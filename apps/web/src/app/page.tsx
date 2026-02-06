@@ -52,10 +52,15 @@ export default function OverviewPage() {
 
   if (error || !data) {
     return (
-      <div className="container mx-auto max-w-4xl px-4 py-12">
+      <div className="container mx-auto max-w-4xl py-12 space-y-4">
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-destructive">
           {error || "No data available"}
         </div>
+        {error && (
+          <p className="text-sm text-muted-foreground">
+            On Railway, ensure the web service has <code className="rounded bg-muted px-1">API_URL</code> set (e.g. to your API&apos;s URL).
+          </p>
+        )}
       </div>
     );
   }

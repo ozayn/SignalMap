@@ -46,5 +46,10 @@ pnpm dev
 - Uses `Dockerfile.web`; Next.js listens on `PORT` (Railway injects this)
 
 **Environment variables:**
-- Web: `API_URL` = `http://${{api.RAILWAY_PRIVATE_DOMAIN}}` (private = no egress fees). Or use `https://api.RAILWAY_PUBLIC_DOMAIN` for public.
-- API: CORS allows `*.up.railway.app` automatically
+
+| Service | Variable | Value |
+|---------|----------|-------|
+| Web | `API_URL` | **Required.** `http://${{api.RAILWAY_PRIVATE_DOMAIN}}` (private) or `https://your-api.up.railway.app` |
+| API | — | CORS allows `*.up.railway.app` automatically |
+
+**If the page loads but shows "Failed to fetch overview" or "No data available":** The web service is missing `API_URL`. Add it in Railway → Web service → Variables.
