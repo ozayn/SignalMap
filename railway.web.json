@@ -5,6 +5,6 @@
     "dockerfilePath": "Dockerfile.web"
   },
   "deploy": {
-    "startCommand": "cd apps/web && pnpm exec next start -H 0.0.0.0"
+    "startCommand": "cd apps/web && pnpm exec next start -H 0.0.0.0 -p ${PORT:-3000}"
   }
 }
