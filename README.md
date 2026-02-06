@@ -49,7 +49,7 @@ pnpm dev
 
 | Service | Variable | Value |
 |---------|----------|-------|
-| Web | `API_URL` | **Required.** `http://${{api.RAILWAY_PRIVATE_DOMAIN}}` (private) or `https://your-api.up.railway.app` |
+| Web | `API_URL` | **Required.** For private: `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:8080` (port required). For public: `https://your-api.up.railway.app` |
 | API | — | CORS allows `*.up.railway.app` automatically |
 
-**If the page loads but shows "Failed to fetch overview" or "No data available":** The web service is missing `API_URL`. Add it in Railway → Web service → Variables.
+**Debug:** Hit `https://your-web.up.railway.app/api/health` to check API connectivity.
