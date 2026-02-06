@@ -5,6 +5,6 @@
     "dockerfilePath": "Dockerfile.web"
   },
   "deploy": {
-    "startCommand": "pnpm run start:web"
+    "startCommand": "node apps/web/server.js"
   }
 }
