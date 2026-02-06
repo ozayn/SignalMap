@@ -42,8 +42,8 @@ pnpm dev
 
 **Web service:**
 - Root Directory = `.` (repo root)
-- Settings → Build → Config File Path = `railway.web.json`
-- Uses `Dockerfile.web`; Next.js listens on `PORT` (Railway injects this)
+- **Settings → Build → Config File Path = `railway.web.json`** (critical: without this, it builds the API Dockerfile instead)
+- Settings → Networking → ensure target port matches `PORT` (Railway auto-sets this)
 
 **Environment variables:**
 
