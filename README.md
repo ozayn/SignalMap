@@ -36,10 +36,13 @@ pnpm dev
 
 ## Railway deployment
 
-**API service:** Set **Root Directory** to `apps/api` in Railway. The Dockerfile ensures a Python-only build (no Node/Next.js).
+**API service (required):**
+1. Set **Root Directory** to `apps/api` (Settings → General)
+2. The `railway.json` + `Dockerfile` force a Python-only build (no pnpm/Node)
+3. Add **Generate Domain** under Settings → Networking for a public URL
 
-**Web service:** Set **Root Directory** to `apps/web` (or repo root with appropriate build commands).
+**Web service:** Set **Root Directory** to `apps/web`.
 
 **Environment variables:**
-- Web: `NEXT_PUBLIC_API_URL` = your API URL
+- Web: `NEXT_PUBLIC_API_URL` = your API URL (e.g. `https://xxx.up.railway.app`)
 - API: `WEB_ORIGIN` = your web URL (for CORS)
