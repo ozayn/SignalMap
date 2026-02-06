@@ -85,13 +85,27 @@ export function TimelineChart({
       ],
     };
 
-    const applyOption = () => chart.setOption(option);
-    requestAnimationFrame(applyOption);
+    let cancelled = false;
+    const rafId = requestAnimationFrame(() => {
+      if (!cancelled && chartRef.current) {
+        chart.setOption(option);
+      }
+    });
 
-    const resize = () => chart.resize();
+    const resize = () => {
+      if (!cancelled) {
+        try {
+          chart.resize();
+        } catch {
+          // Chart may be disposed
+        }
+      }
+    };
     window.addEventListener("resize", resize);
 
     return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
       chartInstanceRef.current = null;
       try {
