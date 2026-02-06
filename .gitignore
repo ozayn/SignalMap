@@ -1,0 +1,42 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+.next
+out
+build
+*.egg-info
+__pycache__
+*.pyc
+.venv
+venv
+env
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data & logs
+*.db
+*.duckdb
+logs
+*.log
+
+# Testing
+coverage
+.pytest_cache
+.coverage
+htmlcov

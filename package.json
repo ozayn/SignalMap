@@ -1,0 +1,17 @@
+{
+  "name": "signalmap",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n web,api -c auto \"pnpm dev:web\" \"pnpm dev:api\"",
+    "dev:web": "pnpm --filter web dev",
+    "dev:api": "pnpm --filter api dev"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "pnpm@9.14.2",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
