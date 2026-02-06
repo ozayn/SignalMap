@@ -5,6 +5,8 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "python run.py"
+    "startCommand": "python run.py",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 30
   }
 }
