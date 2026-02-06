@@ -2,6 +2,7 @@
 
 import { useRef, useEffect } from "react";
 import * as echarts from "echarts";
+import { cssHsl, withAlphaHsl } from "@/lib/utils";
 
 type DataPoint = { date: string; value: number; confidence?: number };
 
@@ -9,18 +10,17 @@ type TimelineChartProps = {
   data: DataPoint[];
   valueKey: keyof DataPoint;
   label: string;
-  color: string;
 };
 
 export function TimelineChart({
   data,
   valueKey,
   label,
-  color,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const color = cssHsl("--chart-primary", "hsl(238, 84%, 67%)");
     if (!chartRef.current || !data.length) return;
 
     const chart = echarts.init(chartRef.current);
@@ -71,8 +71,8 @@ export function TimelineChart({
           itemStyle: { color },
           areaStyle: {
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: `${color}40` },
-              { offset: 1, color: `${color}08` },
+              { offset: 0, color: withAlphaHsl(color, 0.25) },
+              { offset: 1, color: withAlphaHsl(color, 0.03) },
             ]),
           },
         },
@@ -88,7 +88,7 @@ export function TimelineChart({
       window.removeEventListener("resize", resize);
       chart.dispose();
     };
-  }, [data, valueKey, label, color]);
+  }, [data, valueKey, label]);
 
   return <div ref={chartRef} className="h-80 w-full" />;
 }

@@ -12,20 +12,28 @@ type OverviewData = {
   timeline: Array<{ date: string; value: number }>;
 };
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 export default function OverviewPage() {
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/overview")
+    const controller = new AbortController();
+
+    fetch(`${API_BASE}/api/overview`, { signal: controller.signal })
       .then((r) => {
         if (!r.ok) throw new Error("Failed to fetch overview");
         return r.json();
       })
       .then(setData)
-      .catch((e) => setError(e.message))
+      .catch((e) => {
+        if (e?.name !== "AbortError") setError(e.message ?? "Unknown error");
+      })
       .finally(() => setLoading(false));
+
+    return () => controller.abort();
   }, []);
 
   if (loading) {
@@ -63,7 +71,6 @@ export default function OverviewPage() {
         </p>
       </div>
 
-      {/* 3 KPI tiles */}
       <div className="grid gap-4 sm:grid-cols-3">
         {data.kpis.map((kpi) => (
           <Card key={kpi.label}>
@@ -88,21 +95,15 @@ export default function OverviewPage() {
         ))}
       </div>
 
-      {/* 1 timeline chart */}
       <Card>
         <CardHeader>
           <CardTitle>Sentiment over time</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Daily average sentiment score
+            Average sentiment score (sampled over time)
           </p>
         </CardHeader>
         <CardContent>
-          <TimelineChart
-            data={data.timeline}
-            valueKey="value"
-            label="Sentiment"
-            color="#6366f1"
-          />
+          <TimelineChart data={data.timeline} valueKey="value" label="Sentiment" />
         </CardContent>
       </Card>
     </div>
