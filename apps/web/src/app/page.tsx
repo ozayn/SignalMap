@@ -12,7 +12,7 @@ type OverviewData = {
   timeline: Array<{ date: string; value: number }>;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Use relative /api path - Next.js rewrites proxy to API (use API_URL with private domain to avoid egress)
 
 export default function OverviewPage() {
   const [data, setData] = useState<OverviewData | null>(null);
@@ -22,7 +22,7 @@ export default function OverviewPage() {
   useEffect(() => {
     const controller = new AbortController();
 
-    fetch(`${API_BASE}/api/overview`, { signal: controller.signal })
+    fetch("/api/overview", { signal: controller.signal })
       .then((r) => {
         if (!r.ok) throw new Error("Failed to fetch overview");
         return r.json();
