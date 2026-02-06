@@ -49,7 +49,7 @@ pnpm dev
 
 | Service | Variable | Value |
 |---------|----------|-------|
-| Web | `API_URL` | **Required.** For private: `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:8080` (port required). For public: `https://your-api.up.railway.app` |
+| Web | `API_URL` | **Required.** Use public URL: `https://api-production-XXXX.up.railway.app` (from your API service). Or private: `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:8080` |
 | API | — | CORS allows `*.up.railway.app` automatically |
 
 **Debug:** Hit `https://your-web.up.railway.app/api/health` to check API connectivity.

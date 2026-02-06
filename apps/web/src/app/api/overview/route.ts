@@ -18,16 +18,12 @@ export async function GET() {
     return NextResponse.json(data);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      {
-        error: msg,
-        hint:
-          !process.env.API_URL &&
-          process.env.NODE_ENV === "production"
-            ? "Set API_URL on the web service in Railway"
-            : undefined,
-      },
-      { status: 502 }
-    );
+    const hint =
+      process.env.NODE_ENV === "production"
+        ? !process.env.API_URL
+          ? "Set API_URL in Railway: Web service → Variables → API_URL = https://${{api.RAILWAY_PUBLIC_DOMAIN}}"
+          : "API unreachable. Check API_URL and that the API service is running."
+        : undefined;
+    return NextResponse.json({ error: msg, hint }, { status: 502 });
   }
 }
