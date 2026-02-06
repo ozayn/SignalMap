@@ -16,7 +16,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased min-h-screen`}>
+      <body className={`${inter.variable} font-sans antialiased min-h-screen`} suppressHydrationWarning>
         <ThemeProvider>
           <header className="border-b border-border bg-background">
             <div className="container mx-auto max-w-4xl px-4 py-4 flex items-center justify-between">
