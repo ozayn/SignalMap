@@ -36,13 +36,12 @@ pnpm dev
 
 ## Railway deployment
 
-**API service (required):**
-1. Set **Root Directory** to `apps/api` (Settings → General)
-2. The `railway.json` + `Dockerfile` force a Python-only build (no pnpm/Node)
-3. Add **Generate Domain** under Settings → Networking for a public URL
+**API service:**
+- **Option A:** Root Directory = `apps/api`, domain port = `8080`
+- **Option B (if A fails):** Root Directory = `.` (empty), add variable `RAILWAY_DOCKERFILE_PATH` = `Dockerfile.api`, domain port = `8080`
 
-**Web service:** Set **Root Directory** to `apps/web`.
+**Web service:** Root Directory = `apps/web`.
 
 **Environment variables:**
-- Web: `NEXT_PUBLIC_API_URL` = your API URL (e.g. `https://xxx.up.railway.app`)
-- API: `WEB_ORIGIN` = your web URL (for CORS)
+- Web: `NEXT_PUBLIC_API_URL` = your API URL
+- API: CORS allows `*.up.railway.app` automatically
