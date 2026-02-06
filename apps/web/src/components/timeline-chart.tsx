@@ -18,17 +18,23 @@ export function TimelineChart({
   label,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
+  const chartInstanceRef = useRef<echarts.ECharts | null>(null);
 
   useEffect(() => {
     const color = cssHsl("--chart-primary", "hsl(238, 84%, 67%)");
     if (!chartRef.current || !data.length) return;
 
-    const chart = echarts.init(chartRef.current);
+    let chart = echarts.getInstanceByDom(chartRef.current);
+    if (!chart) {
+      chart = echarts.init(chartRef.current);
+    }
+    chartInstanceRef.current = chart;
 
     const dates = data.map((d) => d.date);
     const values = data.map((d) => d[valueKey] as number);
 
     const option: echarts.EChartsOption = {
+      animation: false,
       tooltip: {
         trigger: "axis",
         formatter: (params: unknown) => {
@@ -79,14 +85,20 @@ export function TimelineChart({
       ],
     };
 
-    chart.setOption(option);
+    const applyOption = () => chart.setOption(option);
+    requestAnimationFrame(applyOption);
 
     const resize = () => chart.resize();
     window.addEventListener("resize", resize);
 
     return () => {
       window.removeEventListener("resize", resize);
-      chart.dispose();
+      chartInstanceRef.current = null;
+      try {
+        chart.dispose();
+      } catch {
+        // Ignore dispose errors when chart is already torn down
+      }
     };
   }, [data, valueKey, label]);
 

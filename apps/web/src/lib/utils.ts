@@ -19,5 +19,16 @@ export function cssColor(varName: string, fallback: string) {
 
 export function withAlphaHsl(hslColor: string, alpha: number): string {
   if (!hslColor.startsWith("hsl(")) return hslColor;
+  // Parse hsl(h s% l%) or hsl(h, s%, l%) and output hsla(h, s%, l%, alpha) for Canvas API
+  const match = hslColor.match(/hsl\(\s*(\d+)\s*,?\s*(\d+(?:\.\d+)?%?)\s*,?\s*(\d+(?:\.\d+)?%?)\s*\)/);
+  if (match) {
+    const [, h, s, l] = match;
+    return `hsla(${h}, ${s}, ${l}, ${alpha})`;
+  }
+  const spaceMatch = hslColor.match(/hsl\(\s*(\d+)\s+(\d+(?:\.\d+)?%?)\s+(\d+(?:\.\d+)?%?)\s*\)/);
+  if (spaceMatch) {
+    const [, h, s, l] = spaceMatch;
+    return `hsla(${h}, ${s}, ${l}, ${alpha})`;
+  }
   return hslColor.replace(")", `, ${alpha})`).replace("hsl(", "hsla(");
 }
