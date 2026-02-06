@@ -1,23 +1,33 @@
-# Dependencies
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
 node_modules
 .pnpm-store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Build outputs
-dist
-.next
-out
-build
-*.egg-info
-__pycache__
+# Next
+apps/web/.next
+apps/web/out
+apps/web/.vercel
+apps/web/next-env.d.ts
+
+# Python
+__pycache__/
 *.pyc
-.venv
-venv
-env
+.venv/
+venv/
+env/
 
-# Environment
+# Env files
 .env
 .env.local
 .env.*.local
+apps/web/.env.local
+apps/api/.env
 
 # IDE
 .idea
@@ -25,17 +35,17 @@ env
 *.swp
 *.swo
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Data & logs
-*.db
+# Data (future)
+data/
 *.duckdb
+*.db
 logs
 *.log
 
-# Testing
+# Build / testing
+dist
+build
+*.egg-info
 coverage
 .pytest_cache
 .coverage
