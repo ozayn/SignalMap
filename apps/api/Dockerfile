@@ -9,7 +9,7 @@ COPY main.py .
 COPY start.sh .
 RUN chmod +x start.sh
 
-ENV PORT=8000
-EXPOSE 8000
+ENV PORT=8080
+EXPOSE 8080
 
 CMD ["./start.sh"]
