@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "concurrently -n web,api -c auto \"pnpm dev:web\" \"pnpm dev:api\"",
     "dev:web": "pnpm --filter web dev",
-    "dev:api": "pnpm --filter api dev"
+    "dev:api": "pnpm --filter api dev",
+    "build:web": "pnpm --filter web build",
+    "start:web": "pnpm --filter web start"
   },
   "engines": {
     "node": ">=18"
