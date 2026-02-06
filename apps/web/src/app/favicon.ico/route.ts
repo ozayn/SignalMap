@@ -1,0 +1,15 @@
+import { NextResponse } from "next/server";
+
+const SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="6" fill="hsl(238, 84%, 67%)"/>
+  <path d="M8 12h16v2H8zm0 4h12v2H8zm0 4h8v2H8z" fill="white"/>
+</svg>`;
+
+export function GET() {
+  return new NextResponse(SVG, {
+    headers: {
+      "Content-Type": "image/svg+xml",
+      "Cache-Control": "public, max-age=86400",
+    },
+  });
+}
