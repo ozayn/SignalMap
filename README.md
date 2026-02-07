@@ -38,7 +38,9 @@ pnpm dev
 
 ## Railway deployment
 
-**API service:**
+Add a **Postgres** database and link it to the API service for Wayback jobs (cache + job queue).
+
+### API service
 - **Option A:** Root Directory = `apps/api`, domain port = `8080`
 - **Option B (if A fails):** Root Directory = `.` (empty), add variable `RAILWAY_DOCKERFILE_PATH` = `Dockerfile.api`, domain port = `8080`
 
@@ -53,6 +55,7 @@ pnpm dev
 | Service | Variable | Value |
 |---------|----------|-------|
 | Web | `API_URL` | **Required.** Use public URL: `https://api-production-XXXX.up.railway.app` (from your API service). Or private: `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:8080` |
-| API | — | CORS allows `*.up.railway.app` automatically |
+| API | `DATABASE_URL` | Postgres URL (link Postgres service). Required for Wayback jobs. |
+| API | `WEB_ORIGIN` | Optional. Web URL for CORS |
 
 **Debug:** Hit `https://your-web.up.railway.app/api/health` to check API connectivity.
