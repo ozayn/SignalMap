@@ -1,16 +1,6 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-const studies = [
-  {
-    id: "1",
-    number: "Study 1",
-    title: "SignalMap Overview",
-    timeRange: "2024-01-01 — 2024-08-31",
-    description:
-      "Longitudinal exploration of sentiment, interaction volume, and hashtag coverage across a defined time window.",
-  },
-];
+import { STUDIES } from "@/lib/studies";
 
 export default function StudiesPage() {
   return (
@@ -25,13 +15,13 @@ export default function StudiesPage() {
       </div>
 
       <div className="space-y-4">
-        {studies.map((study) => (
+        {STUDIES.map((study) => (
           <Card key={study.id} className="border-border">
             <CardHeader className="pb-2">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-medium text-muted-foreground">
-                    {study.number}
+                    Study {study.number}
                   </p>
                   <CardTitle className="text-lg font-medium mt-0.5">
                     {study.title}
@@ -44,7 +34,9 @@ export default function StudiesPage() {
                   View
                 </Link>
               </div>
-              <p className="text-xs text-muted-foreground">{study.timeRange}</p>
+              <p className="text-xs text-muted-foreground">
+                {study.timeRange[0]} — {study.timeRange[1]}
+              </p>
             </CardHeader>
             <CardContent className="pt-0">
               <p className="text-sm text-muted-foreground">

@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TimelineChart } from "@/components/timeline-chart";
+import { getStudyById } from "@/lib/studies";
+import { fetchJson } from "@/lib/api";
 
 type OverviewData = {
   study_id: string;
@@ -14,40 +16,29 @@ type OverviewData = {
   timeline: Array<{ date: string; value: number }>;
 };
 
-const PLACEHOLDER_TABS = [
-  { id: "overview", label: "Overview", active: true },
-  { id: "timeline", label: "Timeline", active: false },
-  { id: "network", label: "Network", active: false },
-  { id: "topics", label: "Topics", active: false },
-  { id: "hashtags", label: "Hashtags", active: false },
-];
-
 export default function StudyDetailPage() {
   const params = useParams();
   const studyId = params.studyId as string;
+  const study = getStudyById(studyId);
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (studyId !== "1") return;
-    const controller = new AbortController();
+    if (!study) return;
+    let mounted = true;
 
-    fetch("/api/overview", { signal: controller.signal })
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed to fetch overview");
-        return r.json();
-      })
-      .then(setData)
-      .catch((e) => {
-        if (e?.name !== "AbortError") setError(e.message ?? "Unknown error");
-      })
-      .finally(() => setLoading(false));
+    fetchJson<OverviewData>(`/api/overview?study_id=${studyId}`)
+      .then((d) => mounted && setData(d))
+      .catch((e) => mounted && setError(e instanceof Error ? e.message : "Unknown error"))
+      .finally(() => mounted && setLoading(false));
 
-    return () => controller.abort();
-  }, [studyId]);
+    return () => {
+      mounted = false;
+    };
+  }, [studyId, study]);
 
-  if (studyId !== "1") {
+  if (!study) {
     return (
       <div className="container mx-auto max-w-4xl px-4 py-12 space-y-4">
         <p className="text-muted-foreground">Study not found.</p>
@@ -78,9 +69,7 @@ export default function StudyDetailPage() {
   if (error || !data) {
     return (
       <div className="container mx-auto max-w-4xl py-12 space-y-4">
-        <div className="rounded-lg border border-border p-6 text-muted-foreground">
-          {error || "No data available"}
-        </div>
+        <p className="text-muted-foreground">{error || "No data available"}</p>
         <Link
           href="/studies"
           className="text-sm text-muted-foreground hover:text-foreground border border-border rounded-md px-3 py-1.5 inline-block"
@@ -93,37 +82,21 @@ export default function StudyDetailPage() {
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-12 space-y-10">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <Link
-            href="/studies"
-            className="text-xs text-muted-foreground hover:text-foreground mb-2 inline-block"
-          >
-            ← Studies
-          </Link>
-          <h1 className="text-2xl font-medium tracking-tight text-foreground">
-            Study 1 — Overview
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {data.time_range[0]} — {data.time_range[1]}
-          </p>
-        </div>
-      </div>
-
-      <nav className="flex gap-1 border-b border-border">
-        {PLACEHOLDER_TABS.map((tab) => (
-          <span
-            key={tab.id}
-            className={`text-sm px-3 py-2 border-b-2 -mb-px transition ${
-              tab.active
-                ? "border-foreground text-foreground"
-                : "border-transparent text-muted-foreground"
-            }`}
-          >
-            {tab.label}
-          </span>
-        ))}
-      </nav>
+      <header className="space-y-1">
+        <Link
+          href="/studies"
+          className="text-xs text-muted-foreground hover:text-foreground inline-block"
+        >
+          ← Studies
+        </Link>
+        <h1 className="text-2xl font-medium tracking-tight text-foreground">
+          Study {study.number}
+        </h1>
+        <p className="text-lg text-muted-foreground">{study.title}</p>
+        <p className="text-sm text-muted-foreground">
+          {study.timeRange[0]} — {study.timeRange[1]}
+        </p>
+      </header>
 
       <div className="grid gap-4 sm:grid-cols-3">
         {data.kpis.map((kpi) => (

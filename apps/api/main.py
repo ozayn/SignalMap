@@ -65,5 +65,6 @@ OVERVIEW_STUB = {
 
 
 @app.get("/api/overview")
-def get_overview():
-    return OVERVIEW_STUB
+def get_overview(study_id: str = "1"):
+    result = {**OVERVIEW_STUB, "study_id": study_id}
+    return result
