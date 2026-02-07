@@ -7,6 +7,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY apps/api/main.py .
 COPY apps/api/run.py .
+COPY apps/api/db.py .
+COPY apps/api/jobs.py .
 COPY apps/api/connectors/ ./connectors/
 
 EXPOSE 8080
