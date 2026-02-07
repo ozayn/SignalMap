@@ -32,7 +32,7 @@ export default function RootLayout({
             <nav className="container mx-auto max-w-4xl px-4 py-4 flex items-center justify-between">
               <div className="flex items-center gap-8">
                 <Link
-                  href="/studies"
+                  href="/"
                   className="font-medium text-foreground hover:text-muted-foreground transition"
                 >
                   SignalMap
