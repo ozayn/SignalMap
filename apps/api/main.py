@@ -1,6 +1,10 @@
 import os
+from typing import Optional
 
 from fastapi import FastAPI
+
+from connectors.wayback import get_snapshots_with_metrics
+from connectors.wayback_instagram import get_instagram_archival_metrics
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -27,6 +31,19 @@ app.add_middleware(
 @app.get("/")
 def root():
     return {"name": "signalmap-api", "status": "ok"}
+
+
+@app.get("/api")
+def api_index():
+    """List available API endpoints."""
+    return {
+        "endpoints": {
+            "overview": "/api/overview?study_id=1",
+            "wayback_snapshots": "/api/wayback/snapshots?url=...&sample=30",
+            "wayback_instagram": "/api/wayback/instagram?username=...&sample=30",
+        },
+        "docs": "/docs",
+    }
 
 
 @app.get("/health")
@@ -68,3 +85,41 @@ OVERVIEW_STUB = {
 def get_overview(study_id: str = "1"):
     result = {**OVERVIEW_STUB, "study_id": study_id}
     return result
+
+
+@app.get("/api/wayback/snapshots")
+def wayback_snapshots(
+    url: str,
+    from_year: Optional[int] = None,
+    to_year: Optional[int] = None,
+    sample: int = 30,
+):
+    """Return Wayback snapshots with optional metric extraction."""
+    sample = min(max(sample, 1), 50)
+    return get_snapshots_with_metrics(
+        url=url,
+        from_year=from_year,
+        to_year=to_year,
+        sample=sample,
+    )
+
+
+@app.get("/api/wayback/instagram")
+def wayback_instagram(
+    username: str,
+    from_year: Optional[int] = None,
+    to_year: Optional[int] = None,
+    sample: int = 30,
+    include_evidence: bool = True,
+    progress: bool = False,
+):
+    """Return Wayback archival snapshots for an Instagram profile."""
+    sample = min(max(sample, 1), 50)
+    return get_instagram_archival_metrics(
+        username=username,
+        from_year=from_year,
+        to_year=to_year,
+        sample=sample,
+        include_evidence=include_evidence,
+        progress=progress,
+    )
