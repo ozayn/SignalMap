@@ -14,22 +14,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const params = new URLSearchParams({ username });
-    const fromYear = searchParams.get("from_year");
-    const toYear = searchParams.get("to_year");
-    const fromDate = searchParams.get("from_date");
-    const toDate = searchParams.get("to_date");
+    const from = searchParams.get("from_year");
+    const to = searchParams.get("to_year");
     const sample = searchParams.get("sample");
-    const includeEvidence = searchParams.get("include_evidence");
-    const progress = searchParams.get("progress");
-    if (fromYear) params.set("from_year", fromYear);
-    if (toYear) params.set("to_year", toYear);
-    if (fromDate) params.set("from_date", fromDate);
-    if (toDate) params.set("to_date", toDate);
+    if (from) params.set("from_year", from);
+    if (to) params.set("to_year", to);
     if (sample) params.set("sample", sample);
-    if (includeEvidence !== null) params.set("include_evidence", includeEvidence);
-    if (progress !== null) params.set("progress", progress);
 
-    const res = await fetch(`${API_BASE}/api/wayback/instagram?${params}`, {
+    const res = await fetch(`${API_BASE}/api/wayback/instagram/followers?${params}`, {
       headers: { Accept: "application/json" },
       next: { revalidate: 0 },
     });

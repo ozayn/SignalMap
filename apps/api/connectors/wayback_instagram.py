@@ -13,7 +13,7 @@ import httpx
 
 CDX_URL = "https://web.archive.org/cdx/search/cdx"
 FETCH_TIMEOUT = 10.0
-REQUEST_DELAY_S = 0.25
+REQUEST_DELAY_S = 1.0  # Wayback rate-limits; 1s between fetches to avoid 429
 
 EVIDENCE_MAX_LEN = 140
 
@@ -70,8 +70,16 @@ def _build_archived_url(timestamp: str, original_url: str) -> str:
     return f"https://web.archive.org/web/{timestamp}/{original_url}"
 
 
-def _fetch_cdx(url: str, from_year: Optional[int], to_year: Optional[int], limit: int, match_type: Optional[str] = None) -> list[dict]:
-    """Fetch CDX results for a URL (and optional matchType)."""
+def _fetch_cdx(
+    url: str,
+    from_year: Optional[int] = None,
+    to_year: Optional[int] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    limit: int = 500,
+    match_type: Optional[str] = None,
+) -> list[dict]:
+    """Fetch CDX results for a URL. Use from_date/to_date (YYYYMMDD) for precise ranges, else from_year/to_year."""
     params_list = [
         ("url", url),
         ("output", "json"),
@@ -83,13 +91,21 @@ def _fetch_cdx(url: str, from_year: Optional[int], to_year: Optional[int], limit
     params_list.append(("filter", "mimetype:text/html"))
     if match_type:
         params_list.append(("matchType", match_type))
-    if from_year is not None:
+    if from_date:
+        params_list.append(("from", from_date))
+    elif from_year is not None:
         params_list.append(("from", str(from_year)))
-    if to_year is not None:
+    if to_date:
+        params_list.append(("to", to_date))
+    elif to_year is not None:
         params_list.append(("to", str(to_year)))
 
+    time.sleep(0.5)  # Be polite to CDX; reduces 429 risk
     with httpx.Client(timeout=15.0) as client:
         resp = client.get(CDX_URL, params=params_list)
+        if resp.status_code == 429:
+            time.sleep(8.0)
+            resp = client.get(CDX_URL, params=params_list)
         resp.raise_for_status()
         data = resp.json()
 
@@ -107,44 +123,86 @@ def _fetch_cdx(url: str, from_year: Optional[int], to_year: Optional[int], limit
     ]
 
 
+def _is_profile_url(original: str, username: str) -> bool:
+    """True if URL is the profile page (not /username/photos, etc)."""
+    if not original or not username:
+        return False
+    # Get path (after domain, before ? or #)
+    path = original.split("?")[0].split("#")[0]
+    if "instagram.com" in path.lower():
+        path = path.split("instagram.com")[-1]
+    # Strip port (e.g. :80) - older archives use http://instagram.com:80/username
+    path = re.sub(r":\d+", "", path)
+    path = path.strip("/")
+    parts = [p for p in path.split("/") if p and not p.startswith(":")]
+    return len(parts) == 1 and parts[0].lower() == username.lower()
+
+
 def list_snapshots(
     url: str,
     from_year: Optional[int] = None,
     to_year: Optional[int] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
     limit: int = 500,
 ) -> list[dict]:
     """
     Use Wayback CDX API to return snapshot timestamps + original URL.
-    CDX matches canonical URL flexibly (http/https, www/non-www). Returns list of {"timestamp": "...", "original": "..."}.
+    Pass from_date/to_date (YYYYMMDD) for precise ranges (e.g. past two weeks).
+    Otherwise use from_year/to_year.
     """
     if "instagram.com/" not in url:
         return []
 
+    base = url.split("instagram.com/")[-1].split("?")[0].strip().rstrip("/")
+    if not base:
+        return []
+
     all_snapshots = []
     url = url.strip()
-    # Primary: canonical URL (CDX matches this across http/https, www/non-www variants)
-    try:
-        all_snapshots.extend(_fetch_cdx(url, from_year, to_year, limit))
-    except Exception:
-        pass
+    seen_ts: set[str] = set()
 
-    # Fallback: if nothing found, try alternate URL forms
+    # Try URL forms; put instagram.com:80 first (older archives often use this)
+    urls_to_try = [
+        (f"instagram.com:80/{base}", "prefix"),
+        (f"instagram.com/{base}/", "prefix"),
+        (f"http://instagram.com:80/{base}", None),
+        (f"https://www.instagram.com/{base}/", None),
+    ]
+    for u, match_type in urls_to_try:
+        try:
+            snaps = _fetch_cdx(u, from_year=from_year, to_year=to_year, from_date=from_date, to_date=to_date, limit=limit, match_type=match_type)
+            if snaps:
+                if match_type == "prefix":
+                    filtered = [s for s in snaps if _is_profile_url(s["original"], base)]
+                    snaps = filtered if filtered else snaps
+                for s in snaps:
+                    if s["timestamp"] not in seen_ts:
+                        seen_ts.add(s["timestamp"])
+                        all_snapshots.append(s)
+        except Exception:
+            continue
+
+    # Fallback: try alternate URL forms if still empty
     if not all_snapshots:
-        base = url.split("instagram.com/")[-1].split("?")[0].strip().rstrip("/")
-        if base:
-            for u in [
-                f"https://instagram.com/{base}/",
-                f"https://www.instagram.com/{base}",
-                f"http://instagram.com/{base}",
-            ]:
-                if u != url:
-                    try:
-                        snaps = _fetch_cdx(u, from_year, to_year, limit)
-                        if snaps:
-                            all_snapshots.extend(snaps)
-                            break
-                    except Exception:
-                        continue
+        for u in [
+            f"https://instagram.com/{base}/",
+            f"https://www.instagram.com/{base}",
+            f"http://instagram.com/{base}",
+            f"http://www.instagram.com/{base}/",
+        ]:
+            if u == url or u.rstrip("/") == url.rstrip("/"):
+                continue
+            try:
+                snaps = _fetch_cdx(u, from_year=from_year, to_year=to_year, from_date=from_date, to_date=to_date, limit=limit)
+                if snaps:
+                    for s in snaps:
+                        if s["timestamp"] not in seen_ts:
+                            seen_ts.add(s["timestamp"])
+                            all_snapshots.append(s)
+                    break
+            except Exception:
+                continue
 
     return all_snapshots
 
@@ -166,29 +224,107 @@ def evenly_sample_snapshots(
     snapshots: list[dict],
     sample: int = 30,
 ) -> list[dict]:
-    """Sample evenly across the full date range."""
+    """Sample evenly across the full date range, ensuring coverage per year."""
     if not snapshots:
         return []
-    n = min(sample, len(snapshots))
-    step = max(1, len(snapshots) // n)
-    indices = [i * step for i in range(n)][:n]
-    return [snapshots[i] for i in indices if i < len(snapshots)]
+    sorted_snaps = sorted(snapshots, key=lambda s: s["timestamp"])
+    if len(sorted_snaps) <= sample:
+        return sorted_snaps
+
+    # Group by year to ensure we get at least 1 per year with data
+    by_year: dict[str, list[dict]] = {}
+    for s in sorted_snaps:
+        ts = s["timestamp"]
+        year = ts[:4] if len(ts) >= 4 else "unknown"
+        by_year.setdefault(year, []).append(s)
+
+    result: list[dict] = []
+    years = sorted(by_year.keys())
+    per_year = max(1, sample // len(years))
+    remainder = sample - per_year * len(years)
+
+    for i, year in enumerate(years):
+        year_snaps = by_year[year]
+        n_take = per_year + (1 if i < remainder else 0)
+        n_take = min(n_take, len(year_snaps))
+        if n_take >= len(year_snaps):
+            result.extend(year_snaps)
+        else:
+            step = max(1, len(year_snaps) // n_take)
+            indices = [j * step for j in range(n_take)][:n_take]
+            result.extend(year_snaps[j] for j in indices if j < len(year_snaps))
+
+    return sorted(result, key=lambda s: s["timestamp"])
 
 
 def fetch_snapshot_html(timestamp: str, original_url: str) -> Tuple[Optional[str], str]:
     """
     Fetch HTML from archived URL.
     Returns (html, archived_url). html is None on failure.
+    Retries once with longer delay on 429.
     """
     archived_url = _build_archived_url(timestamp, original_url)
-    try:
-        time.sleep(REQUEST_DELAY_S)
-        with httpx.Client(timeout=FETCH_TIMEOUT) as client:
-            resp = client.get(archived_url)
-            resp.raise_for_status()
-            return resp.text, archived_url
-    except Exception:
-        return None, archived_url
+    for attempt in range(2):
+        try:
+            time.sleep(REQUEST_DELAY_S)
+            with httpx.Client(timeout=FETCH_TIMEOUT) as client:
+                resp = client.get(archived_url)
+                if resp.status_code == 429:
+                    time.sleep(5.0)  # Back off before retry
+                    continue
+                resp.raise_for_status()
+                return resp.text, archived_url
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429 and attempt == 0:
+                time.sleep(5.0)
+                continue
+            return None, archived_url
+        except Exception:
+            return None, archived_url
+    return None, archived_url
+
+
+def _extract_from_shared_data(html: str) -> Optional[dict]:
+    """
+    Strategy: window._sharedData has ProfilePage with followed_by, follows, media counts.
+    2016-era IG uses this format. Returns {followers, following, posts} or None.
+    """
+    if not html or "followed_by" not in html or "count" not in html:
+        return None
+    # Match "followed_by":{"count":406462} and "follows":{"count":14} and "media":{"count":164}
+    fb = re.search(r'["\']followed_by["\'][\s:]*\{[^}]*?["\']count["\'][\s:]*(\d+)', html, re.I)
+    fg = re.search(r'["\']follows["\'][\s:]*\{[^}]*?["\']count["\'][\s:]*(\d+)', html, re.I)
+    md = re.search(r'["\']media["\'][\s:]*\{[^}]*?["\']count["\'][\s:]*(\d+)', html, re.I)
+    if not fb:
+        return None
+    followers = int(fb.group(1)) if 0 < int(fb.group(1)) < 1_000_000_000 else None
+    following = int(fg.group(1)) if fg and 0 <= int(fg.group(1)) < 100_000_000 else None
+    posts = int(md.group(1)) if md and 0 <= int(md.group(1)) < 100_000_000 else None
+    if followers is None:
+        return None
+    return {"followers": followers, "following": following, "posts": posts}
+
+
+def _extract_followers_from_edge_followed_by(html: str) -> dict:
+    """
+    Strategy B: Look for edge_followed_by in JSON-ish blobs.
+    Older IG sometimes embedded counts. Returns {value, confidence, evidence} or empty.
+    """
+    if not html or "edge_followed_by" not in html:
+        return {}
+    m = re.search(
+        r'["\']edge_followed_by["\'][\s:]*\{[^}]*["\']count["\'][\s:]*(\d+)',
+        html,
+        re.IGNORECASE,
+    )
+    if m:
+        val = int(m.group(1))
+        if 0 < val < 1_000_000_000:
+            snippet = m.group(0)[:EVIDENCE_MAX_LEN]
+            if len(m.group(0)) > EVIDENCE_MAX_LEN:
+                snippet += "..."
+            return {"value": val, "confidence": 0.5, "evidence": snippet}
+    return {}
 
 
 def _extract_evidence_candidates(html: str) -> list[Tuple[str, str]]:
@@ -242,9 +378,6 @@ def extract_instagram_metrics(html: str) -> dict:
     }
 
     candidates = _extract_evidence_candidates(html)
-    if not candidates:
-        return result
-
     html_lower = html.lower()
     best_evidence: Optional[str] = None
     best_confidence = 0.0
@@ -293,6 +426,78 @@ def extract_instagram_metrics(html: str) -> dict:
                 best_evidence += "..."
             parsed = {"followers": f_val, "following": g_val, "posts": p_val}
 
+    # Strategy B: window._sharedData (2016-era: followed_by, follows, media)
+    shared = _extract_from_shared_data(html)
+    if shared and not best_evidence:
+        result["followers"]["value"] = shared["followers"]
+        result["followers"]["confidence"] = 0.75
+        result["followers"]["evidence"] = "followed_by from _sharedData"
+        if shared.get("following") is not None:
+            result["following"]["value"] = shared["following"]
+            result["following"]["confidence"] = 0.75
+        if shared.get("posts") is not None:
+            result["posts"]["value"] = shared["posts"]
+            result["posts"]["confidence"] = 0.75
+        return result
+
+    # Strategy C: edge_followed_by JSON blob (older GraphQL-style)
+    if not best_evidence:
+        edge_result = _extract_followers_from_edge_followed_by(html)
+        if edge_result:
+            result["followers"]["value"] = edge_result["value"]
+            result["followers"]["confidence"] = edge_result["confidence"]
+            result["followers"]["evidence"] = edge_result["evidence"]
+            return result
+
+    # Strategy D: direct scan for "X followers", "X following", "X posts" anywhere in HTML
+    # 2015 IG: <span class="number-stat">3,646</span> followers - try span format first
+    f_m = re.search(r"([\d.,]+)\s*</[^>]+>\s*followers", html, re.IGNORECASE)
+    g_m = re.search(r"([\d.,]+)\s*</[^>]+>\s*following", html, re.IGNORECASE)
+    p_m = re.search(r"([\d.,]+)\s*</[^>]+>\s*posts?", html, re.IGNORECASE)
+    if not f_m:
+        f_m = re.search(r"([\d.,]+)\s*([MK])?\s*followers", html, re.IGNORECASE)
+    if not g_m:
+        g_m = re.search(r"([\d.,]+)\s*([MK])?\s*following", html, re.IGNORECASE)
+    if not p_m:
+        p_m = re.search(r"([\d.,]+)\s*([MK])?\s*posts?", html, re.IGNORECASE)
+    def _parse_match(m):
+        if not m:
+            return None
+        val = _parse_number(m.group(1))
+        try:
+            suffix = m.group(2)
+        except IndexError:
+            suffix = None
+        return _apply_multiplier(val, suffix)
+
+    f_direct = _parse_match(f_m)
+    g_direct = _parse_match(g_m)
+    p_direct = _parse_match(p_m)
+    if f_direct is not None and (f_direct <= 0 or f_direct >= 1_000_000_000):
+        f_direct = None
+    if g_direct is not None and (g_direct < 0 or g_direct >= 100_000_000):
+        g_direct = None
+    if p_direct is not None and (p_direct < 0 or p_direct >= 100_000_000):
+        p_direct = None
+    direct_count = sum(1 for v in [f_direct, g_direct, p_direct] if v is not None)
+    if direct_count >= 1 and not best_evidence:
+        # Use direct scan when meta/candidates didn't find enough (e.g. 2015-style separate list items)
+        conf = 0.5 if direct_count >= 2 else 0.35
+        ev = (f_m.group(0)[:EVIDENCE_MAX_LEN] if f_m else None) or (g_m.group(0)[:EVIDENCE_MAX_LEN] if g_m else None)
+        if f_direct is not None:
+            result["followers"]["value"] = f_direct
+            result["followers"]["confidence"] = conf
+            result["followers"]["evidence"] = f_m.group(0)[:EVIDENCE_MAX_LEN] if f_m else ev
+        if g_direct is not None:
+            result["following"]["value"] = g_direct
+            result["following"]["confidence"] = conf
+            result["following"]["evidence"] = g_m.group(0)[:EVIDENCE_MAX_LEN] if g_m else ev
+        if p_direct is not None:
+            result["posts"]["value"] = p_direct
+            result["posts"]["confidence"] = conf
+            result["posts"]["evidence"] = p_m.group(0)[:EVIDENCE_MAX_LEN] if p_m else ev
+        return result
+
     if best_evidence:
         result["followers"]["value"] = parsed["followers"]
         result["followers"]["confidence"] = best_confidence
@@ -311,12 +516,15 @@ def get_instagram_archival_metrics(
     username: str,
     from_year: Optional[int] = None,
     to_year: Optional[int] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
     sample: int = 30,
     include_evidence: bool = True,
     progress: bool = False,
 ) -> dict:
     """
     Fetch Instagram profile from Wayback, sample snapshots, extract metrics.
+    Use from_date/to_date (YYYYMMDD) for precise ranges, else from_year/to_year.
     """
     username = (username or "").strip()
     if not username:
@@ -330,7 +538,14 @@ def get_instagram_archival_metrics(
             "notes": "Username is required.",
         }
     canonical_url = f"https://www.instagram.com/{username}/"
-    raw_snapshots = list_snapshots(canonical_url, from_year, to_year, limit=500)
+    raw_snapshots = list_snapshots(
+        canonical_url,
+        from_year=from_year,
+        to_year=to_year,
+        from_date=from_date,
+        to_date=to_date,
+        limit=500,
+    )
     snapshots_total = len(raw_snapshots)
 
     deduped = deduplicate_snapshots(raw_snapshots)
@@ -385,6 +600,10 @@ def get_instagram_archival_metrics(
 
         results.append(entry)
 
+    notes = "Sparse archival snapshots; missing metrics are expected. Treat as contextual signals only."
+    if snapshots_total == 0:
+        notes += " No snapshots found for this profile in the archive—the username may have no historic captures, or the Wayback CDX service may be unreachable."
+
     out = {
         "platform": "instagram",
         "username": username,
@@ -392,8 +611,56 @@ def get_instagram_archival_metrics(
         "snapshots_total": snapshots_total,
         "snapshots_sampled": snapshots_sampled,
         "results": results,
-        "notes": "Sparse archival snapshots; missing metrics are expected. Treat as contextual signals only.",
+        "notes": notes,
     }
     if progress:
         out["progress"] = {"total": total_to_process, "processed": processed}
     return out
+
+
+def get_instagram_followers_time_series(
+    username: str,
+    from_year: Optional[int] = None,
+    to_year: Optional[int] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    sample: int = 30,
+) -> dict:
+    """
+    Return a time series of follower counts from Wayback snapshots.
+    Only includes points where followers was successfully extracted.
+    Points sorted by date ascending.
+    """
+    data = get_instagram_archival_metrics(
+        username=username,
+        from_year=from_year,
+        to_year=to_year,
+        from_date=from_date,
+        to_date=to_date,
+        sample=sample,
+        include_evidence=False,
+        progress=False,
+    )
+    points = []
+    for r in data.get("results", []):
+        f = r.get("followers")
+        if f is None:
+            continue
+        ts = r.get("timestamp", "")
+        if len(ts) >= 8:
+            date_str = f"{ts[:4]}-{ts[4:6]}-{ts[6:8]}"
+        else:
+            continue
+        points.append({
+            "date": date_str,
+            "followers": f,
+            "confidence": round(r.get("confidence", 0.2), 2),
+            "archived_url": r.get("archived_url", ""),
+        })
+    points.sort(key=lambda p: p["date"])
+    return {
+        "username": data.get("username", username),
+        "canonical_url": data.get("canonical_url", f"https://www.instagram.com/{username}/"),
+        "points": points,
+        "notes": "Sparse archival snapshots; missing points are expected. Interpret as contextual signals only.",
+    }
