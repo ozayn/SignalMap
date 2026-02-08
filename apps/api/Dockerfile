@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py run.py .
+COPY main.py run.py db.py jobs.py .
 COPY connectors/ ./connectors/
 
 EXPOSE 8080
