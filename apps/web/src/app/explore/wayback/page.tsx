@@ -322,6 +322,7 @@ export default function WaybackExplorePage() {
           Archival snapshots with optional follower/subscriber extraction. Sparse coverage; metrics are contextual signals only.
           Try <code className="text-xs">internetarchive</code> for a profile with many archives.
         </p>
+        <p className="mt-1 text-xs text-muted-foreground/70">Build: 2025-02-08</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4" suppressHydrationWarning>

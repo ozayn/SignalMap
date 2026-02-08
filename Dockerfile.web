@@ -8,6 +8,8 @@ COPY apps/web/package.json ./apps/web/
 RUN pnpm install --frozen-lockfile
 
 COPY . .
+# Bust cache so layer changes when source changes (avoids stale Railway builds)
+RUN echo "build $(date -u +%Y-%m-%dT%H:%MZ)" > /tmp/build_id
 RUN pnpm run build:web
 
 ENV NODE_ENV=production
