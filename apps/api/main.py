@@ -83,6 +83,12 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/api/version")
+def api_version():
+    """Debug: verify API has jobs support."""
+    return {"version": "jobs-v1", "has_jobs": True}
+
+
 OVERVIEW_STUB = {
     "study_id": "default",
     "study_title": "SignalMap Overview",
