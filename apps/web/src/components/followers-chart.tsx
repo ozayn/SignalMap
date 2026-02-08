@@ -65,7 +65,7 @@ export function FollowersChart({ data, username, metricLabel = "Followers" }: Fo
       grid: { left: "3%", right: "4%", bottom: "3%", top: "12%", containLabel: true },
       xAxis: {
         type: "time",
-        boundaryGap: false,
+        boundaryGap: [0, 0],
         splitNumber: 8,
         axisLine: { lineStyle: { color: borderColor } },
         axisLabel: {

@@ -6,6 +6,7 @@
     "dev": "concurrently -n web,api -c auto \"pnpm dev:web\" \"pnpm dev:api\"",
     "dev:web": "pnpm --filter web dev",
     "dev:api": "pnpm --filter api dev",
+    "build": "pnpm run build:web",
     "build:web": "pnpm --filter web build",
     "start:web": "pnpm --filter web start",
     "clean": "rm -rf apps/web/.next apps/web/node_modules/.cache node_modules/.cache"
