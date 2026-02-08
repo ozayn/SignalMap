@@ -6,22 +6,42 @@ import { cssHsl, withAlphaHsl } from "@/lib/utils";
 
 type DataPoint = { date: string; value: number; confidence?: number };
 
+export type TimelineEvent = {
+  id: string;
+  title: string;
+  date: string;
+  type?: string;
+  description?: string;
+};
+
 type TimelineChartProps = {
   data: DataPoint[];
   valueKey: keyof DataPoint;
   label: string;
+  events?: TimelineEvent[];
 };
+
+function findEventIndex(dates: string[], eventDate: string): number | null {
+  const idx = dates.indexOf(eventDate);
+  if (idx >= 0) return idx;
+  for (let i = 0; i < dates.length; i++) {
+    if (dates[i] >= eventDate) return i;
+  }
+  return dates.length - 1;
+}
 
 export function TimelineChart({
   data,
   valueKey,
   label,
+  events = [],
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
 
   useEffect(() => {
     const color = cssHsl("--chart-primary", "hsl(238, 84%, 67%)");
+    const muted = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
     if (!chartRef.current || !data.length) return;
 
     let chart = echarts.getInstanceByDom(chartRef.current);
@@ -33,20 +53,39 @@ export function TimelineChart({
     const dates = data.map((d) => d.date);
     const values = data.map((d) => d[valueKey] as number);
 
+    const minDate = dates[0];
+    const maxDate = dates[dates.length - 1];
+    const markLineData: { xAxis: number; event: TimelineEvent }[] = [];
+    for (const ev of events) {
+      if (ev.date < minDate || ev.date > maxDate) continue;
+      const idx = findEventIndex(dates, ev.date);
+      if (idx != null) {
+        markLineData.push({ xAxis: idx, event: ev });
+      }
+    }
+
     const option: echarts.EChartsOption = {
       animation: false,
       tooltip: {
         trigger: "axis",
         formatter: (params: unknown) => {
-          const p = Array.isArray(params) ? params[0] : params;
-          if (p && typeof p === "object" && "data" in p) {
+          const arr = Array.isArray(params) ? params : [params];
+          const p = arr[0];
+          if (p && typeof p === "object" && "dataIndex" in p) {
             const idx = (p as { dataIndex: number }).dataIndex;
-            const pt = data[idx];
-            let str = `${pt.date}<br/>${label}: ${pt.value}`;
-            if (pt.confidence != null) {
-              str += `<br/>Confidence: ${(pt.confidence * 100).toFixed(0)}%`;
+            const axisValue = (p as { axisValue?: string }).axisValue;
+            const ev = markLineData.find((m) => dates[m.xAxis] === axisValue)?.event;
+            if (ev) {
+              return `${ev.title}<br/>${ev.date}`;
             }
-            return str;
+            const pt = data[idx];
+            if (pt) {
+              let str = `${pt.date}<br/>${label}: ${pt.value}`;
+              if (pt.confidence != null) {
+                str += `<br/>Confidence: ${(pt.confidence * 100).toFixed(0)}%`;
+              }
+              return str;
+            }
           }
           return "";
         },
@@ -55,7 +94,7 @@ export function TimelineChart({
       xAxis: {
         type: "category",
         data: dates,
-        boundaryGap: false,
+        boundaryGap: [0, 0],
         axisLine: { lineStyle: { color: "#e5e7eb" } },
         axisLabel: { color: "#6b7280", fontSize: 11 },
       },
@@ -81,6 +120,14 @@ export function TimelineChart({
               { offset: 1, color: withAlphaHsl(color, 0.03) },
             ]),
           },
+          markLine:
+            markLineData.length > 0
+              ? {
+                  symbol: "none",
+                  lineStyle: { color: muted, width: 1, type: "solid" },
+                  data: markLineData.map((d) => ({ xAxis: d.xAxis, label: { show: false } })),
+                }
+              : undefined,
         },
       ],
     };
@@ -114,7 +161,7 @@ export function TimelineChart({
         // Ignore dispose errors when chart is already torn down
       }
     };
-  }, [data, valueKey, label]);
+  }, [data, valueKey, label, events]);
 
   return <div ref={chartRef} className="h-80 w-full" />;
 }

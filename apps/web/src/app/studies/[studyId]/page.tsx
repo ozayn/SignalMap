@@ -16,11 +16,17 @@ type OverviewData = {
   timeline: Array<{ date: string; value: number }>;
 };
 
+type EventsData = {
+  study_id: string;
+  events: Array<{ id: string; title: string; date: string; type?: string }>;
+};
+
 export default function StudyDetailPage() {
   const params = useParams();
   const studyId = params.studyId as string;
   const study = getStudyById(studyId);
   const [data, setData] = useState<OverviewData | null>(null);
+  const [events, setEvents] = useState<EventsData["events"]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,8 +34,16 @@ export default function StudyDetailPage() {
     if (!study) return;
     let mounted = true;
 
-    fetchJson<OverviewData>(`/api/overview?study_id=${studyId}`)
-      .then((d) => mounted && setData(d))
+    Promise.all([
+      fetchJson<OverviewData>(`/api/overview?study_id=${studyId}`),
+      fetchJson<EventsData>(`/api/events?study_id=${studyId}`).catch(() => ({ events: [] })),
+    ])
+      .then(([overview, eventsRes]) => {
+        if (mounted) {
+          setData(overview);
+          setEvents(eventsRes.events ?? []);
+        }
+      })
       .catch((e) => mounted && setError(e instanceof Error ? e.message : "Unknown error"))
       .finally(() => mounted && setLoading(false));
 
@@ -132,7 +146,12 @@ export default function StudyDetailPage() {
           </p>
         </CardHeader>
         <CardContent>
-          <TimelineChart data={data.timeline} valueKey="value" label="Sentiment" />
+          <TimelineChart
+            data={data.timeline}
+            valueKey="value"
+            label="Sentiment"
+            events={events}
+          />
         </CardContent>
       </Card>
     </div>

@@ -1,9 +1,14 @@
 import os
+import sys
+from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Allow signalmap package imports (apps/api/src/signalmap)
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 from pydantic import BaseModel
 
@@ -87,6 +92,19 @@ def health():
 def api_version():
     """Debug: verify API has jobs support."""
     return {"version": "jobs-v1", "has_jobs": True}
+
+
+@app.get("/api/events")
+def get_events(study_id: str = "1"):
+    """Return contextual events for a study. Events are exogenous anchors, not outcome variables."""
+    from signalmap.data.load_events import load_events
+
+    events = load_events(study_id)
+    return {
+        "study_id": study_id,
+        "events": events,
+        "notes": "Events are contextual anchors, not outcome variables.",
+    }
 
 
 OVERVIEW_STUB = {

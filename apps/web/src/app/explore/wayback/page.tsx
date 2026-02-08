@@ -327,7 +327,10 @@ export default function WaybackExplorePage() {
 
       <form onSubmit={handleSubmit} className="space-y-4" suppressHydrationWarning>
         <input
+          id="wayback-url"
+          name="url"
           type="url"
+          autoComplete="url"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://example.com"
@@ -390,7 +393,10 @@ export default function WaybackExplorePage() {
         <h2 className="text-lg font-medium">Instagram profile</h2>
         <form onSubmit={handleInstagramSubmit} className="space-y-4" suppressHydrationWarning>
           <input
+            id="ig-username"
+            name="username"
             type="text"
+            autoComplete="off"
             value={igUsername}
             onChange={(e) => setIgUsername(e.target.value)}
             placeholder="username (e.g. internetarchive, golfarahani)"
@@ -398,9 +404,12 @@ export default function WaybackExplorePage() {
             disabled={igLoading}
             suppressHydrationWarning
           />
-          <label className="flex flex-col gap-1">
+          <label htmlFor="ig-range-preset" className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">Time range</span>
             <select
+              id="ig-range-preset"
+              name="range-preset"
+              autoComplete="off"
               value={rangePreset}
               onChange={(e) => setRangePreset(e.target.value as RangePreset)}
               className="w-40 rounded-md border border-border bg-background px-3 py-2 text-sm"
@@ -418,10 +427,13 @@ export default function WaybackExplorePage() {
             {(rangePreset === "years" || rangePreset === "custom") &&
               (rangePreset === "years" ? (
                 <>
-                  <label className="flex flex-col gap-1">
+                  <label htmlFor="ig-from-year" className="flex flex-col gap-1">
                     <span className="text-xs text-muted-foreground">From year</span>
                     <input
+                      id="ig-from-year"
+                      name="from-year"
                       type="number"
+                      autoComplete="off"
                       min={2006}
                       max={2030}
                       value={fromYear}
@@ -431,10 +443,13 @@ export default function WaybackExplorePage() {
                       suppressHydrationWarning
                     />
                   </label>
-                  <label className="flex flex-col gap-1">
+                  <label htmlFor="ig-to-year" className="flex flex-col gap-1">
                     <span className="text-xs text-muted-foreground">To year</span>
                     <input
+                      id="ig-to-year"
+                      name="to-year"
                       type="number"
+                      autoComplete="off"
                       min={2006}
                       max={2030}
                       value={toYear}
@@ -447,10 +462,13 @@ export default function WaybackExplorePage() {
                 </>
               ) : (
                 <>
-                  <label className="flex flex-col gap-1">
+                  <label htmlFor="ig-from-date" className="flex flex-col gap-1">
                     <span className="text-xs text-muted-foreground">From date</span>
                     <input
+                      id="ig-from-date"
+                      name="from-date"
                       type="date"
+                      autoComplete="off"
                       value={fromDate}
                       onChange={(e) => setFromDate(e.target.value)}
                       className="w-36 rounded-md border border-border bg-background px-3 py-2 text-sm"
@@ -458,10 +476,13 @@ export default function WaybackExplorePage() {
                       suppressHydrationWarning
                     />
                   </label>
-                  <label className="flex flex-col gap-1">
+                  <label htmlFor="ig-to-date" className="flex flex-col gap-1">
                     <span className="text-xs text-muted-foreground">To date</span>
                     <input
+                      id="ig-to-date"
+                      name="to-date"
                       type="date"
+                      autoComplete="off"
                       value={toDate}
                       onChange={(e) => setToDate(e.target.value)}
                       className="w-36 rounded-md border border-border bg-background px-3 py-2 text-sm"
@@ -471,10 +492,13 @@ export default function WaybackExplorePage() {
                   </label>
                 </>
               ))}
-            <label className="flex flex-col gap-1">
+            <label htmlFor="ig-sample-size" className="flex flex-col gap-1">
                 <span className="text-xs text-muted-foreground">Snapshots to sample</span>
                 <input
+                  id="ig-sample-size"
+                  name="sample-size"
                   type="number"
+                  autoComplete="off"
                   min={1}
                   max={100}
                   value={sampleSize}

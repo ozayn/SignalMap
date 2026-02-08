@@ -10,6 +10,7 @@ COPY apps/api/run.py .
 COPY apps/api/db.py .
 COPY apps/api/jobs.py .
 COPY apps/api/connectors/ ./connectors/
+COPY apps/api/src/ ./src/
 
 EXPOSE 8080
 
