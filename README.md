@@ -29,7 +29,7 @@ pip install -r apps/api/requirements.txt
 pnpm dev
 ```
 
-**If you see 404s for `/_next/static/...`** (layout.css, chunks, etc.): the build cache is out of sync. When the project is in Dropbox, the build folder is now automatically placed in `node_modules/.cache/next` to avoid sync corruption. Stop any running dev server, run `pnpm clean`, then `pnpm dev`.
+**If you see 404s for `/_next/static/...`** (layout.css, chunks, etc.): the build cache is out of sync. Stop any running dev server, run `pnpm clean`, then `pnpm dev`.
 
 - Web: http://localhost:3000
 - API: http://localhost:8000
