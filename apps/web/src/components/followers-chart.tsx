@@ -64,7 +64,7 @@ export function FollowersChart({ data, username }: FollowersChartProps) {
       grid: { left: "3%", right: "4%", bottom: "3%", top: "12%", containLabel: true },
       xAxis: {
         type: "time",
-        boundaryGap: false,
+        boundaryGap: [0, 0],
         splitNumber: 8,
         axisLine: { lineStyle: { color: borderColor } },
         axisLabel: {
@@ -97,7 +97,7 @@ export function FollowersChart({ data, username }: FollowersChartProps) {
           lineStyle:
             data.length >= 3
               ? { color, width: 1, opacity: 0.35 }
-              : { show: false },
+              : { width: 0 },
           itemStyle: { color },
         },
       ],
