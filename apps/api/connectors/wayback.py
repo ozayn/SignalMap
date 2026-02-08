@@ -10,8 +10,13 @@ from typing import Optional
 import httpx
 
 CDX_URL = "https://web.archive.org/cdx/search/cdx"
-FETCH_TIMEOUT = 10.0
-REQUEST_DELAY_MS = 300
+FETCH_TIMEOUT = 15.0
+# Internet Archive: 15 req/min limit
+REQUEST_DELAY_MS = 4500
+
+WAYBACK_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; SignalMap/1.0; research tool)",
+}
 
 # Conservative regex patterns for follower/subscriber counts.
 # False positives are worse than missing data.
@@ -61,7 +66,7 @@ def list_snapshots(
     if to_year is not None:
         params["to"] = str(to_year)
 
-    with httpx.Client(timeout=15.0) as client:
+    with httpx.Client(timeout=15.0, headers=WAYBACK_HEADERS) as client:
         resp = client.get(CDX_URL, params=params)
         resp.raise_for_status()
         data = resp.json()
@@ -83,7 +88,7 @@ def fetch_snapshot_html(timestamp: str, url: str) -> Optional[str]:
     """Fetch HTML from archived URL. Returns None on failure."""
     archived = f"https://web.archive.org/web/{timestamp}/{url}"
     try:
-        with httpx.Client(timeout=FETCH_TIMEOUT) as client:
+        with httpx.Client(timeout=FETCH_TIMEOUT, headers=WAYBACK_HEADERS) as client:
             resp = client.get(archived)
             resp.raise_for_status()
             return resp.text

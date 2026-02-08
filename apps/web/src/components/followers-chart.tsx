@@ -14,6 +14,7 @@ export type FollowersPoint = {
 type FollowersChartProps = {
   data: FollowersPoint[];
   username: string;
+  metricLabel?: string;
 };
 
 function formatFollowers(n: number): string {
@@ -22,7 +23,7 @@ function formatFollowers(n: number): string {
   return n.toLocaleString();
 }
 
-export function FollowersChart({ data, username }: FollowersChartProps) {
+export function FollowersChart({ data, username, metricLabel = "Followers" }: FollowersChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -50,8 +51,8 @@ export function FollowersChart({ data, username }: FollowersChartProps) {
             const pt = data[idx];
             const followerLine =
               pt.followers != null
-                ? `${formatFollowers(pt.followers)} followers · Confidence: ${(pt.confidence * 100).toFixed(0)}%`
-                : "No follower data extracted";
+                ? `${formatFollowers(pt.followers)} ${metricLabel.toLowerCase()} · Confidence: ${(pt.confidence * 100).toFixed(0)}%`
+                : `No ${metricLabel.toLowerCase()} data extracted`;
             const lines = [pt.date, followerLine];
             if (pt.archived_url) {
               lines.push(`<a href="${pt.archived_url}" target="_blank" rel="noopener noreferrer" style="font-size:11px;text-decoration:underline;margin-top:4px;display:block">View archived snapshot</a>`);
@@ -64,7 +65,7 @@ export function FollowersChart({ data, username }: FollowersChartProps) {
       grid: { left: "3%", right: "4%", bottom: "3%", top: "12%", containLabel: true },
       xAxis: {
         type: "time",
-        boundaryGap: [0, 0],
+        boundaryGap: false,
         splitNumber: 8,
         axisLine: { lineStyle: { color: borderColor } },
         axisLabel: {
@@ -72,7 +73,9 @@ export function FollowersChart({ data, username }: FollowersChartProps) {
           fontSize: 11,
           formatter: (value: number) => {
             const d = new Date(value);
-            return `${d.getFullYear()}`;
+            const months = "JanFebMarAprMayJunJulAugSepOctNovDec";
+            const m = months.slice(d.getMonth() * 3, d.getMonth() * 3 + 3);
+            return `${m} ${d.getFullYear()}`;
           },
         },
       },
@@ -88,7 +91,7 @@ export function FollowersChart({ data, username }: FollowersChartProps) {
       },
       series: [
         {
-          name: "Followers",
+          name: metricLabel,
           type: "line",
           data: seriesData,
           showSymbol: true,
@@ -127,15 +130,15 @@ export function FollowersChart({ data, username }: FollowersChartProps) {
         // Ignore
       }
     };
-  }, [data, username]);
+  }, [data, username, metricLabel]);
 
   if (!data.length) return null;
 
   const withData = data.filter((d) => d.followers != null).length;
   const caption =
     withData === data.length
-      ? `Followers over time (${data.length} point${data.length !== 1 ? "s" : ""})`
-      : `${withData} of ${data.length} snapshots had follower data`;
+      ? `${metricLabel} over time (${data.length} point${data.length !== 1 ? "s" : ""})`
+      : `${withData} of ${data.length} snapshots had ${metricLabel.toLowerCase()} data`;
 
   return (
     <div className="space-y-2">
@@ -150,7 +153,7 @@ export function FollowersChart({ data, username }: FollowersChartProps) {
               <span
                 key={`${d.date}-${i}`}
                 className={d.followers != null ? undefined : "opacity-60"}
-                title={d.followers != null ? `${d.followers.toLocaleString()} followers` : "No follower data"}
+                title={d.followers != null ? `${d.followers.toLocaleString()} ${metricLabel.toLowerCase()}` : `No ${metricLabel.toLowerCase()} data`}
               >
                 {d.date}
               </span>

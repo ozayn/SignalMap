@@ -120,5 +120,16 @@ def init_tables() -> None:
                 cur.execute("ALTER TABLE wayback_jobs ADD COLUMN IF NOT EXISTS summary TEXT")
             except Exception:
                 pass
+            for col in ("subscribers",):
+                try:
+                    cur.execute(
+                        "ALTER TABLE wayback_snapshot_cache ADD COLUMN IF NOT EXISTS " + col + " BIGINT"
+                    )
+                except Exception:
+                    pass
+            try:
+                cur.execute("ALTER TABLE wayback_job_snapshots ADD COLUMN IF NOT EXISTS subscribers BIGINT")
+            except Exception:
+                pass
     except Exception:
         pass  # DB may not be available; job endpoints will return 503

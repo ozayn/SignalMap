@@ -12,9 +12,13 @@ from typing import Optional, Tuple
 import httpx
 
 CDX_URL = "https://web.archive.org/cdx/search/cdx"
-FETCH_TIMEOUT = 10.0
-REQUEST_DELAY_S = 1.0  # Wayback rate-limits; 1s between fetches to avoid 429
+FETCH_TIMEOUT = 15.0
+# Internet Archive: 15 req/min limit (archive.org/details/toomanyrequests_20191110)
+REQUEST_DELAY_S = 4.5  # ~13 req/min; cache hits skip delay
 
+WAYBACK_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; SignalMap/1.0; research tool)",
+}
 EVIDENCE_MAX_LEN = 140
 
 
@@ -101,7 +105,7 @@ def _fetch_cdx(
         params_list.append(("to", str(to_year)))
 
     time.sleep(0.5)  # Be polite to CDX; reduces 429 risk
-    with httpx.Client(timeout=15.0) as client:
+    with httpx.Client(timeout=15.0, headers=WAYBACK_HEADERS) as client:
         resp = client.get(CDX_URL, params=params_list)
         if resp.status_code == 429:
             time.sleep(8.0)
@@ -267,7 +271,7 @@ def fetch_snapshot_html(timestamp: str, original_url: str) -> Tuple[Optional[str
     for attempt in range(2):
         try:
             time.sleep(REQUEST_DELAY_S)
-            with httpx.Client(timeout=FETCH_TIMEOUT) as client:
+            with httpx.Client(timeout=FETCH_TIMEOUT, headers=WAYBACK_HEADERS) as client:
                 resp = client.get(archived_url)
                 if resp.status_code == 429:
                     time.sleep(5.0)  # Back off before retry

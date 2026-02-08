@@ -11,6 +11,7 @@ type JobResult = {
   followers?: number | null;
   following?: number | null;
   posts?: number | null;
+  subscribers?: number | null;
   confidence?: number;
   evidence?: string | null;
   source?: string;
@@ -19,6 +20,7 @@ type JobResult = {
 type JobResponse = {
   job_id: string;
   status: string;
+  platform?: string;
   username?: string;
   total?: number;
   processed?: number;
@@ -70,14 +72,16 @@ export default function WaybackJobPage() {
     return () => clearInterval(interval);
   }, [job?.status, fetchJob]);
 
+  const isYouTube = job?.platform === "youtube";
   const chartData = job?.all_results ?? job?.results ?? [];
   const followersPoints: FollowersPoint[] = chartData
     .map((r) => {
       const ts = r.timestamp;
       const date = ts.length >= 8 ? `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}` : "";
+      const value = isYouTube ? r.subscribers : r.followers;
       return {
         date,
-        followers: r.followers ?? null,
+        followers: value ?? null,
         confidence: r.confidence ?? 0.2,
         archived_url: r.archived_url ?? "",
       };
@@ -144,7 +148,7 @@ export default function WaybackJobPage() {
           ← Back to Wayback
         </Link>
         <h1 className="text-2xl font-medium tracking-tight text-foreground">
-          Wayback job: @{job.username ?? "—"}
+          Wayback job: {isYouTube ? job.username ?? "—" : `@${job.username ?? "—"}`}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Status: {job.status}
@@ -214,8 +218,14 @@ export default function WaybackJobPage() {
         <div className="space-y-6">
           {followersPoints.length > 0 && (
             <div className="rounded-md border border-border p-4">
-              <h2 className="text-sm font-medium mb-3">Followers over time</h2>
-              <FollowersChart data={followersPoints} username={job.username ?? ""} />
+              <h2 className="text-sm font-medium mb-3">
+                {isYouTube ? "Subscribers" : "Followers"} over time
+              </h2>
+              <FollowersChart
+                data={followersPoints}
+                username={job.username ?? ""}
+                metricLabel={isYouTube ? "Subscribers" : "Followers"}
+              />
             </div>
           )}
 
@@ -235,9 +245,15 @@ export default function WaybackJobPage() {
                       <span className="text-xs text-muted-foreground/80">source: {r.source}</span>
                     )}
                   </div>
-                  {(r.followers != null || r.following != null || r.posts != null) && (
+                  {(r.followers != null || r.following != null || r.posts != null || r.subscribers != null) && (
                     <p>
-                      Followers: {r.followers?.toLocaleString() ?? "—"} · Following: {r.following?.toLocaleString() ?? "—"} · Posts: {r.posts?.toLocaleString() ?? "—"}
+                      {isYouTube ? (
+                        <>Subscribers: {r.subscribers?.toLocaleString() ?? "—"}</>
+                      ) : (
+                        <>
+                          Followers: {r.followers?.toLocaleString() ?? "—"} · Following: {r.following?.toLocaleString() ?? "—"} · Posts: {r.posts?.toLocaleString() ?? "—"}
+                        </>
+                      )}
                       {r.confidence != null && r.confidence > 0 && ` (conf: ${r.confidence})`}
                     </p>
                   )}

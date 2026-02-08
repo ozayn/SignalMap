@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 from pydantic import BaseModel
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 
 from connectors.wayback import get_snapshots_with_metrics
 from connectors.wayback_instagram import (
@@ -23,16 +23,22 @@ from connectors.wayback_instagram import (
     evenly_sample_snapshots,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from signalmap.connectors.wayback_youtube import get_youtube_archival_metrics
+from signalmap.connectors.wayback_twitter import get_twitter_archival_metrics
 
 from db import init_tables
 from jobs import (
     create_instagram_job,
+    create_youtube_job,
+    create_twitter_job,
     get_job,
     get_job_results,
     list_jobs,
     cancel_job,
     delete_job,
     _run_instagram_job,
+    _run_youtube_job,
+    _run_twitter_job,
 )
 
 
@@ -75,6 +81,8 @@ def api_index():
             "overview": "/api/overview?study_id=1",
             "wayback_snapshots": "/api/wayback/snapshots?url=...&sample=30",
             "wayback_instagram": "/api/wayback/instagram?username=...&sample=30",
+            "wayback_youtube": "/api/wayback/youtube?input=@handle&from_year=2010&to_year=2026&sample=40",
+            "wayback_twitter": "/api/wayback/twitter?input=@handle&from_year=2010&to_year=2026&sample=40",
             "wayback_instagram_jobs": "POST /api/wayback/instagram/jobs",
             "wayback_jobs_list": "GET /api/wayback/jobs/list",
             "wayback_job_status": "GET /api/wayback/jobs/{job_id}",
@@ -230,6 +238,51 @@ def wayback_instagram_followers(
     )
 
 
+@app.get("/api/wayback/youtube/debug")
+def wayback_youtube_debug(
+    input_param: str = Query(..., alias="input"),
+    from_year: Optional[int] = None,
+    to_year: Optional[int] = None,
+):
+    """Debug: show raw CDX snapshot count for a YouTube channel."""
+    from signalmap.connectors.wayback_youtube import (
+        canonicalize_youtube_input,
+        list_snapshots,
+    )
+    canon = canonicalize_youtube_input(input_param)
+    url = canon.get("canonical_url", "")
+    if not url:
+        return {"input": input_param, "error": "Invalid input", "urls_tried": []}
+    snaps = list_snapshots(url, from_year=from_year, to_year=to_year, limit=500)
+    return {
+        "input": input_param,
+        "canonical_url": url,
+        "snapshots_count": len(snaps),
+        "preview": snaps[:5] if snaps else [],
+    }
+
+
+@app.get("/api/wayback/youtube")
+def wayback_youtube(
+    input_param: str = Query(..., alias="input"),
+    from_year: Optional[int] = None,
+    to_year: Optional[int] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    sample: int = 40,
+):
+    """Return YouTube channel subscriber counts from Wayback archival snapshots."""
+    sample = min(max(sample, 1), 100)
+    return get_youtube_archival_metrics(
+        input_str=input_param,
+        from_year=from_year if from_year is not None else 2005,
+        to_year=to_year if to_year is not None else 2026,
+        from_date=from_date,
+        to_date=to_date,
+        sample=sample,
+    )
+
+
 def _require_db():
     if not os.getenv("DATABASE_URL"):
         raise HTTPException(
@@ -245,6 +298,77 @@ class CreateInstagramJobBody(BaseModel):
     from_date: Optional[str] = None
     to_date: Optional[str] = None
     sample: int = 30
+
+
+class CreateYouTubeJobBody(BaseModel):
+    input: str
+    from_year: Optional[int] = None
+    to_year: Optional[int] = None
+    from_date: Optional[str] = None
+    to_date: Optional[str] = None
+    sample: int = 30
+
+
+class CreateTwitterJobBody(BaseModel):
+    input: str
+    from_year: Optional[int] = None
+    to_year: Optional[int] = None
+    from_date: Optional[str] = None
+    to_date: Optional[str] = None
+    sample: int = 30
+
+
+@app.get("/api/wayback/twitter")
+def wayback_twitter(
+    input_param: str = Query(..., alias="input"),
+    from_year: Optional[int] = None,
+    to_year: Optional[int] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    sample: int = 40,
+):
+    """Return Twitter/X profile follower counts from Wayback archival snapshots."""
+    sample = min(max(sample, 1), 100)
+    return get_twitter_archival_metrics(
+        input_str=input_param,
+        from_year=from_year if from_year is not None else 2006,
+        to_year=to_year if to_year is not None else 2026,
+        from_date=from_date,
+        to_date=to_date,
+        sample=sample,
+    )
+
+
+@app.post("/api/wayback/twitter/jobs")
+def create_wayback_twitter_job(body: CreateTwitterJobBody, background_tasks: BackgroundTasks):
+    """Start a Wayback Twitter fetch job. Returns immediately with job_id."""
+    _require_db()
+    job_id = create_twitter_job(
+        input_str=body.input,
+        from_year=body.from_year,
+        to_year=body.to_year,
+        from_date=body.from_date,
+        to_date=body.to_date,
+        sample=body.sample,
+    )
+    background_tasks.add_task(_run_twitter_job, job_id)
+    return {"job_id": job_id, "status": "queued"}
+
+
+@app.post("/api/wayback/youtube/jobs")
+def create_wayback_youtube_job(body: CreateYouTubeJobBody, background_tasks: BackgroundTasks):
+    """Start a Wayback YouTube fetch job. Returns immediately with job_id."""
+    _require_db()
+    job_id = create_youtube_job(
+        input_str=body.input,
+        from_year=body.from_year,
+        to_year=body.to_year,
+        from_date=body.from_date,
+        to_date=body.to_date,
+        sample=body.sample,
+    )
+    background_tasks.add_task(_run_youtube_job, job_id)
+    return {"job_id": job_id, "status": "queued"}
 
 
 @app.post("/api/wayback/instagram/jobs")
@@ -264,7 +388,11 @@ def create_wayback_instagram_job(body: CreateInstagramJobBody, background_tasks:
 
 
 @app.get("/api/wayback/jobs/list")
-def list_wayback_jobs(username: Optional[str] = None, limit: int = 10):
+def list_wayback_jobs(
+    username: Optional[str] = None,
+    platform: Optional[str] = None,
+    limit: int = 10,
+):
     """List recent jobs, optionally filtered by username."""
     if not os.getenv("DATABASE_URL"):
         raise HTTPException(
@@ -272,7 +400,7 @@ def list_wayback_jobs(username: Optional[str] = None, limit: int = 10):
             detail="Database not configured. Set DATABASE_URL for job support.",
         )
     try:
-        jobs = list_jobs(username=username, limit=limit)
+        jobs = list_jobs(username=username, platform=platform, limit=limit)
         return {"jobs": jobs}
     except Exception:
         raise HTTPException(

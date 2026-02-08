@@ -5,11 +5,13 @@ const API_BASE = process.env.API_URL ?? "http://localhost:8000";
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const username = searchParams.get("username");
+  const platform = searchParams.get("platform");
   const limit = searchParams.get("limit");
 
   try {
     const params = new URLSearchParams();
     if (username) params.set("username", username);
+    if (platform) params.set("platform", platform);
     if (limit) params.set("limit", limit);
 
     const res = await fetch(`${API_BASE}/api/wayback/jobs/list?${params}`, {

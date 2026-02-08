@@ -80,7 +80,8 @@ export function TimelineChart({
             }
             const pt = data[idx];
             if (pt) {
-              let str = `${pt.date}<br/>${label}: ${pt.value}`;
+              const val = pt[valueKey];
+              let str = `${pt.date}<br/>${label}: ${val ?? "—"}`;
               if (pt.confidence != null) {
                 str += `<br/>Confidence: ${(pt.confidence * 100).toFixed(0)}%`;
               }
