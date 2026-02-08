@@ -94,7 +94,7 @@ export function TimelineChart({
       xAxis: {
         type: "category",
         data: dates,
-        boundaryGap: [0, 0],
+        boundaryGap: false,
         axisLine: { lineStyle: { color: "#e5e7eb" } },
         axisLabel: { color: "#6b7280", fontSize: 11 },
       },
