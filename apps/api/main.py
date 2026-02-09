@@ -111,7 +111,7 @@ def get_events(study_id: str = "1"):
     return {
         "study_id": study_id,
         "events": events,
-        "notes": "Events are contextual anchors, not outcome variables.",
+        "notes": "Events are contextual anchors; missing coverage is expected.",
     }
 
 

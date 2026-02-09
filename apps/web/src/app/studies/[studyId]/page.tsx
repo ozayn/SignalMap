@@ -16,9 +16,19 @@ type OverviewData = {
   timeline: Array<{ date: string; value: number }>;
 };
 
+type Event = {
+  id: string;
+  title: string;
+  date: string;
+  type?: string;
+  description?: string;
+  confidence?: string;
+  sources?: string[];
+};
+
 type EventsData = {
   study_id: string;
-  events: Array<{ id: string; title: string; date: string; type?: string }>;
+  events: Event[];
 };
 
 export default function StudyDetailPage() {

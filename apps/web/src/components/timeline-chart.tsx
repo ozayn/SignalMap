@@ -12,6 +12,7 @@ export type TimelineEvent = {
   date: string;
   type?: string;
   description?: string;
+  confidence?: string;
 };
 
 type TimelineChartProps = {
@@ -42,6 +43,8 @@ export function TimelineChart({
   useEffect(() => {
     const color = cssHsl("--chart-primary", "hsl(238, 84%, 67%)");
     const muted = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
+    const borderColor = cssHsl("--border", "hsl(240, 5.9%, 90%)");
+    const mutedFg = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
     if (!chartRef.current || !data.length) return;
 
     let chart = echarts.getInstanceByDom(chartRef.current);
@@ -55,12 +58,12 @@ export function TimelineChart({
 
     const minDate = dates[0];
     const maxDate = dates[dates.length - 1];
-    const markLineData: { xAxis: number; event: TimelineEvent }[] = [];
+    const markLineData: { xAxis: string; event: TimelineEvent }[] = [];
     for (const ev of events) {
       if (ev.date < minDate || ev.date > maxDate) continue;
       const idx = findEventIndex(dates, ev.date);
       if (idx != null) {
-        markLineData.push({ xAxis: idx, event: ev });
+        markLineData.push({ xAxis: dates[idx], event: ev });
       }
     }
 
@@ -73,10 +76,13 @@ export function TimelineChart({
           const p = arr[0];
           if (p && typeof p === "object" && "dataIndex" in p) {
             const idx = (p as { dataIndex: number }).dataIndex;
-            const axisValue = (p as { axisValue?: string }).axisValue;
-            const ev = markLineData.find((m) => dates[m.xAxis] === axisValue)?.event;
+            const axisValue = (p as { axisValue?: string }).axisValue as string | undefined;
+            const ev = markLineData.find((m) => m.xAxis === axisValue)?.event;
             if (ev) {
-              return `${ev.title}<br/>${ev.date}`;
+              let lines = [`<span style="font-weight:600">${ev.title}</span>`, ev.date];
+              if (ev.description) lines.push(ev.description);
+              if (ev.confidence) lines.push(`Confidence: ${ev.confidence}`);
+              return lines.join("<br/>");
             }
             const pt = data[idx];
             if (pt) {
@@ -96,14 +102,14 @@ export function TimelineChart({
         type: "category",
         data: dates,
         boundaryGap: false,
-        axisLine: { lineStyle: { color: "#e5e7eb" } },
-        axisLabel: { color: "#6b7280", fontSize: 11 },
+        axisLine: { lineStyle: { color: borderColor } },
+        axisLabel: { color: mutedFg, fontSize: 11 },
       },
       yAxis: {
         type: "value",
         axisLine: { show: false },
-        splitLine: { lineStyle: { color: "#f3f4f6" } },
-        axisLabel: { color: "#6b7280", fontSize: 11 },
+        splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
+        axisLabel: { color: mutedFg, fontSize: 11 },
       },
       series: [
         {
