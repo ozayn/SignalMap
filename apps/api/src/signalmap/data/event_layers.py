@@ -111,6 +111,31 @@ EVENTS_SANCTIONS: list[dict] = [
     },
 ]
 
+EVENTS_WORLD_RANGE: list[dict] = [
+    {
+        "id": "ukraine_invasion_initial",
+        "title": "Russia invades Ukraine (initial phase)",
+        "date_start": "2022-02-24",
+        "date_end": "2022-03-15",
+        "type": "military",
+        "scope": "world",
+        "confidence": "high",
+        "description": "Initial 3-week phase of Russia's full-scale invasion of Ukraine.",
+        "sources": ["https://www.reuters.com/world/europe/ukraine-crisis"],
+    },
+    {
+        "id": "iran_israel_12_day_war_2025",
+        "title": "Israel–Iran direct military confrontation",
+        "date_start": "2025-06-13",
+        "date_end": "2025-06-24",
+        "type": "military",
+        "scope": "world",
+        "confidence": "high",
+        "description": "A 12-day period of direct military escalation involving missile and drone strikes.",
+        "sources": ["BBC", "Reuters", "Al Jazeera"],
+    },
+]
+
 EVENTS_WORLD_CORE: list[dict] = [
     {
         "id": "wl-001",

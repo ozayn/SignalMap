@@ -5,8 +5,12 @@ const API_BASE = process.env.API_URL ?? "http://localhost:8000";
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl;
+    const params = new URLSearchParams();
     const studyId = searchParams.get("study_id") ?? "1";
-    const res = await fetch(`${API_BASE}/api/events?study_id=${studyId}`, {
+    params.set("study_id", studyId);
+    const layers = searchParams.get("layers");
+    if (layers) params.set("layers", layers);
+    const res = await fetch(`${API_BASE}/api/events?${params}`, {
       headers: { Accept: "application/json" },
       next: { revalidate: 0 },
     });

@@ -9,7 +9,9 @@ type DataPoint = { date: string; value: number; confidence?: number };
 export type TimelineEvent = {
   id: string;
   title: string;
-  date: string;
+  date?: string;
+  date_start?: string;
+  date_end?: string;
   type?: string;
   description?: string;
   confidence?: string;
@@ -84,6 +86,7 @@ export function TimelineChart({
     const IranOpacity = 0.5;
     const WorldOpacity = 0.3;
     const SanctionsOpacity = 0.28;
+    const RangeBandOpacity = 0.06;
 
     const oilPointsResolved = secondSeries?.points ?? oilPoints;
     const hasData = data.length > 0;
@@ -122,10 +125,14 @@ export function TimelineChart({
 
     const minDate = dates[0];
     const maxDate = dates[dates.length - 1];
+
+    const pointEvents = events.filter((e) => e.date != null);
+    const rangeEvents = events.filter((e) => e.date_start != null && e.date_end != null);
+
     const markLineData: { xAxis: string; event: TimelineEvent; isAnchor: boolean }[] = [];
-    for (const ev of events) {
-      if (ev.date < minDate || ev.date > maxDate) continue;
-      const idx = findEventIndex(dates, ev.date);
+    for (const ev of pointEvents) {
+      if (ev.date! < minDate || ev.date! > maxDate) continue;
+      const idx = findEventIndex(dates, ev.date!);
       if (idx != null) {
         markLineData.push({
           xAxis: dates[idx],
@@ -133,6 +140,27 @@ export function TimelineChart({
           isAnchor: anchorEventId === ev.id,
         });
       }
+    }
+
+    const rangeBandData: { xStart: string; xEnd: string; event: TimelineEvent }[] = [];
+    for (const ev of rangeEvents) {
+      const ds = ev.date_start!;
+      const de = ev.date_end!;
+      if (de < minDate || ds > maxDate) continue;
+      const startIdx = dates.findIndex((d) => d >= ds);
+      let endIdx = -1;
+      for (let i = dates.length - 1; i >= 0; i--) {
+        if (dates[i] <= de) {
+          endIdx = i;
+          break;
+        }
+      }
+      if (startIdx < 0 || endIdx < 0 || startIdx > endIdx) continue;
+      rangeBandData.push({
+        xStart: dates[startIdx],
+        xEnd: dates[endIdx],
+        event: ev,
+      });
     }
 
     const oilColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
@@ -153,14 +181,19 @@ export function TimelineChart({
           const dateStr = dates[idx] ?? (typeof axisValue === "string" ? axisValue : "") ?? "";
           const hoverTime = dateStr ? new Date(dateStr).getTime() : 0;
           const dayMs = 86400000;
-          const nearestEv = markLineData
-            .map((m) => ({
-              ev: m.event,
-              dist: Math.abs(new Date(m.event.date).getTime() - hoverTime),
-            }))
-            .filter((x) => x.dist <= dayMs * 7)
-            .sort((a, b) => a.dist - b.dist)[0];
-          const ev = nearestEv?.ev ?? markLineData.find(
+          const rangeEv = rangeBandData.find(
+            (r) => dateStr >= r.xStart && dateStr <= r.xEnd
+          )?.event;
+          const nearestEv = !rangeEv
+            ? markLineData
+                .map((m) => ({
+                  ev: m.event,
+                  dist: Math.abs(new Date(m.event.date!).getTime() - hoverTime),
+                }))
+                .filter((x) => x.dist <= dayMs * 7)
+                .sort((a, b) => a.dist - b.dist)[0]
+            : null;
+          const ev = rangeEv ?? nearestEv?.ev ?? markLineData.find(
             (m) => m.xAxis === axisValue || m.xAxis === dateStr
           )?.event;
           const lines: string[] = [];
@@ -168,17 +201,31 @@ export function TimelineChart({
             const scope = getEventScope(ev);
             const scopeLabel = scope === "sanctions" ? "Sanctions" : scope === "world" ? "World event" : "Iran event";
             lines.push(`<span style="font-size:10px;color:#888">${scopeLabel}</span>`);
-            lines.push(`<span style="font-weight:600">${ev.title}</span>`, ev.date);
+            lines.push(`<span style="font-weight:600">${ev.title}</span>`);
+            if (ev.date_start && ev.date_end) {
+              lines.push(`${ev.date_start} — ${ev.date_end}`);
+            } else {
+              lines.push(ev.date ?? "");
+            }
             if (ev.description) lines.push(ev.description);
             if (ev.sources && ev.sources.length > 0) {
-              lines.push(
-                ev.sources
-                  .map((url, i) => {
-                    const label = ev.sources!.length > 1 ? `Source ${i + 1}` : "Source";
-                    return `<a href="${url}" target="_blank" rel="noopener" style="color:#6b9dc7;font-size:11px">${label}</a>`;
-                  })
-                  .join(" • ")
-              );
+              const urlSources = ev.sources.filter((s) => s.startsWith("http"));
+              const textSources = ev.sources.filter((s) => !s.startsWith("http"));
+              const parts: string[] = [];
+              if (urlSources.length) {
+                parts.push(
+                  urlSources
+                    .map((url, i) => {
+                      const label = urlSources.length > 1 ? `Source ${i + 1}` : "Source";
+                      return `<a href="${url}" target="_blank" rel="noopener" style="color:#6b9dc7;font-size:11px">${label}</a>`;
+                    })
+                    .join(" • ")
+                );
+              }
+              if (textSources.length) {
+                parts.push(`Sources: ${textSources.join(", ")}`);
+              }
+              lines.push(parts.join(" • "));
             }
             if (ev.confidence && scope !== "sanctions") lines.push(`Confidence: ${ev.confidence}`);
             lines.push("—");
@@ -314,6 +361,21 @@ export function TimelineChart({
                         }),
                       }
                     : undefined,
+                markArea:
+                  rangeBandData.length > 0
+                    ? {
+                        silent: true,
+                        itemStyle: {
+                          color: withAlphaHsl(muted, RangeBandOpacity),
+                          borderColor: withAlphaHsl(muted, 0.2),
+                          borderWidth: 1,
+                        },
+                        data: rangeBandData.map((r) => [
+                          { xAxis: r.xStart },
+                          { xAxis: r.xEnd },
+                        ]),
+                      }
+                    : undefined,
               },
             ]
           : [
@@ -341,6 +403,21 @@ export function TimelineChart({
                             lineStyle: { color, width, type: lineType },
                           };
                         }),
+                      }
+                    : undefined,
+                markArea:
+                  rangeBandData.length > 0
+                    ? {
+                        silent: true,
+                        itemStyle: {
+                          color: withAlphaHsl(muted, RangeBandOpacity),
+                          borderColor: withAlphaHsl(muted, 0.2),
+                          borderWidth: 1,
+                        },
+                        data: rangeBandData.map((r) => [
+                          { xAxis: r.xStart },
+                          { xAxis: r.xEnd },
+                        ]),
                       }
                     : undefined,
               },
