@@ -37,7 +37,7 @@ type Event = {
   confidence?: string;
   sources?: string[];
   layer?: "iran_core" | "world_core" | "world_1900" | "sanctions" | "iran_presidents";
-  scope?: "iran" | "world" | "sanctions";
+  scope?: "iran" | "world" | "sanctions" | "oil_exports";
 };
 
 type EventsData = {
@@ -107,11 +107,6 @@ const WINDOW_OPTIONS_LONG_RANGE = [
   { value: 730, label: "±2 years" },
 ] as const;
 
-/** Oil export sanctions periods for Study 9. Spans both panels as background bands. */
-const EXPORT_CAPACITY_SANCTIONS_PERIODS = [
-  { date_start: "2012-07-01", date_end: "2016-01-16", title: "Oil sector sanctions (2012–2016)", scope: "oil exports" },
-  { date_start: "2018-08-06", date_end: "2024-12-31", title: "Oil sanctions reimposed (2018–)", scope: "oil exports" },
-] as const;
 
 function computeWindowRange(
   eventDate: string,
@@ -256,6 +251,19 @@ export default function StudyDetailPage() {
     const mid = Math.floor(sorted.length / 2);
     return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
   }, [isOilPppIran, pppIranPoints]);
+
+  const sanctionsPeriodsFromEvents = useMemo(() => {
+    if (!isOilExportCapacity || !showSanctionsPeriods || !study) return undefined;
+    const rangeEnd = exportCapacityTimeRange?.[1] ?? study.timeRange[1];
+    return events
+      .filter((e): e is Event & { date_start: string } => e.scope === "oil_exports" && !!e.date_start)
+      .map((e) => ({
+        date_start: e.date_start,
+        date_end: e.date_end ?? rangeEnd,
+        title: e.title,
+        scope: "Oil exports" as const,
+      }));
+  }, [isOilExportCapacity, showSanctionsPeriods, study, events, exportCapacityTimeRange]);
 
   useEffect(() => {
     if (!study) return;
@@ -1266,7 +1274,7 @@ export default function StudyDetailPage() {
                 ]}
                 timeRange={exportCapacityTimeRange ?? study.timeRange}
                 mutedBands={false}
-                sanctionsPeriods={showSanctionsPeriods ? [...EXPORT_CAPACITY_SANCTIONS_PERIODS] : undefined}
+                sanctionsPeriods={sanctionsPeriodsFromEvents}
               />
               <p className="mt-3 text-xs text-muted-foreground max-w-2xl">
                 Export capacity proxy = oil price × estimated export volume. Indexed to first year = 100. Proxy for earning capacity, not realized revenue.
@@ -1347,6 +1355,9 @@ export default function StudyDetailPage() {
                 <p>
                   It is not actual revenue—it is a rough proxy. Price and volume together give a sense of capacity, not what was actually earned.
                   The chart aims to show that combination and how it has evolved over time. It does not prove any causal link or represent actual government receipts.
+                </p>
+                <p>
+                  When exports are constrained, volume often matters more than price. World oil prices can rise or fall, but if you cannot sell as much, the price alone says little about earning capacity. Volume reflects how much can actually be exported—the bottleneck is often how much you can sell, not the price at which you could sell it.
                 </p>
               </InSimpleTerms>
             </>

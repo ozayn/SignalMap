@@ -105,7 +105,7 @@ IRAN_CORE = [
 
 # Sanctions events (point events → vertical lines)
 # Sources: USIP, State Dept
-SANCTIONS = [
+SANCTIONS_POINT = [
     {"id": "sanctions-1996-isa", "title": "Iran Sanctions Act", "date": "1996-08-05", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "ISA signed into law.", "confidence": "high"},
     {"id": "sanctions-2010-cisada", "title": "CISADA", "date": "2010-07-01", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "Comprehensive Iran Sanctions Act.", "confidence": "high"},
     {"id": "sanctions-2011-cbi", "title": "CBI sanctions", "date": "2011-12-31", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "Central Bank sanctions (NDAA 1245).", "confidence": "high"},
@@ -116,6 +116,15 @@ SANCTIONS = [
     {"id": "sanctions-2022-eu-pause", "title": "EU removes JCPOA from agenda", "date": "2022-08-08", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "EU coordinator pauses JCPOA restoration talks.", "confidence": "high"},
     {"id": "sanctions-2024-eu-iran", "title": "EU sanctions on Iran (after Israel strike)", "date": "2024-04-18", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "EU expands sanctions on Iran following April 2024 drone and missile attack on Israel.", "confidence": "high"},
 ]
+
+# Sanctions RANGE events for Study 9 (oil export capacity context)
+# date_end nullable if ongoing; scope: oil_exports
+SANCTIONS_OIL_EXPORTS_RANGE = [
+    {"id": "sanctions-range-oil-2012", "title": "Oil sector sanctions (2012–2016)", "date_start": "2012-07-01", "date_end": "2016-01-16", "type": "economic", "scope": "oil_exports", "layer": "sanctions", "description": "Oil export sanctions tightened until JCPOA implementation."},
+    {"id": "sanctions-range-oil-2018", "title": "Oil sanctions reimposed (2018–)", "date_start": "2018-08-06", "date_end": None, "type": "economic", "scope": "oil_exports", "layer": "sanctions", "description": "US reimposed oil and financial sanctions; ongoing."},
+]
+
+SANCTIONS = SANCTIONS_POINT + SANCTIONS_OIL_EXPORTS_RANGE
 
 _LAYER_REGISTRY = {
     "iran_presidents": IRAN_PRESIDENTS,
