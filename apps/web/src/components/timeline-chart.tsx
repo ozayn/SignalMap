@@ -17,7 +17,7 @@ export type TimelineEvent = {
   confidence?: string;
   sources?: string[];
   layer?: "iran_core" | "world_core" | "world_1900" | "sanctions" | "iran_presidents";
-  scope?: "iran" | "world" | "sanctions";
+  scope?: "iran" | "world" | "sanctions" | "oil_exports";
 };
 
 type OilPoint = { date: string; value: number };
@@ -161,7 +161,7 @@ export function TimelineChart({
     const oilColorMuted = withAlphaHsl(muted, 0.7);
 
     const getEventScope = (ev: TimelineEvent): "iran" | "world" | "sanctions" =>
-      ev.scope ?? (ev.layer === "world_core" || ev.layer === "world_1900" ? "world" : ev.layer === "sanctions" ? "sanctions" : "iran");
+      (ev.scope === "oil_exports" ? "sanctions" : ev.scope) ?? (ev.layer === "world_core" || ev.layer === "world_1900" ? "world" : ev.layer === "sanctions" ? "sanctions" : "iran");
     const isPresidentialEvent = (ev: TimelineEvent) => ev.layer === "iran_presidents";
     const IranOpacity = mutedEventLines ? 0.35 : 0.5;
     const WorldOpacity = mutedEventLines ? 0.3 : 0.3;
