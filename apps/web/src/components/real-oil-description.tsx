@@ -5,15 +5,7 @@ export function RealOilDescription() {
       base year. It is used to assess long-term economic burden and to compare prices across decades
       without the distortion of nominal currency fluctuations. Unlike nominal prices, which reflect
       market signals in current dollars, real prices isolate changes in purchasing power. Prices are
-      expressed in constant 2015 US dollars using the US CPI.{" "}
-      <a
-        href="https://en.wikipedia.org/wiki/Real_price"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-muted-foreground underline underline-offset-2"
-      >
-        Real price (Wikipedia)
-      </a>
+      expressed in constant 2015 US dollars using the US CPI.
     </p>
   );
 }

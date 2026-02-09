@@ -39,18 +39,21 @@ export function ConceptsUsed({ conceptKeys }: ConceptsUsedProps) {
                 <span className="font-medium text-foreground/90">{c.title}</span>
                 {" — "}
                 {c.description}
-                {c.link && (
-                  <>
-                    {" "}
-                    <a
-                      href={c.link.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                    >
-                      {c.link.label}
-                    </a>
-                  </>
+                {c.links && c.links.length > 0 && (
+                  <span className="mt-1 block">
+                    {c.links.map((link) => (
+                      <span key={link.href} className="mr-3">
+                        <a
+                          href={link.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                        >
+                          {link.type === "video" ? `▶ Video: ${link.label}` : link.label}
+                        </a>
+                      </span>
+                    ))}
+                  </span>
                 )}
               </li>
             ))}

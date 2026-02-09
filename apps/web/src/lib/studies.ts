@@ -50,6 +50,7 @@ export const STUDIES: StudyMeta[] = [
       "A baseline study illustrating event-anchored windows on a macroeconomic series.",
     status: "active",
     primarySignal: { kind: "oil_brent" },
+    concepts: ["nominal_price", "oil_benchmark", "event_overlay"],
   },
   {
     id: "usd-toman",
@@ -60,6 +61,7 @@ export const STUDIES: StudyMeta[] = [
       "Open-market USD/toman rate as a lived economic pressure indicator.",
     status: "active",
     primarySignal: { kind: "fx_usd_toman" },
+    concepts: ["fx_rate", "event_overlay"],
   },
   {
     id: "oil-and-fx",
@@ -70,6 +72,7 @@ export const STUDIES: StudyMeta[] = [
       "Brent oil price (left axis) and USD→toman open-market rate (right axis) overlaid for comparative context.",
     status: "active",
     primarySignal: { kind: "oil_and_fx" },
+    concepts: ["nominal_price", "oil_benchmark", "fx_rate", "event_overlay"],
   },
   {
     id: "global_oil_1900",
@@ -81,6 +84,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "gold_and_oil" },
     eventLayers: ["world_1900"],
+    concepts: ["nominal_price", "oil_benchmark", "gold_price", "event_overlay"],
   },
   {
     id: "real_oil_price",
@@ -92,7 +96,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "real_oil" },
     eventLayers: ["world_core", "world_1900"],
-    concepts: ["real_price", "cpi"],
+    concepts: ["real_price", "cpi", "event_overlay"],
   },
   {
     id: "iran_oil_ppp",
@@ -104,7 +108,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "oil_ppp_iran" },
     eventLayers: ["iran_core", "world_core"],
-    concepts: ["ppp", "log_scale", "structural_break"],
+    concepts: ["ppp", "log_scale", "structural_break", "event_overlay"],
   },
   {
     id: "iran_oil_ppp_turkey",
@@ -129,6 +133,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "oil_export_capacity" },
     eventLayers: ["sanctions"],
+    concepts: ["oil_benchmark", "price_vs_quantity", "indexing", "event_overlay"],
   },
   {
     id: "events_timeline",
@@ -139,6 +144,7 @@ export const STUDIES: StudyMeta[] = [
       "A reference timeline of major political, economic, and geopolitical events used as context throughout SignalMap.",
     status: "active",
     primarySignal: { kind: "events_timeline" },
+    concepts: ["event_overlay"],
   },
 ];
 

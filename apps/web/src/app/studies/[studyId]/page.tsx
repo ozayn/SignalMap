@@ -711,6 +711,7 @@ export default function StudyDetailPage() {
       </header>
 
       {isEventsTimeline ? (
+        <>
         <Card className="border-border min-w-0 overflow-visible">
           <CardHeader>
             <CardTitle className="text-base font-medium">
@@ -766,6 +767,14 @@ export default function StudyDetailPage() {
             />
           </CardContent>
         </Card>
+        {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
+        <InSimpleTerms>
+          <p>
+            This timeline provides chronological context for political, economic, and geopolitical events.
+            Use it as a reference when interpreting charts—events are anchors for understanding, not explanations of cause and effect.
+          </p>
+        </InSimpleTerms>
+        </>
       ) : (isOilBrent || isOilGlobalLong) && oilKpis ? (
         <div className="grid gap-4 sm:grid-cols-3">
           <Card className="border-border">
@@ -1260,7 +1269,6 @@ export default function StudyDetailPage() {
                         },
                       ]
                 }
-                links={[{ label: "Purchasing power parity (Wikipedia)", href: "https://en.wikipedia.org/wiki/Purchasing_power_parity" }]}
               />
               {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
               <CurrentSnapshot asOf="March 2026">
@@ -1408,6 +1416,7 @@ export default function StudyDetailPage() {
                   { label: "EIA Iran Country Analysis", href: "https://www.eia.gov/international/content/analysis/countries_long/iran/" },
                 ]}
               />
+              {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
               <SourceInfo
                 items={[
                   {
@@ -1433,12 +1442,7 @@ export default function StudyDetailPage() {
                 ]}
                 note="Annual resolution. Export volumes are estimates. Do not equate proxy with government revenue."
               />
-              <InSimpleTerms
-                learnMore={{
-                  label: "Why quantity constraints matter under sanctions",
-                  url: "https://www.youtube.com/watch?v=zrK2B2yMPrA",
-                }}
-              >
+              <InSimpleTerms>
                 <p>
                   Brent crude oil is a benchmark oil type traded on world markets, often used as a reference for global oil prices.
                   The chart combines Brent oil price and estimated export volume to suggest how much earning capacity Iran might have from oil exports.
@@ -1501,7 +1505,6 @@ export default function StudyDetailPage() {
                     ],
                   },
                 ]}
-                links={[{ label: "Real price (Wikipedia)", href: "https://en.wikipedia.org/wiki/Real_price" }]}
               />
               {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
               <CurrentSnapshot asOf="March 2026">
@@ -1585,11 +1588,8 @@ export default function StudyDetailPage() {
                     ],
                   },
                 ]}
-                links={[
-                  { label: "Brent Crude (Wikipedia)", href: "https://en.wikipedia.org/wiki/Brent_Crude" },
-                  { label: "West Texas Intermediate (Wikipedia)", href: "https://en.wikipedia.org/wiki/West_Texas_Intermediate" },
-                ]}
               />
+              {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
               <CurrentSnapshot asOf="March 2026">
                 <p>
                   As of March 2026, gold and oil both trade at elevated levels relative to pre-2020 norms. Gold shows
@@ -1679,8 +1679,8 @@ export default function StudyDetailPage() {
                       ],
                     },
                   ]}
-                  links={[{ label: "Brent Crude (Wikipedia)", href: "https://en.wikipedia.org/wiki/Brent_Crude" }]}
                 />
+              {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
               <CurrentSnapshot asOf="March 2026">
                 <p>
                   As of March 2026, Brent crude trades in a moderate range relative to the 2021–2024 period. Volatility
@@ -1788,6 +1788,7 @@ export default function StudyDetailPage() {
                   ]}
                 />
               )}
+              {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
               <InSimpleTerms>
                 <p>
                   Brent crude oil is a benchmark oil type traded on world markets, often used as a reference for global oil prices.
@@ -1828,6 +1829,7 @@ export default function StudyDetailPage() {
                   ]}
                 />
               )}
+              {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
               <InSimpleTerms>
                 <p>
                   The chart shows the open-market exchange rate between the US dollar and the Iranian toman—how many tomans you get for one dollar.
