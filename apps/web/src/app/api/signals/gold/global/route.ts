@@ -23,7 +23,8 @@ export async function GET(request: NextRequest) {
     if (!res.ok) {
       let body: { error?: string } = { error: `API returned ${res.status}` };
       try {
-        const parsed = await res.json();
+        const text = await res.text();
+        const parsed = text ? JSON.parse(text) : null;
         if (parsed?.detail) body = { error: parsed.detail };
       } catch {}
       return NextResponse.json(body, { status: res.status });

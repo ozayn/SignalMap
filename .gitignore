@@ -36,8 +36,8 @@ apps/api/.env
 *.swp
 *.swo
 
-# Data (future)
-data/
+# Data (future) - only root-level; apps/api/src/signalmap/data/ holds gold/oil constants
+/data/
 *.duckdb
 *.db
 logs
