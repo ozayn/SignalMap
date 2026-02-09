@@ -38,6 +38,32 @@ export default function MethodsPage() {
 
       <section className="space-y-4">
         <h2 className="text-lg font-medium text-foreground">
+          Signals
+        </h2>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          In SignalMap, a signal is a time-varying measurement derived from
+          observable data. Examples include subscriber counts (from archival
+          sources or platform APIs), follower counts, sentiment scores, and
+          hashtag frequency. Signals are not ground truth; they are
+          platform-dependent, sparsely sampled, and subject to measurement
+          error.
+          Different platforms expose different metrics at different
+          granularities, and archival coverage is uneven across time and
+          source.
+        </p>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Confidence and missing data are treated as first-class concerns.
+          When extraction is uncertain or data are absent, values are omitted
+          rather than imputed. Missing values are expected and do not imply
+          failure; they reflect the inherent incompleteness of available
+          sources. Analysis is conducted relative to events and time windows,
+          not absolute values. The emphasis is on conditional change and
+          comparative patterns rather than point estimates.
+        </p>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-medium text-foreground">
           Aggregation-only analysis
         </h2>
         <p className="text-sm text-muted-foreground leading-relaxed">

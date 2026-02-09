@@ -445,7 +445,7 @@ PLATFORM_TWITTER = "twitter"
 
 
 def create_twitter_job(
-    input_str: str,
+    username: str,
     from_year: Optional[int] = None,
     to_year: Optional[int] = None,
     from_date: Optional[str] = None,
@@ -453,17 +453,15 @@ def create_twitter_job(
     sample: int = 30,
 ) -> str:
     """Create Twitter job row and return job_id. Caller starts background task."""
-    from signalmap.connectors.wayback_twitter import canonicalize_twitter_input
+    from signalmap.connectors.wayback_twitter import normalize_username
 
-    input_str = (input_str or "").strip()
-    if not input_str:
-        raise ValueError("input is required")
+    username = (username or "").strip()
+    if not username:
+        raise ValueError("username is required")
     sample = min(max(sample, 1), 100)
-    canon = canonicalize_twitter_input(input_str)
-    canonical_url = canon.get("canonical_url", "")
+    norm_username, canonical_url = normalize_username(username)
     if not canonical_url:
-        raise ValueError("Invalid Twitter input")
-    username = input_str.lstrip("@").split("/")[-1].split("?")[0] or input_str
+        raise ValueError("Invalid Twitter username")
     job_id = str(uuid.uuid4())
 
     with cursor() as cur:
@@ -473,7 +471,7 @@ def create_twitter_job(
             (job_id, platform, username, canonical_url, from_year, to_year, from_date, to_date, sample, status)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
-            (job_id, PLATFORM_TWITTER, username, canonical_url, from_year, to_year, from_date, to_date, sample, "queued"),
+            (job_id, PLATFORM_TWITTER, norm_username, canonical_url, from_year, to_year, from_date, to_date, sample, "queued"),
         )
 
     return job_id

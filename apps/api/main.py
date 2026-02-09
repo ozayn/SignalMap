@@ -82,7 +82,7 @@ def api_index():
             "wayback_snapshots": "/api/wayback/snapshots?url=...&sample=30",
             "wayback_instagram": "/api/wayback/instagram?username=...&sample=30",
             "wayback_youtube": "/api/wayback/youtube?input=@handle&from_year=2010&to_year=2026&sample=40",
-            "wayback_twitter": "/api/wayback/twitter?input=@handle&from_year=2010&to_year=2026&sample=40",
+            "wayback_twitter": "/api/wayback/twitter?username=jack&from_year=2009&to_year=2026&sample=40",
             "wayback_instagram_jobs": "POST /api/wayback/instagram/jobs",
             "wayback_jobs_list": "GET /api/wayback/jobs/list",
             "wayback_job_status": "GET /api/wayback/jobs/{job_id}",
@@ -310,7 +310,7 @@ class CreateYouTubeJobBody(BaseModel):
 
 
 class CreateTwitterJobBody(BaseModel):
-    input: str
+    username: str
     from_year: Optional[int] = None
     to_year: Optional[int] = None
     from_date: Optional[str] = None
@@ -320,18 +320,22 @@ class CreateTwitterJobBody(BaseModel):
 
 @app.get("/api/wayback/twitter")
 def wayback_twitter(
-    input_param: str = Query(..., alias="input"),
+    username: str = Query(..., description="Twitter handle: jack or @jack"),
     from_year: Optional[int] = None,
     to_year: Optional[int] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     sample: int = 40,
 ):
-    """Return Twitter/X profile follower counts from Wayback archival snapshots."""
+    """
+    Return Twitter/X profile follower counts from Wayback archival snapshots.
+    GET /api/wayback/twitter?username=jack&sample=20
+    GET /api/wayback/twitter?username=@nytimes&sample=20
+    """
     sample = min(max(sample, 1), 100)
     return get_twitter_archival_metrics(
-        input_str=input_param,
-        from_year=from_year if from_year is not None else 2006,
+        username=username,
+        from_year=from_year if from_year is not None else 2009,
         to_year=to_year if to_year is not None else 2026,
         from_date=from_date,
         to_date=to_date,
@@ -344,7 +348,7 @@ def create_wayback_twitter_job(body: CreateTwitterJobBody, background_tasks: Bac
     """Start a Wayback Twitter fetch job. Returns immediately with job_id."""
     _require_db()
     job_id = create_twitter_job(
-        input_str=body.input,
+        username=body.username,
         from_year=body.from_year,
         to_year=body.to_year,
         from_date=body.from_date,

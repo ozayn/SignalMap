@@ -23,6 +23,19 @@ type RecentJob = {
   summary?: string | null;
 };
 
+function apiErrorToString(data: unknown, fallback: string): string {
+  if (!data || typeof data !== "object") return fallback;
+  const d = data as Record<string, unknown>;
+  if (typeof d.error === "string") return d.error;
+  const detail = d.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    const first = detail[0] as { msg?: string };
+    return first?.msg ?? JSON.stringify(detail[0]);
+  }
+  return fallback;
+}
+
 function jobStatusLabel(j: RecentJob): string {
   if (j.status !== "completed") return j.status;
   const p = j.processed ?? 0;
@@ -107,7 +120,7 @@ type TwitterResult = {
 
 type TwitterResponse = {
   platform: string;
-  input: string;
+  username: string;
   canonical_url: string;
   snapshots_total: number;
   snapshots_sampled: number;
@@ -326,7 +339,7 @@ export default function WaybackExplorePage() {
           setJobError("Database not configured. Using direct fetch…");
           await handleDirectFetch();
         } else {
-          setIgError(data.error ?? `Request failed: ${res.status}`);
+          setIgError(apiErrorToString(data, `Request failed: ${res.status}`));
         }
         return;
       }
@@ -465,7 +478,7 @@ export default function WaybackExplorePage() {
           setYtJobError("Database not configured. Using direct fetch…");
           await handleYouTubeDirectFetch(fromYearVal, toYearVal, fromDateVal, toDateVal);
         } else {
-          setYtError(data.error ?? data.detail ?? `Request failed: ${res.status}`);
+          setYtError(apiErrorToString(data, `Request failed: ${res.status}`));
         }
         return;
       }
@@ -558,7 +571,7 @@ export default function WaybackExplorePage() {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
-          input: twInput.trim(),
+          username: twInput.trim(),
           from_year: fromYearVal ?? undefined,
           to_year: toYearVal ?? undefined,
           from_date: fromDateVal ?? undefined,
@@ -573,7 +586,7 @@ export default function WaybackExplorePage() {
           setTwJobError("Database not configured. Using direct fetch…");
           await handleTwitterDirectFetch(fromYearVal, toYearVal, fromDateVal, toDateVal);
         } else {
-          setTwError(data.error ?? data.detail ?? `Request failed: ${res.status}`);
+          setTwError(apiErrorToString(data, `Request failed: ${res.status}`));
         }
         return;
       }
@@ -594,7 +607,7 @@ export default function WaybackExplorePage() {
     let completed = false;
     try {
       const params = new URLSearchParams({
-        input: twInput.trim(),
+        username: twInput.trim(),
         sample: String(twSample),
       });
       if (fromYearVal != null) params.set("from_year", String(fromYearVal));
@@ -1312,7 +1325,7 @@ export default function WaybackExplorePage() {
           <div className="space-y-6">
             <p className="text-xs text-muted-foreground">{twData.notes}</p>
             <p className="text-sm text-muted-foreground">
-              {twData.snapshots_sampled} of {twData.snapshots_total} snapshots for {twData.input}
+              {twData.snapshots_sampled} of {twData.snapshots_total} snapshots for @{twData.username}
             </p>
             {twData.snapshots_total === 0 && (
               <p className="text-sm text-muted-foreground italic">
@@ -1322,7 +1335,7 @@ export default function WaybackExplorePage() {
             {twFollowersPoints.length > 0 && (
               <div className="rounded-md border border-border p-4">
                 <h3 className="text-sm font-medium mb-3">Followers over time</h3>
-                <FollowersChart data={twFollowersPoints} username={twData.input} />
+                <FollowersChart data={twFollowersPoints} username={twData.username} />
               </div>
             )}
             <div className="space-y-2 max-h-96 overflow-y-auto">

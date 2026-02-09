@@ -6,16 +6,16 @@ export const maxDuration = 120;
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
-  const input = searchParams.get("input");
-  if (!input) {
+  const username = searchParams.get("username");
+  if (!username) {
     return NextResponse.json(
-      { error: "input is required (e.g. @handle or full URL)" },
+      { error: "username is required (e.g. jack or @jack)" },
       { status: 400 }
     );
   }
 
   try {
-    const params = new URLSearchParams({ input });
+    const params = new URLSearchParams({ username });
     const fromYear = searchParams.get("from_year");
     const toYear = searchParams.get("to_year");
     const fromDate = searchParams.get("from_date");

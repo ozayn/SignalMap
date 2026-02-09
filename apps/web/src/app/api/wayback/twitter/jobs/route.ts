@@ -12,11 +12,15 @@ export async function POST(request: NextRequest) {
       cache: "no-store",
     });
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      return NextResponse.json(
-        { error: data.detail ?? data.error ?? `API returned ${res.status}` },
-        { status: res.status }
-      );
+      const data = await res.json().catch(() => ({})) as Record<string, unknown>;
+      let errMsg = typeof data.error === "string" ? data.error : "";
+      if (!errMsg && typeof data.detail === "string") errMsg = data.detail;
+      if (!errMsg && Array.isArray(data.detail) && data.detail.length > 0) {
+        const first = data.detail[0] as { msg?: string };
+        errMsg = first?.msg ?? String(data.detail[0]);
+      }
+      if (!errMsg) errMsg = `API returned ${res.status}`;
+      return NextResponse.json({ error: errMsg }, { status: res.status });
     }
     const data = await res.json();
     return NextResponse.json(data);
