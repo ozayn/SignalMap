@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import * as echarts from "echarts";
 import { cssHsl, withAlphaHsl } from "@/lib/utils";
 
@@ -151,6 +151,14 @@ export function TimelineChart({
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
+  const [xLabelRotate, setXLabelRotate] = useState(0);
+
+  useEffect(() => {
+    const updateRotate = () => setXLabelRotate(window.innerWidth < 640 ? 90 : 0);
+    updateRotate();
+    window.addEventListener("resize", updateRotate);
+    return () => window.removeEventListener("resize", updateRotate);
+  }, []);
 
   useEffect(() => {
     const color = cssHsl("--chart-primary", "hsl(238, 84%, 67%)");
@@ -506,7 +514,11 @@ export function TimelineChart({
             : hasOil || !hasData || hasMultiSeries
               ? "12%"
               : "4%",
-        bottom: (comparatorSeries && comparatorValuesForChart && hasOil) || (hasMultiSeries && multiSeries) || (hasOil && secondSeries && !comparatorSeries) ? "10%" : "3%",
+        bottom: xLabelRotate
+          ? "18%"
+          : (comparatorSeries && comparatorValuesForChart && hasOil) || (hasMultiSeries && multiSeries) || (hasOil && secondSeries && !comparatorSeries)
+            ? "10%"
+            : "3%",
         top: "10%",
         containLabel: true,
       },
@@ -518,6 +530,7 @@ export function TimelineChart({
         axisLabel: {
           color: mutedFg,
           fontSize: 11,
+          rotate: xLabelRotate,
           interval: (() => {
             const maxLabels = useSparseMultiSeriesDates ? 50 : 12;
             const n = dates.length;
@@ -934,7 +947,7 @@ export function TimelineChart({
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
     };
-  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods]);
+  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods, xLabelRotate]);
 
   useEffect(() => {
     return () => {
@@ -950,5 +963,5 @@ export function TimelineChart({
     };
   }, []);
 
-  return <div ref={chartRef} className="h-80 w-full" />;
+  return <div ref={chartRef} className="h-80 w-full min-w-0" />;
 }

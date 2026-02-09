@@ -665,7 +665,7 @@ export default function StudyDetailPage() {
   const fxKpis = isFxUsdToman ? computeFxKpis(fxPoints) : null;
 
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-12 space-y-10">
+    <div className="container mx-auto max-w-4xl px-4 py-12 space-y-10 min-w-0">
       <header className="space-y-1">
         <Link
           href="/studies"
@@ -900,7 +900,7 @@ export default function StudyDetailPage() {
         </div>
       ) : null}
 
-      <Card className="border-border">
+      <Card className="border-border overflow-hidden">
         <CardHeader>
           <CardTitle className="text-base font-medium">
             {isGoldAndOil
@@ -1026,7 +1026,7 @@ export default function StudyDetailPage() {
         </CardHeader>
         <CardContent>
           {(isOverviewStub || isOilBrent || isFxUsdToman || isOilAndFx || (isOilPppIran && !hasTurkeyComparator)) && !isOilGlobalLong && !isGoldAndOil && !isRealOil && (
-            <div className="mb-3 flex flex-shrink-0 items-center gap-4 border-b border-border pb-3">
+            <div className="mb-3 flex flex-shrink-0 flex-wrap items-center gap-3 border-b border-border pb-3">
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                 <input
                   type="checkbox"
@@ -1099,7 +1099,7 @@ export default function StudyDetailPage() {
                 indexComparator={hasTurkeyComparator}
               />
               {hasTurkeyComparator && (
-                <p className="mt-3 text-xs text-muted-foreground max-w-2xl">
+                <p className="mt-3 text-xs text-muted-foreground max-w-2xl break-words">
                   Both series are indexed to the first common year (= 100). Values above 100 indicate a higher estimated burden relative to that baseline; below 100, a lower burden. Example: 200 = twice the baseline.
                 </p>
               )}
@@ -1276,7 +1276,7 @@ export default function StudyDetailPage() {
                 mutedBands={false}
                 sanctionsPeriods={sanctionsPeriodsFromEvents}
               />
-              <p className="mt-3 text-xs text-muted-foreground max-w-2xl">
+              <p className="mt-3 text-xs text-muted-foreground max-w-2xl break-words">
                 Export capacity proxy = oil price × estimated export volume. Indexed to first year = 100. Proxy for earning capacity, not realized revenue.
               </p>
               <LearningNote

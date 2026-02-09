@@ -4,6 +4,7 @@ import Link from "next/link";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SuppressDevLogs } from "@/components/suppress-dev-logs";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -28,6 +29,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased min-h-screen`} suppressHydrationWarning>
         <ThemeProvider>
+          <SuppressDevLogs />
           <header className="border-b border-border bg-background">
             <nav className="container mx-auto max-w-4xl px-4 py-4 flex items-center justify-between">
               <div className="flex items-center gap-8">

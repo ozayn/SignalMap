@@ -1,6 +1,6 @@
 export function RealOilDescription() {
   return (
-    <p className="mt-3 max-w-full text-sm text-muted-foreground">
+    <p className="mt-3 max-w-full text-sm text-muted-foreground break-words">
       Real oil price denotes inflation-adjusted oil expressed in constant dollars—typically a fixed
       base year. It is used to assess long-term economic burden and to compare prices across decades
       without the distortion of nominal currency fluctuations. Unlike nominal prices, which reflect

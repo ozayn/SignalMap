@@ -20,14 +20,14 @@ export function SourceInfo({
   note,
 }: SourceInfoProps) {
   return (
-    <Card className="mt-3 border-border bg-muted/30">
+    <Card className="mt-3 border-border bg-muted/30 overflow-hidden">
       <CardContent className="p-4">
         <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {title}
         </p>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 min-w-0">
           {items.map((item) => (
-            <div key={item.label} className="space-y-0.5">
+            <div key={item.label} className="space-y-0.5 min-w-0 break-words">
               <p className="text-sm font-medium text-foreground/90">{item.label}</p>
               <p className="text-sm text-muted-foreground">
                 {item.sourceName}
@@ -47,7 +47,7 @@ export function SourceInfo({
           ))}
         </div>
         {note && (
-          <p className="mt-3 text-xs text-muted-foreground/80">{note}</p>
+          <p className="mt-3 text-xs text-muted-foreground/80 break-words">{note}</p>
         )}
       </CardContent>
     </Card>

@@ -23,6 +23,10 @@ function formatFollowers(n: number): string {
   return n.toLocaleString();
 }
 
+function getXLabelRotate() {
+  return typeof window !== "undefined" && window.innerWidth < 640 ? 90 : 0;
+}
+
 export function FollowersChart({ data, username, metricLabel = "Followers" }: FollowersChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
 
@@ -40,90 +44,89 @@ export function FollowersChart({ data, username, metricLabel = "Followers" }: Fo
 
     const seriesData = data.map((d) => [d.date, d.followers != null ? d.followers : null]);
 
-    const option: echarts.EChartsOption = {
-      animation: false,
-      tooltip: {
-        trigger: "axis",
-        formatter: (params: unknown) => {
-          const p = Array.isArray(params) ? params[0] : params;
-          if (p && typeof p === "object" && "dataIndex" in p) {
-            const idx = (p as { dataIndex: number }).dataIndex;
-            const pt = data[idx];
-            const followerLine =
-              pt.followers != null
-                ? `${formatFollowers(pt.followers)} ${metricLabel.toLowerCase()} · Confidence: ${(pt.confidence * 100).toFixed(0)}%`
-                : `No ${metricLabel.toLowerCase()} data extracted`;
-            const lines = [pt.date, followerLine];
-            if (pt.archived_url) {
-              lines.push(`<a href="${pt.archived_url}" target="_blank" rel="noopener noreferrer" style="font-size:11px;text-decoration:underline;margin-top:4px;display:block">View archived snapshot</a>`);
+    const applyOption = () => {
+      const rotate = getXLabelRotate();
+      const option: echarts.EChartsOption = {
+        animation: false,
+        tooltip: {
+          trigger: "axis",
+          formatter: (params: unknown) => {
+            const p = Array.isArray(params) ? params[0] : params;
+            if (p && typeof p === "object" && "dataIndex" in p) {
+              const idx = (p as { dataIndex: number }).dataIndex;
+              const pt = data[idx];
+              const followerLine =
+                pt.followers != null
+                  ? `${formatFollowers(pt.followers)} ${metricLabel.toLowerCase()} · Confidence: ${(pt.confidence * 100).toFixed(0)}%`
+                  : `No ${metricLabel.toLowerCase()} data extracted`;
+              const lines = [pt.date, followerLine];
+              if (pt.archived_url) {
+                lines.push(`<a href="${pt.archived_url}" target="_blank" rel="noopener noreferrer" style="font-size:11px;text-decoration:underline;margin-top:4px;display:block">View archived snapshot</a>`);
+              }
+              return lines.join("<br/>");
             }
-            return lines.join("<br/>");
-          }
-          return "";
-        },
-      },
-      grid: { left: "3%", right: "4%", bottom: "3%", top: "12%", containLabel: true },
-      xAxis: {
-        type: "time",
-        boundaryGap: [0, 0],
-        splitNumber: 8,
-        axisLine: { lineStyle: { color: borderColor } },
-        axisLabel: {
-          color: mutedFg,
-          fontSize: 11,
-          formatter: (value: number) => {
-            const d = new Date(value);
-            const months = "JanFebMarAprMayJunJulAugSepOctNovDec";
-            const m = months.slice(d.getMonth() * 3, d.getMonth() * 3 + 3);
-            return `${m} ${d.getFullYear()}`;
+            return "";
           },
         },
-      },
-      yAxis: {
-        type: "value",
-        axisLine: { show: false },
-        splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
-        axisLabel: {
-          color: mutedFg,
-          fontSize: 11,
-          formatter: (v: number) => formatFollowers(v),
+        grid: { left: "3%", right: "4%", bottom: rotate ? "18%" : "3%", top: "12%", containLabel: true },
+        xAxis: {
+          type: "time",
+          boundaryGap: [0, 0],
+          splitNumber: 8,
+          axisLine: { lineStyle: { color: borderColor } },
+          axisLabel: {
+            color: mutedFg,
+            fontSize: 11,
+            rotate,
+            formatter: (value: number) => String(new Date(value).getFullYear()),
+          },
         },
-      },
-      series: [
-        {
-          name: metricLabel,
-          type: "line",
-          data: seriesData,
-          showSymbol: true,
-          symbolSize: 8,
-          connectNulls: false,
-          lineStyle:
-            data.length >= 3
-              ? { color, width: 1, opacity: 0.35 }
-              : { width: 0 },
-          itemStyle: { color },
+        yAxis: {
+          type: "value",
+          axisLine: { show: false },
+          splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
+          axisLabel: {
+            color: mutedFg,
+            fontSize: 11,
+            formatter: (v: number) => formatFollowers(v),
+          },
         },
-      ],
+        series: [
+          {
+            name: metricLabel,
+            type: "line",
+            data: seriesData,
+            showSymbol: true,
+            symbolSize: 8,
+            connectNulls: false,
+            lineStyle:
+              data.length >= 3
+                ? { color, width: 1, opacity: 0.35 }
+                : { width: 0 },
+            itemStyle: { color },
+          },
+        ],
+      };
+      chart.setOption(option);
     };
 
     const rafId = requestAnimationFrame(() => {
-      if (chartRef.current) {
-        chart.setOption(option);
-      }
+      if (chartRef.current) applyOption();
     });
 
-    const resize = () => {
+    const handleResize = () => {
       try {
+        applyOption();
         chart.resize();
       } catch {
         // Chart may be disposed
       }
     };
-    window.addEventListener("resize", resize);
+    window.addEventListener("resize", handleResize);
 
     return () => {
       cancelAnimationFrame(rafId);
-      window.removeEventListener("resize", resize);
+      window.removeEventListener("resize", handleResize);
       try {
         chart.dispose();
       } catch {
@@ -161,7 +164,7 @@ export function FollowersChart({ data, username, metricLabel = "Followers" }: Fo
           </div>
         </details>
       )}
-      <div ref={chartRef} className="h-72 w-full" />
+      <div ref={chartRef} className="h-72 w-full min-w-0" />
     </div>
   );
 }
