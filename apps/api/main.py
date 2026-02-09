@@ -10,7 +10,9 @@ load_dotenv()
 # Allow signalmap package imports (apps/api/src/signalmap)
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 
@@ -28,15 +30,14 @@ from signalmap.connectors.wayback_twitter import get_twitter_archival_metrics
 
 from db import init_tables
 from jobs import (
+    cache_first_instagram,
+    cache_first_twitter,
+    cache_first_youtube,
     create_instagram_job,
     create_youtube_job,
     create_twitter_job,
-    get_cached_instagram_snapshots,
-    get_cached_youtube_snapshots,
-    get_instagram_cache_first,
     get_job,
     get_job_results,
-    get_youtube_cache_first,
     list_jobs,
     cancel_job,
     delete_job,
@@ -44,6 +45,52 @@ from jobs import (
     _run_youtube_job,
     _run_twitter_job,
 )
+
+
+# --- Normalized cache-first response (research-grade, all platforms) ---
+class CacheFirstSnapshot(BaseModel):
+    """Single snapshot in cache-first response. timestamp is ISO-8601."""
+    timestamp: str
+    followers: Optional[int] = None
+    snapshot_url: Optional[str] = None
+    raw: Optional[dict] = None
+
+
+class CacheFirstMeta(BaseModel):
+    cache_hit: bool
+    cache_rows: int
+    wayback_calls: int
+    rate_limited: bool = False
+    notes: list[str] = Field(default_factory=list)
+    last_cached_at: Optional[str] = None
+
+
+class CacheFirstResponse(BaseModel):
+    platform: Literal["instagram", "youtube", "twitter"]
+    handle: str
+    canonical_url: str
+    source: Literal["cache", "live", "mixed"]
+    snapshots: list[CacheFirstSnapshot] = Field(default_factory=list)
+    meta: CacheFirstMeta
+
+
+def resolve_handle(
+    handle: Optional[str] = None,
+    username: Optional[str] = None,
+    input_param: Optional[str] = None,
+) -> str:
+    """
+    Resolve platform-agnostic handle from query params.
+    Precedence: handle > username (deprecated) > input (deprecated).
+    Raises HTTPException 422 if none provided or empty after strip.
+    """
+    for val in (handle, username, input_param):
+        if val is not None and (s := (val or "").strip()):
+            return s
+    raise HTTPException(
+        status_code=422,
+        detail="One of 'handle', 'username', or 'input' is required (prefer 'handle').",
+    )
 
 
 app = FastAPI()
@@ -403,6 +450,7 @@ def wayback_snapshots(
 @app.get("/api/wayback/instagram/cached")
 def wayback_instagram_cached(username: str):
     """Return cached Instagram snapshots for a username, if any. Fast path for profiles already fetched via jobs."""
+    from jobs import get_cached_instagram_snapshots
     cached = get_cached_instagram_snapshots(username)
     if cached is None:
         raise HTTPException(status_code=404, detail="No cached data for this username")
@@ -411,15 +459,18 @@ def wayback_instagram_cached(username: str):
 
 @app.get("/api/wayback/instagram/cache-first")
 def wayback_instagram_cache_first(
-    username: str,
-    sample: int = 40,
+    handle: Optional[str] = Query(None, description="Platform-agnostic handle (preferred)"),
+    username: Optional[str] = Query(None, description="Deprecated: use handle"),
+    input_param: Optional[str] = Query(None, alias="input", description="Deprecated: use handle"),
+    force_live: bool = Query(False, description="Force one live fetch and upsert"),
+    limit: Optional[int] = Query(None, description="Cap on snapshots returned / fetched"),
 ):
     """
-    Cache-first: read from Postgres cache first; if empty, fetch from Wayback live and seed cache.
-    Returns metadata.source: "cache" or "wayback_live".
+    Cache-first: return cache only unless force_live or cache empty. One live batch max.
+    Normalized response: platform, handle, canonical_url, source, snapshots, meta.
     """
-    sample = min(max(sample, 1), 100)
-    return get_instagram_cache_first(username=username, sample=sample)
+    h = resolve_handle(handle=handle, username=username, input_param=input_param)
+    return cache_first_instagram(handle=h, force_live=force_live, limit=limit)
 
 
 @app.get("/api/wayback/instagram")
@@ -519,6 +570,7 @@ def wayback_youtube_debug(
 @app.get("/api/wayback/youtube/cached")
 def wayback_youtube_cached(input_param: str = Query(..., alias="input")):
     """Return cached YouTube snapshots for an input (handle or URL), if any."""
+    from jobs import get_cached_youtube_snapshots
     cached = get_cached_youtube_snapshots(input_param)
     if cached is None:
         raise HTTPException(status_code=404, detail="No cached data for this input")
@@ -527,15 +579,18 @@ def wayback_youtube_cached(input_param: str = Query(..., alias="input")):
 
 @app.get("/api/wayback/youtube/cache-first")
 def wayback_youtube_cache_first(
-    input_param: str = Query(..., alias="input"),
-    sample: int = 40,
+    handle: Optional[str] = Query(None, description="Platform-agnostic handle (preferred)"),
+    username: Optional[str] = Query(None, description="Deprecated: use handle"),
+    input_param: Optional[str] = Query(None, alias="input", description="Deprecated: use handle"),
+    force_live: bool = Query(False, description="Force one live fetch and upsert"),
+    limit: Optional[int] = Query(None, description="Cap on snapshots returned / fetched"),
 ):
     """
-    Cache-first: read from Postgres cache first; if empty, fetch from Wayback live and seed cache.
-    Returns metadata.source: "cache" or "wayback_live".
+    Cache-first: return cache only unless force_live or cache empty. One live batch max.
+    Normalized response: platform, handle, canonical_url, source, snapshots, meta.
     """
-    sample = min(max(sample, 1), 100)
-    return get_youtube_cache_first(input_str=input_param, sample=sample)
+    h = resolve_handle(handle=handle, username=username, input_param=input_param)
+    return cache_first_youtube(handle=h, force_live=force_live, limit=limit)
 
 
 @app.get("/api/wayback/youtube")
@@ -592,6 +647,22 @@ class CreateTwitterJobBody(BaseModel):
     from_date: Optional[str] = None
     to_date: Optional[str] = None
     sample: int = 30
+
+
+@app.get("/api/wayback/twitter/cache-first")
+def wayback_twitter_cache_first(
+    handle: Optional[str] = Query(None, description="Platform-agnostic handle (preferred)"),
+    username: Optional[str] = Query(None, description="Deprecated: use handle"),
+    input_param: Optional[str] = Query(None, alias="input", description="Deprecated: use handle"),
+    force_live: bool = Query(False, description="Force one live fetch and upsert"),
+    limit: Optional[int] = Query(None, description="Cap on snapshots returned / fetched"),
+):
+    """
+    Cache-first: return cache only unless force_live or cache empty. One live batch max.
+    Normalized response: platform, handle, canonical_url, source, snapshots, meta.
+    """
+    h = resolve_handle(handle=handle, username=username, input_param=input_param)
+    return cache_first_twitter(handle=h, force_live=force_live, limit=limit)
 
 
 @app.get("/api/wayback/twitter")

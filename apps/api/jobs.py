@@ -1,6 +1,7 @@
 """
-Wayback Instagram and YouTube job runners.
+Wayback Instagram, YouTube, and Twitter job runners.
 Uses Postgres cache and job tables. Runs in background.
+Cache-first endpoints return a normalized response (platform, handle, source, snapshots, meta).
 """
 
 import time
@@ -21,6 +22,45 @@ from db import cursor
 PLATFORM = "instagram"
 # Internet Archive limit: 15 requests/min (archive.org/details/toomanyrequests_20191110)
 REQUEST_DELAY_S = 4.5  # ~13 req/min; cache hits skip delay
+
+
+def _cdx_ts_to_iso(ts: str) -> str:
+    """Convert CDX timestamp (YYYYMMDDhhmmss) to ISO-8601."""
+    if not ts or len(ts) < 8:
+        return ts
+    if len(ts) >= 14:
+        return f"{ts[:4]}-{ts[4:6]}-{ts[6:8]}T{ts[8:10]}:{ts[10:12]}:{ts[12:14]}Z"
+    return f"{ts[:4]}-{ts[4:6]}-{ts[6:8]}Z"
+
+
+def _build_cache_first_response(
+    platform: str,
+    handle: str,
+    canonical_url: str,
+    source: str,
+    snapshots: list[dict],
+    cache_rows: int,
+    wayback_calls: int,
+    rate_limited: bool = False,
+    notes: Optional[list[str]] = None,
+    last_cached_at: Optional[str] = None,
+) -> dict:
+    """Build normalized cache-first JSON. snapshots: list of {timestamp (ISO), followers, snapshot_url}."""
+    return {
+        "platform": platform,
+        "handle": handle,
+        "canonical_url": canonical_url,
+        "source": source,
+        "snapshots": snapshots,
+        "meta": {
+            "cache_hit": source == "cache",
+            "cache_rows": cache_rows,
+            "wayback_calls": wayback_calls,
+            "rate_limited": rate_limited,
+            "notes": notes or [],
+            "last_cached_at": last_cached_at,
+        },
+    }
 
 
 def _run_instagram_job(job_id: str) -> None:
@@ -347,12 +387,12 @@ def get_instagram_cache_first(username: str, sample: int = 40) -> dict:
     Cache-first read: try cache, else live Wayback fetch.
     When falling back to live, upserts results into cache to seed future reads.
     Returns same shape as get_instagram_archival_metrics, plus metadata.source.
+    (Legacy; prefer cache_first_instagram for normalized response.)
     """
     cached = get_cached_instagram_snapshots(username)
     if cached is not None and cached.get("metadata", {}).get("count", 0) >= 1:
         return cached
 
-    # Live fetch
     live = get_instagram_archival_metrics(
         username=username,
         sample=sample,
@@ -368,6 +408,91 @@ def get_instagram_cache_first(username: str, sample: int = 40) -> dict:
         "last_cached_at": None,
     }
     return live
+
+
+def _get_cache_rows(platform: str, canonical_url: str) -> tuple[list[dict], Optional[str]]:
+    """Return (rows, last_cached_at) from wayback_snapshot_cache for platform + canonical_url."""
+    try:
+        with cursor() as cur:
+            cur.execute(
+                """
+                SELECT timestamp, archived_url, followers, following, posts, subscribers, confidence, evidence, fetched_at
+                FROM wayback_snapshot_cache
+                WHERE platform = %s AND LOWER(canonical_url) = LOWER(%s)
+                ORDER BY timestamp ASC
+                """,
+                (platform, canonical_url),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+    except Exception:
+        return [], None
+    fa_values = [r.get("fetched_at") for r in rows if r.get("fetched_at")]
+    last_cached_at = max(fa_values).isoformat() if fa_values else None
+    return rows, last_cached_at
+
+
+def _rows_to_snapshots_instagram(rows: list[dict]) -> list[dict]:
+    """Build normalized snapshot list from cache rows (Instagram)."""
+    out = []
+    for r in rows:
+        ts = r.get("timestamp")
+        out.append({
+            "timestamp": _cdx_ts_to_iso(ts) if ts else "",
+            "followers": r.get("followers"),
+            "snapshot_url": r.get("archived_url"),
+            "raw": None,
+        })
+    return out
+
+
+def cache_first_instagram(
+    handle: str,
+    force_live: bool = False,
+    limit: Optional[int] = None,
+) -> dict:
+    """
+    Normalized cache-first: return cache only if present and not force_live;
+    else one live fetch, upsert, return. source in {cache, live, mixed}.
+    """
+    handle_norm = _normalize_instagram_username(handle)
+    if not handle_norm:
+        return _build_cache_first_response(
+            "instagram", handle, "", "live", [], 0, 0, notes=["Invalid handle."]
+        )
+    canonical_url = f"https://www.instagram.com/{handle_norm}/"
+    sample = min(max(limit or 40, 1), 100)
+
+    cache_rows, last_cached_at = _get_cache_rows(PLATFORM, canonical_url)
+    if cache_rows and not force_live:
+        snapshots = _rows_to_snapshots_instagram(cache_rows)
+        return _build_cache_first_response(
+            "instagram", handle_norm, canonical_url, "cache",
+            snapshots, len(cache_rows), 0,
+            last_cached_at=last_cached_at,
+        )
+
+    # One live batch (no retries)
+    live = get_instagram_archival_metrics(
+        username=handle_norm, sample=sample, include_evidence=True, progress=False,
+    )
+    results = live.get("results", [])
+    if results:
+        _upsert_instagram_cache(handle_norm, results)
+    snapshots = []
+    for r in results:
+        ts = r.get("timestamp")
+        snapshots.append({
+            "timestamp": _cdx_ts_to_iso(ts) if ts else "",
+            "followers": r.get("followers"),
+            "snapshot_url": r.get("archived_url"),
+            "raw": None,
+        })
+    source = "mixed" if cache_rows else "live"
+    return _build_cache_first_response(
+        "instagram", handle_norm, canonical_url, source,
+        snapshots, len(cache_rows), len(results),
+        last_cached_at=last_cached_at if cache_rows else None,
+    )
 
 
 def create_instagram_job(
@@ -575,6 +700,117 @@ def delete_job(job_id: str) -> bool:
 # --- Twitter jobs ---
 
 PLATFORM_TWITTER = "twitter"
+
+
+def _upsert_twitter_cache(username: str, canonical_url: str, results: list[dict]) -> None:
+    """Upsert live fetch results into wayback_snapshot_cache. Seeds cache-first reads."""
+    try:
+        with cursor() as cur:
+            for r in results:
+                ts = r.get("timestamp")
+                if not ts:
+                    continue
+                archived_url = r.get("archived_url")
+                original_url = r.get("original_url", r.get("original", ""))
+                cur.execute(
+                    """
+                    INSERT INTO wayback_snapshot_cache
+                    (platform, username, canonical_url, timestamp, original_url, archived_url,
+                     followers, confidence, evidence)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (platform, canonical_url, timestamp)
+                    DO UPDATE SET
+                        followers = EXCLUDED.followers,
+                        confidence = EXCLUDED.confidence,
+                        evidence = EXCLUDED.evidence,
+                        fetched_at = NOW()
+                    """,
+                    (
+                        PLATFORM_TWITTER,
+                        username,
+                        canonical_url,
+                        ts,
+                        original_url,
+                        archived_url,
+                        r.get("followers"),
+                        r.get("confidence") or 0.2,
+                        r.get("evidence"),
+                    ),
+                )
+    except Exception:
+        pass
+
+
+def _rows_to_snapshots_twitter(rows: list[dict]) -> list[dict]:
+    """Build normalized snapshot list from cache rows (Twitter)."""
+    out = []
+    for r in rows:
+        ts = r.get("timestamp")
+        out.append({
+            "timestamp": _cdx_ts_to_iso(ts) if ts else "",
+            "followers": r.get("followers"),
+            "snapshot_url": r.get("archived_url"),
+            "raw": None,
+        })
+    return out
+
+
+def cache_first_twitter(
+    handle: str,
+    force_live: bool = False,
+    limit: Optional[int] = None,
+) -> dict:
+    """
+    Normalized cache-first: return cache only if present and not force_live;
+    else one live fetch, upsert, return. source in {cache, live, mixed}.
+    """
+    from signalmap.connectors.wayback_twitter import (
+        normalize_username,
+        get_twitter_archival_metrics,
+    )
+
+    handle_stripped = (handle or "").strip()
+    if not handle_stripped:
+        return _build_cache_first_response(
+            "twitter", handle, "", "live", [], 0, 0, notes=["Invalid handle."]
+        )
+    norm_username, canonical_url = normalize_username(handle_stripped)
+    if not canonical_url:
+        return _build_cache_first_response(
+            "twitter", handle_stripped, "", "live", [], 0, 0, notes=["Invalid Twitter handle or URL."]
+        )
+    sample = min(max(limit or 40, 1), 100)
+
+    cache_rows, last_cached_at = _get_cache_rows(PLATFORM_TWITTER, canonical_url)
+    if cache_rows and not force_live:
+        snapshots = _rows_to_snapshots_twitter(cache_rows)
+        return _build_cache_first_response(
+            "twitter", norm_username, canonical_url, "cache",
+            snapshots, len(cache_rows), 0,
+            last_cached_at=last_cached_at,
+        )
+
+    live = get_twitter_archival_metrics(
+        username=handle_stripped, from_year=2009, to_year=2026, sample=sample,
+    )
+    results = live.get("results", [])
+    if results:
+        _upsert_twitter_cache(norm_username, canonical_url, results)
+    snapshots = []
+    for r in results:
+        ts = r.get("timestamp")
+        snapshots.append({
+            "timestamp": _cdx_ts_to_iso(ts) if ts else "",
+            "followers": r.get("followers"),
+            "snapshot_url": r.get("archived_url"),
+            "raw": None,
+        })
+    source = "mixed" if cache_rows else "live"
+    return _build_cache_first_response(
+        "twitter", norm_username, canonical_url, source,
+        snapshots, len(cache_rows), len(results),
+        last_cached_at=last_cached_at if cache_rows else None,
+    )
 
 
 def create_twitter_job(
@@ -908,7 +1144,7 @@ def _upsert_youtube_cache(canonical_url: str, input_str: str, results: list[dict
 def get_youtube_cache_first(input_str: str, sample: int = 40) -> dict:
     """
     Cache-first read: try cache, else live Wayback fetch.
-    When falling back to live, upserts results into cache to seed future reads.
+    (Legacy; prefer cache_first_youtube for normalized response.)
     """
     from signalmap.connectors.wayback_youtube import get_youtube_archival_metrics
 
@@ -916,10 +1152,7 @@ def get_youtube_cache_first(input_str: str, sample: int = 40) -> dict:
     if cached is not None and cached.get("metadata", {}).get("count", 0) >= 1:
         return cached
 
-    live = get_youtube_archival_metrics(
-        input_str=input_str,
-        sample=sample,
-    )
+    live = get_youtube_archival_metrics(input_str=input_str, sample=sample)
     results = live.get("results", [])
     canonical_url = live.get("canonical_url", "")
     if results and canonical_url:
@@ -930,6 +1163,77 @@ def get_youtube_cache_first(input_str: str, sample: int = 40) -> dict:
         "last_cached_at": None,
     }
     return live
+
+
+def _rows_to_snapshots_youtube(rows: list[dict]) -> list[dict]:
+    """Build normalized snapshot list from cache rows (YouTube: subscribers -> followers)."""
+    out = []
+    for r in rows:
+        ts = r.get("timestamp")
+        out.append({
+            "timestamp": _cdx_ts_to_iso(ts) if ts else "",
+            "followers": r.get("subscribers"),
+            "snapshot_url": r.get("archived_url"),
+            "raw": None,
+        })
+    return out
+
+
+def cache_first_youtube(
+    handle: str,
+    force_live: bool = False,
+    limit: Optional[int] = None,
+) -> dict:
+    """
+    Normalized cache-first: return cache only if present and not force_live;
+    else one live fetch, upsert, return. source in {cache, live, mixed}.
+    """
+    from signalmap.connectors.wayback_youtube import (
+        canonicalize_youtube_input,
+        get_youtube_archival_metrics,
+    )
+
+    handle_stripped = (handle or "").strip()
+    if not handle_stripped:
+        return _build_cache_first_response(
+            "youtube", handle, "", "live", [], 0, 0, notes=["Invalid handle."]
+        )
+    canon = canonicalize_youtube_input(handle_stripped)
+    canonical_url = canon.get("canonical_url", "")
+    if not canonical_url:
+        return _build_cache_first_response(
+            "youtube", handle_stripped, "", "live", [], 0, 0, notes=["Invalid YouTube handle or URL."]
+        )
+    sample = min(max(limit or 40, 1), 100)
+
+    cache_rows, last_cached_at = _get_cache_rows(PLATFORM_YOUTUBE, canonical_url)
+    if cache_rows and not force_live:
+        snapshots = _rows_to_snapshots_youtube(cache_rows)
+        return _build_cache_first_response(
+            "youtube", handle_stripped, canonical_url, "cache",
+            snapshots, len(cache_rows), 0,
+            last_cached_at=last_cached_at,
+        )
+
+    live = get_youtube_archival_metrics(input_str=handle_stripped, sample=sample)
+    results = live.get("results", [])
+    if results and canonical_url:
+        _upsert_youtube_cache(canonical_url, handle_stripped, results)
+    snapshots = []
+    for r in results:
+        ts = r.get("timestamp")
+        snapshots.append({
+            "timestamp": _cdx_ts_to_iso(ts) if ts else "",
+            "followers": r.get("subscribers"),
+            "snapshot_url": r.get("archived_url"),
+            "raw": None,
+        })
+    source = "mixed" if cache_rows else "live"
+    return _build_cache_first_response(
+        "youtube", handle_stripped, canonical_url, source,
+        snapshots, len(cache_rows), len(results),
+        last_cached_at=last_cached_at if cache_rows else None,
+    )
 
 
 def create_youtube_job(

@@ -69,6 +69,8 @@ export function fitExponential(points: Point[]): { a: number; b: number } | null
 export function fitLogistic(points: Point[]): { L: number; k: number; x0: number } | null {
   const xy = daysSinceFirst(points);
   if (xy.length < 3) return null;
+  const xRange =
+    Math.max(...xy.map((p) => p.x)) - Math.min(...xy.map((p) => p.x)) || 1;
   const maxY = Math.max(...xy.map((p) => p.y));
   const L = maxY * 1.2 + 1;
   const eps = 1e-6;
@@ -88,8 +90,14 @@ export function fitLogistic(points: Point[]): { L: number; k: number; x0: number
   }
   const denom = n * sumX2 - sumX * sumX;
   if (Math.abs(denom) < 1e-12) return null;
-  const k = (n * sumXZ - sumX * sumZ) / denom;
-  const x0 = k !== 0 ? (sumZ - k * sumX) / (n * k) : sumX / n;
+  let k = (n * sumXZ - sumX * sumZ) / denom;
+  // If k is near zero, the curve is flat (y ≈ L/2). Enforce minimum k so the S-curve
+  // shows visible curvature over the data-spanning x range.
+  const kMin = 2 / xRange;
+  if (Math.abs(k) < kMin) {
+    k = k > 0 ? kMin : -kMin;
+  }
+  const x0 = -(sumZ - k * sumX) / (n * k); // inflection: logit=0 => x = -intercept/k
   return { L, k, x0 };
 }
 

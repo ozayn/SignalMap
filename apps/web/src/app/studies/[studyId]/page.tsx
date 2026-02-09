@@ -190,7 +190,10 @@ export default function StudyDetailPage() {
   const [fgPlatform, setFgPlatform] = useState<"twitter" | "instagram" | "youtube">("twitter");
   const [fgUsername, setFgUsername] = useState("");
   const [fgData, setFgData] = useState<{
-    results: { timestamp: string; followers?: number | null; subscribers?: number | null }[];
+    snapshots?: { timestamp: string; followers?: number | null }[];
+    results?: { timestamp: string; followers?: number | null; subscribers?: number | null }[];
+    source?: string;
+    meta?: { cache_hit?: boolean; cache_rows?: number; wayback_calls?: number; last_cached_at?: string | null };
   } | null>(null);
   const [fgLoading, setFgLoading] = useState(false);
   const [fgError, setFgError] = useState<string | null>(null);
@@ -198,7 +201,7 @@ export default function StudyDetailPage() {
   const [fgShowExponential, setFgShowExponential] = useState(true);
   const [fgShowLogistic, setFgShowLogistic] = useState(true);
   const [fgMetadata, setFgMetadata] = useState<{
-    source?: "cache" | "wayback_live";
+    source?: "cache" | "live" | "mixed";
     count?: number;
     last_cached_at?: string | null;
   } | null>(null);
@@ -809,61 +812,27 @@ export default function StudyDetailPage() {
                 suppressHydrationWarning
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  const un = fgUsername.trim().replace(/^@/, "");
-                  if (!un) return;
+                  const handle = fgUsername.trim();
+                  if (!handle) return;
                   setFgLoading(true);
                   setFgError(null);
                   setFgData(null);
                   setFgMetadata(null);
                   try {
-                    if (fgPlatform === "instagram") {
-                      const res = await fetchJson<{
-                        results: { timestamp: string; followers?: number | null }[];
-                        metadata?: { source?: string; count?: number; last_cached_at?: string | null };
-                      }>(`/api/wayback/instagram/cache-first?username=${encodeURIComponent(un)}&sample=40`);
-                      setFgData(res);
-                      const meta = res.metadata;
-                      setFgMetadata(
-                        meta
-                          ? {
-                              source: (meta.source === "cache" ? "cache" : "wayback_live") as "cache" | "wayback_live",
-                              count: meta.count,
-                              last_cached_at: meta.last_cached_at ?? undefined,
-                            }
-                          : {
-                              source: "wayback_live" as const,
-                              count: res.results?.length,
-                            }
-                      );
-                      return;
-                    }
-                    if (fgPlatform === "youtube") {
-                      const val = un.startsWith("@") ? un : `@${un}`;
-                      const res = await fetchJson<{
-                        results: { timestamp: string; subscribers?: number | null }[];
-                        metadata?: { source?: string; count?: number; last_cached_at?: string | null };
-                      }>(`/api/wayback/youtube/cache-first?input=${encodeURIComponent(val)}&sample=40`);
-                      setFgData(res);
-                      const meta = res.metadata;
-                      setFgMetadata(
-                        meta
-                          ? {
-                              source: (meta.source === "cache" ? "cache" : "wayback_live") as "cache" | "wayback_live",
-                              count: meta.count,
-                              last_cached_at: meta.last_cached_at ?? undefined,
-                            }
-                          : {
-                              source: "wayback_live" as const,
-                              count: res.results?.length,
-                            }
-                      );
-                      return;
-                    }
-                    const res = await fetchJson<{ results: { timestamp: string; followers?: number | null }[] }>(
-                      `/api/wayback/twitter?username=${encodeURIComponent(un)}&sample=40`
-                    );
+                    const url = `/api/wayback/${fgPlatform}/cache-first?handle=${encodeURIComponent(handle)}&limit=40`;
+                    const res = await fetchJson<{
+                      platform: string;
+                      handle: string;
+                      source: "cache" | "live" | "mixed";
+                      snapshots: { timestamp: string; followers?: number | null }[];
+                      meta?: { cache_hit?: boolean; cache_rows?: number; wayback_calls?: number; last_cached_at?: string | null };
+                    }>(url);
                     setFgData(res);
-                    setFgMetadata({ source: "wayback_live", count: res.results?.length });
+                    setFgMetadata({
+                      source: res.source,
+                      count: res.meta?.cache_rows ?? res.snapshots?.length,
+                      last_cached_at: res.meta?.last_cached_at ?? undefined,
+                    });
                   } catch (err) {
                     setFgError(err instanceof Error ? err.message : "Fetch failed");
                   } finally {
@@ -886,13 +855,13 @@ export default function StudyDetailPage() {
                   </select>
                 </label>
                 <label className="flex flex-col gap-1" suppressHydrationWarning>
-                  <span className="text-xs text-muted-foreground">{fgPlatform === "youtube" ? "Handle (e.g. @channel)" : "Username"}</span>
+                  <span className="text-xs text-muted-foreground">Handle</span>
                   <input
                     type="text"
                     suppressHydrationWarning
                     value={fgUsername}
                     onChange={(e) => setFgUsername(e.target.value)}
-                    placeholder={fgPlatform === "youtube" ? "@channel" : "username"}
+                    placeholder={fgPlatform === "youtube" ? "@channel" : "username or @handle"}
                     className="text-sm border border-border rounded px-2.5 py-1.5 bg-background min-w-[140px]"
                   />
                 </label>
@@ -908,7 +877,7 @@ export default function StudyDetailPage() {
               {fgError && (
                 <p className="mt-2 text-sm text-muted-foreground">{fgError}</p>
               )}
-              {fgData && fgData.results.length > 0 && (
+              {fgData && (fgData.snapshots?.length ?? fgData.results?.length ?? 0) > 0 && (
                 <div className="mt-4 flex flex-wrap items-center gap-4">
                   <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                     <input
@@ -942,13 +911,13 @@ export default function StudyDetailPage() {
             </CardHeader>
             <CardContent>
               {fgData && (() => {
-                const metric = fgPlatform === "youtube" ? "subscribers" : "followers";
-                const points = fgData.results
-                  .filter((r) => (r[metric as keyof typeof r] ?? null) != null)
+                const list = fgData.snapshots ?? fgData.results ?? [];
+                const points = list
+                  .filter((r) => (r.followers ?? (r as { subscribers?: number }).subscribers ?? null) != null)
                   .map((r) => {
                     const ts = r.timestamp;
-                    const date = ts.length >= 8 ? `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}` : ts;
-                    const val = metric === "subscribers" ? (r.subscribers ?? 0) : (r.followers ?? 0);
+                    const date = ts.includes("-") ? ts.slice(0, 10) : (ts.length >= 8 ? `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}` : ts);
+                    const val = r.followers ?? (r as { subscribers?: number }).subscribers ?? 0;
                     return { date, value: val };
                   })
                   .sort((a, b) => a.date.localeCompare(b.date));
@@ -960,9 +929,9 @@ export default function StudyDetailPage() {
                       </p>
                       {fgMetadata && (
                         <p className="mt-3 text-xs text-muted-foreground border-t border-border pt-3">
-                          Data source: {fgMetadata.source === "cache" ? "cache" : "Wayback (live)"}
+                          Data source: {fgMetadata.source === "cache" ? "cache" : fgMetadata.source === "mixed" ? "mixed (live refresh)" : "Wayback (live)"}
                           {fgMetadata.count != null && ` · ${fgMetadata.count} snapshot${fgMetadata.count !== 1 ? "s" : ""}`}
-                          {fgMetadata.source === "cache" && fgMetadata.last_cached_at != null && (
+                          {(fgMetadata.source === "cache" || fgMetadata.source === "mixed") && fgMetadata.last_cached_at != null && (
                             <> · Last cached: {new Date(fgMetadata.last_cached_at).toLocaleDateString()}</>
                           )}
                         </p>
@@ -981,9 +950,9 @@ export default function StudyDetailPage() {
                     />
                     {fgMetadata && (
                       <p className="mt-3 text-xs text-muted-foreground border-t border-border pt-3">
-                        Data source: {fgMetadata.source === "cache" ? "cache" : "Wayback (live)"}
+                        Data source: {fgMetadata.source === "cache" ? "cache" : fgMetadata.source === "mixed" ? "mixed (live refresh)" : "Wayback (live)"}
                         {fgMetadata.count != null && ` · ${fgMetadata.count} snapshot${fgMetadata.count !== 1 ? "s" : ""}`}
-                        {fgMetadata.source === "cache" && fgMetadata.last_cached_at != null && (
+                        {(fgMetadata.source === "cache" || fgMetadata.source === "mixed") && fgMetadata.last_cached_at != null && (
                           <> · Last cached: {new Date(fgMetadata.last_cached_at).toLocaleDateString()}</>
                         )}
                       </p>
@@ -993,7 +962,7 @@ export default function StudyDetailPage() {
               })()}
               {!fgData && !fgLoading && (
                 <p className="text-sm text-muted-foreground">
-                  Enter a username and click Fetch data to load Wayback snapshots.
+                  Enter a handle and click Fetch data to load Wayback snapshots.
                 </p>
               )}
             </CardContent>

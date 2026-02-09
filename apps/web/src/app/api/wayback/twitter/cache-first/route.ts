@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const limit = searchParams.get("limit");
     if (limit !== null && limit !== undefined) params.set("limit", limit);
 
-    const res = await fetch(`${API_BASE}/api/wayback/instagram/cache-first?${params}`, {
+    const res = await fetch(`${API_BASE}/api/wayback/twitter/cache-first?${params}`, {
       headers: { Accept: "application/json" },
       next: { revalidate: 0 },
     });

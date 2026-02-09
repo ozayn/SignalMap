@@ -4,28 +4,32 @@ const API_BASE = process.env.API_URL ?? "http://localhost:8000";
 
 export const maxDuration = 120;
 
+/** Thin proxy: forward normalized params (handle preferred; username/input deprecated) to FastAPI. */
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
-  const input = searchParams.get("input");
-  if (!input) {
+  const handle = searchParams.get("handle") ?? searchParams.get("username") ?? searchParams.get("input");
+  if (!handle?.trim()) {
     return NextResponse.json(
-      { error: "input is required (e.g. @handle or full URL)" },
-      { status: 400 }
+      { error: "One of handle, username, or input is required", detail: "Prefer 'handle'." },
+      { status: 422 }
     );
   }
 
   try {
-    const params = new URLSearchParams({ input });
-    const sample = searchParams.get("sample");
-    if (sample) params.set("sample", sample);
+    const params = new URLSearchParams({ handle: handle.trim() });
+    const forceLive = searchParams.get("force_live");
+    if (forceLive !== null && forceLive !== undefined) params.set("force_live", String(forceLive));
+    const limit = searchParams.get("limit");
+    if (limit !== null && limit !== undefined) params.set("limit", limit);
 
     const res = await fetch(`${API_BASE}/api/wayback/youtube/cache-first?${params}`, {
       headers: { Accept: "application/json" },
       next: { revalidate: 0 },
     });
     if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
       return NextResponse.json(
-        { error: `API returned ${res.status}` },
+        body?.detail ? { error: body.detail, ...body } : { error: `API returned ${res.status}` },
         { status: res.status }
       );
     }
