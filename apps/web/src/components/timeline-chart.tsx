@@ -20,6 +20,7 @@ type TimelineChartProps = {
   valueKey: keyof DataPoint;
   label: string;
   events?: TimelineEvent[];
+  anchorEventId?: string;
 };
 
 function findEventIndex(dates: string[], eventDate: string): number | null {
@@ -36,6 +37,7 @@ export function TimelineChart({
   valueKey,
   label,
   events = [],
+  anchorEventId,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
@@ -58,12 +60,16 @@ export function TimelineChart({
 
     const minDate = dates[0];
     const maxDate = dates[dates.length - 1];
-    const markLineData: { xAxis: string; event: TimelineEvent }[] = [];
+    const markLineData: { xAxis: string; event: TimelineEvent; isAnchor: boolean }[] = [];
     for (const ev of events) {
       if (ev.date < minDate || ev.date > maxDate) continue;
       const idx = findEventIndex(dates, ev.date);
       if (idx != null) {
-        markLineData.push({ xAxis: dates[idx], event: ev });
+        markLineData.push({
+          xAxis: dates[idx],
+          event: ev,
+          isAnchor: anchorEventId === ev.id,
+        });
       }
     }
 
@@ -131,8 +137,15 @@ export function TimelineChart({
             markLineData.length > 0
               ? {
                   symbol: "none",
-                  lineStyle: { color: muted, width: 1, type: "solid" },
-                  data: markLineData.map((d) => ({ xAxis: d.xAxis, label: { show: false } })),
+                  data: markLineData.map((d) => ({
+                    xAxis: d.xAxis,
+                    label: { show: false },
+                    lineStyle: {
+                      color: d.isAnchor ? mutedFg : muted,
+                      width: d.isAnchor ? 1.5 : 1,
+                      type: "solid" as const,
+                    },
+                  })),
                 }
               : undefined,
         },
@@ -168,7 +181,7 @@ export function TimelineChart({
         // Ignore dispose errors when chart is already torn down
       }
     };
-  }, [data, valueKey, label, events]);
+  }, [data, valueKey, label, events, anchorEventId]);
 
   return <div ref={chartRef} className="h-80 w-full" />;
 }

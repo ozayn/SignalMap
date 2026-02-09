@@ -14,6 +14,9 @@ type OverviewData = {
   time_range: [string, string];
   kpis: Array<{ label: string; value: string | number; unit?: string | null }>;
   timeline: Array<{ date: string; value: number }>;
+  anchor_event_id?: string | null;
+  window_days?: number | null;
+  window_range?: [string, string];
 };
 
 type Event = {
@@ -31,36 +34,51 @@ type EventsData = {
   events: Event[];
 };
 
+const WINDOW_OPTIONS = [
+  { value: 7, label: "±7 days" },
+  { value: 30, label: "±30 days" },
+  { value: 90, label: "±90 days" },
+] as const;
+
 export default function StudyDetailPage() {
   const params = useParams();
   const studyId = params.studyId as string;
   const study = getStudyById(studyId);
   const [data, setData] = useState<OverviewData | null>(null);
   const [events, setEvents] = useState<EventsData["events"]>([]);
+  const [anchorEventId, setAnchorEventId] = useState<string>("");
+  const [windowDays, setWindowDays] = useState<number>(30);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!study) return;
     let mounted = true;
-
-    Promise.all([
-      fetchJson<OverviewData>(`/api/overview?study_id=${studyId}`),
-      fetchJson<EventsData>(`/api/events?study_id=${studyId}`).catch(() => ({ events: [] })),
-    ])
-      .then(([overview, eventsRes]) => {
-        if (mounted) {
-          setData(overview);
-          setEvents(eventsRes.events ?? []);
-        }
-      })
-      .catch((e) => mounted && setError(e instanceof Error ? e.message : "Unknown error"))
-      .finally(() => mounted && setLoading(false));
-
+    fetchJson<EventsData>(`/api/events?study_id=${studyId}`)
+      .then((res) => mounted && setEvents(res.events ?? []))
+      .catch(() => {});
     return () => {
       mounted = false;
     };
   }, [studyId, study]);
+
+  useEffect(() => {
+    if (!study) return;
+    let mounted = true;
+    if (!data) setLoading(true);
+    const params = new URLSearchParams({ study_id: studyId });
+    if (anchorEventId) {
+      params.set("anchor_event_id", anchorEventId);
+      params.set("window_days", String(windowDays));
+    }
+    fetchJson<OverviewData>(`/api/overview?${params}`)
+      .then((res) => mounted && setData(res))
+      .catch((e) => mounted && setError(e instanceof Error ? e.message : "Unknown error"))
+      .finally(() => mounted && setLoading(false));
+    return () => {
+      mounted = false;
+    };
+  }, [studyId, study, anchorEventId, windowDays]);
 
   if (!study) {
     return (
@@ -154,6 +172,32 @@ export default function StudyDetailPage() {
           <p className="text-sm text-muted-foreground">
             Average sentiment score (sampled over time)
           </p>
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            <select
+              value={anchorEventId}
+              onChange={(e) => setAnchorEventId(e.target.value)}
+              className="text-xs text-muted-foreground bg-transparent border border-border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">None (full timeline)</option>
+              {events.map((ev) => (
+                <option key={ev.id} value={ev.id}>
+                  {ev.title} ({ev.date})
+                </option>
+              ))}
+            </select>
+            <select
+              value={windowDays}
+              onChange={(e) => setWindowDays(Number(e.target.value))}
+              disabled={!anchorEventId}
+              className="text-xs text-muted-foreground bg-transparent border border-border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+            >
+              {WINDOW_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </CardHeader>
         <CardContent>
           <TimelineChart
@@ -161,6 +205,7 @@ export default function StudyDetailPage() {
             valueKey="value"
             label="Sentiment"
             events={events}
+            anchorEventId={anchorEventId || undefined}
           />
         </CardContent>
       </Card>

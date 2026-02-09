@@ -118,36 +118,100 @@ def get_events(study_id: str = "1"):
 OVERVIEW_STUB = {
     "study_id": "default",
     "study_title": "SignalMap Overview",
-    "time_range": ["2024-01-01", "2024-08-31"],
+    "time_range": ["2021-01-15", "2026-02-06"],
     "kpis": [
         {"label": "Total interactions", "value": 2047, "unit": None},
         {"label": "Avg. sentiment", "value": 0.18, "unit": "score"},
         {"label": "Unique hashtags", "value": 14, "unit": None},
     ],
     "timeline": [
+        {"date": "2021-01-15", "value": 0.08},
+        {"date": "2021-04-11", "value": -0.12},
+        {"date": "2021-06-18", "value": -0.05},
+        {"date": "2021-08-03", "value": -0.08},
+        {"date": "2021-10-15", "value": 0.02},
+        {"date": "2022-01-15", "value": 0.05},
+        {"date": "2022-06-01", "value": 0.10},
+        {"date": "2022-08-15", "value": 0.12},
+        {"date": "2022-09-01", "value": 0.08},
+        {"date": "2022-09-16", "value": -0.15},
+        {"date": "2022-09-30", "value": -0.22},
+        {"date": "2022-10-17", "value": -0.18},
+        {"date": "2022-12-08", "value": -0.12},
+        {"date": "2023-02-11", "value": 0.05},
+        {"date": "2023-06-15", "value": 0.12},
+        {"date": "2023-10-01", "value": 0.08},
         {"date": "2024-01-01", "value": 0.15},
         {"date": "2024-01-15", "value": 0.22},
-        {"date": "2024-02-01", "value": 0.19},
-        {"date": "2024-02-15", "value": 0.31},
-        {"date": "2024-03-01", "value": 0.25},
-        {"date": "2024-03-15", "value": 0.28},
-        {"date": "2024-04-01", "value": 0.12},
-        {"date": "2024-04-15", "value": 0.08},
-        {"date": "2024-05-01", "value": 0.14},
-        {"date": "2024-05-15", "value": -0.05},
-        {"date": "2024-06-01", "value": -0.12},
+        {"date": "2024-04-13", "value": -0.20},
+        {"date": "2024-05-19", "value": -0.15},
         {"date": "2024-06-15", "value": -0.08},
-        {"date": "2024-07-01", "value": 0.05},
-        {"date": "2024-07-15", "value": 0.18},
-        {"date": "2024-08-01", "value": 0.22},
-        {"date": "2024-08-15", "value": 0.19},
+        {"date": "2024-08-01", "value": 0.05},
+        {"date": "2024-10-15", "value": 0.12},
+        {"date": "2025-01-15", "value": -0.05},
+        {"date": "2025-04-01", "value": -0.18},
+        {"date": "2025-06-15", "value": -0.12},
+        {"date": "2025-09-01", "value": -0.08},
+        {"date": "2025-12-01", "value": -0.10},
+        {"date": "2026-01-15", "value": -0.06},
+        {"date": "2026-02-06", "value": -0.04},
     ],
 }
 
 
+def _filter_overview_by_event(
+    study_id: str,
+    anchor_event_id: str,
+    window_days: int,
+) -> dict:
+    """Filter timeline and recompute KPIs for an event-centered window."""
+    from datetime import datetime, timedelta
+    from signalmap.data.load_events import load_events
+
+    events = load_events(study_id)
+    event = next((e for e in events if e.get("id") == anchor_event_id), None)
+    if not event:
+        return {**OVERVIEW_STUB, "study_id": study_id}
+
+    event_date = datetime.strptime(event["date"], "%Y-%m-%d").date()
+    delta = timedelta(days=window_days)
+    start = (event_date - delta).strftime("%Y-%m-%d")
+    end = (event_date + delta).strftime("%Y-%m-%d")
+
+    timeline = OVERVIEW_STUB["timeline"]
+    filtered = [p for p in timeline if start <= p["date"] <= end]
+    if not filtered:
+        return {**OVERVIEW_STUB, "study_id": study_id}
+
+    avg_sentiment = sum(p["value"] for p in filtered) / len(filtered)
+    kpis = [
+        {"label": "Total interactions", "value": int(2047 * len(filtered) / len(timeline)), "unit": None},
+        {"label": "Avg. sentiment", "value": round(avg_sentiment, 2), "unit": "score"},
+        {"label": "Unique hashtags", "value": 14, "unit": None},
+    ]
+    return {
+        **OVERVIEW_STUB,
+        "study_id": study_id,
+        "kpis": kpis,
+        "timeline": filtered,
+        "time_range": [start, end],
+        "anchor_event_id": anchor_event_id,
+        "window_days": window_days,
+        "window_range": [start, end],
+    }
+
+
 @app.get("/api/overview")
-def get_overview(study_id: str = "1"):
+def get_overview(
+    study_id: str = "1",
+    anchor_event_id: Optional[str] = None,
+    window_days: Optional[int] = None,
+):
+    """Return study overview. Optionally filter by event-centered window."""
     result = {**OVERVIEW_STUB, "study_id": study_id}
+    if anchor_event_id:
+        days = window_days if window_days is not None and window_days > 0 else 30
+        result = _filter_overview_by_event(study_id, anchor_event_id, days)
     return result
 
 
