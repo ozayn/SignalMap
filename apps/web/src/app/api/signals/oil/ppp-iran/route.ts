@@ -21,10 +21,12 @@ export async function GET(request: NextRequest) {
       }
     );
     if (!res.ok) {
-      return NextResponse.json(
-        { error: `API returned ${res.status}` },
-        { status: res.status }
-      );
+      let body: { error?: string } = { error: `API returned ${res.status}` };
+      try {
+        const parsed = await res.json();
+        if (parsed?.detail) body = { error: parsed.detail };
+      } catch {}
+      return NextResponse.json(body, { status: res.status });
     }
     const data = await res.json();
     return NextResponse.json(data);
