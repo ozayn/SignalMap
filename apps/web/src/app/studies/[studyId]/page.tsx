@@ -12,6 +12,7 @@ import { LearningNote } from "@/components/learning-note";
 import { ConceptsUsed } from "@/components/concepts-used";
 import { CurrentSnapshot } from "@/components/current-snapshot";
 import { InSimpleTerms } from "@/components/in-simple-terms";
+import { EventsTimeline, type TimelineEvent } from "@/components/events-timeline";
 import { getStudyById } from "@/lib/studies";
 import { fetchJson } from "@/lib/api";
 
@@ -38,6 +39,7 @@ type Event = {
   sources?: string[];
   layer?: "iran_core" | "world_core" | "world_1900" | "sanctions" | "iran_presidents";
   scope?: "iran" | "world" | "sanctions" | "oil_exports";
+  category?: string;
 };
 
 type EventsData = {
@@ -195,6 +197,7 @@ export default function StudyDetailPage() {
   const isOilPppIran = study?.primarySignal.kind === "oil_ppp_iran";
   const hasTurkeyComparator = study?.comparatorCountry === "Turkey";
   const isOilExportCapacity = study?.primarySignal.kind === "oil_export_capacity";
+  const isEventsTimeline = study?.primarySignal.kind === "events_timeline";
 
   const windowOptions = isGoldAndOil ? WINDOW_OPTIONS_LONG_RANGE : WINDOW_OPTIONS;
   const effectiveWindowDays = useMemo(
@@ -271,8 +274,8 @@ export default function StudyDetailPage() {
     const params = new URLSearchParams({
       study_id: isFxUsdToman || isOilAndFx ? "iran" : studyId,
     });
-    const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity;
-    if (hasEventLayers) {
+    const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isEventsTimeline;
+    if (hasEventLayers && !isEventsTimeline) {
       let layers: string[];
       if (((isOilGlobalLong || isGoldAndOil || isRealOil || isOilExportCapacity) && study.eventLayers?.length) || (hasTurkeyComparator && study.eventLayers !== undefined)) {
         if (isOilExportCapacity) {
@@ -290,13 +293,22 @@ export default function StudyDetailPage() {
       }
       params.set("layers", layers.length ? layers.join(",") : "none");
     }
+    if (isEventsTimeline) {
+      params.set("study_id", "events_timeline");
+    }
     fetchJson<EventsData>(`/api/events?${params}`)
       .then((res) => mounted && setEvents(res.events ?? []))
       .catch(() => {});
     return () => {
       mounted = false;
     };
-  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, hasTurkeyComparator, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms, showSanctionsPeriods]);
+  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, hasTurkeyComparator, isEventsTimeline, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms, showSanctionsPeriods]);
+
+  useEffect(() => {
+    if (study && isEventsTimeline) {
+      setLoading(false);
+    }
+  }, [study, isEventsTimeline]);
 
   useEffect(() => {
     if (!study || !isOverviewStub) return;
@@ -667,12 +679,28 @@ export default function StudyDetailPage() {
   return (
     <div className="container mx-auto max-w-4xl px-4 py-12 space-y-10 min-w-0">
       <header className="space-y-1">
-        <Link
-          href="/studies"
-          className="text-xs text-muted-foreground hover:text-foreground inline-block"
-        >
-          ← Studies
-        </Link>
+        <div className="flex items-center gap-4 flex-wrap">
+          <Link
+            href="/studies"
+            className="text-xs text-muted-foreground hover:text-foreground inline-block"
+          >
+            ← Studies
+          </Link>
+          <Link
+            href="/learning"
+            className="text-xs text-muted-foreground hover:text-foreground inline-block"
+          >
+            Learning resources
+          </Link>
+          {!isEventsTimeline && (
+            <Link
+              href="/studies/events_timeline"
+              className="text-xs text-muted-foreground hover:text-foreground inline-block"
+            >
+              Reference timeline
+            </Link>
+          )}
+        </div>
         <h1 className="text-2xl font-medium tracking-tight text-foreground">
           Study {study.number}
         </h1>
@@ -682,7 +710,63 @@ export default function StudyDetailPage() {
         </p>
       </header>
 
-      {(isOilBrent || isOilGlobalLong) && oilKpis ? (
+      {isEventsTimeline ? (
+        <Card className="border-border min-w-0 overflow-visible">
+          <CardHeader>
+            <CardTitle className="text-base font-medium">
+              Reference timeline
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {study.description}
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              Hover over events for details. Toggle categories to focus.
+            </p>
+            <div className="mt-3">
+              <label className="text-xs text-muted-foreground mr-2">Focus on event:</label>
+              <select
+                value={anchorEventId}
+                onChange={(e) => setAnchorEventId(e.target.value)}
+                className="text-xs text-muted-foreground bg-transparent border border-border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="">Full timeline</option>
+                {events
+                  .filter((e): e is Event & { category: string } => !!e.category)
+                  .sort((a, b) => (a.date_start ?? a.date ?? "").localeCompare(b.date_start ?? b.date ?? ""))
+                  .map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      {ev.title} ({ev.date_start ?? ev.date ?? ""})
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <EventsTimeline
+              events={events.filter((e): e is Event & { category: string } => !!e.category) as TimelineEvent[]}
+              timeRange={
+                anchorEventId
+                  ? (() => {
+                      const ev = events.find((e) => e.id === anchorEventId);
+                      const anchorDate = ev?.date ?? ev?.date_start ?? ev?.date_end;
+                      if (!anchorDate) return study.timeRange;
+                      const [rangeStart, rangeEnd] = study.timeRange;
+                      const d = new Date(anchorDate);
+                      const start = new Date(d);
+                      start.setFullYear(start.getFullYear() - 5);
+                      const end = new Date(d);
+                      end.setFullYear(end.getFullYear() + 5);
+                      return [
+                        start.toISOString().slice(0, 10) < rangeStart ? rangeStart : start.toISOString().slice(0, 10),
+                        end.toISOString().slice(0, 10) > rangeEnd ? rangeEnd : end.toISOString().slice(0, 10),
+                      ] as [string, string];
+                    })()
+                  : study.timeRange
+              }
+            />
+          </CardContent>
+        </Card>
+      ) : (isOilBrent || isOilGlobalLong) && oilKpis ? (
         <div className="grid gap-4 sm:grid-cols-3">
           <Card className="border-border">
             <CardHeader className="pb-1">
@@ -900,6 +984,7 @@ export default function StudyDetailPage() {
         </div>
       ) : null}
 
+      {!isEventsTimeline && (
       <Card className="border-border overflow-hidden">
         <CardHeader>
           <CardTitle className="text-base font-medium">
@@ -1348,7 +1433,12 @@ export default function StudyDetailPage() {
                 ]}
                 note="Annual resolution. Export volumes are estimates. Do not equate proxy with government revenue."
               />
-              <InSimpleTerms>
+              <InSimpleTerms
+                learnMore={{
+                  label: "Why quantity constraints matter under sanctions",
+                  url: "https://www.youtube.com/watch?v=zrK2B2yMPrA",
+                }}
+              >
                 <p>
                   Brent crude oil is a benchmark oil type traded on world markets, often used as a reference for global oil prices.
                   The chart combines Brent oil price and estimated export volume to suggest how much earning capacity Iran might have from oil exports.
@@ -1749,9 +1839,9 @@ export default function StudyDetailPage() {
                 </p>
               </InSimpleTerms>
             </>
-          ) : (
+          ) : data ? (
             <TimelineChart
-              data={data!.timeline}
+              data={data.timeline}
               valueKey="value"
               label="Sentiment"
               events={events}
@@ -1766,11 +1856,12 @@ export default function StudyDetailPage() {
                     }
                   : undefined
               }
-              timeRange={data!.time_range}
+              timeRange={data.time_range}
             />
-          )}
+          ) : null}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

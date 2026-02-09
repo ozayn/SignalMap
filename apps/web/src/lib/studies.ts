@@ -7,7 +7,8 @@ export type PrimarySignal =
   | { kind: "oil_and_fx" }
   | { kind: "real_oil" }
   | { kind: "oil_ppp_iran" }
-  | { kind: "oil_export_capacity" };
+  | { kind: "oil_export_capacity" }
+  | { kind: "events_timeline" };
 
 import type { ConceptKey } from "./concepts";
 
@@ -128,6 +129,16 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "oil_export_capacity" },
     eventLayers: ["sanctions"],
+  },
+  {
+    id: "events_timeline",
+    number: 10,
+    title: "Historical events timeline (1900–present)",
+    timeRange: ["1900-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "A reference timeline of major political, economic, and geopolitical events used as context throughout SignalMap.",
+    status: "active",
+    primarySignal: { kind: "events_timeline" },
   },
 ];
 

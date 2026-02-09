@@ -20,6 +20,7 @@ const navLinks = [
   { href: "/studies", label: "Studies" },
   { href: "/explore", label: "Explore" },
   { href: "/methods", label: "Methods" },
+  { href: "/learning", label: "Learning", subtle: true },
 ];
 
 export default function RootLayout({
@@ -40,11 +41,11 @@ export default function RootLayout({
                   SignalMap
                 </Link>
                 <div className="flex items-center gap-1">
-                  {navLinks.map(({ href, label }) => (
+                  {navLinks.map(({ href, label, subtle }) => (
                     <Link
                       key={href}
                       href={href}
-                      className="text-sm text-muted-foreground hover:text-foreground border border-transparent hover:border-border rounded-md px-3 py-1.5 transition"
+                      className={`text-muted-foreground hover:text-foreground border border-transparent hover:border-border rounded-md px-3 py-1.5 transition ${subtle ? "text-xs opacity-80" : "text-sm"}`}
                     >
                       {label}
                     </Link>

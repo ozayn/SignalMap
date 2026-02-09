@@ -927,7 +927,7 @@ export function TimelineChart({
     let cancelled = false;
     const rafId = requestAnimationFrame(() => {
       if (!cancelled && chartRef.current) {
-        chart.setOption(option);
+        chart.setOption(option, { notMerge: true });
       }
     });
 

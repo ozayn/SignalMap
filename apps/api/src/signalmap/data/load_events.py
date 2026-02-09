@@ -126,17 +126,28 @@ SANCTIONS_OIL_EXPORTS_RANGE = [
 
 SANCTIONS = SANCTIONS_POINT + SANCTIONS_OIL_EXPORTS_RANGE
 
+def _get_world_core():
+    from signalmap.data.event_layers import EVENTS_WORLD_CORE
+    return EVENTS_WORLD_CORE
+
+def _get_world_1900():
+    from signalmap.data.event_layers import EVENTS_WORLD_1900
+    return EVENTS_WORLD_1900
+
 _LAYER_REGISTRY = {
     "iran_presidents": IRAN_PRESIDENTS,
     "iran_core": IRAN_CORE,
-    "world_core": [],
-    "world_1900": [],
+    "world_core": _get_world_core(),
+    "world_1900": _get_world_1900(),
     "sanctions": SANCTIONS,
 }
 
 
 def load_events(study_id: str) -> list[dict]:
     """Load default events for a study. Returns empty when no default layer is configured."""
+    if study_id == "events_timeline":
+        from signalmap.data.events_timeline import EVENTS_TIMELINE_ALL
+        return EVENTS_TIMELINE_ALL
     return []
 
 
