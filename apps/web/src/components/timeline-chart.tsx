@@ -16,7 +16,7 @@ export type TimelineEvent = {
   description?: string;
   confidence?: string;
   sources?: string[];
-  layer?: "iran_core" | "world_core" | "sanctions";
+  layer?: "iran_core" | "world_core" | "world_1900" | "sanctions";
   scope?: "iran" | "world" | "sanctions";
 };
 
@@ -39,6 +39,8 @@ type TimelineChartProps = {
   oilPoints?: OilPoint[];
   secondSeries?: SecondSeries;
   timeRange?: [string, string];
+  /** When true, range bands use very low opacity (oil-dominant view). */
+  mutedBands?: boolean;
 };
 
 function findEventIndex(dates: string[], eventDate: string): number | null {
@@ -61,6 +63,11 @@ function sparseDatesFromRange(start: string, end: string, stepMonths = 1): strin
   return out;
 }
 
+/** Date grid for long-range views (e.g. 1900-present). ~monthly step to keep axis manageable. */
+function longRangeDates(start: string, end: string, stepMonths = 1): string[] {
+  return sparseDatesFromRange(start, end, stepMonths);
+}
+
 export function TimelineChart({
   data,
   valueKey,
@@ -71,6 +78,7 @@ export function TimelineChart({
   oilPoints = [],
   secondSeries,
   timeRange,
+  mutedBands = false,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
@@ -82,25 +90,28 @@ export function TimelineChart({
     const mutedFg = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
 
     const getEventScope = (ev: TimelineEvent): "iran" | "world" | "sanctions" =>
-      ev.scope ?? (ev.layer === "world_core" ? "world" : ev.layer === "sanctions" ? "sanctions" : "iran");
+      ev.scope ?? (ev.layer === "world_core" || ev.layer === "world_1900" ? "world" : ev.layer === "sanctions" ? "sanctions" : "iran");
     const IranOpacity = 0.5;
     const WorldOpacity = 0.3;
     const SanctionsOpacity = 0.28;
-    const RangeBandOpacity = 0.06;
+    const RangeBandOpacity = mutedBands ? 0.02 : 0.06;
 
     const oilPointsResolved = secondSeries?.points ?? oilPoints;
     const hasData = data.length > 0;
     const hasOil = oilPointsResolved.length > 0;
+    const useTimeRangeForAxis = mutedBands && timeRange && timeRange[0] && timeRange[1];
     const hasFallback = !hasData && (hasOil || (timeRange && events.length > 0));
     if (!chartRef.current || (!hasData && !hasFallback)) return;
 
     const dates = hasData
       ? data.map((d) => d.date)
-      : hasOil
-        ? [...new Set(oilPointsResolved.map((p) => p.date))].sort()
-        : timeRange
-          ? sparseDatesFromRange(timeRange[0], timeRange[1])
-          : [];
+      : useTimeRangeForAxis
+        ? longRangeDates(timeRange[0], timeRange[1])
+        : hasOil
+          ? [...new Set(oilPointsResolved.map((p) => p.date))].sort()
+          : timeRange
+            ? sparseDatesFromRange(timeRange[0], timeRange[1])
+            : [];
     const values = hasData ? data.map((d) => d[valueKey] as number) : [];
 
     let chart = echarts.getInstanceByDom(chartRef.current);
@@ -111,10 +122,13 @@ export function TimelineChart({
 
     const oilByDate = new Map(oilPointsResolved.map((p) => [p.date, p.value]));
     const oilDates = [...oilByDate.keys()].sort();
+    const firstOilDate = oilDates[0] ?? "";
+    const lastOilDate = oilDates[oilDates.length - 1] ?? "";
     const nearestOil = (d: string) => {
       const exact = oilByDate.get(d);
       if (exact != null) return exact;
       if (oilDates.length === 0) return null;
+      if (d < firstOilDate || d > lastOilDate) return null;
       const dist = (a: string) => Math.abs(new Date(a).getTime() - new Date(d).getTime());
       const nearest = oilDates.reduce((a, b) => (dist(a) <= dist(b) ? a : b));
       return oilByDate.get(nearest) ?? null;
@@ -370,10 +384,9 @@ export function TimelineChart({
                           borderColor: withAlphaHsl(muted, 0.2),
                           borderWidth: 1,
                         },
-                        data: rangeBandData.map((r) => [
-                          { xAxis: r.xStart },
-                          { xAxis: r.xEnd },
-                        ]),
+                        data: rangeBandData.map((r) =>
+                          [{ xAxis: r.xStart }, { xAxis: r.xEnd }] as [{ xAxis: string }, { xAxis: string }]
+                        ),
                       }
                     : undefined,
               },
@@ -414,10 +427,9 @@ export function TimelineChart({
                           borderColor: withAlphaHsl(muted, 0.2),
                           borderWidth: 1,
                         },
-                        data: rangeBandData.map((r) => [
-                          { xAxis: r.xStart },
-                          { xAxis: r.xEnd },
-                        ]),
+                        data: rangeBandData.map((r) =>
+                          [{ xAxis: r.xStart }, { xAxis: r.xEnd }] as [{ xAxis: string }, { xAxis: string }]
+                        ),
                       }
                     : undefined,
               },
@@ -430,6 +442,7 @@ export function TimelineChart({
                 yAxisIndex: 1,
                 data: oilValues,
                 smooth: true,
+                connectNulls: true,
                 symbol: "circle",
                 symbolSize: 3,
                 lineStyle: { color: oilColor, width: 1.5 },
@@ -464,7 +477,7 @@ export function TimelineChart({
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
     };
-  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, timeRange]);
+  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, timeRange, mutedBands]);
 
   useEffect(() => {
     return () => {

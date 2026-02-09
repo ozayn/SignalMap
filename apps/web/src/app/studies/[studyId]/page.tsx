@@ -22,12 +22,14 @@ type OverviewData = {
 type Event = {
   id: string;
   title: string;
-  date: string;
+  date?: string;
+  date_start?: string;
+  date_end?: string;
   type?: string;
   description?: string;
   confidence?: string;
   sources?: string[];
-  layer?: "iran_core" | "world_core";
+  layer?: "iran_core" | "world_core" | "world_1900";
   scope?: "iran" | "world";
 };
 
@@ -48,6 +50,9 @@ type OilSignalData = {
   unit: string;
   source: OilSource;
   points: Array<{ date: string; value: number }>;
+  resolution_change?: string;
+  source_annual?: OilSource;
+  source_daily?: OilSource;
 };
 
 type FxUsdTomanSource = {
@@ -122,6 +127,7 @@ export default function StudyDetailPage() {
   const [showSanctionsEvents, setShowSanctionsEvents] = useState(false);
   const [oilPoints, setOilPoints] = useState<OilSignalData["points"]>([]);
   const [oilSource, setOilSource] = useState<OilSource | null>(null);
+  const [oilResolutionNote, setOilResolutionNote] = useState<string | null>(null);
   const [fxPoints, setFxPoints] = useState<FxUsdTomanSignalData["points"]>([]);
   const [fxSource, setFxSource] = useState<FxUsdTomanSource | null>(null);
   const [loading, setLoading] = useState(true);
@@ -129,23 +135,30 @@ export default function StudyDetailPage() {
 
   const isOverviewStub = study?.primarySignal.kind === "overview_stub";
   const isOilBrent = study?.primarySignal.kind === "oil_brent";
+  const isOilGlobalLong = study?.primarySignal.kind === "oil_global_long";
   const isFxUsdToman = study?.primarySignal.kind === "fx_usd_toman";
   const isOilAndFx = study?.primarySignal.kind === "oil_and_fx";
 
   const oilTimeRange = useMemo((): [string, string] | null => {
-    if (!study || !(isOilBrent || isOilAndFx)) return null;
+    if (!study || !(isOilBrent || isOilGlobalLong || isOilAndFx)) return null;
     if (anchorEventId) {
       const ev = events.find((e) => e.id === anchorEventId);
-      if (ev) return computeWindowRange(ev.date, windowDays);
+      if (ev) {
+        const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
+        if (anchorDate) return computeWindowRange(anchorDate, windowDays);
+      }
     }
     return study.timeRange;
-  }, [study, isOilBrent, isOilAndFx, anchorEventId, events, windowDays]);
+  }, [study, isOilBrent, isOilGlobalLong, isOilAndFx, anchorEventId, events, windowDays]);
 
   const fxTimeRange = useMemo((): [string, string] | null => {
     if (!study || !(isFxUsdToman || isOilAndFx)) return null;
     if (anchorEventId) {
       const ev = events.find((e) => e.id === anchorEventId);
-      if (ev) return computeWindowRange(ev.date, windowDays);
+      if (ev) {
+        const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
+        if (anchorDate) return computeWindowRange(anchorDate, windowDays);
+      }
     }
     return study.timeRange;
   }, [study, isFxUsdToman, isOilAndFx, anchorEventId, events, windowDays]);
@@ -154,7 +167,10 @@ export default function StudyDetailPage() {
     if (!study || !isOilAndFx) return null;
     if (anchorEventId) {
       const ev = events.find((e) => e.id === anchorEventId);
-      if (ev) return computeWindowRange(ev.date, windowDays);
+      if (ev) {
+        const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
+        if (anchorDate) return computeWindowRange(anchorDate, windowDays);
+      }
     }
     return study.timeRange;
   }, [study, isOilAndFx, anchorEventId, events, windowDays]);
@@ -165,13 +181,18 @@ export default function StudyDetailPage() {
     const params = new URLSearchParams({
       study_id: isFxUsdToman || isOilAndFx ? "iran" : studyId,
     });
-    const hasEventLayers = isOverviewStub || isOilBrent || isFxUsdToman || isOilAndFx;
+    const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isFxUsdToman || isOilAndFx;
     if (hasEventLayers) {
-      const layers = [
-        ...(showIranEvents ? ["iran_core"] : []),
-        ...(showWorldEvents ? ["world_core"] : []),
-        ...(showSanctionsEvents ? ["sanctions"] : []),
-      ];
+      let layers: string[];
+      if (isOilGlobalLong && study.eventLayers?.length) {
+        layers = study.eventLayers;
+      } else {
+        layers = [
+          ...(showIranEvents ? ["iran_core"] : []),
+          ...(showWorldEvents ? ["world_core"] : []),
+          ...(showSanctionsEvents ? ["sanctions"] : []),
+        ];
+      }
       params.set("layers", layers.length ? layers.join(",") : "none");
     }
     fetchJson<EventsData>(`/api/events?${params}`)
@@ -180,7 +201,7 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [studyId, study, isOverviewStub, isOilBrent, isFxUsdToman, isOilAndFx, showIranEvents, showWorldEvents, showSanctionsEvents]);
+  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isFxUsdToman, isOilAndFx, showIranEvents, showWorldEvents, showSanctionsEvents]);
 
   useEffect(() => {
     if (!study || !isOverviewStub) return;
@@ -201,29 +222,36 @@ export default function StudyDetailPage() {
   }, [studyId, study, isOverviewStub, anchorEventId, windowDays, data]);
 
   useEffect(() => {
-    if (!oilTimeRange || !(isOilBrent || isOilAndFx)) {
-      if (isOilBrent || isOilAndFx) {
+    if (!oilTimeRange || !(isOilBrent || isOilGlobalLong || isOilAndFx)) {
+      if (isOilBrent || isOilGlobalLong || isOilAndFx) {
         setOilPoints([]);
         setOilSource(null);
+        setOilResolutionNote(null);
       }
       return;
     }
     if (isOilAndFx) return;
     const [start, end] = oilTimeRange;
+    const url = isOilGlobalLong
+      ? `/api/signals/oil/global-long?start=${start}&end=${end}`
+      : `/api/signals/oil/brent?start=${start}&end=${end}`;
     let mounted = true;
     setLoading(true);
     setError(null);
-    fetchJson<OilSignalData>(`/api/signals/oil/brent?start=${start}&end=${end}`)
+    setOilResolutionNote(null);
+    fetchJson<OilSignalData>(url)
       .then((res) => {
         if (mounted) {
           setOilPoints(res.points ?? []);
           setOilSource(res.source ?? null);
+          setOilResolutionNote(res.resolution_change ?? null);
         }
       })
       .catch((e) => {
         if (mounted) {
           setOilPoints([]);
           setOilSource(null);
+          setOilResolutionNote(null);
           setError(e instanceof Error ? e.message : "Signal fetch failed");
         }
       })
@@ -231,7 +259,7 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [oilTimeRange, isOilBrent, isOilAndFx]);
+  }, [oilTimeRange, isOilBrent, isOilGlobalLong, isOilAndFx]);
 
   useEffect(() => {
     if (!dualTimeRange || !isOilAndFx) return;
@@ -331,9 +359,15 @@ export default function StudyDetailPage() {
 
   const showError = error || (isOverviewStub && !data);
 
-  const isSingleSignalStudy = isOilBrent || isFxUsdToman || isOilAndFx;
+  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isFxUsdToman || isOilAndFx;
   const singleSignalReady =
-    isOilBrent ? oilPoints.length > 0 : isFxUsdToman ? fxPoints.length > 0 : isOilAndFx ? oilPoints.length > 0 && fxPoints.length > 0 : false;
+    isOilBrent || isOilGlobalLong
+      ? oilPoints.length > 0
+      : isFxUsdToman
+        ? fxPoints.length > 0
+        : isOilAndFx
+          ? oilPoints.length > 0 && fxPoints.length > 0
+          : false;
   if (loading && (isOverviewStub ? !data : isSingleSignalStudy && !singleSignalReady)) {
     return (
       <div className="container mx-auto max-w-4xl px-4 py-12 animate-pulse space-y-8">
@@ -362,7 +396,7 @@ export default function StudyDetailPage() {
     );
   }
 
-  const oilKpis = isOilBrent ? computeOilKpis(oilPoints) : null;
+  const oilKpis = (isOilBrent || isOilGlobalLong) ? computeOilKpis(oilPoints) : null;
   const fxKpis = isFxUsdToman ? computeFxKpis(fxPoints) : null;
 
   return (
@@ -383,7 +417,7 @@ export default function StudyDetailPage() {
         </p>
       </header>
 
-      {isOilBrent && oilKpis ? (
+      {(isOilBrent || isOilGlobalLong) && oilKpis ? (
         <div className="grid gap-4 sm:grid-cols-3">
           <Card className="border-border">
             <CardHeader className="pb-1">
@@ -508,7 +542,9 @@ export default function StudyDetailPage() {
       <Card className="border-border">
         <CardHeader>
           <CardTitle className="text-base font-medium">
-            {isOilBrent
+            {isOilGlobalLong
+              ? "Oil price"
+              : isOilBrent
               ? "Brent oil price"
               : isFxUsdToman
                 ? "USD→Toman (open market)"
@@ -519,7 +555,9 @@ export default function StudyDetailPage() {
                     : "Timeline"}
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            {isOilBrent
+            {isOilGlobalLong
+              ? "Oil price (USD/barrel) with event markers. Annual data pre-1987; daily Brent from 1987."
+              : isOilBrent
               ? "Daily Brent crude oil price (USD/barrel) with event markers"
               : isFxUsdToman
                 ? "Open-market USD/toman rate (toman per USD) with event markers"
@@ -538,7 +576,8 @@ export default function StudyDetailPage() {
               <option value="">None (full timeline)</option>
               {events.map((ev) => (
                 <option key={ev.id} value={ev.id}>
-                  {ev.title} ({ev.date})
+                  {ev.title}{" "}
+                  ({ev.date ?? (ev.date_start && ev.date_end ? `${ev.date_start}–${ev.date_end}` : ev.date_start ?? ev.date_end ?? "")})
                 </option>
               ))}
             </select>
@@ -568,7 +607,7 @@ export default function StudyDetailPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {(isOverviewStub || isOilBrent || isFxUsdToman || isOilAndFx) && (
+          {(isOverviewStub || isOilBrent || isFxUsdToman || isOilAndFx) && !isOilGlobalLong && (
             <div className="mb-3 flex flex-shrink-0 items-center gap-4 border-b border-border pb-3">
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                 <input
@@ -599,25 +638,33 @@ export default function StudyDetailPage() {
               </label>
             </div>
           )}
-          {isOilBrent ? (
+          {isOilBrent || isOilGlobalLong ? (
             <>
               <TimelineChart
                 data={[]}
                 valueKey="value"
-                label="Brent oil"
+                label={isOilGlobalLong ? "Oil price" : "Brent oil"}
                 events={events}
                 anchorEventId={anchorEventId || undefined}
                 secondSeries={{
-                  label: "Brent oil",
+                  label: isOilGlobalLong ? "Oil price" : "Brent oil",
                   unit: "USD/barrel",
                   points: oilPoints,
                   yAxisIndex: 1,
                 }}
                 timeRange={oilTimeRange ?? study.timeRange}
+                mutedBands={isOilGlobalLong}
               />
               {oilSource && (
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Source: {oilSource.name} ({oilSource.publisher}), Brent crude oil spot price (USD/barrel).
+                  {isOilGlobalLong
+                    ? "Pre-1987: EIA U.S. Crude Oil First Purchase Price (annual). From 1987: FRED Brent spot (daily)."
+                    : `Source: ${oilSource.name} (${oilSource.publisher}), Brent crude oil spot price (USD/barrel).`}
+                </p>
+              )}
+              {isOilGlobalLong && oilResolutionNote && (
+                <p className="mt-1 text-xs text-muted-foreground/80">
+                  {oilResolutionNote}
                 </p>
               )}
             </>

@@ -1,12 +1,13 @@
 """Load and validate manual events data."""
 
 import json
+from datetime import date
 from pathlib import Path
 from typing import List, Optional
 
 from signalmap.models.events import Event
 
-from signalmap.data.event_layers import EVENTS_SANCTIONS, EVENTS_WORLD_CORE, EVENTS_WORLD_RANGE
+from signalmap.data.event_layers import EVENTS_SANCTIONS, EVENTS_WORLD_1900, EVENTS_WORLD_CORE, EVENTS_WORLD_RANGE
 
 
 def _load_iran_events() -> list[dict]:
@@ -58,5 +59,12 @@ def get_events_by_layers(study_id: str, layers: Optional[List[str]] = None) -> l
     if "world_core" in layers:
         for ev in EVENTS_WORLD_RANGE:
             events.append({**ev, "layer": "world_core", "scope": "world"})
+    if "world_1900" in layers:
+        today = date.today().isoformat()
+        for ev in EVENTS_WORLD_1900:
+            ev_copy = {**ev, "layer": "world_1900", "scope": "world"}
+            if ev_copy.get("id") == "g1900-ukraine" and ev_copy.get("date_end"):
+                ev_copy["date_end"] = today
+            events.append(ev_copy)
     events.sort(key=lambda e: e.get("date") or e.get("date_start", ""))
     return events

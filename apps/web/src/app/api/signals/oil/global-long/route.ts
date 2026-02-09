@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       );
     }
     const res = await fetch(
-      `${API_BASE}/api/signals/oil/brent?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+      `${API_BASE}/api/signals/oil/global-long?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
       {
         headers: { Accept: "application/json" },
         cache: "no-store",

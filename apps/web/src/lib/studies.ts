@@ -1,6 +1,7 @@
 export type PrimarySignal =
   | { kind: "overview_stub" }
   | { kind: "oil_brent" }
+  | { kind: "oil_global_long" }
   | { kind: "fx_usd_toman" }
   | { kind: "oil_and_fx" };
 
@@ -12,6 +13,7 @@ export type StudyMeta = {
   description: string;
   status: string;
   primarySignal: PrimarySignal;
+  eventLayers?: string[];
 };
 
 export const STUDIES: StudyMeta[] = [
@@ -54,6 +56,17 @@ export const STUDIES: StudyMeta[] = [
       "Brent oil price (left axis) and USD→toman open-market rate (right axis) overlaid for comparative context.",
     status: "active",
     primarySignal: { kind: "oil_and_fx" },
+  },
+  {
+    id: "global_oil_1900",
+    number: 5,
+    title: "Global conflict and economic shocks (1900–present)",
+    timeRange: ["1900-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "A long-range view of global conflicts and structural shocks contextualized against oil prices.",
+    status: "active",
+    primarySignal: { kind: "oil_global_long" },
+    eventLayers: ["world_1900"],
   },
 ];
 

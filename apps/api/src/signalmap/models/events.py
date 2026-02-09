@@ -13,6 +13,9 @@ class EventType(str, Enum):
     CULTURAL = "cultural"
     PLATFORM = "platform"
     MILITARY = "military"
+    CONFLICT = "conflict"
+    ECONOMIC = "economic"
+    ENERGY = "energy"
 
 
 class EventConfidence(str, Enum):
