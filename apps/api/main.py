@@ -237,6 +237,23 @@ def get_brent_oil_signal(
         raise HTTPException(status_code=502, detail="Signal fetch failed")
 
 
+@app.get("/api/signals/fx/usd-toman")
+def get_usd_toman_signal(
+    start: str = Query(..., description="Start date YYYY-MM-DD"),
+    end: str = Query(..., description="End date YYYY-MM-DD"),
+):
+    """Return USD→Toman open-market rate (Bonbast) for date range."""
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    try:
+        from signalmap.services.signals import get_usd_toman_series
+        return get_usd_toman_series(start, end)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="Signal fetch failed")
+
+
 @app.get("/api/overview")
 def get_overview(
     study_id: str = "1",

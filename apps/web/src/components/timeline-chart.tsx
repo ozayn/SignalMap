@@ -30,6 +30,7 @@ type TimelineChartProps = {
   data: DataPoint[];
   valueKey: keyof DataPoint;
   label: string;
+  unit?: string;
   events?: TimelineEvent[];
   anchorEventId?: string;
   oilPoints?: OilPoint[];
@@ -61,6 +62,7 @@ export function TimelineChart({
   data,
   valueKey,
   label,
+  unit,
   events = [],
   anchorEventId,
   oilPoints = [],
@@ -181,7 +183,14 @@ export function TimelineChart({
             const oilVal = oilValues[idx];
             const unit = secondSeries?.unit ?? "USD/barrel";
             const lbl = secondSeries?.label ?? "Brent oil";
-            lines.push(`${lbl}: ${oilVal != null ? `${oilVal} ${unit}` : "—"}`);
+            const isToman = unit.includes("toman");
+            const formatted =
+              oilVal != null
+                ? isToman
+                  ? `${(oilVal / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k ${unit}`
+                  : `${oilVal} ${unit}`
+                : "—";
+            lines.push(`${lbl}: ${formatted}`);
           }
           return lines.join("<br/>");
         },
@@ -205,6 +214,9 @@ export function TimelineChart({
             {
               type: "value" as const,
               position: "left" as const,
+              name: (hasData ? label : secondSeries?.label ?? "Brent oil") + (unit ? ` (${unit})` : ""),
+              nameTextStyle: { color: mutedFg, fontSize: 11 },
+              nameGap: 8,
               axisLine: { show: false },
               splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
               axisLabel: { color: mutedFg, fontSize: 11 },
@@ -213,13 +225,30 @@ export function TimelineChart({
             {
               type: "value" as const,
               position: "right" as const,
+              name:
+                (secondSeries?.label ?? "Brent oil") +
+                (secondSeries?.unit?.includes("toman") ? " (k toman/USD)" : secondSeries?.unit ? ` (${secondSeries.unit})` : ""),
+              nameTextStyle: { color: mutedFg, fontSize: 11 },
+              nameGap: 8,
               axisLine: { show: false },
               splitLine: { show: false },
-              axisLabel: { color: mutedFg, fontSize: 11 },
+              axisLabel: {
+                color: mutedFg,
+                fontSize: 11,
+                ...(secondSeries?.unit?.includes("toman")
+                  ? {
+                      formatter: (v: number) =>
+                        typeof v === "number" ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k` : String(v),
+                    }
+                  : {}),
+              },
             },
           ]
         : {
             type: "value",
+            name: label,
+            nameTextStyle: { color: mutedFg, fontSize: 11 },
+            nameGap: 8,
             axisLine: { show: false },
             splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
             axisLabel: { color: mutedFg, fontSize: 11 },
@@ -261,7 +290,7 @@ export function TimelineChart({
                           const isWorld = scope === "world";
                           const color = d.isAnchor ? mutedFg : withAlphaHsl(muted, isWorld ? WorldOpacity : IranOpacity);
                           const width = d.isAnchor ? 1.5 : isWorld ? 1 : 1.15;
-                          const lineType = isWorld ? ("dashed" as const) : ("solid" as const);
+                          const lineType = "dashed" as const;
                           return {
                             xAxis: d.xAxis,
                             label: { show: false },
@@ -288,7 +317,7 @@ export function TimelineChart({
                           const isWorld = scope === "world";
                           const color = d.isAnchor ? mutedFg : withAlphaHsl(muted, isWorld ? WorldOpacity : IranOpacity);
                           const width = d.isAnchor ? 1.5 : isWorld ? 1 : 1.15;
-                          const lineType = isWorld ? ("dashed" as const) : ("solid" as const);
+                          const lineType = "dashed" as const;
                           return {
                             xAxis: d.xAxis,
                             label: { show: false },
@@ -341,7 +370,7 @@ export function TimelineChart({
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
     };
-  }, [data, valueKey, label, events, anchorEventId, oilPoints, secondSeries, timeRange]);
+  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, timeRange]);
 
   useEffect(() => {
     return () => {

@@ -50,6 +50,21 @@ type OilSignalData = {
   points: Array<{ date: string; value: number }>;
 };
 
+type FxUsdTomanSource = {
+  name: string;
+  publisher: string;
+  type: string;
+  url: string;
+  notes?: string;
+};
+
+type FxUsdTomanSignalData = {
+  signal: string;
+  unit: string;
+  source: FxUsdTomanSource;
+  points: Array<{ date: string; value: number }>;
+};
+
 const WINDOW_OPTIONS = [
   { value: 7, label: "±7 days" },
   { value: 30, label: "±30 days" },
@@ -82,6 +97,17 @@ function computeOilKpis(points: { value: number }[]) {
   };
 }
 
+function computeFxKpis(points: { date: string; value: number }[]) {
+  if (points.length === 0) return null;
+  const vals = points.map((p) => p.value);
+  const latest = points[points.length - 1]?.value;
+  return {
+    latest: latest != null ? latest.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—",
+    min: Math.min(...vals).toLocaleString(undefined, { maximumFractionDigits: 0 }),
+    max: Math.max(...vals).toLocaleString(undefined, { maximumFractionDigits: 0 }),
+  };
+}
+
 export default function StudyDetailPage() {
   const params = useParams();
   const studyId = params.studyId as string;
@@ -94,26 +120,50 @@ export default function StudyDetailPage() {
   const [showWorldEvents, setShowWorldEvents] = useState(false);
   const [oilPoints, setOilPoints] = useState<OilSignalData["points"]>([]);
   const [oilSource, setOilSource] = useState<OilSource | null>(null);
+  const [fxPoints, setFxPoints] = useState<FxUsdTomanSignalData["points"]>([]);
+  const [fxSource, setFxSource] = useState<FxUsdTomanSource | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const isOverviewStub = study?.primarySignal.kind === "overview_stub";
   const isOilBrent = study?.primarySignal.kind === "oil_brent";
+  const isFxUsdToman = study?.primarySignal.kind === "fx_usd_toman";
+  const isOilAndFx = study?.primarySignal.kind === "oil_and_fx";
 
   const oilTimeRange = useMemo((): [string, string] | null => {
-    if (!study || !isOilBrent) return null;
+    if (!study || !(isOilBrent || isOilAndFx)) return null;
     if (anchorEventId) {
       const ev = events.find((e) => e.id === anchorEventId);
       if (ev) return computeWindowRange(ev.date, windowDays);
     }
     return study.timeRange;
-  }, [study, isOilBrent, anchorEventId, events, windowDays]);
+  }, [study, isOilBrent, isOilAndFx, anchorEventId, events, windowDays]);
+
+  const fxTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !(isFxUsdToman || isOilAndFx)) return null;
+    if (anchorEventId) {
+      const ev = events.find((e) => e.id === anchorEventId);
+      if (ev) return computeWindowRange(ev.date, windowDays);
+    }
+    return study.timeRange;
+  }, [study, isFxUsdToman, isOilAndFx, anchorEventId, events, windowDays]);
+
+  const dualTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isOilAndFx) return null;
+    if (anchorEventId) {
+      const ev = events.find((e) => e.id === anchorEventId);
+      if (ev) return computeWindowRange(ev.date, windowDays);
+    }
+    return study.timeRange;
+  }, [study, isOilAndFx, anchorEventId, events, windowDays]);
 
   useEffect(() => {
     if (!study) return;
     let mounted = true;
-    const params = new URLSearchParams({ study_id: studyId });
-    if (isOilBrent) {
+    const params = new URLSearchParams({
+      study_id: isFxUsdToman || isOilAndFx ? "iran" : studyId,
+    });
+    if (isOilBrent || isFxUsdToman || isOilAndFx) {
       params.set("layers", showWorldEvents ? "iran_core,world_core" : "iran_core");
     }
     fetchJson<EventsData>(`/api/events?${params}`)
@@ -122,7 +172,7 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [studyId, study, isOilBrent, showWorldEvents]);
+  }, [studyId, study, isOilBrent, isFxUsdToman, isOilAndFx, showWorldEvents]);
 
   useEffect(() => {
     if (!study || !isOverviewStub) return;
@@ -143,13 +193,14 @@ export default function StudyDetailPage() {
   }, [studyId, study, isOverviewStub, anchorEventId, windowDays, data]);
 
   useEffect(() => {
-    if (!oilTimeRange || !isOilBrent) {
-      if (isOilBrent) {
+    if (!oilTimeRange || !(isOilBrent || isOilAndFx)) {
+      if (isOilBrent || isOilAndFx) {
         setOilPoints([]);
         setOilSource(null);
       }
       return;
     }
+    if (isOilAndFx) return;
     const [start, end] = oilTimeRange;
     let mounted = true;
     setLoading(true);
@@ -172,7 +223,73 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [oilTimeRange, isOilBrent]);
+  }, [oilTimeRange, isOilBrent, isOilAndFx]);
+
+  useEffect(() => {
+    if (!dualTimeRange || !isOilAndFx) return;
+    const [start, end] = dualTimeRange;
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+    Promise.all([
+      fetchJson<OilSignalData>(`/api/signals/oil/brent?start=${start}&end=${end}`),
+      fetchJson<FxUsdTomanSignalData>(`/api/signals/fx/usd-toman?start=${start}&end=${end}`),
+    ])
+      .then(([oilRes, fxRes]) => {
+        if (mounted) {
+          setOilPoints(oilRes.points ?? []);
+          setOilSource(oilRes.source ?? null);
+          setFxPoints(fxRes.points ?? []);
+          setFxSource(fxRes.source ?? null);
+        }
+      })
+      .catch((e) => {
+        if (mounted) {
+          setOilPoints([]);
+          setOilSource(null);
+          setFxPoints([]);
+          setFxSource(null);
+          setError(e instanceof Error ? e.message : "Signal fetch failed");
+        }
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => {
+      mounted = false;
+    };
+  }, [dualTimeRange, isOilAndFx]);
+
+  useEffect(() => {
+    if (!fxTimeRange || !(isFxUsdToman || isOilAndFx)) {
+      if (isFxUsdToman || isOilAndFx) {
+        setFxPoints([]);
+        setFxSource(null);
+      }
+      return;
+    }
+    if (isOilAndFx) return;
+    const [start, end] = fxTimeRange;
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+    fetchJson<FxUsdTomanSignalData>(`/api/signals/fx/usd-toman?start=${start}&end=${end}`)
+      .then((res) => {
+        if (mounted) {
+          setFxPoints(res.points ?? []);
+          setFxSource(res.source ?? null);
+        }
+      })
+      .catch((e) => {
+        if (mounted) {
+          setFxPoints([]);
+          setFxSource(null);
+          setError(e instanceof Error ? e.message : "Signal fetch failed");
+        }
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => {
+      mounted = false;
+    };
+  }, [fxTimeRange, isFxUsdToman, isOilAndFx]);
 
   useEffect(() => {
     if (!study || !isOverviewStub) return;
@@ -206,7 +323,10 @@ export default function StudyDetailPage() {
 
   const showError = error || (isOverviewStub && !data);
 
-  if (loading && (isOverviewStub ? !data : isOilBrent && !oilPoints.length)) {
+  const isSingleSignalStudy = isOilBrent || isFxUsdToman || isOilAndFx;
+  const singleSignalReady =
+    isOilBrent ? oilPoints.length > 0 : isFxUsdToman ? fxPoints.length > 0 : isOilAndFx ? oilPoints.length > 0 && fxPoints.length > 0 : false;
+  if (loading && (isOverviewStub ? !data : isSingleSignalStudy && !singleSignalReady)) {
     return (
       <div className="container mx-auto max-w-4xl px-4 py-12 animate-pulse space-y-8">
         <div className="h-8 w-48 rounded bg-muted" />
@@ -235,6 +355,7 @@ export default function StudyDetailPage() {
   }
 
   const oilKpis = isOilBrent ? computeOilKpis(oilPoints) : null;
+  const fxKpis = isFxUsdToman ? computeFxKpis(fxPoints) : null;
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-12 space-y-10">
@@ -302,6 +423,54 @@ export default function StudyDetailPage() {
             </CardContent>
           </Card>
         </div>
+      ) : isFxUsdToman && fxKpis ? (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Card className="border-border">
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Latest
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-medium">
+                {fxKpis.latest}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  toman/USD
+                </span>
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-border">
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Min
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-medium">
+                {fxKpis.min}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  toman/USD
+                </span>
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-border">
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Max
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-medium">
+                {fxKpis.max}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  toman/USD
+                </span>
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       ) : data?.kpis && data.kpis.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-3">
           {data.kpis.map((kpi) => (
@@ -333,16 +502,24 @@ export default function StudyDetailPage() {
           <CardTitle className="text-base font-medium">
             {isOilBrent
               ? "Brent oil price"
-              : data?.timeline?.length
-                ? "Sentiment over time"
-                : "Timeline"}
+              : isFxUsdToman
+                ? "USD→Toman (open market)"
+                : isOilAndFx
+                  ? "Oil and USD/Toman"
+                  : data?.timeline?.length
+                    ? "Sentiment over time"
+                    : "Timeline"}
           </CardTitle>
           <p className="text-sm text-muted-foreground">
             {isOilBrent
               ? "Daily Brent crude oil price (USD/barrel) with event markers"
-              : data?.timeline?.length
-                ? "Average sentiment score (sampled over time)"
-                : "Event markers and optional external signals"}
+              : isFxUsdToman
+                ? "Open-market USD/toman rate (toman per USD) with event markers"
+                : isOilAndFx
+                  ? "Brent oil (left axis) and USD→toman (right axis) with event markers"
+                  : data?.timeline?.length
+                    ? "Average sentiment score (sampled over time)"
+                    : "Event markers and optional external signals"}
           </p>
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <select
@@ -380,7 +557,7 @@ export default function StudyDetailPage() {
                 Show Brent oil price
               </label>
             )}
-            {isOilBrent && (
+            {(isOilBrent || isFxUsdToman || isOilAndFx) && (
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                 <input
                   type="checkbox"
@@ -413,6 +590,54 @@ export default function StudyDetailPage() {
               {oilSource && (
                 <p className="mt-2 text-sm text-muted-foreground">
                   Source: {oilSource.name} ({oilSource.publisher}), Brent crude oil spot price (USD/barrel).
+                </p>
+              )}
+            </>
+          ) : isOilAndFx ? (
+            <>
+              <TimelineChart
+                data={oilPoints}
+                valueKey="value"
+                label="Brent oil"
+                unit="USD/barrel"
+                events={events}
+                anchorEventId={anchorEventId || undefined}
+                secondSeries={{
+                  label: "USD→Toman",
+                  unit: "toman/USD",
+                  points: fxPoints,
+                  yAxisIndex: 1,
+                }}
+                timeRange={dualTimeRange ?? study.timeRange}
+              />
+              <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                {oilSource && (
+                  <p>Brent oil: {oilSource.name} ({oilSource.publisher}), spot price (USD/barrel).</p>
+                )}
+                {fxSource && (
+                  <p>USD→Toman: {fxSource.name} (open market proxy). Values in toman (1 toman = 10 rials).</p>
+                )}
+              </div>
+            </>
+          ) : isFxUsdToman ? (
+            <>
+              <TimelineChart
+                data={[]}
+                valueKey="value"
+                label="USD→Toman"
+                events={events}
+                anchorEventId={anchorEventId || undefined}
+                secondSeries={{
+                  label: "USD→Toman",
+                  unit: "toman/USD",
+                  points: fxPoints,
+                  yAxisIndex: 1,
+                }}
+                timeRange={fxTimeRange ?? study.timeRange}
+              />
+              {fxSource && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Source: {fxSource.name} (open market proxy). Values in toman (1 toman = 10 rials).
                 </p>
               )}
             </>
