@@ -87,7 +87,7 @@ IRAN_PRESIDENTS = [
 ]
 
 # Iran core events (point events → vertical lines)
-# Sources: public timelines
+# Sources: public timelines; 2021+ from events_iran.json
 IRAN_CORE = [
     {"id": "iran-1997-khatami", "title": "Khatami inaugurated", "date": "1997-08-03", "type": "political", "scope": "iran", "layer": "iran_core", "description": "Mohammad Khatami became president.", "confidence": "high"},
     {"id": "iran-2005-ahmadinejad", "title": "Ahmadinejad inaugurated", "date": "2005-08-03", "type": "political", "scope": "iran", "layer": "iran_core", "description": "Mahmoud Ahmadinejad became president.", "confidence": "high"},
@@ -95,6 +95,12 @@ IRAN_CORE = [
     {"id": "iran-2013-rouhani", "title": "Rouhani inaugurated", "date": "2013-08-03", "type": "political", "scope": "iran", "layer": "iran_core", "description": "Hassan Rouhani became president.", "confidence": "high"},
     {"id": "iran-2015-jcpoa", "title": "JCPOA finalized", "date": "2015-07-14", "type": "political", "scope": "iran", "layer": "iran_core", "description": "Joint Comprehensive Plan of Action agreed.", "confidence": "high"},
     {"id": "iran-2018-us-withdrawal", "title": "US withdraws from JCPOA", "date": "2018-05-08", "type": "political", "scope": "iran", "layer": "iran_core", "description": "Trump announced US withdrawal.", "confidence": "high"},
+    {"id": "iran-2021-natanz", "title": "Natanz nuclear facility incident", "date": "2021-04-11", "type": "political", "scope": "iran", "layer": "iran_core", "description": "Electrical grid failure at Natanz enrichment facility.", "confidence": "high"},
+    {"id": "iran-2021-raisi-elected", "title": "Raisi elected president", "date": "2021-06-18", "type": "political", "scope": "iran", "layer": "iran_core", "description": "Ebrahim Raisi wins presidential election.", "confidence": "high"},
+    {"id": "iran-2021-raisi-inaugurated", "title": "Raisi sworn in", "date": "2021-08-03", "type": "political", "scope": "iran", "layer": "iran_core", "description": "Ebrahim Raisi inaugurated as president.", "confidence": "high"},
+    {"id": "iran-2022-amini-protests", "title": "Mahsa Amini protests begin", "date": "2022-09-16", "type": "social", "scope": "iran", "layer": "iran_core", "description": "Nationwide protests following death of Mahsa Amini in custody.", "confidence": "high"},
+    {"id": "iran-2024-israel-strike", "title": "Iran-Israel escalation", "date": "2024-04-13", "type": "political", "scope": "iran", "layer": "iran_core", "description": "Iran launches direct strikes on Israel.", "confidence": "high"},
+    {"id": "iran-2024-raisi-crash", "title": "Raisi helicopter crash", "date": "2024-05-19", "type": "political", "scope": "iran", "layer": "iran_core", "description": "President Raisi and foreign minister killed in helicopter crash.", "confidence": "high"},
 ]
 
 # Sanctions events (point events → vertical lines)
@@ -106,6 +112,9 @@ SANCTIONS = [
     {"id": "sanctions-2012-oil", "title": "Oil sector sanctions", "date": "2012-07-01", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "Oil export sanctions tightened.", "confidence": "high"},
     {"id": "sanctions-2016-implementation", "title": "JCPOA Implementation Day", "date": "2016-01-16", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "Sanctions relief under JCPOA.", "confidence": "high"},
     {"id": "sanctions-2018-reimposition", "title": "Sanctions reimposed", "date": "2018-08-06", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "US reimposed JCPOA-lifted sanctions.", "confidence": "high"},
+    {"id": "sanctions-2021-vienna", "title": "Vienna JCPOA talks begin", "date": "2021-04-06", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "Negotiations to restore JCPOA resume in Vienna.", "confidence": "high"},
+    {"id": "sanctions-2022-eu-pause", "title": "EU removes JCPOA from agenda", "date": "2022-08-08", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "EU coordinator pauses JCPOA restoration talks.", "confidence": "high"},
+    {"id": "sanctions-2024-eu-iran", "title": "EU sanctions on Iran (after Israel strike)", "date": "2024-04-18", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "EU expands sanctions on Iran following April 2024 drone and missile attack on Israel.", "confidence": "high"},
 ]
 
 _LAYER_REGISTRY = {
