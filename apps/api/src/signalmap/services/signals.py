@@ -3,6 +3,7 @@ Signal series orchestration.
 Read path: cache → Postgres → fetcher (with upsert).
 """
 
+from signalmap.data.gold_annual import GOLD_ANNUAL
 from signalmap.data.oil_annual import BRENT_DAILY_START, OIL_ANNUAL_EIA
 from signalmap.sources.bonbast_usd_toman import fetch_usd_toman_series
 from signalmap.sources.fred_brent import fetch_brent_series
@@ -28,6 +29,13 @@ OIL_ANNUAL_SOURCE = {
     "series_id": "U.S. Crude Oil First Purchase Price",
     "publisher": "U.S. Energy Information Administration",
     "url": "https://www.eia.gov/dnav/pet/hist/LeafHandler.ashx?f=A&n=pet&s=f000000__3",
+}
+
+GOLD_SOURCE = {
+    "name": "LBMA / Treasury",
+    "series_id": "Gold price (annual)",
+    "publisher": "LBMA, US Treasury, WGC",
+    "url": "https://www.gold.org/goldhub/data/historical-data",
 }
 
 USD_TOMAN_SOURCE = {
@@ -117,10 +125,21 @@ def get_brent_series(start: str, end: str) -> dict:
     return result
 
 
+def _sample_to_monthly(points: list[dict]) -> list[dict]:
+    """Keep first observation of each month, normalized to YYYY-MM-01 for axis alignment."""
+    by_month: dict[str, dict] = {}
+    for p in points:
+        month_key = p["date"][:7]
+        if month_key not in by_month:
+            by_month[month_key] = {"date": f"{month_key}-01", "value": p["value"]}
+    return sorted(by_month.values(), key=lambda p: p["date"])
+
+
 def get_oil_global_long_series(start: str, end: str) -> dict:
     """
     Long-range oil price: annual (EIA) before 1987-05-20, daily (Brent) from then.
     No fabrication of daily data pre-1987. Single point per year at YYYY-01-01.
+    For ranges > 10 years, daily Brent is sampled to monthly to reduce payload.
     """
     ck = _cache_key(SIGNAL_OIL_GLOBAL_LONG, start, end)
     cached = cache_get(ck)
@@ -144,6 +163,10 @@ def get_oil_global_long_series(start: str, end: str) -> dict:
         brent_start = start if start >= BRENT_DAILY_START else BRENT_DAILY_START
         brent_result = get_brent_series(brent_start, end)
         brent_points = brent_result.get("points", [])
+        # Sample to monthly for long ranges to reduce payload (~14k -> ~500)
+        span_years = int(end[:4]) - int(brent_start[:4]) + 1
+        if span_years > 10 and len(brent_points) > 500:
+            brent_points = _sample_to_monthly(brent_points)
 
     points = sorted(annual_points + brent_points, key=lambda p: p["date"])
 
@@ -154,6 +177,34 @@ def get_oil_global_long_series(start: str, end: str) -> dict:
         "source_annual": OIL_ANNUAL_SOURCE,
         "source_daily": BRENT_SOURCE,
         "resolution_change": "Annual (one point/year) before 1987-05-20; daily Brent from 1987-05-20 onward.",
+        "points": points,
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
+
+
+def get_gold_price_global_series(start: str, end: str) -> dict:
+    """
+    Global gold price (USD/oz). Annual data only; one point per year at YYYY-01-01.
+    No daily data; no interpolation.
+    """
+    ck = f"signal:gold_price_global:{start}:{end}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    start_year = max(1900, int(start[:4]))
+    end_year = min(max(GOLD_ANNUAL.keys()), int(end[:4]))
+    points: list[dict] = []
+    for y in range(start_year, end_year + 1):
+        if y in GOLD_ANNUAL:
+            points.append({"date": f"{y}-01-01", "value": round(GOLD_ANNUAL[y], 2)})
+
+    result = {
+        "signal": "gold_price_global",
+        "unit": "USD/oz",
+        "source": GOLD_SOURCE,
+        "resolution": "annual",
         "points": points,
     }
     cache_set(ck, result, CACHE_TTL)
