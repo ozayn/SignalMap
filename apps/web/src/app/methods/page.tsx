@@ -61,8 +61,7 @@ export default function MethodsPage() {
           comparative patterns rather than point estimates.
         </p>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Where relevant, exogenous macroeconomic signals (e.g., Brent crude
-          oil price from FRED) are used to contextualize discourse patterns.
+          Where relevant, exogenous macroeconomic signals (e.g., Brent crude oil price from FRED—Brent is a benchmark oil type traded on world markets) are used to contextualize discourse patterns.
           These signals are treated as external context, not as dependent
           variables, and are sourced from the Federal Reserve Economic Data
           (FRED) series DCOILBRENTEU.

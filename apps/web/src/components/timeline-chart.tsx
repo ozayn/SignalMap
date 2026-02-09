@@ -67,6 +67,8 @@ type TimelineChartProps = {
   comparatorSeries?: { label: string; points: { date: string; value: number }[] };
   /** When true, index both series to 100 at first common year so different-scale series (e.g. Iran vs Turkey) are comparable. */
   indexComparator?: boolean;
+  /** Optional sanctions periods rendered as low-opacity background bands (Study 9). */
+  sanctionsPeriods?: Array<{ date_start: string; date_end: string; title: string; scope?: string }>;
 };
 
 function findEventIndex(dates: string[], eventDate: string): number | null {
@@ -145,6 +147,7 @@ export function TimelineChart({
   useTimeRangeForDateAxis = false,
   comparatorSeries,
   indexComparator = false,
+  sanctionsPeriods = [],
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
@@ -166,6 +169,7 @@ export function TimelineChart({
     const EventLineWidth = mutedEventLines ? 1 : 1;
     const SanctionsLineWidth = mutedEventLines ? 1.2 : 1;
     const RangeBandOpacity = mutedBands ? 0.02 : 0.06;
+    const SanctionsBandOpacity = 0.04;
 
     const oilPointsResolved = secondSeries?.points ?? oilPoints;
     const hasData = data.length > 0;
@@ -187,6 +191,8 @@ export function TimelineChart({
       allMultiSeriesDates.length > 100 &&
       allMultiSeriesDates.length <= 3000 &&
       timeRange;
+    const useSparseMultiSeriesDates =
+      hasMultiSeries && allMultiSeriesDates.length > 0 && allMultiSeriesDates.length <= 50 && timeRange;
     const useTimeRangeForBands =
       useTimeRangeForDateAxis &&
       !hasData &&
@@ -197,9 +203,11 @@ export function TimelineChart({
       ? data.map((d) => d.date)
       : useUnionDates
         ? allMultiSeriesDates
-        : useTimeRangeForAxis && timeRange
-          ? longRangeDates(timeRange[0], timeRange[1])
-          : useTimeRangeForBands && timeRange
+        : useSparseMultiSeriesDates
+          ? allMultiSeriesDates
+          : useTimeRangeForAxis && timeRange
+            ? longRangeDates(timeRange[0], timeRange[1])
+            : useTimeRangeForBands && timeRange
             ? longRangeDates(timeRange[0], timeRange[1])
             : hasOil
               ? [...new Set(oilPointsResolved.map((p) => p.date))].sort()
@@ -345,7 +353,29 @@ export function TimelineChart({
               data: [secondSeries?.label ?? "Iran (PPP)", comparatorSeries.label],
             },
           }
-        : {}),
+        : hasMultiSeries && multiSeries
+          ? {
+              legend: {
+                show: true,
+                bottom: 4,
+                left: "center",
+                itemGap: 16,
+                textStyle: { color: mutedFg, fontSize: 10 },
+                data: multiSeries.map((s) => s.label),
+              },
+            }
+          : hasOil && secondSeries && !comparatorSeries
+            ? {
+                legend: {
+                  show: true,
+                  bottom: 4,
+                  left: "center",
+                  itemGap: 16,
+                  textStyle: { color: mutedFg, fontSize: 10 },
+                  data: hasData ? [label, secondSeries.label] : [secondSeries?.label ?? "Brent oil"],
+                },
+              }
+            : {}),
       tooltip: {
         trigger: "axis",
         confine: true,
@@ -362,6 +392,7 @@ export function TimelineChart({
           const hoverTime = dateStr ? new Date(dateStr).getTime() : 0;
           const dayMs = 86400000;
           const rangeBand = rangeBandData.find((r) => dateStr >= r.xStart && dateStr <= r.xEnd);
+          const sanctionsBand = sanctionsPeriods.find((p) => dateStr >= p.date_start && dateStr <= p.date_end);
           const rangeEv = rangeBand?.event;
           const nearestEv = !rangeEv
             ? markLineData
@@ -376,6 +407,13 @@ export function TimelineChart({
             (m) => m.xAxis === axisValue || m.xAxis === dateStr
           )?.event;
           const lines: string[] = [];
+          if (sanctionsBand) {
+            lines.push(`<span style="font-size:10px;color:#888">Sanctions period</span>`);
+            lines.push(`<span style="font-weight:600">${sanctionsBand.title}</span>`);
+            lines.push(`${sanctionsBand.date_start} — ${sanctionsBand.date_end}`);
+            lines.push(`Scope: ${sanctionsBand.scope ?? "oil exports"}`);
+            lines.push("—");
+          }
           if (ev) {
             if (rangeBand && isPresidentialEvent(ev)) {
               lines.push(`<span style="font-size:10px;color:#888">Presidential term</span>`);
@@ -468,7 +506,7 @@ export function TimelineChart({
             : hasOil || !hasData || hasMultiSeries
               ? "12%"
               : "4%",
-        bottom: comparatorSeries && comparatorValuesForChart && hasOil ? "10%" : "3%",
+        bottom: (comparatorSeries && comparatorValuesForChart && hasOil) || (hasMultiSeries && multiSeries) || (hasOil && secondSeries && !comparatorSeries) ? "10%" : "3%",
         top: "10%",
         containLabel: true,
       },
@@ -481,7 +519,7 @@ export function TimelineChart({
           color: mutedFg,
           fontSize: 11,
           interval: (() => {
-            const maxLabels = 12;
+            const maxLabels = useSparseMultiSeriesDates ? 50 : 12;
             const n = dates.length;
             if (n <= maxLabels) return 0;
             return Math.max(1, Math.floor(n / maxLabels));
@@ -489,7 +527,7 @@ export function TimelineChart({
           formatter: (value: string) => {
             const n = dates.length;
             if (n > 365) return value.slice(0, 4); // year only (long daily)
-            if (n <= 100) return value.slice(0, 4); // year only (sparse/annual)
+            if (n <= 100 || useSparseMultiSeriesDates) return value.slice(0, 4); // year only (sparse/annual)
             if (n > 60) return value.slice(0, 7); // YYYY-MM
             return value; // full date for short ranges
           },
@@ -592,9 +630,10 @@ export function TimelineChart({
                 symbol: "none",
                 emphasis: { focus: "none" as const },
                 markArea:
-                  rangeBandData.length > 0
+                  rangeBandData.length > 0 || sanctionsPeriods.length > 0
                     ? {
-                        silent: true,
+                        silent: false,
+                        z: 0,
                         itemStyle: {
                           color: withAlphaHsl(muted, RangeBandOpacity),
                           borderColor: withAlphaHsl(muted, 0.2),
@@ -610,6 +649,19 @@ export function TimelineChart({
                               { xAxis: r.xEnd },
                             ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }]
                           ),
+                          ...sanctionsPeriods
+                            .map((p) => {
+                              const startIdx = dates.findIndex((d) => d >= p.date_start);
+                              const endIdx = dates.reduce((last, d, i) => (d <= p.date_end ? i : last), -1);
+                              if (startIdx < 0 || endIdx < 0 || startIdx > endIdx) return null;
+                              const xStart = dates[startIdx]!;
+                              const xEnd = dates[endIdx]!;
+                              return [
+                                { xAxis: xStart, itemStyle: { color: withAlphaHsl(muted, SanctionsBandOpacity), borderColor: "transparent" } },
+                                { xAxis: xEnd },
+                              ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }];
+                            })
+                            .filter((x): x is [{ xAxis: string; itemStyle?: object }, { xAxis: string }] => x != null),
                         ],
                       }
                     : undefined,
@@ -617,9 +669,11 @@ export function TimelineChart({
               ...multiSeries.map((s, i) => {
                 const isGold = s.key === "gold";
                 const isOil = s.key === "oil";
+                const isProxy = s.key === "proxy";
                 const lineColor = isGold ? goldColor : isOil ? color : oilColorMuted;
                 const lineWidth = isGold || isOil ? 1.5 : 1;
-                const symbolSize = isGold ? 4 : isOil ? 3 : 2;
+                const symbolSize = isGold ? 4 : isOil ? 3 : 2.5;
+                const symbol = isGold ? "circle" : isProxy || s.yAxisIndex === 1 ? "diamond" : "circle";
                 return {
                   name: s.label,
                   type: "line" as const,
@@ -628,7 +682,7 @@ export function TimelineChart({
                   smooth: false,
                   connectNulls: true,
                   step: (isGold ? "start" : false) as "start" | false,
-                  symbol: "circle",
+                  symbol: symbol as "circle" | "diamond",
                   symbolSize,
                   lineStyle: { color: lineColor, width: lineWidth },
                   itemStyle: { color: lineColor },
@@ -846,7 +900,7 @@ export function TimelineChart({
                 data: comparatorValuesForChart,
                 smooth: true,
                 connectNulls: true,
-                symbol: "circle",
+                symbol: "diamond",
                 symbolSize: 2.5,
                 lineStyle: { color: comparatorColor, width: 1.25 },
                 itemStyle: { color: comparatorColor },
@@ -880,7 +934,7 @@ export function TimelineChart({
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
     };
-  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator]);
+  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods]);
 
   useEffect(() => {
     return () => {

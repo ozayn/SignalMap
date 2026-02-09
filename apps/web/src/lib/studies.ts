@@ -6,7 +6,8 @@ export type PrimarySignal =
   | { kind: "fx_usd_toman" }
   | { kind: "oil_and_fx" }
   | { kind: "real_oil" }
-  | { kind: "oil_ppp_iran" };
+  | { kind: "oil_ppp_iran" }
+  | { kind: "oil_export_capacity" };
 
 import type { ConceptKey } from "./concepts";
 
@@ -116,6 +117,17 @@ export const STUDIES: StudyMeta[] = [
     eventLayers: [],
     concepts: ["ppp", "log_scale", "structural_break"],
     comparatorCountry: "Turkey",
+  },
+  {
+    id: "iran_oil_export_capacity",
+    number: 9,
+    title: "Iran oil export capacity: price and volume",
+    timeRange: ["2010-01-01", "2024-12-31"],
+    description:
+      "A comparative view of global oil prices and Iran's estimated crude export capacity under constraints.",
+    status: "active",
+    primarySignal: { kind: "oil_export_capacity" },
+    eventLayers: ["sanctions"],
   },
 ];
 

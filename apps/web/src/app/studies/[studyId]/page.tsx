@@ -11,6 +11,7 @@ import { OilPppIranDescription } from "@/components/oil-ppp-iran-description";
 import { LearningNote } from "@/components/learning-note";
 import { ConceptsUsed } from "@/components/concepts-used";
 import { CurrentSnapshot } from "@/components/current-snapshot";
+import { InSimpleTerms } from "@/components/in-simple-terms";
 import { getStudyById } from "@/lib/studies";
 import { fetchJson } from "@/lib/api";
 
@@ -106,6 +107,12 @@ const WINDOW_OPTIONS_LONG_RANGE = [
   { value: 730, label: "±2 years" },
 ] as const;
 
+/** Oil export sanctions periods for Study 9. Spans both panels as background bands. */
+const EXPORT_CAPACITY_SANCTIONS_PERIODS = [
+  { date_start: "2012-07-01", date_end: "2016-01-16", title: "Oil sector sanctions (2012–2016)", scope: "oil exports" },
+  { date_start: "2018-08-06", date_end: "2024-12-31", title: "Oil sanctions reimposed (2018–)", scope: "oil exports" },
+] as const;
+
 function computeWindowRange(
   eventDate: string,
   windowDays: number
@@ -161,6 +168,7 @@ export default function StudyDetailPage() {
   const [showSanctionsEvents, setShowSanctionsEvents] = useState(false);
   const [showPresidentialTerms, setShowPresidentialTerms] = useState(false);
   const [pppYAxisLog, setPppYAxisLog] = useState(true);
+  const [showSanctionsPeriods, setShowSanctionsPeriods] = useState(false);
   const [oilPoints, setOilPoints] = useState<OilSignalData["points"]>([]);
   const [oilSource, setOilSource] = useState<OilSource | null>(null);
   const [oilSourceAnnual, setOilSourceAnnual] = useState<OilSource | null>(null);
@@ -176,6 +184,9 @@ export default function StudyDetailPage() {
   const [pppIranSource, setPppIranSource] = useState<OilPppIranSignalData["source"] | null>(null);
   const [pppTurkeyPoints, setPppTurkeyPoints] = useState<OilPppIranSignalData["points"]>([]);
   const [pppTurkeySource, setPppTurkeySource] = useState<OilPppIranSignalData["source"] | null>(null);
+  const [exportCapacityOilPoints, setExportCapacityOilPoints] = useState<{ date: string; value: number }[]>([]);
+  const [exportCapacityProxyPoints, setExportCapacityProxyPoints] = useState<{ date: string; value: number }[]>([]);
+  const [exportCapacityBaseYear, setExportCapacityBaseYear] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -188,6 +199,7 @@ export default function StudyDetailPage() {
   const isRealOil = study?.primarySignal.kind === "real_oil";
   const isOilPppIran = study?.primarySignal.kind === "oil_ppp_iran";
   const hasTurkeyComparator = study?.comparatorCountry === "Turkey";
+  const isOilExportCapacity = study?.primarySignal.kind === "oil_export_capacity";
 
   const windowOptions = isGoldAndOil ? WINDOW_OPTIONS_LONG_RANGE : WINDOW_OPTIONS;
   const effectiveWindowDays = useMemo(
@@ -196,7 +208,7 @@ export default function StudyDetailPage() {
   );
 
   const oilTimeRange = useMemo((): [string, string] | null => {
-    if (!study || !(isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isRealOil || isOilPppIran)) return null;
+    if (!study || !(isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity)) return null;
     if (anchorEventId) {
       const ev = events.find((e) => e.id === anchorEventId);
       if (ev) {
@@ -205,7 +217,12 @@ export default function StudyDetailPage() {
       }
     }
     return study.timeRange;
-  }, [study, isOilBrent, isOilGlobalLong, isGoldAndOil, isOilAndFx, isRealOil, isOilPppIran, anchorEventId, events, effectiveWindowDays]);
+  }, [study, isOilBrent, isOilGlobalLong, isGoldAndOil, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, anchorEventId, events, effectiveWindowDays]);
+
+  const exportCapacityTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isOilExportCapacity) return null;
+    return study.timeRange;
+  }, [study, isOilExportCapacity]);
 
   const fxTimeRange = useMemo((): [string, string] | null => {
     if (!study || !(isFxUsdToman || isOilAndFx)) return null;
@@ -246,11 +263,15 @@ export default function StudyDetailPage() {
     const params = new URLSearchParams({
       study_id: isFxUsdToman || isOilAndFx ? "iran" : studyId,
     });
-    const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran;
+    const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity;
     if (hasEventLayers) {
       let layers: string[];
-      if (((isOilGlobalLong || isGoldAndOil || isRealOil) && study.eventLayers?.length) || (hasTurkeyComparator && study.eventLayers !== undefined)) {
-        layers = study.eventLayers ?? [];
+      if (((isOilGlobalLong || isGoldAndOil || isRealOil || isOilExportCapacity) && study.eventLayers?.length) || (hasTurkeyComparator && study.eventLayers !== undefined)) {
+        if (isOilExportCapacity) {
+          layers = showSanctionsPeriods ? ["sanctions"] : [];
+        } else {
+          layers = study.eventLayers ?? [];
+        }
       } else {
         layers = [
           ...(showIranEvents ? ["iran_core"] : []),
@@ -267,7 +288,7 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, hasTurkeyComparator, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms]);
+  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, hasTurkeyComparator, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms, showSanctionsPeriods]);
 
   useEffect(() => {
     if (!study || !isOverviewStub) return;
@@ -442,6 +463,42 @@ export default function StudyDetailPage() {
   }, [oilTimeRange, isOilPppIran, hasTurkeyComparator]);
 
   useEffect(() => {
+    if (!exportCapacityTimeRange || !isOilExportCapacity) {
+      if (!isOilExportCapacity) {
+        setExportCapacityOilPoints([]);
+        setExportCapacityProxyPoints([]);
+      }
+      return;
+    }
+    const [start, end] = exportCapacityTimeRange;
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+    fetchJson<{
+      oil_price: { points: { date: string; value: number }[] };
+      export_volume: { points: { date: string; value: number }[] };
+      export_revenue_proxy: { points: { date: string; value: number }[]; base_year?: number };
+    }>(`/api/signals/oil/export-capacity?start=${start}&end=${end}`)
+      .then((res) => {
+        if (mounted) {
+          setExportCapacityOilPoints(res.oil_price?.points ?? []);
+          setExportCapacityProxyPoints(res.export_revenue_proxy?.points ?? []);
+          setExportCapacityBaseYear(res.export_revenue_proxy?.base_year ?? null);
+        }
+      })
+      .catch((e) => {
+        if (mounted) {
+          setExportCapacityOilPoints([]);
+          setExportCapacityProxyPoints([]);
+          setExportCapacityBaseYear(null);
+          setError(e instanceof Error ? e.message : "Signal fetch failed");
+        }
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => { mounted = false; };
+  }, [exportCapacityTimeRange, isOilExportCapacity]);
+
+  useEffect(() => {
     if (!dualTimeRange || !isOilAndFx) return;
     const [start, end] = dualTimeRange;
     let mounted = true;
@@ -549,7 +606,7 @@ export default function StudyDetailPage() {
 
   const showError = error || (isOverviewStub && !data);
 
-  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran;
+  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity;
   const singleSignalReady =
     isGoldAndOil
       ? goldPoints.length > 0 && oilPoints.length > 0
@@ -563,7 +620,9 @@ export default function StudyDetailPage() {
             ? realOilPoints.length > 0
             : isOilPppIran
               ? pppIranPoints.length > 0
-              : false;
+              : isOilExportCapacity
+                ? exportCapacityOilPoints.length > 0 && exportCapacityProxyPoints.length > 0
+                : false;
   if (loading && (isOverviewStub ? !data : isSingleSignalStudy && !singleSignalReady)) {
     return (
       <div className="container mx-auto max-w-4xl px-4 py-12 animate-pulse space-y-8">
@@ -848,6 +907,8 @@ export default function StudyDetailPage() {
               ? "Iran and Turkey: PPP oil burden"
               : isOilPppIran
               ? "Oil price burden (PPP)"
+              : isOilExportCapacity
+              ? "Oil price and export capacity proxy"
               : isFxUsdToman
                 ? "USD→Toman (open market)"
                 : isOilAndFx
@@ -862,23 +923,25 @@ export default function StudyDetailPage() {
               : isOilGlobalLong
               ? "Oil price (USD/barrel) with event markers. Annual data pre-1987; daily Brent from 1987."
               : isOilBrent
-              ? "Daily Brent crude oil price (USD/barrel) with event markers"
+              ? "Daily Brent crude oil price (USD/barrel) with event markers. Brent is a benchmark oil type traded on world markets."
               : isRealOil
               ? "Inflation-adjusted oil price (constant 2015 USD/bbl) with world event overlays"
               : hasTurkeyComparator
               ? "Iran and Turkey indexed to first common year (= 100). Identical methodology and resolution."
               : isOilPppIran
               ? "PPP-adjusted oil burden in Iran (annual) with event overlays"
+              : isOilExportCapacity
+              ? "Oil price (left) and export capacity proxy (right, indexed). Sanctions markers."
               : isFxUsdToman
                 ? "Open-market USD/toman rate (toman per USD) with event markers"
                 : isOilAndFx
-                  ? "Brent oil (left axis) and USD→toman (right axis) with event markers"
+                  ? "Brent oil (left axis) and USD→toman (right axis) with event markers. Brent is a benchmark oil type traded on world markets."
                   : data?.timeline?.length
                     ? "Average sentiment score (sampled over time)"
                     : "Event markers and optional external signals"}
           </p>
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            {!hasTurkeyComparator && (
+            {!hasTurkeyComparator && !isOilExportCapacity && (
               <>
                 <select
                   value={anchorEventId}
@@ -915,7 +978,7 @@ export default function StudyDetailPage() {
                   onChange={(e) => setShowOil(e.target.checked)}
                   className="rounded border-border"
                 />
-                Show Brent oil price
+                Show Brent oil price (benchmark oil type traded on world markets)
               </label>
             )}
             {isOilAndFx && (
@@ -938,6 +1001,17 @@ export default function StudyDetailPage() {
                   className="rounded border-border"
                 />
                 Log scale
+              </label>
+            )}
+            {isOilExportCapacity && (
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showSanctionsPeriods}
+                  onChange={(e) => setShowSanctionsPeriods(e.target.checked)}
+                  className="rounded border-border"
+                />
+                Show sanctions periods
               </label>
             )}
           </div>
@@ -1038,7 +1112,7 @@ export default function StudyDetailPage() {
                           heading: "Methodological symmetry",
                           bullets: [
                             "Identical construction: annual average oil × country-specific PPP factor.",
-                            "Same oil series (Brent) and same PPP source (World Bank / ICP).",
+                            "Same oil series (Brent crude oil, a benchmark oil type traded on world markets) and same PPP source (World Bank / ICP).",
                             "Identical resolution: annual.",
                           ],
                         },
@@ -1155,6 +1229,126 @@ export default function StudyDetailPage() {
                   note={hasTurkeyComparator ? "Identical methodology: nominal oil × country PPP factor. Annual resolution. Same oil and PPP sources." : "PPP values reflect domestic purchasing power; values are not market exchange rates. Annual resolution."}
                 />
               )}
+              <InSimpleTerms>
+                <p>
+                  Brent crude oil is a benchmark oil type traded on world markets, often used as a reference for global oil prices.
+                  The chart tries to show how “heavy” or “burdensome” oil feels in domestic terms—what one barrel of oil means in terms of local purchasing power.
+                  It uses a method (PPP) to translate world oil prices (Brent) into something comparable across countries or over time.
+                </p>
+                <p>
+                  When two countries are shown, the chart illustrates how their relative burden has evolved from a common starting point.
+                  The chart focuses on that comparison and meaning, not on actual spending or policy outcomes.
+                </p>
+              </InSimpleTerms>
+            </>
+          ) : isOilExportCapacity ? (
+            <>
+              <TimelineChart
+                data={[]}
+                valueKey="value"
+                label="Oil price"
+                events={events}
+                multiSeries={[
+                  {
+                    key: "oil",
+                    label: "Oil price",
+                    yAxisIndex: 0,
+                    unit: "USD/bbl",
+                    points: exportCapacityOilPoints,
+                  },
+                  {
+                    key: "proxy",
+                    label: "Export capacity proxy",
+                    yAxisIndex: 1,
+                    unit: exportCapacityBaseYear ? `Index (base=${exportCapacityBaseYear})` : "Index",
+                    points: exportCapacityProxyPoints,
+                  },
+                ]}
+                timeRange={exportCapacityTimeRange ?? study.timeRange}
+                mutedBands={false}
+                sanctionsPeriods={showSanctionsPeriods ? [...EXPORT_CAPACITY_SANCTIONS_PERIODS] : undefined}
+              />
+              <p className="mt-3 text-xs text-muted-foreground max-w-2xl">
+                Export capacity proxy = oil price × estimated export volume. Indexed to first year = 100. Proxy for earning capacity, not realized revenue.
+              </p>
+              <LearningNote
+                sections={[
+                  {
+                    heading: "How to read this chart",
+                    bullets: [
+                      "Sanctions periods can be optionally displayed to provide context for changes in export capacity; their presence does not imply causality.",
+                    ],
+                  },
+                  {
+                    heading: "Why volume matters",
+                    bullets: [
+                      "Oil price alone does not capture export capacity. Revenue-like capacity depends on both price and volume.",
+                      "Iran's export volumes have varied significantly under sanctions. Combining price and volume gives a fuller picture.",
+                    ],
+                  },
+                  {
+                    heading: "Why indexing is used",
+                    bullets: [
+                      "The proxy (price × volume) has no natural unit for comparison over time. Indexing to the first year (= 100) emphasizes relative evolution.",
+                      "Values above 100 indicate higher estimated capacity relative to the baseline; below 100, lower.",
+                    ],
+                  },
+                  {
+                    heading: "What the proxy represents",
+                    bullets: [
+                      "A proxy for export earning capacity: oil price × estimated crude export volume.",
+                      "Not realized revenue. Does not account for discounts, informal trade, or non-crude exports.",
+                    ],
+                  },
+                  {
+                    heading: "Pitfalls",
+                    bullets: [
+                      "Export volumes are estimates. Volumes under sanctions are uncertain.",
+                      "Does not equal government revenue. Pricing, discounts, and payment terms vary.",
+                      "Does not capture discounts or informal trade.",
+                      "Do not infer causality from co-movement with sanctions events.",
+                    ],
+                  },
+                ]}
+                links={[
+                  { label: "EIA Iran Country Analysis", href: "https://www.eia.gov/international/content/analysis/countries_long/iran/" },
+                ]}
+              />
+              <SourceInfo
+                items={[
+                  {
+                    label: "Oil price",
+                    sourceName: "FRED DCOILBRENTEU",
+                    sourceDetail: "Brent crude, annual average",
+                    unitLabel: "USD/barrel",
+                  },
+                  {
+                    label: "Export volume",
+                    sourceName: "EIA / tanker tracking estimates",
+                    sourceDetail: "Estimated crude oil and condensate exports",
+                    unitLabel: "million barrels/year",
+                    unitNote: "Estimates; uncertain under sanctions.",
+                  },
+                  {
+                    label: "Export capacity proxy",
+                    sourceName: "Derived",
+                    sourceDetail: "Oil price × export volume, indexed",
+                    unitLabel: "Index (base=first year)",
+                    unitNote: "Proxy for earning capacity, not realized revenue.",
+                  },
+                ]}
+                note="Annual resolution. Export volumes are estimates. Do not equate proxy with government revenue."
+              />
+              <InSimpleTerms>
+                <p>
+                  Brent crude oil is a benchmark oil type traded on world markets, often used as a reference for global oil prices.
+                  The chart combines Brent oil price and estimated export volume to suggest how much earning capacity Iran might have from oil exports.
+                </p>
+                <p>
+                  It is not actual revenue—it is a rough proxy. Price and volume together give a sense of capacity, not what was actually earned.
+                  The chart aims to show that combination and how it has evolved over time. It does not prove any causal link or represent actual government receipts.
+                </p>
+              </InSimpleTerms>
             </>
           ) : isRealOil ? (
             <>
@@ -1233,6 +1427,16 @@ export default function StudyDetailPage() {
                   note="Base year: 2015 (US CPI). FRED CPIAUCSL (Consumer Price Index, All Urban Consumers)."
                 />
               )}
+              <InSimpleTerms>
+                <p>
+                  Brent crude oil is a benchmark oil type traded on world markets, often used as a reference for global oil prices.
+                  The chart shows these prices adjusted for inflation, so you can compare “how expensive” oil felt in different decades.
+                  Without this adjustment, a price from decades ago would look much smaller than today’s, even if oil was relatively more expensive then.
+                </p>
+                <p>
+                  The chart aims to show that comparison—what oil meant in terms of purchasing power over time—not to prove any cause or effect.
+                </p>
+              </InSimpleTerms>
             </>
           ) : isGoldAndOil ? (
             <>
@@ -1345,10 +1549,10 @@ export default function StudyDetailPage() {
               <LearningNote
                   sections={[
                     {
-                      heading: "What this measures",
-                      bullets: [
-                        "Spot price of Brent crude oil, a global benchmark for light sweet crude.",
-                        "Brent is traded in USD and reflects international market conditions.",
+                    heading: "What this measures",
+                    bullets: [
+                      "Brent crude oil is a benchmark oil type traded on world markets, often used as a reference for global oil prices. This chart shows its spot price.",
+                      "Brent is traded in USD and reflects international market conditions.",
                       ],
                     },
                     {
@@ -1400,6 +1604,16 @@ export default function StudyDetailPage() {
                   ]}
                 />
               )}
+              <InSimpleTerms>
+                <p>
+                  Brent crude oil is a benchmark oil type traded on world markets, often used as a reference for global oil prices.
+                  This chart shows how its price has moved over time.
+                </p>
+                <p>
+                  It gives you a sense of the broader backdrop for energy costs and risk—when prices spike or fall, that context matters for many decisions.
+                  The chart does not predict anything or prove cause and effect. It simply displays the pattern so you can see what happened when.
+                </p>
+              </InSimpleTerms>
             </>
           ) : isOilAndFx ? (
             <>
@@ -1472,6 +1686,16 @@ export default function StudyDetailPage() {
                   ]}
                 />
               )}
+              <InSimpleTerms>
+                <p>
+                  Brent crude oil is a benchmark oil type traded on world markets, often used as a reference for global oil prices.
+                  This chart shows two things side by side: Brent oil prices and the exchange rate between the US dollar and the Iranian toman.
+                </p>
+                <p>
+                  It tries to give context—when oil moves, how does the local currency move? When both move together or apart, that pattern can be informative.
+                  The chart does not explain why they move or prove any cause. It simply displays the pattern so you can see what happened when.
+                </p>
+              </InSimpleTerms>
             </>
           ) : isFxUsdToman ? (
             <>
@@ -1502,6 +1726,16 @@ export default function StudyDetailPage() {
                   ]}
                 />
               )}
+              <InSimpleTerms>
+                <p>
+                  The chart shows the open-market exchange rate between the US dollar and the Iranian toman—how many tomans you get for one dollar.
+                  The toman is Iran’s main currency unit (one toman equals ten rials).
+                </p>
+                <p>
+                  When the rate rises, it means more tomans are needed to buy one dollar—a sign of a weaker toman.
+                  The chart aims to show that pattern over time and give context for economic pressure. It does not explain why the rate moves or prove any cause.
+                </p>
+              </InSimpleTerms>
             </>
           ) : (
             <TimelineChart

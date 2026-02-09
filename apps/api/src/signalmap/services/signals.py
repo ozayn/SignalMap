@@ -4,6 +4,7 @@ Read path: cache → Postgres → fetcher (with upsert).
 """
 
 from signalmap.data.gold_annual import GOLD_ANNUAL
+from signalmap.data.iran_export_volume import IRAN_EXPORT_VOLUME_EST
 from signalmap.data.oil_annual import BRENT_DAILY_START, OIL_ANNUAL_EIA
 from signalmap.sources.bonbast_usd_toman import fetch_usd_toman_series
 from signalmap.sources.fred_brent import fetch_brent_series
@@ -19,6 +20,8 @@ SIGNAL_OIL_GLOBAL_LONG = "oil_global_long"
 SIGNAL_REAL_OIL = "real_oil_price"
 SIGNAL_OIL_PPP_IRAN = "oil_price_ppp_iran"
 SIGNAL_OIL_PPP_TURKEY = "oil_price_ppp_turkey"
+SIGNAL_IRAN_EXPORT_VOLUME = "iran_oil_export_volume"
+SIGNAL_EXPORT_REVENUE_PROXY = "derived_export_revenue_proxy"
 SIGNAL_USD_TOMAN = "usd_toman_open_market"
 CACHE_TTL = 21600  # 6 hours
 
@@ -361,6 +364,144 @@ def get_oil_ppp_iran_series(start: str, end: str) -> dict:
     }
     cache_set(ck, result, CACHE_TTL)
     return result
+
+
+IRAN_EXPORT_SOURCE = {
+    "name": "EIA / tanker tracking estimates",
+    "publisher": "U.S. Energy Information Administration, Vortexa",
+    "url": "https://www.eia.gov/international/content/analysis/countries_long/iran/",
+    "notes": "Estimated annual crude oil and condensate exports. Values are estimates; volumes under sanctions are uncertain.",
+}
+
+
+def get_iran_export_volume_series(start: str, end: str) -> dict:
+    """
+    Return estimated Iran crude oil export volume (million barrels/year). Annual only.
+    Values are estimates; clearly marked in metadata.
+    """
+    ck = f"{_cache_key(SIGNAL_IRAN_EXPORT_VOLUME, start, end)}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    start_year = max(2010, int(start[:4]))
+    end_year = min(int(end[:4]), 2024)
+
+    points: list[dict] = []
+    for y in range(start_year, end_year + 1):
+        vol = IRAN_EXPORT_VOLUME_EST.get(y)
+        if vol is not None:
+            points.append({"date": f"{y}-01-01", "value": vol})
+
+    result = {
+        "signal": SIGNAL_IRAN_EXPORT_VOLUME,
+        "unit": "million barrels/year",
+        "source": IRAN_EXPORT_SOURCE,
+        "resolution": "annual",
+        "metadata": {"estimated": True, "note": "Export volumes are estimates; uncertain under sanctions."},
+        "points": points,
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
+
+
+def get_export_revenue_proxy_series(start: str, end: str) -> dict:
+    """
+    export_revenue_proxy = oil_price × export_volume. Indexed to first available year = 100.
+    Proxy for export earning capacity, not realized revenue.
+    """
+    ck = f"{_cache_key(SIGNAL_EXPORT_REVENUE_PROXY, start, end)}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    start_year = max(2010, int(start[:4]))
+    end_year = min(int(end[:4]), 2024)
+
+    oil_by_year = _get_oil_annual_avg_by_year(start_year, end_year)
+
+    raw_points: list[dict] = []
+    for y in range(start_year, end_year + 1):
+        oil_avg = oil_by_year.get(y)
+        vol = IRAN_EXPORT_VOLUME_EST.get(y)
+        if oil_avg is not None and vol is not None:
+            raw_val = oil_avg * vol
+            raw_points.append({"date": f"{y}-01-01", "value": raw_val})
+
+    if not raw_points:
+        result = {
+            "signal": SIGNAL_EXPORT_REVENUE_PROXY,
+            "unit": "Index (base=first year)",
+            "source": {
+                "oil": "FRED DCOILBRENTEU (Brent)",
+                "volume": "EIA / tanker tracking estimates",
+            },
+            "resolution": "annual",
+            "metadata": {
+                "note": "Proxy for export earning capacity, not realized revenue.",
+                "formula": "oil_price × export_volume",
+            },
+            "points": [],
+            "base_year": None,
+        }
+        cache_set(ck, result, CACHE_TTL)
+        return result
+
+    base_val = raw_points[0]["value"]
+    base_year = int(raw_points[0]["date"][:4])
+
+    points: list[dict] = []
+    for p in raw_points:
+        idx = round((p["value"] / base_val) * 100, 1) if base_val and base_val > 0 else None
+        points.append({"date": p["date"], "value": idx})
+
+    result = {
+        "signal": SIGNAL_EXPORT_REVENUE_PROXY,
+        "unit": "Index (base=first year)",
+        "source": {
+            "oil": "FRED DCOILBRENTEU (Brent)",
+            "volume": "EIA / tanker tracking estimates",
+        },
+        "resolution": "annual",
+        "metadata": {
+            "note": "Proxy for export earning capacity, not realized revenue.",
+            "formula": "oil_price × export_volume",
+            "base_year": base_year,
+        },
+        "points": points,
+        "base_year": base_year,
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
+
+
+def get_oil_export_capacity_study(start: str, end: str) -> dict:
+    """
+    Combined response for Study 9: oil price (annual), export volume, export revenue proxy.
+    """
+    start_year = max(2010, int(start[:4]))
+    end_year = min(int(end[:4]), 2024)
+    oil_by_year = _get_oil_annual_avg_by_year(start_year, end_year)
+    oil_points = [
+        {"date": f"{y}-01-01", "value": v}
+        for y, v in sorted(oil_by_year.items())
+        if y in IRAN_EXPORT_VOLUME_EST
+    ]
+
+    volume_res = get_iran_export_volume_series(start, end)
+    proxy_res = get_export_revenue_proxy_series(start, end)
+
+    return {
+        "oil_price": {
+            "signal": "oil_price_global",
+            "unit": "USD/barrel",
+            "source": BRENT_SOURCE,
+            "resolution": "annual",
+            "points": oil_points,
+        },
+        "export_volume": volume_res,
+        "export_revenue_proxy": proxy_res,
+    }
 
 
 def get_oil_ppp_turkey_series(start: str, end: str) -> dict:
