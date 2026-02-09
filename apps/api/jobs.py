@@ -14,6 +14,7 @@ from connectors.wayback_instagram import (
     fetch_snapshot_html,
     extract_instagram_metrics,
     _build_archived_url,
+    get_instagram_archival_metrics,
 )
 from db import cursor
 
@@ -237,6 +238,138 @@ def _run_instagram_job(job_id: str) -> None:
             )
 
 
+def _normalize_instagram_username(username: str) -> str:
+    """Lowercase, trim, remove @. Consistent key for cache reads and writes."""
+    return (username or "").strip().replace("@", "").lower()
+
+
+def get_cached_instagram_snapshots(username: str) -> Optional[dict]:
+    """Return cached Instagram snapshots for a username, or None if no cache or DB unavailable."""
+    username = _normalize_instagram_username(username)
+    if not username:
+        return None
+    canonical_url = f"https://www.instagram.com/{username}/"
+    try:
+        with cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ON (timestamp) timestamp, archived_url, followers, following, posts, confidence, evidence, fetched_at
+                FROM wayback_snapshot_cache
+                WHERE platform = %s AND LOWER(canonical_url) = LOWER(%s)
+                ORDER BY timestamp ASC, fetched_at DESC NULLS LAST
+                """,
+                (PLATFORM, canonical_url),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+    except Exception:
+        return None
+    if not rows:
+        return None
+    fa_values = [r.get("fetched_at") for r in rows if r.get("fetched_at")]
+    last_cached_at = max(fa_values).isoformat() if fa_values else None
+    results = [
+        {
+            "timestamp": r["timestamp"],
+            "archived_url": r.get("archived_url"),
+            "followers": r.get("followers"),
+            "following": r.get("following"),
+            "posts": r.get("posts"),
+            "confidence": float(r["confidence"]) if r.get("confidence") is not None else 0.2,
+            "evidence": r.get("evidence"),
+            "source": "cache",
+        }
+        for r in rows
+    ]
+    return {
+        "platform": "instagram",
+        "username": username,
+        "results": results,
+        "snapshots_total": len(results),
+        "snapshots_sampled": len(results),
+        "notes": "Served from cache. Run a job from Explore for more snapshots.",
+        "metadata": {
+            "source": "cache",
+            "count": len(results),
+            "last_cached_at": last_cached_at,
+        },
+    }
+
+
+def _upsert_instagram_cache(username: str, results: list[dict]) -> None:
+    """Upsert live fetch results into wayback_snapshot_cache. Seeds future cache reads."""
+    username = _normalize_instagram_username(username)
+    if not username:
+        return
+    canonical_url = f"https://www.instagram.com/{username}/"
+    try:
+        with cursor() as cur:
+            for r in results:
+                ts = r.get("timestamp")
+                if not ts:
+                    continue
+                archived_url = r.get("archived_url")
+                original_url = r.get("original_url", "")
+                cur.execute(
+                    """
+                    INSERT INTO wayback_snapshot_cache
+                    (platform, username, canonical_url, timestamp, original_url, archived_url,
+                     followers, following, posts, confidence, evidence)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (platform, canonical_url, timestamp)
+                    DO UPDATE SET
+                        followers = EXCLUDED.followers,
+                        following = EXCLUDED.following,
+                        posts = EXCLUDED.posts,
+                        confidence = EXCLUDED.confidence,
+                        evidence = EXCLUDED.evidence,
+                        fetched_at = NOW()
+                    """,
+                    (
+                        PLATFORM,
+                        username,
+                        canonical_url,
+                        ts,
+                        original_url,
+                        archived_url,
+                        r.get("followers"),
+                        r.get("following"),
+                        r.get("posts"),
+                        r.get("confidence") or 0.2,
+                        r.get("evidence"),
+                    ),
+                )
+    except Exception:
+        pass  # Non-fatal; cache seeding is best-effort
+
+
+def get_instagram_cache_first(username: str, sample: int = 40) -> dict:
+    """
+    Cache-first read: try cache, else live Wayback fetch.
+    When falling back to live, upserts results into cache to seed future reads.
+    Returns same shape as get_instagram_archival_metrics, plus metadata.source.
+    """
+    cached = get_cached_instagram_snapshots(username)
+    if cached is not None and cached.get("metadata", {}).get("count", 0) >= 1:
+        return cached
+
+    # Live fetch
+    live = get_instagram_archival_metrics(
+        username=username,
+        sample=sample,
+        include_evidence=True,
+        progress=False,
+    )
+    results = live.get("results", [])
+    if results:
+        _upsert_instagram_cache(username, results)
+    live["metadata"] = {
+        "source": "wayback_live",
+        "count": len(results),
+        "last_cached_at": None,
+    }
+    return live
+
+
 def create_instagram_job(
     username: str,
     from_year: Optional[int] = None,
@@ -246,7 +379,7 @@ def create_instagram_job(
     sample: int = 30,
 ) -> str:
     """Create job row and return job_id. Caller starts background task."""
-    username = (username or "").strip()
+    username = _normalize_instagram_username(username)
     if not username:
         raise ValueError("username is required")
     sample = min(max(sample, 1), 100)
@@ -677,6 +810,126 @@ def _run_twitter_job(job_id: str) -> None:
 # --- YouTube jobs ---
 
 PLATFORM_YOUTUBE = "youtube"
+
+
+def get_cached_youtube_snapshots(input_str: str) -> Optional[dict]:
+    """Return cached YouTube snapshots for an input (handle or URL), or None if no cache or DB unavailable."""
+    from signalmap.connectors.wayback_youtube import canonicalize_youtube_input
+
+    canon = canonicalize_youtube_input((input_str or "").strip())
+    canonical_url = canon.get("canonical_url", "")
+    if not canonical_url:
+        return None
+    try:
+        with cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ON (timestamp) timestamp, archived_url, subscribers, confidence, evidence, fetched_at
+                FROM wayback_snapshot_cache
+                WHERE platform = %s AND LOWER(canonical_url) = LOWER(%s)
+                ORDER BY timestamp ASC, fetched_at DESC NULLS LAST
+                """,
+                (PLATFORM_YOUTUBE, canonical_url),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+    except Exception:
+        return None
+    if not rows:
+        return None
+    fa_values = [r.get("fetched_at") for r in rows if r.get("fetched_at")]
+    last_cached_at = max(fa_values).isoformat() if fa_values else None
+    results = [
+        {
+            "timestamp": r["timestamp"],
+            "archived_url": r.get("archived_url"),
+            "subscribers": r.get("subscribers"),
+            "confidence": float(r["confidence"]) if r.get("confidence") is not None else 0.2,
+            "evidence": r.get("evidence"),
+            "source": "cache",
+        }
+        for r in rows
+    ]
+    return {
+        "platform": "youtube",
+        "input": input_str.strip(),
+        "canonical_url": canonical_url,
+        "results": results,
+        "snapshots_total": len(results),
+        "snapshots_sampled": len(results),
+        "notes": "Served from cache. Run a job from Explore for more snapshots.",
+        "metadata": {
+            "source": "cache",
+            "count": len(results),
+            "last_cached_at": last_cached_at,
+        },
+    }
+
+
+def _upsert_youtube_cache(canonical_url: str, input_str: str, results: list[dict]) -> None:
+    """Upsert live fetch results into wayback_snapshot_cache. Seeds future cache reads."""
+    username = (input_str or "").strip().lstrip("@").split("/")[-1].split("?")[0] or input_str
+    try:
+        with cursor() as cur:
+            for r in results:
+                ts = r.get("timestamp")
+                if not ts:
+                    continue
+                archived_url = r.get("archived_url")
+                original_url = r.get("original_url", "")
+                cur.execute(
+                    """
+                    INSERT INTO wayback_snapshot_cache
+                    (platform, username, canonical_url, timestamp, original_url, archived_url,
+                     subscribers, confidence, evidence)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (platform, canonical_url, timestamp)
+                    DO UPDATE SET
+                        subscribers = EXCLUDED.subscribers,
+                        confidence = EXCLUDED.confidence,
+                        evidence = EXCLUDED.evidence,
+                        fetched_at = NOW()
+                    """,
+                    (
+                        PLATFORM_YOUTUBE,
+                        username,
+                        canonical_url,
+                        ts,
+                        original_url,
+                        archived_url,
+                        r.get("subscribers"),
+                        r.get("confidence") or 0.2,
+                        r.get("evidence"),
+                    ),
+                )
+    except Exception:
+        pass  # Non-fatal; cache seeding is best-effort
+
+
+def get_youtube_cache_first(input_str: str, sample: int = 40) -> dict:
+    """
+    Cache-first read: try cache, else live Wayback fetch.
+    When falling back to live, upserts results into cache to seed future reads.
+    """
+    from signalmap.connectors.wayback_youtube import get_youtube_archival_metrics
+
+    cached = get_cached_youtube_snapshots(input_str)
+    if cached is not None and cached.get("metadata", {}).get("count", 0) >= 1:
+        return cached
+
+    live = get_youtube_archival_metrics(
+        input_str=input_str,
+        sample=sample,
+    )
+    results = live.get("results", [])
+    canonical_url = live.get("canonical_url", "")
+    if results and canonical_url:
+        _upsert_youtube_cache(canonical_url, input_str, results)
+    live["metadata"] = {
+        "source": "wayback_live",
+        "count": len(results),
+        "last_cached_at": None,
+    }
+    return live
 
 
 def create_youtube_job(

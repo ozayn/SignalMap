@@ -8,7 +8,8 @@ export type PrimarySignal =
   | { kind: "real_oil" }
   | { kind: "oil_ppp_iran" }
   | { kind: "oil_export_capacity" }
-  | { kind: "events_timeline" };
+  | { kind: "events_timeline" }
+  | { kind: "follower_growth_dynamics" };
 
 import type { ConceptKey } from "./concepts";
 
@@ -136,8 +137,19 @@ export const STUDIES: StudyMeta[] = [
     concepts: ["oil_benchmark", "price_vs_quantity", "indexing", "event_overlay"],
   },
   {
-    id: "events_timeline",
+    id: "follower_growth_dynamics",
     number: 10,
+    title: "Follower growth dynamics over time",
+    timeRange: ["2010-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "An exploratory analysis of historical follower growth using simple growth models.",
+    status: "active",
+    primarySignal: { kind: "follower_growth_dynamics" },
+    concepts: ["linear_vs_exponential_growth", "logistic_growth_saturation", "model_fitting_intuition", "overfitting_simple"],
+  },
+  {
+    id: "events_timeline",
+    number: 11,
     title: "Historical events timeline (1900–present)",
     timeRange: ["1900-01-01", new Date().toISOString().slice(0, 10)],
     description:

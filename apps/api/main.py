@@ -31,8 +31,12 @@ from jobs import (
     create_instagram_job,
     create_youtube_job,
     create_twitter_job,
+    get_cached_instagram_snapshots,
+    get_cached_youtube_snapshots,
+    get_instagram_cache_first,
     get_job,
     get_job_results,
+    get_youtube_cache_first,
     list_jobs,
     cancel_job,
     delete_job,
@@ -396,6 +400,28 @@ def wayback_snapshots(
     )
 
 
+@app.get("/api/wayback/instagram/cached")
+def wayback_instagram_cached(username: str):
+    """Return cached Instagram snapshots for a username, if any. Fast path for profiles already fetched via jobs."""
+    cached = get_cached_instagram_snapshots(username)
+    if cached is None:
+        raise HTTPException(status_code=404, detail="No cached data for this username")
+    return cached
+
+
+@app.get("/api/wayback/instagram/cache-first")
+def wayback_instagram_cache_first(
+    username: str,
+    sample: int = 40,
+):
+    """
+    Cache-first: read from Postgres cache first; if empty, fetch from Wayback live and seed cache.
+    Returns metadata.source: "cache" or "wayback_live".
+    """
+    sample = min(max(sample, 1), 100)
+    return get_instagram_cache_first(username=username, sample=sample)
+
+
 @app.get("/api/wayback/instagram")
 def wayback_instagram(
     username: str,
@@ -488,6 +514,28 @@ def wayback_youtube_debug(
         "snapshots_count": len(snaps),
         "preview": snaps[:5] if snaps else [],
     }
+
+
+@app.get("/api/wayback/youtube/cached")
+def wayback_youtube_cached(input_param: str = Query(..., alias="input")):
+    """Return cached YouTube snapshots for an input (handle or URL), if any."""
+    cached = get_cached_youtube_snapshots(input_param)
+    if cached is None:
+        raise HTTPException(status_code=404, detail="No cached data for this input")
+    return cached
+
+
+@app.get("/api/wayback/youtube/cache-first")
+def wayback_youtube_cache_first(
+    input_param: str = Query(..., alias="input"),
+    sample: int = 40,
+):
+    """
+    Cache-first: read from Postgres cache first; if empty, fetch from Wayback live and seed cache.
+    Returns metadata.source: "cache" or "wayback_live".
+    """
+    sample = min(max(sample, 1), 100)
+    return get_youtube_cache_first(input_str=input_param, sample=sample)
 
 
 @app.get("/api/wayback/youtube")

@@ -13,6 +13,7 @@ import { ConceptsUsed } from "@/components/concepts-used";
 import { CurrentSnapshot } from "@/components/current-snapshot";
 import { InSimpleTerms } from "@/components/in-simple-terms";
 import { EventsTimeline, type TimelineEvent } from "@/components/events-timeline";
+import { FollowerGrowthChart } from "@/components/follower-growth-chart";
 import { getStudyById } from "@/lib/studies";
 import { fetchJson } from "@/lib/api";
 
@@ -186,6 +187,21 @@ export default function StudyDetailPage() {
   const [exportCapacityBaseYear, setExportCapacityBaseYear] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fgPlatform, setFgPlatform] = useState<"twitter" | "instagram" | "youtube">("twitter");
+  const [fgUsername, setFgUsername] = useState("");
+  const [fgData, setFgData] = useState<{
+    results: { timestamp: string; followers?: number | null; subscribers?: number | null }[];
+  } | null>(null);
+  const [fgLoading, setFgLoading] = useState(false);
+  const [fgError, setFgError] = useState<string | null>(null);
+  const [fgShowLinear, setFgShowLinear] = useState(true);
+  const [fgShowExponential, setFgShowExponential] = useState(true);
+  const [fgShowLogistic, setFgShowLogistic] = useState(true);
+  const [fgMetadata, setFgMetadata] = useState<{
+    source?: "cache" | "wayback_live";
+    count?: number;
+    last_cached_at?: string | null;
+  } | null>(null);
 
   const isOverviewStub = study?.primarySignal.kind === "overview_stub";
   const isOilBrent = study?.primarySignal.kind === "oil_brent";
@@ -198,6 +214,7 @@ export default function StudyDetailPage() {
   const hasTurkeyComparator = study?.comparatorCountry === "Turkey";
   const isOilExportCapacity = study?.primarySignal.kind === "oil_export_capacity";
   const isEventsTimeline = study?.primarySignal.kind === "events_timeline";
+  const isFollowerGrowthDynamics = study?.primarySignal.kind === "follower_growth_dynamics";
 
   const windowOptions = isGoldAndOil ? WINDOW_OPTIONS_LONG_RANGE : WINDOW_OPTIONS;
   const effectiveWindowDays = useMemo(
@@ -305,10 +322,10 @@ export default function StudyDetailPage() {
   }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, hasTurkeyComparator, isEventsTimeline, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms, showSanctionsPeriods]);
 
   useEffect(() => {
-    if (study && isEventsTimeline) {
+    if (study && (isEventsTimeline || isFollowerGrowthDynamics)) {
       setLoading(false);
     }
-  }, [study, isEventsTimeline]);
+  }, [study, isEventsTimeline, isFollowerGrowthDynamics]);
 
   useEffect(() => {
     if (!study || !isOverviewStub) return;
@@ -774,6 +791,251 @@ export default function StudyDetailPage() {
             Use it as a reference when interpreting charts—events are anchors for understanding, not explanations of cause and effect.
           </p>
         </InSimpleTerms>
+        </>
+      ) : isFollowerGrowthDynamics ? (
+        <>
+          <Card className="border-border min-w-0 overflow-visible">
+            <CardHeader>
+              <CardTitle className="text-base font-medium">
+                Follower growth dynamics
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                {study.description}
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Data source: Wayback Machine follower count snapshots. Irregular time resolution.
+              </p>
+              <form
+                suppressHydrationWarning
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const un = fgUsername.trim().replace(/^@/, "");
+                  if (!un) return;
+                  setFgLoading(true);
+                  setFgError(null);
+                  setFgData(null);
+                  setFgMetadata(null);
+                  try {
+                    if (fgPlatform === "instagram") {
+                      const res = await fetchJson<{
+                        results: { timestamp: string; followers?: number | null }[];
+                        metadata?: { source?: string; count?: number; last_cached_at?: string | null };
+                      }>(`/api/wayback/instagram/cache-first?username=${encodeURIComponent(un)}&sample=40`);
+                      setFgData(res);
+                      const meta = res.metadata;
+                      setFgMetadata(
+                        meta
+                          ? {
+                              source: (meta.source === "cache" ? "cache" : "wayback_live") as "cache" | "wayback_live",
+                              count: meta.count,
+                              last_cached_at: meta.last_cached_at ?? undefined,
+                            }
+                          : {
+                              source: "wayback_live" as const,
+                              count: res.results?.length,
+                            }
+                      );
+                      return;
+                    }
+                    if (fgPlatform === "youtube") {
+                      const val = un.startsWith("@") ? un : `@${un}`;
+                      const res = await fetchJson<{
+                        results: { timestamp: string; subscribers?: number | null }[];
+                        metadata?: { source?: string; count?: number; last_cached_at?: string | null };
+                      }>(`/api/wayback/youtube/cache-first?input=${encodeURIComponent(val)}&sample=40`);
+                      setFgData(res);
+                      const meta = res.metadata;
+                      setFgMetadata(
+                        meta
+                          ? {
+                              source: (meta.source === "cache" ? "cache" : "wayback_live") as "cache" | "wayback_live",
+                              count: meta.count,
+                              last_cached_at: meta.last_cached_at ?? undefined,
+                            }
+                          : {
+                              source: "wayback_live" as const,
+                              count: res.results?.length,
+                            }
+                      );
+                      return;
+                    }
+                    const res = await fetchJson<{ results: { timestamp: string; followers?: number | null }[] }>(
+                      `/api/wayback/twitter?username=${encodeURIComponent(un)}&sample=40`
+                    );
+                    setFgData(res);
+                    setFgMetadata({ source: "wayback_live", count: res.results?.length });
+                  } catch (err) {
+                    setFgError(err instanceof Error ? err.message : "Fetch failed");
+                  } finally {
+                    setFgLoading(false);
+                  }
+                }}
+                className="mt-4 flex flex-wrap items-end gap-3"
+              >
+                <label className="flex flex-col gap-1" suppressHydrationWarning>
+                  <span className="text-xs text-muted-foreground">Platform</span>
+                  <select
+                    value={fgPlatform}
+                    suppressHydrationWarning
+                    onChange={(e) => setFgPlatform(e.target.value as "twitter" | "instagram" | "youtube")}
+                    className="text-sm border border-border rounded px-2.5 py-1.5 bg-background"
+                  >
+                    <option value="twitter">Twitter / X</option>
+                    <option value="instagram">Instagram</option>
+                    <option value="youtube">YouTube</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1" suppressHydrationWarning>
+                  <span className="text-xs text-muted-foreground">{fgPlatform === "youtube" ? "Handle (e.g. @channel)" : "Username"}</span>
+                  <input
+                    type="text"
+                    suppressHydrationWarning
+                    value={fgUsername}
+                    onChange={(e) => setFgUsername(e.target.value)}
+                    placeholder={fgPlatform === "youtube" ? "@channel" : "username"}
+                    className="text-sm border border-border rounded px-2.5 py-1.5 bg-background min-w-[140px]"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={fgLoading}
+                  className="text-sm border border-border rounded px-4 py-1.5 hover:bg-muted/50 disabled:opacity-50"
+                  suppressHydrationWarning
+                >
+                  {fgLoading ? "Fetching…" : "Fetch data"}
+                </button>
+              </form>
+              {fgError && (
+                <p className="mt-2 text-sm text-muted-foreground">{fgError}</p>
+              )}
+              {fgData && fgData.results.length > 0 && (
+                <div className="mt-4 flex flex-wrap items-center gap-4">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={fgShowLinear}
+                      onChange={(e) => setFgShowLinear(e.target.checked)}
+                      className="rounded border-border"
+                    />
+                    Linear model
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={fgShowExponential}
+                      onChange={(e) => setFgShowExponential(e.target.checked)}
+                      className="rounded border-border"
+                    />
+                    Exponential model
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={fgShowLogistic}
+                      onChange={(e) => setFgShowLogistic(e.target.checked)}
+                      className="rounded border-border"
+                    />
+                    Logistic (S-curve) model
+                  </label>
+                </div>
+              )}
+            </CardHeader>
+            <CardContent>
+              {fgData && (() => {
+                const metric = fgPlatform === "youtube" ? "subscribers" : "followers";
+                const points = fgData.results
+                  .filter((r) => (r[metric as keyof typeof r] ?? null) != null)
+                  .map((r) => {
+                    const ts = r.timestamp;
+                    const date = ts.length >= 8 ? `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}` : ts;
+                    const val = metric === "subscribers" ? (r.subscribers ?? 0) : (r.followers ?? 0);
+                    return { date, value: val };
+                  })
+                  .sort((a, b) => a.date.localeCompare(b.date));
+                if (points.length < 2) {
+                  return (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        Need at least 2 data points for model fitting. Found {points.length}.
+                      </p>
+                      {fgMetadata && (
+                        <p className="mt-3 text-xs text-muted-foreground border-t border-border pt-3">
+                          Data source: {fgMetadata.source === "cache" ? "cache" : "Wayback (live)"}
+                          {fgMetadata.count != null && ` · ${fgMetadata.count} snapshot${fgMetadata.count !== 1 ? "s" : ""}`}
+                          {fgMetadata.source === "cache" && fgMetadata.last_cached_at != null && (
+                            <> · Last cached: {new Date(fgMetadata.last_cached_at).toLocaleDateString()}</>
+                          )}
+                        </p>
+                      )}
+                    </>
+                  );
+                }
+                return (
+                  <>
+                    <FollowerGrowthChart
+                      data={points}
+                      metricLabel={fgPlatform === "youtube" ? "Subscribers" : "Followers"}
+                      showLinear={fgShowLinear}
+                      showExponential={fgShowExponential}
+                      showLogistic={fgShowLogistic}
+                    />
+                    {fgMetadata && (
+                      <p className="mt-3 text-xs text-muted-foreground border-t border-border pt-3">
+                        Data source: {fgMetadata.source === "cache" ? "cache" : "Wayback (live)"}
+                        {fgMetadata.count != null && ` · ${fgMetadata.count} snapshot${fgMetadata.count !== 1 ? "s" : ""}`}
+                        {fgMetadata.source === "cache" && fgMetadata.last_cached_at != null && (
+                          <> · Last cached: {new Date(fgMetadata.last_cached_at).toLocaleDateString()}</>
+                        )}
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
+              {!fgData && !fgLoading && (
+                <p className="text-sm text-muted-foreground">
+                  Enter a username and click Fetch data to load Wayback snapshots.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+          <LearningNote
+            title="How to read this chart"
+            sections={[
+              {
+                heading: "Raw data",
+                bullets: [
+                  "Points show follower counts at snapshot dates. The line connects them in time order.",
+                  "Irregular spacing reflects when the archive captured the profile.",
+                ],
+              },
+              {
+                heading: "Fitted models",
+                bullets: [
+                  "Models are fit to the observed data only. No extrapolation beyond the last point.",
+                  "Linear: constant growth per day. Exponential: percentage growth. Logistic: S-curve with saturation.",
+                  "Models are descriptive aids, not predictions or causal explanations.",
+                ],
+              },
+              {
+                heading: "Pitfalls",
+                bullets: [
+                  "Wayback coverage is sparse; gaps and missing values are expected.",
+                  "Do not infer causality. Different models may fit similarly; overfitting is a risk.",
+                ],
+              },
+            ]}
+          />
+          {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
+          <InSimpleTerms>
+            <p>
+              Growth often slows over time—early phases can look exponential, then level off as limits are approached.
+              We test different models to see which shape best describes the observed pattern, not to predict the future.
+            </p>
+            <p>
+              This study does not claim that any model is “correct,” that growth will continue, or that any factor caused the observed pattern.
+              It is exploratory and descriptive only.
+            </p>
+          </InSimpleTerms>
         </>
       ) : (isOilBrent || isOilGlobalLong) && oilKpis ? (
         <div className="grid gap-4 sm:grid-cols-3">

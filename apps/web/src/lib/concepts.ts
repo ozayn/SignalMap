@@ -10,7 +10,11 @@ export type ConceptKey =
   | "price_vs_quantity"
   | "fx_rate"
   | "gold_price"
-  | "event_overlay";
+  | "event_overlay"
+  | "linear_vs_exponential_growth"
+  | "logistic_growth_saturation"
+  | "model_fitting_intuition"
+  | "overfitting_simple";
 
 export type ConceptLink = {
   label: string;
@@ -120,6 +124,38 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
     title: "What event overlays mean",
     description:
       "Event markers provide context—political, economic, or geopolitical milestones. They are anchors for interpretation, not explanations of causality.",
+  },
+  linear_vs_exponential_growth: {
+    title: "Linear vs exponential growth",
+    description:
+      "Linear growth adds a fixed amount per unit of time. Exponential growth multiplies by a factor—each period adds a percentage of the current value. Many natural processes start exponential but slow over time.",
+    links: [
+      { label: "Exponential growth (Wikipedia)", href: "https://en.wikipedia.org/wiki/Exponential_growth" },
+    ],
+  },
+  logistic_growth_saturation: {
+    title: "Logistic growth and saturation",
+    description:
+      "Logistic growth describes an S-curve: fast growth in the middle, slowing at both ends. It models saturation—when a quantity approaches a limit and cannot grow indefinitely.",
+    links: [
+      { label: "Logistic function (Wikipedia)", href: "https://en.wikipedia.org/wiki/Logistic_function" },
+    ],
+  },
+  model_fitting_intuition: {
+    title: "Model fitting (intuition only)",
+    description:
+      "Fitting a model means finding parameters that make the curve pass close to the observed points. Different models capture different patterns; no model is “true,” only more or less useful for description.",
+    links: [
+      { label: "Curve fitting (Wikipedia)", href: "https://en.wikipedia.org/wiki/Curve_fitting" },
+    ],
+  },
+  overfitting_simple: {
+    title: "Overfitting (simple explanation)",
+    description:
+      "Overfitting occurs when a model tracks the data too closely, including noise as if it were pattern. It can look good on past data but fails to generalize. Simpler models are often more robust.",
+    links: [
+      { label: "Overfitting (Wikipedia)", href: "https://en.wikipedia.org/wiki/Overfitting" },
+    ],
   },
 };
 
