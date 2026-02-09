@@ -174,6 +174,8 @@ export default function StudyDetailPage() {
   const [realOilMetadata, setRealOilMetadata] = useState<RealOilSignalData["metadata"] | null>(null);
   const [pppIranPoints, setPppIranPoints] = useState<OilPppIranSignalData["points"]>([]);
   const [pppIranSource, setPppIranSource] = useState<OilPppIranSignalData["source"] | null>(null);
+  const [pppTurkeyPoints, setPppTurkeyPoints] = useState<OilPppIranSignalData["points"]>([]);
+  const [pppTurkeySource, setPppTurkeySource] = useState<OilPppIranSignalData["source"] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -185,6 +187,7 @@ export default function StudyDetailPage() {
   const isOilAndFx = study?.primarySignal.kind === "oil_and_fx";
   const isRealOil = study?.primarySignal.kind === "real_oil";
   const isOilPppIran = study?.primarySignal.kind === "oil_ppp_iran";
+  const hasTurkeyComparator = study?.comparatorCountry === "Turkey";
 
   const windowOptions = isGoldAndOil ? WINDOW_OPTIONS_LONG_RANGE : WINDOW_OPTIONS;
   const effectiveWindowDays = useMemo(
@@ -246,8 +249,8 @@ export default function StudyDetailPage() {
     const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran;
     if (hasEventLayers) {
       let layers: string[];
-      if ((isOilGlobalLong || isGoldAndOil || isRealOil) && study.eventLayers?.length) {
-        layers = study.eventLayers;
+      if (((isOilGlobalLong || isGoldAndOil || isRealOil) && study.eventLayers?.length) || (hasTurkeyComparator && study.eventLayers !== undefined)) {
+        layers = study.eventLayers ?? [];
       } else {
         layers = [
           ...(showIranEvents ? ["iran_core"] : []),
@@ -264,7 +267,7 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms]);
+  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, hasTurkeyComparator, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms]);
 
   useEffect(() => {
     if (!study || !isOverviewStub) return;
@@ -416,6 +419,27 @@ export default function StudyDetailPage() {
       mounted = false;
     };
   }, [oilTimeRange, isOilBrent, isOilGlobalLong, isGoldAndOil, isOilAndFx, isRealOil, isOilPppIran]);
+
+  useEffect(() => {
+    if (!oilTimeRange || !isOilPppIran || !hasTurkeyComparator) {
+      if (!hasTurkeyComparator) {
+        setPppTurkeyPoints([]);
+        setPppTurkeySource(null);
+      }
+      return;
+    }
+    const [start, end] = oilTimeRange;
+    let mounted = true;
+    fetchJson<OilPppIranSignalData>(`/api/signals/oil/ppp-turkey?start=${start}&end=${end}`)
+      .then((res) => {
+        if (mounted) {
+          setPppTurkeyPoints(res.points ?? []);
+          setPppTurkeySource(res.source ?? null);
+        }
+      })
+      .catch(() => mounted && (setPppTurkeyPoints([]), setPppTurkeySource(null)));
+    return () => { mounted = false; };
+  }, [oilTimeRange, isOilPppIran, hasTurkeyComparator]);
 
   useEffect(() => {
     if (!dualTimeRange || !isOilAndFx) return;
@@ -687,7 +711,7 @@ export default function StudyDetailPage() {
             </CardContent>
           </Card>
         </div>
-      ) : isOilPppIran && pppIranKpis ? (
+      ) : isOilPppIran && pppIranKpis && !hasTurkeyComparator ? (
         <div className="grid gap-4 sm:grid-cols-3">
           <Card className="border-border">
             <CardHeader className="pb-1">
@@ -820,6 +844,8 @@ export default function StudyDetailPage() {
               ? "Brent oil price"
               : isRealOil
               ? "Real oil price"
+              : hasTurkeyComparator
+              ? "Iran and Turkey: PPP oil burden"
               : isOilPppIran
               ? "Oil price burden (PPP)"
               : isFxUsdToman
@@ -839,6 +865,8 @@ export default function StudyDetailPage() {
               ? "Daily Brent crude oil price (USD/barrel) with event markers"
               : isRealOil
               ? "Inflation-adjusted oil price (constant 2015 USD/bbl) with world event overlays"
+              : hasTurkeyComparator
+              ? "Iran and Turkey indexed to first common year (= 100). Identical methodology and resolution."
               : isOilPppIran
               ? "PPP-adjusted oil burden in Iran (annual) with event overlays"
               : isFxUsdToman
@@ -850,31 +878,35 @@ export default function StudyDetailPage() {
                     : "Event markers and optional external signals"}
           </p>
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            <select
-              value={anchorEventId}
-              onChange={(e) => setAnchorEventId(e.target.value)}
-              className="text-xs text-muted-foreground bg-transparent border border-border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value="">None (full timeline)</option>
-              {events.map((ev) => (
-                <option key={ev.id} value={ev.id}>
-                  {ev.title}{" "}
-                  ({ev.date ?? (ev.date_start && ev.date_end ? `${ev.date_start}–${ev.date_end}` : ev.date_start ?? ev.date_end ?? "")})
-                </option>
-              ))}
-            </select>
-            <select
-              value={effectiveWindowDays}
-              onChange={(e) => setWindowDays(Number(e.target.value))}
-              disabled={!anchorEventId}
-              className="text-xs text-muted-foreground bg-transparent border border-border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-            >
-              {windowOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+            {!hasTurkeyComparator && (
+              <>
+                <select
+                  value={anchorEventId}
+                  onChange={(e) => setAnchorEventId(e.target.value)}
+                  className="text-xs text-muted-foreground bg-transparent border border-border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">None (full timeline)</option>
+                  {events.map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      {ev.title}{" "}
+                      ({ev.date ?? (ev.date_start && ev.date_end ? `${ev.date_start}–${ev.date_end}` : ev.date_start ?? ev.date_end ?? "")})
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={effectiveWindowDays}
+                  onChange={(e) => setWindowDays(Number(e.target.value))}
+                  disabled={!anchorEventId}
+                  className="text-xs text-muted-foreground bg-transparent border border-border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                >
+                  {windowOptions.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
             {isOverviewStub && (
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                 <input
@@ -911,7 +943,7 @@ export default function StudyDetailPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {(isOverviewStub || isOilBrent || isFxUsdToman || isOilAndFx || isOilPppIran) && !isOilGlobalLong && !isGoldAndOil && !isRealOil && (
+          {(isOverviewStub || isOilBrent || isFxUsdToman || isOilAndFx || (isOilPppIran && !hasTurkeyComparator)) && !isOilGlobalLong && !isGoldAndOil && !isRealOil && (
             <div className="mb-3 flex flex-shrink-0 items-center gap-4 border-b border-border pb-3">
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                 <input
@@ -962,7 +994,7 @@ export default function StudyDetailPage() {
                 events={events}
                 anchorEventId={anchorEventId || undefined}
                 secondSeries={{
-                  label: "Oil price burden",
+                  label: hasTurkeyComparator ? "Iran (PPP)" : "Oil price burden",
                   unit: "toman/bbl (PPP)",
                   points: pppIranPoints,
                   yAxisIndex: 1,
@@ -970,72 +1002,157 @@ export default function StudyDetailPage() {
                 timeRange={oilTimeRange ?? study.timeRange}
                 mutedBands={false}
                 yAxisLog={pppYAxisLog}
-                yAxisNameSuffix={pppYAxisLog ? "(log scale)" : undefined}
+                yAxisNameSuffix={pppYAxisLog ? (hasTurkeyComparator ? "log" : "(log scale)") : undefined}
                 mutedEventLines
                 referenceLine={
-                  pppYAxisLog && pppEarlierPeriodMedian != null
+                  !hasTurkeyComparator && pppYAxisLog && pppEarlierPeriodMedian != null
                     ? { value: pppEarlierPeriodMedian, label: "Earlier-period median" }
                     : undefined
                 }
+                comparatorSeries={
+                  hasTurkeyComparator && pppTurkeyPoints.length > 0
+                    ? { label: "Turkey (PPP)", points: pppTurkeyPoints }
+                    : undefined
+                }
+                indexComparator={hasTurkeyComparator}
               />
+              {hasTurkeyComparator && (
+                <p className="mt-3 text-xs text-muted-foreground max-w-2xl">
+                  Both series are indexed to the first common year (= 100). Values above 100 indicate a higher estimated burden relative to that baseline; below 100, a lower burden. Example: 200 = twice the baseline.
+                </p>
+              )}
               <OilPppIranDescription />
               <LearningNote
-                sections={[
-                  {
-                    heading: "What this measures",
-                    bullets: [
-                      "PPP-adjusted oil burden in Iran: nominal oil price × Iran PPP conversion factor.",
-                      "Expresses the domestic purchasing power equivalent of a barrel of oil.",
-                    ],
-                  },
-                  {
-                    heading: "Purpose",
-                    bullets: [
-                      "PPP is used instead of market exchange rates to approximate domestic burden.",
-                      "Useful when comparing affordability across countries or over time.",
-                    ],
-                  },
-                  {
-                    heading: "Reading guidance",
-                    bullets: [
-                      "Y-axis: PPP-adjusted toman per barrel. Use the Log scale toggle in the card header.",
-                      "Resolution: annual. One point per year.",
-                    ],
-                  },
-                  {
-                    heading: "Pitfalls",
-                    bullets: [
-                      "This is a burden proxy, not a market price. Do not infer causality.",
-                      "PPP data are annual; intra-year volatility is not captured.",
-                    ],
-                  },
-                ]}
+                sections={
+                  hasTurkeyComparator
+                    ? [
+                        {
+                          heading: "Methodology",
+                          bullets: [
+                            "Iran: nominal oil price × Iran PPP conversion factor (toman per barrel).",
+                            "Turkey: nominal oil price × Turkey PPP conversion factor (lira per barrel).",
+                            "Both series estimate the domestic purchasing-power equivalent of one barrel of oil.",
+                          ],
+                        },
+                        {
+                          heading: "Methodological symmetry",
+                          bullets: [
+                            "Identical construction: annual average oil × country-specific PPP factor.",
+                            "Same oil series (Brent) and same PPP source (World Bank / ICP).",
+                            "Identical resolution: annual.",
+                          ],
+                        },
+                        {
+                          heading: "How to read this chart",
+                          bullets: [
+                            "Y-axis: Index (base year = first common year). Both series are scaled so the first year with data for both countries equals 100.",
+                            "Values above 100 indicate a higher estimated burden relative to that baseline; values below 100 indicate a lower burden.",
+                            "Example: 200 = twice the baseline burden; 50 = half.",
+                            "Because the chart is indexed, relative evolution is emphasized rather than absolute levels.",
+                          ],
+                        },
+                        {
+                          heading: "Pitfalls",
+                          bullets: [
+                            "This is a burden proxy, not a market price.",
+                            "PPP data are annual; short-term volatility is not captured.",
+                            "Indexing removes information about absolute affordability; it shows relative change over time only.",
+                            "Do not infer causality from divergence.",
+                          ],
+                        },
+                      ]
+                    : [
+                        {
+                          heading: "What this measures",
+                          bullets: [
+                            "PPP-adjusted oil burden in Iran: nominal oil price × Iran PPP conversion factor.",
+                            "Expresses the domestic purchasing power equivalent of a barrel of oil.",
+                          ],
+                        },
+                        {
+                          heading: "Purpose",
+                          bullets: [
+                            "PPP is used instead of market exchange rates to approximate domestic burden.",
+                            "Useful when comparing affordability across countries or over time.",
+                          ],
+                        },
+                        {
+                          heading: "Reading guidance",
+                          bullets: [
+                            "Y-axis: PPP-adjusted toman per barrel. Use the Log scale toggle in the card header.",
+                            "Resolution: annual. One point per year.",
+                          ],
+                        },
+                        {
+                          heading: "Pitfalls",
+                          bullets: [
+                            "This is a burden proxy, not a market price. Do not infer causality.",
+                            "PPP data are annual; intra-year volatility is not captured.",
+                          ],
+                        },
+                      ]
+                }
                 links={[{ label: "Purchasing power parity (Wikipedia)", href: "https://en.wikipedia.org/wiki/Purchasing_power_parity" }]}
               />
               {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
               <CurrentSnapshot asOf="March 2026">
-                <p>
-                  As of March 2026, PPP-adjusted oil burden in Iran remains elevated relative to the previous decade.
-                  The series appears to show a step-up in levels from the late 2010s onward. Volatility is moderate, with annual
-                  data absorbing intra-year swings.
-                </p>
-                <p>
-                  Limitation: World Bank PPP data lag by one year or more; the most recent point may reflect prior-year
-                  conversion factors.
-                </p>
+                {hasTurkeyComparator ? (
+                  <>
+                    <p>
+                      As of March 2026, Iran and Turkey show divergent evolution in PPP-adjusted oil burden over the observation period.
+                      Both series rise with nominal oil, but the pace and pattern differ. Turkey exhibits notable volatility in recent years;
+                      Iran shows a step-up in levels from the late 2010s onward.
+                    </p>
+                    <p>
+                      This divergence is descriptive. No causal claims are implied. Differences in PPP conversion factors, domestic
+                      inflation, and structural factors may contribute; the chart does not disentangle them.
+                    </p>
+                    <p>
+                      Limitation: World Bank PPP data lag by one year or more; the most recent point may reflect prior-year
+                      conversion factors.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      As of March 2026, PPP-adjusted oil burden in Iran remains elevated relative to the previous decade.
+                      The series appears to show a step-up in levels from the late 2010s onward. Volatility is moderate, with annual
+                      data absorbing intra-year swings.
+                    </p>
+                    <p>
+                      Limitation: World Bank PPP data lag by one year or more; the most recent point may reflect prior-year
+                      conversion factors.
+                    </p>
+                  </>
+                )}
               </CurrentSnapshot>
-              {pppIranSource && (
+              {(pppIranSource || (hasTurkeyComparator && pppTurkeySource)) && (
                 <SourceInfo
                   items={[
-                    {
-                      label: "Oil price burden (PPP)",
-                      sourceName: `${pppIranSource.oil}; ${pppIranSource.ppp}`,
-                      sourceDetail: "Annual average oil × Iran PPP conversion factor",
-                      unitLabel: "PPP-adjusted toman per barrel",
-                      unitNote: "PPP values reflect domestic purchasing power; values are not market exchange rates.",
-                    },
+                    ...(pppIranSource
+                      ? [
+                          {
+                            label: "Iran (PPP)",
+                            sourceName: `${pppIranSource.oil}; ${pppIranSource.ppp}`,
+                            sourceDetail: "Annual average oil × Iran PPP conversion factor",
+                            unitLabel: "PPP-adjusted toman per barrel",
+                            unitNote: "PPP values reflect domestic purchasing power.",
+                          },
+                        ]
+                      : []),
+                    ...(hasTurkeyComparator && pppTurkeySource
+                      ? [
+                          {
+                            label: "Turkey (PPP)",
+                            sourceName: `${pppTurkeySource.oil}; ${pppTurkeySource.ppp}`,
+                            sourceDetail: "Annual average oil × Turkey PPP conversion factor",
+                            unitLabel: "PPP-adjusted lira per barrel",
+                            unitNote: "PPP values reflect domestic purchasing power.",
+                          },
+                        ]
+                      : []),
                   ]}
-                  note="PPP values reflect domestic purchasing power; values are not market exchange rates. Annual resolution."
+                  note={hasTurkeyComparator ? "Identical methodology: nominal oil × country PPP factor. Annual resolution. Same oil and PPP sources." : "PPP values reflect domestic purchasing power; values are not market exchange rates. Annual resolution."}
                 />
               )}
             </>

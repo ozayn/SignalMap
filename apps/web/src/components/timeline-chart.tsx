@@ -63,6 +63,10 @@ type TimelineChartProps = {
   regimeArea?: { xStart: string; xEnd: string; label?: string };
   /** Use timeRange for date axis when band overlays (e.g. presidential terms) need full range. Use for dense/short-range data (e.g. FX). */
   useTimeRangeForDateAxis?: boolean;
+  /** Comparator series on same axis as secondSeries (e.g. Turkey PPP). Thinner, muted. */
+  comparatorSeries?: { label: string; points: { date: string; value: number }[] };
+  /** When true, index both series to 100 at first common year so different-scale series (e.g. Iran vs Turkey) are comparable. */
+  indexComparator?: boolean;
 };
 
 function findEventIndex(dates: string[], eventDate: string): number | null {
@@ -139,6 +143,8 @@ export function TimelineChart({
   referenceLine,
   regimeArea,
   useTimeRangeForDateAxis = false,
+  comparatorSeries,
+  indexComparator = false,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
@@ -222,6 +228,47 @@ export function TimelineChart({
       return oilByDate.get(nearest) ?? null;
     };
     const oilValues = dates.map(nearestOil);
+    const comparatorByDate = comparatorSeries
+      ? new Map(comparatorSeries.points.map((p) => [p.date, p.value]))
+      : null;
+    const nearestComparator = comparatorByDate
+      ? (d: string) => {
+          const exact = comparatorByDate.get(d);
+          if (exact != null) return exact;
+          const sorted = [...comparatorByDate.keys()].sort();
+          if (sorted.length === 0) return null;
+          const first = sorted[0]!;
+          const last = sorted[sorted.length - 1]!;
+          if (d < first || d > last) return null;
+          const dist = (a: string) => Math.abs(new Date(a).getTime() - new Date(d).getTime());
+          const nearest = sorted.reduce((a, b) => (dist(a) <= dist(b) ? a : b));
+          return comparatorByDate.get(nearest) ?? null;
+        }
+      : null;
+    let comparatorValues = nearestComparator ? dates.map(nearestComparator) : null;
+
+    const useIndexed = indexComparator && comparatorSeries && comparatorValues && hasOil;
+    let oilValuesForChart = oilValues;
+    let comparatorValuesForChart = comparatorValues;
+    let indexBaseYear: number | null = null;
+    if (useIndexed) {
+      const baseIdx = dates.findIndex((d, i) => {
+        const o = oilValues[i];
+        const c = comparatorValues?.[i];
+        return o != null && o > 0 && c != null && c > 0;
+      });
+      if (baseIdx >= 0) {
+        const baseOil = oilValues[baseIdx] as number;
+        const baseComp = comparatorValues[baseIdx] as number;
+        indexBaseYear = parseInt(dates[baseIdx]!.slice(0, 4), 10);
+        oilValuesForChart = oilValues.map((v) =>
+          v != null && v > 0 ? (v / baseOil) * 100 : null
+        );
+        comparatorValuesForChart = comparatorValues!.map((v) =>
+          v != null && v > 0 ? (v / baseComp) * 100 : null
+        );
+      }
+    }
 
     const minDate = dates[0];
     const maxDate = dates[dates.length - 1];
@@ -282,10 +329,23 @@ export function TimelineChart({
     const PresidentialBandOpacity = 0.04;
 
     const oilColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
+    const comparatorColor = "hsl(195, 55%, 42%)";
 
     const option: echarts.EChartsOption = {
       animation: false,
       emphasis: { focus: "none" as const },
+      ...(comparatorSeries && comparatorValuesForChart && hasOil
+        ? {
+            legend: {
+              show: true,
+              bottom: 4,
+              left: "center",
+              itemGap: 16,
+              textStyle: { color: mutedFg, fontSize: 10 },
+              data: [secondSeries?.label ?? "Iran (PPP)", comparatorSeries.label],
+            },
+          }
+        : {}),
       tooltip: {
         trigger: "axis",
         confine: true,
@@ -373,17 +433,29 @@ export function TimelineChart({
               lines.push(`${s.label}: ${formatted}`);
             });
           } else if (hasOil) {
-            const oilVal = oilValues[idx];
+            const oilVal = oilValuesForChart[idx];
             const unit = secondSeries?.unit ?? "USD/barrel";
             const lbl = secondSeries?.label ?? "Brent oil";
-            const isToman = unit.includes("toman");
+            const isIndexed = useIndexed && indexBaseYear != null;
             const formatted =
               oilVal != null
-                ? isToman
+                ? isIndexed
+                  ? `${oilVal.toFixed(1)} (indexed)`
+                  : unit.includes("toman")
                   ? `${(oilVal / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k ${unit}`
                   : `${oilVal} ${unit}`
                 : "—";
             lines.push(`${lbl}: ${formatted}`);
+            if (comparatorValuesForChart && comparatorSeries) {
+              const compVal = comparatorValuesForChart[idx];
+              const compFormatted =
+                compVal != null
+                  ? isIndexed
+                    ? `${compVal.toFixed(1)} (indexed)`
+                    : `${compVal}`
+                  : "—";
+              lines.push(`${comparatorSeries.label}: ${compFormatted}`);
+            }
           }
           return lines.join("<br/>");
         },
@@ -396,7 +468,7 @@ export function TimelineChart({
             : hasOil || !hasData || hasMultiSeries
               ? "12%"
               : "4%",
-        bottom: "3%",
+        bottom: comparatorSeries && comparatorValuesForChart && hasOil ? "10%" : "3%",
         top: "10%",
         containLabel: true,
       },
@@ -475,9 +547,11 @@ export function TimelineChart({
               type: (yAxisLog ? "log" : "value") as "value" | "log",
               position: "right" as const,
               name:
-                (secondSeries?.label ?? "Brent oil") +
-                (secondSeries?.unit?.includes("toman") ? " (k toman/USD)" : secondSeries?.unit ? ` (${secondSeries.unit})` : "") +
-                (yAxisNameSuffix ? ` ${yAxisNameSuffix}` : ""),
+                useIndexed && indexBaseYear != null
+                  ? `Index (base=${indexBaseYear})` + (yAxisNameSuffix ? ` ${yAxisNameSuffix}` : "")
+                  : (secondSeries?.label ?? "Brent oil") +
+                    (secondSeries?.unit?.includes("toman") ? " (k toman/USD)" : secondSeries?.unit ? ` (${secondSeries.unit})` : "") +
+                    (yAxisNameSuffix ? ` ${yAxisNameSuffix}` : ""),
               nameTextStyle: { color: mutedFg, fontSize: 11 },
               nameGap: 8,
               axisLine: { show: false },
@@ -718,14 +792,23 @@ export function TimelineChart({
                 name: secondSeries?.label ?? "Brent oil",
                 type: "line" as const,
                 yAxisIndex: 1,
-                data: oilValues,
+                data: oilValuesForChart,
                 smooth: true,
                 connectNulls: true,
                 symbol: "circle",
                 symbolSize: 3,
-                lineStyle: { color: oilColor, width: 1.5 },
-                itemStyle: { color: oilColor },
-                emphasis: { focus: "none" as const, lineStyle: { color: oilColor }, itemStyle: { color: oilColor } },
+                lineStyle: {
+                  color: comparatorSeries && comparatorValuesForChart ? color : oilColor,
+                  width: 1.5,
+                },
+                itemStyle: {
+                  color: comparatorSeries && comparatorValuesForChart ? color : oilColor,
+                },
+                emphasis: {
+                  focus: "none" as const,
+                  lineStyle: { color: comparatorSeries && comparatorValuesForChart ? color : oilColor },
+                  itemStyle: { color: comparatorSeries && comparatorValuesForChart ? color : oilColor },
+                },
                 markLine:
                   markLineData.length > 0 || referenceLine
                     ? {
@@ -751,6 +834,23 @@ export function TimelineChart({
                         ],
                       }
                     : undefined,
+              },
+            ]
+          : []),
+        ...(comparatorSeries && comparatorValuesForChart && hasOil
+          ? [
+              {
+                name: comparatorSeries.label,
+                type: "line" as const,
+                yAxisIndex: 1,
+                data: comparatorValuesForChart,
+                smooth: true,
+                connectNulls: true,
+                symbol: "circle",
+                symbolSize: 2.5,
+                lineStyle: { color: comparatorColor, width: 1.25 },
+                itemStyle: { color: comparatorColor },
+                emphasis: { focus: "none" as const, lineStyle: { color: comparatorColor }, itemStyle: { color: comparatorColor } },
               },
             ]
           : []),
@@ -780,7 +880,7 @@ export function TimelineChart({
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
     };
-  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis]);
+  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator]);
 
   useEffect(() => {
     return () => {

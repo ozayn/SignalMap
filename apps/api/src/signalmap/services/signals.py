@@ -8,7 +8,7 @@ from signalmap.data.oil_annual import BRENT_DAILY_START, OIL_ANNUAL_EIA
 from signalmap.sources.bonbast_usd_toman import fetch_usd_toman_series
 from signalmap.sources.fred_brent import fetch_brent_series
 from signalmap.sources.fred_cpi import fetch_cpi_series
-from signalmap.sources.world_bank_ppp import fetch_iran_ppp_series
+from signalmap.sources.world_bank_ppp import fetch_iran_ppp_series, fetch_turkey_ppp_series
 from signalmap.sources.fred_iran_fx import fetch_iran_fx_series
 from signalmap.sources.rial_archive_usd_toman import fetch_archive_usd_toman_series
 from signalmap.store.signals_repo import get_points, upsert_points
@@ -18,6 +18,7 @@ SIGNAL_BRENT = "brent_oil_price"
 SIGNAL_OIL_GLOBAL_LONG = "oil_global_long"
 SIGNAL_REAL_OIL = "real_oil_price"
 SIGNAL_OIL_PPP_IRAN = "oil_price_ppp_iran"
+SIGNAL_OIL_PPP_TURKEY = "oil_price_ppp_turkey"
 SIGNAL_USD_TOMAN = "usd_toman_open_market"
 CACHE_TTL = 21600  # 6 hours
 
@@ -310,6 +311,18 @@ def _get_iran_ppp_by_year() -> dict[int, float]:
     return by_year
 
 
+def _get_turkey_ppp_by_year() -> dict[int, float]:
+    """Return Turkey PPP conversion factor by year. Cached 24h."""
+    ck = "signal:ppp_turkey:by_year"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+    rows = fetch_turkey_ppp_series()
+    by_year = {r["year"]: r["value"] for r in rows}
+    cache_set(ck, by_year, 86400)
+    return by_year
+
+
 def get_oil_ppp_iran_series(start: str, end: str) -> dict:
     """
     Oil price burden in Iran (PPP-adjusted). Annual only.
@@ -339,6 +352,46 @@ def get_oil_ppp_iran_series(start: str, end: str) -> dict:
         "signal": SIGNAL_OIL_PPP_IRAN,
         "unit": "PPP-adjusted toman per barrel",
         "country": "Iran",
+        "source": {
+            "oil": "FRED DCOILBRENTEU (Brent)",
+            "ppp": "World Bank / ICP (PA.NUS.PPP)",
+        },
+        "resolution": "annual",
+        "points": points,
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
+
+
+def get_oil_ppp_turkey_series(start: str, end: str) -> dict:
+    """
+    Oil price burden in Turkey (PPP-adjusted). Annual only.
+    Same methodology as Iran: oil_price_ppp_turkey(year) = nominal_oil_avg(year) * ppp_conversion_factor(year)
+    Returns PPP-adjusted lira per barrel. Burden proxy, not market price.
+    """
+    ck = f"{_cache_key(SIGNAL_OIL_PPP_TURKEY, start, end)}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    start_year = max(1990, int(start[:4]))
+    end_year = min(int(end[:4]), 2024)
+    ppp_by_year = _get_turkey_ppp_by_year()
+    oil_by_year = _get_oil_annual_avg_by_year(start_year, end_year)
+
+    points: list[dict] = []
+    for y in range(start_year, end_year + 1):
+        oil_avg = oil_by_year.get(y)
+        ppp = ppp_by_year.get(y)
+        if oil_avg is None or ppp is None or ppp <= 0:
+            continue
+        val = round(oil_avg * ppp, 0)
+        points.append({"date": f"{y}-01-01", "value": val})
+
+    result = {
+        "signal": SIGNAL_OIL_PPP_TURKEY,
+        "unit": "PPP-adjusted lira per barrel",
+        "country": "Turkey",
         "source": {
             "oil": "FRED DCOILBRENTEU (Brent)",
             "ppp": "World Bank / ICP (PA.NUS.PPP)",

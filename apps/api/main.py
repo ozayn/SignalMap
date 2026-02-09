@@ -288,6 +288,23 @@ def get_oil_ppp_iran_signal(
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
+@app.get("/api/signals/oil/ppp-turkey")
+def get_oil_ppp_turkey_signal(
+    start: str = Query(..., description="Start date YYYY-MM-DD"),
+    end: str = Query(..., description="End date YYYY-MM-DD"),
+):
+    """Return Turkey PPP-adjusted oil price burden (annual). Same methodology as Iran."""
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    try:
+        from signalmap.services.signals import get_oil_ppp_turkey_series
+        return get_oil_ppp_turkey_series(start, end)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
+
+
 @app.get("/api/signals/oil/global-long")
 def get_oil_global_long_signal(
     start: str = Query(..., description="Start date YYYY-MM-DD"),

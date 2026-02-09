@@ -23,6 +23,8 @@ export type StudyMeta = {
   visible?: boolean;
   /** Concepts used in this study for educational display. */
   concepts?: ConceptKey[];
+  /** When set, show Turkey as a comparator (always-on for Study 8). */
+  comparatorCountry?: "Turkey";
 };
 
 export const STUDIES: StudyMeta[] = [
@@ -101,6 +103,19 @@ export const STUDIES: StudyMeta[] = [
     primarySignal: { kind: "oil_ppp_iran" },
     eventLayers: ["iran_core", "world_core"],
     concepts: ["ppp", "log_scale", "structural_break"],
+  },
+  {
+    id: "iran_oil_ppp_turkey",
+    number: 8,
+    title: "Iran and Turkey: comparative PPP oil burden",
+    timeRange: ["1990-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "Side-by-side comparison of PPP-adjusted oil burden in Iran and Turkey. Both series use identical methodology for contextual comparison.",
+    status: "active",
+    primarySignal: { kind: "oil_ppp_iran" },
+    eventLayers: [],
+    concepts: ["ppp", "log_scale", "structural_break"],
+    comparatorCountry: "Turkey",
   },
 ];
 
