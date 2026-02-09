@@ -54,8 +54,10 @@ Add a **Postgres** database and link it to the API service for Wayback jobs (cac
 
 | Service | Variable | Value |
 |---------|----------|-------|
-| Web | `API_URL` | **Required.** Use public URL: `https://api-production-XXXX.up.railway.app` (from your API service). Or private: `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:8080` |
+| Web | `API_URL` | **Required.** Backend URL for server-side proxy: `https://api-production-XXXX.up.railway.app` or `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:8080` |
 | API | `DATABASE_URL` | Postgres URL (link Postgres service). Required for Wayback jobs. |
-| API | `WEB_ORIGIN` | Optional. Web URL for CORS |
+| API | `WEB_ORIGIN` | Optional. Web URL for CORS (only needed if clients hit API directly) |
+
+**Custom domain:** With a custom domain on the web service, the client uses same-origin fetches (`/api/...`). Next.js proxies to the backend, so no CORS or `NEXT_PUBLIC_API_URL` is needed.
 
 **Debug:** Hit `https://your-web.up.railway.app/api/health` to check API connectivity.

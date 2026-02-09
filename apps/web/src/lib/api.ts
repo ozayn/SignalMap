@@ -1,11 +1,12 @@
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
+/**
+ * Fetch JSON from the same-origin API. All requests go through Next.js API routes,
+ * which proxy to the backend. This avoids CORS issues when using a custom domain.
+ */
 export async function fetchJson<T = unknown>(
   path: string,
   signal?: AbortSignal
 ): Promise<T> {
-  const url = path.startsWith("/") ? `${API_BASE}${path}` : `${API_BASE}/${path}`;
+  const url = path.startsWith("/") ? path : `/${path}`;
   const res = await fetch(url, {
     headers: { Accept: "application/json" },
     cache: "no-store",
