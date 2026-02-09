@@ -76,6 +76,13 @@ const WINDOW_OPTIONS = [
   { value: 90, label: "±90 days" },
 ] as const;
 
+const WINDOW_OPTIONS_LONG_RANGE = [
+  { value: 90, label: "±90 days" },
+  { value: 180, label: "±6 months" },
+  { value: 365, label: "±1 year" },
+  { value: 730, label: "±2 years" },
+] as const;
+
 function computeWindowRange(
   eventDate: string,
   windowDays: number
@@ -144,17 +151,23 @@ export default function StudyDetailPage() {
   const isFxUsdToman = study?.primarySignal.kind === "fx_usd_toman";
   const isOilAndFx = study?.primarySignal.kind === "oil_and_fx";
 
+  const windowOptions = isGoldAndOil ? WINDOW_OPTIONS_LONG_RANGE : WINDOW_OPTIONS;
+  const effectiveWindowDays = useMemo(
+    () => (windowOptions.some((o) => o.value === windowDays) ? windowDays : windowOptions[0].value),
+    [isGoldAndOil, windowDays]
+  );
+
   const oilTimeRange = useMemo((): [string, string] | null => {
     if (!study || !(isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx)) return null;
     if (anchorEventId) {
       const ev = events.find((e) => e.id === anchorEventId);
       if (ev) {
         const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
-        if (anchorDate) return computeWindowRange(anchorDate, windowDays);
+        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowDays);
       }
     }
     return study.timeRange;
-  }, [study, isOilBrent, isOilGlobalLong, isGoldAndOil, isOilAndFx, anchorEventId, events, windowDays]);
+  }, [study, isOilBrent, isOilGlobalLong, isGoldAndOil, isOilAndFx, anchorEventId, events, effectiveWindowDays]);
 
   const fxTimeRange = useMemo((): [string, string] | null => {
     if (!study || !(isFxUsdToman || isOilAndFx)) return null;
@@ -162,11 +175,11 @@ export default function StudyDetailPage() {
       const ev = events.find((e) => e.id === anchorEventId);
       if (ev) {
         const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
-        if (anchorDate) return computeWindowRange(anchorDate, windowDays);
+        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowDays);
       }
     }
     return study.timeRange;
-  }, [study, isFxUsdToman, isOilAndFx, anchorEventId, events, windowDays]);
+  }, [study, isFxUsdToman, isOilAndFx, anchorEventId, events, effectiveWindowDays]);
 
   const dualTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isOilAndFx) return null;
@@ -174,11 +187,11 @@ export default function StudyDetailPage() {
       const ev = events.find((e) => e.id === anchorEventId);
       if (ev) {
         const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
-        if (anchorDate) return computeWindowRange(anchorDate, windowDays);
+        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowDays);
       }
     }
     return study.timeRange;
-  }, [study, isOilAndFx, anchorEventId, events, windowDays]);
+  }, [study, isOilAndFx, anchorEventId, events, effectiveWindowDays]);
 
   useEffect(() => {
     if (!study) return;
@@ -215,7 +228,7 @@ export default function StudyDetailPage() {
     const qs = new URLSearchParams({ study_id: studyId });
     if (anchorEventId) {
       qs.set("anchor_event_id", anchorEventId);
-      qs.set("window_days", String(windowDays));
+      qs.set("window_days", String(effectiveWindowDays));
     }
     fetchJson<OverviewData>(`/api/overview?${qs}`)
       .then((res) => mounted && setData(res))
@@ -224,7 +237,7 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [studyId, study, isOverviewStub, anchorEventId, windowDays, data]);
+  }, [studyId, study, isOverviewStub, anchorEventId, effectiveWindowDays, data]);
 
   useEffect(() => {
     if (!oilTimeRange || !(isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx)) {
@@ -641,12 +654,12 @@ export default function StudyDetailPage() {
               ))}
             </select>
             <select
-              value={windowDays}
+              value={effectiveWindowDays}
               onChange={(e) => setWindowDays(Number(e.target.value))}
               disabled={!anchorEventId}
               className="text-xs text-muted-foreground bg-transparent border border-border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
             >
-              {WINDOW_OPTIONS.map((o) => (
+              {windowOptions.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>

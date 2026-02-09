@@ -91,6 +91,24 @@ function valueAtDate(
   return exact != null ? exact : null;
 }
 
+/** For sparse data (e.g. annual): exact match, or nearest point within range. */
+function valueAtDateOrNearest(
+  points: { date: string; value: number }[],
+  date: string
+): number | null {
+  const byDate = new Map(points.map((p) => [p.date, p.value]));
+  const exact = byDate.get(date);
+  if (exact != null) return exact;
+  if (points.length === 0) return null;
+  const sorted = [...byDate.keys()].sort();
+  const first = sorted[0]!;
+  const last = sorted[sorted.length - 1]!;
+  if (date < first || date > last) return null;
+  const dist = (a: string) => Math.abs(new Date(a).getTime() - new Date(date).getTime());
+  const nearest = sorted.reduce((a, b) => (dist(a) <= dist(b) ? a : b));
+  return byDate.get(nearest) ?? null;
+}
+
 export function TimelineChart({
   data,
   valueKey,
@@ -179,8 +197,9 @@ export function TimelineChart({
     const minDate = dates[0];
     const maxDate = dates[dates.length - 1];
 
+    const valueFn = mutedBands ? valueAtDateOrNearest : valueAtDate;
     const multiSeriesValues = hasMultiSeries && multiSeries
-      ? multiSeries.map((s) => dates.map((d) => valueAtDate(s.points, d)))
+      ? multiSeries.map((s) => dates.map((d) => valueFn(s.points, d)))
       : null;
 
     if (dates.length === 0) return;
@@ -460,7 +479,11 @@ export function TimelineChart({
                   symbolSize,
                   lineStyle: { color: lineColor, width: lineWidth },
                   itemStyle: { color: lineColor },
-                  emphasis: { focus: "none" as const },
+                  emphasis: {
+                    focus: "none" as const,
+                    lineStyle: { color: lineColor, width: lineWidth },
+                    itemStyle: { color: lineColor },
+                  },
                 };
               }),
             ]
