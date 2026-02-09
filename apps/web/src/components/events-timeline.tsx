@@ -194,11 +194,11 @@ export function EventsTimeline({ events, timeRange }: Props) {
                             />
                           </TooltipTrigger>
                           <TooltipContent
-                            side="bottom"
-                            sideOffset={8}
+                            side="right"
+                            sideOffset={10}
                             collisionPadding={16}
                             avoidCollisions={true}
-                            className="max-w-xs z-[100]"
+                            className="max-w-xs z-[9999]"
                           >
                             <p className="font-medium">{ev.title}</p>
                             <p className="text-xs text-muted-foreground mt-0.5">
