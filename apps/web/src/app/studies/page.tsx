@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { STUDIES } from "@/lib/studies";
+import { getVisibleStudies } from "@/lib/studies";
 
 export default function StudiesPage() {
   return (
@@ -14,8 +14,8 @@ export default function StudiesPage() {
         </p>
       </div>
 
-      <div className="space-y-4">
-        {STUDIES.map((study) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {getVisibleStudies().map((study) => (
           <Card key={study.id} className="border-border">
             <CardHeader className="pb-2">
               <div className="flex items-start justify-between gap-4">

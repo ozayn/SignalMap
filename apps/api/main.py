@@ -254,6 +254,40 @@ def get_gold_price_global_signal(
         raise HTTPException(status_code=502, detail="Signal fetch failed")
 
 
+@app.get("/api/signals/oil/real")
+def get_real_oil_signal(
+    start: str = Query(..., description="Start date YYYY-MM-DD"),
+    end: str = Query(..., description="End date YYYY-MM-DD"),
+):
+    """Return inflation-adjusted (real) oil price in constant 2015 USD/bbl."""
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    try:
+        from signalmap.services.signals import get_real_oil_series
+        return get_real_oil_series(start, end)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="Signal fetch failed")
+
+
+@app.get("/api/signals/oil/ppp-iran")
+def get_oil_ppp_iran_signal(
+    start: str = Query(..., description="Start date YYYY-MM-DD"),
+    end: str = Query(..., description="End date YYYY-MM-DD"),
+):
+    """Return Iran PPP-adjusted oil price burden (annual)."""
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    try:
+        from signalmap.services.signals import get_oil_ppp_iran_series
+        return get_oil_ppp_iran_series(start, end)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="Signal fetch failed")
+
+
 @app.get("/api/signals/oil/global-long")
 def get_oil_global_long_signal(
     start: str = Query(..., description="Start date YYYY-MM-DD"),

@@ -16,7 +16,7 @@ export type TimelineEvent = {
   description?: string;
   confidence?: string;
   sources?: string[];
-  layer?: "iran_core" | "world_core" | "world_1900" | "sanctions";
+  layer?: "iran_core" | "world_core" | "world_1900" | "sanctions" | "iran_presidents";
   scope?: "iran" | "world" | "sanctions";
 };
 
@@ -51,6 +51,18 @@ type TimelineChartProps = {
   timeRange?: [string, string];
   /** When true, range bands use very low opacity (oil-dominant view). */
   mutedBands?: boolean;
+  /** Use log scale for the data axis (right when secondSeries). */
+  yAxisLog?: boolean;
+  /** Suffix for y-axis name (e.g. "log scale"). */
+  yAxisNameSuffix?: string;
+  /** Reduce opacity and stroke of event lines so they do not compete with the curve. */
+  mutedEventLines?: boolean;
+  /** Horizontal reference line (value on y-axis). */
+  referenceLine?: { value: number; label?: string };
+  /** Lightly shaded band for a descriptive period (e.g. approximate structural break). */
+  regimeArea?: { xStart: string; xEnd: string; label?: string };
+  /** Use timeRange for date axis when band overlays (e.g. presidential terms) need full range. Use for dense/short-range data (e.g. FX). */
+  useTimeRangeForDateAxis?: boolean;
 };
 
 function findEventIndex(dates: string[], eventDate: string): number | null {
@@ -121,6 +133,12 @@ export function TimelineChart({
   multiSeries,
   timeRange,
   mutedBands = false,
+  yAxisLog = false,
+  yAxisNameSuffix,
+  mutedEventLines = false,
+  referenceLine,
+  regimeArea,
+  useTimeRangeForDateAxis = false,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
@@ -135,9 +153,12 @@ export function TimelineChart({
 
     const getEventScope = (ev: TimelineEvent): "iran" | "world" | "sanctions" =>
       ev.scope ?? (ev.layer === "world_core" || ev.layer === "world_1900" ? "world" : ev.layer === "sanctions" ? "sanctions" : "iran");
-    const IranOpacity = 0.5;
-    const WorldOpacity = 0.3;
-    const SanctionsOpacity = 0.28;
+    const isPresidentialEvent = (ev: TimelineEvent) => ev.layer === "iran_presidents";
+    const IranOpacity = mutedEventLines ? 0.35 : 0.5;
+    const WorldOpacity = mutedEventLines ? 0.3 : 0.3;
+    const SanctionsOpacity = mutedEventLines ? 0.45 : 0.45;
+    const EventLineWidth = mutedEventLines ? 1 : 1;
+    const SanctionsLineWidth = mutedEventLines ? 1.2 : 1;
     const RangeBandOpacity = mutedBands ? 0.02 : 0.06;
 
     const oilPointsResolved = secondSeries?.points ?? oilPoints;
@@ -160,17 +181,25 @@ export function TimelineChart({
       allMultiSeriesDates.length > 100 &&
       allMultiSeriesDates.length <= 3000 &&
       timeRange;
+    const useTimeRangeForBands =
+      useTimeRangeForDateAxis &&
+      !hasData &&
+      hasOil &&
+      !!timeRange?.[0] &&
+      !!timeRange?.[1];
     const dates = hasData
       ? data.map((d) => d.date)
       : useUnionDates
         ? allMultiSeriesDates
         : useTimeRangeForAxis && timeRange
           ? longRangeDates(timeRange[0], timeRange[1])
-          : hasOil
-            ? [...new Set(oilPointsResolved.map((p) => p.date))].sort()
-            : timeRange
-              ? sparseDatesFromRange(timeRange[0], timeRange[1])
-              : [];
+          : useTimeRangeForBands && timeRange
+            ? longRangeDates(timeRange[0], timeRange[1])
+            : hasOil
+              ? [...new Set(oilPointsResolved.map((p) => p.date))].sort()
+              : timeRange
+                ? sparseDatesFromRange(timeRange[0], timeRange[1])
+                : [];
     const values = hasData ? data.map((d) => d[valueKey] as number) : [];
 
     let chart = echarts.getInstanceByDom(chartRef.current);
@@ -221,6 +250,7 @@ export function TimelineChart({
     }
 
     const rangeBandData: { xStart: string; xEnd: string; event: TimelineEvent }[] = [];
+    const presidentialBandData: { xStart: string; xEnd: string; event: TimelineEvent }[] = [];
     for (const ev of rangeEvents) {
       const ds = ev.date_start!;
       const de = ev.date_end!;
@@ -234,12 +264,22 @@ export function TimelineChart({
         }
       }
       if (startIdx < 0 || endIdx < 0 || startIdx > endIdx) continue;
-      rangeBandData.push({
-        xStart: dates[startIdx],
-        xEnd: dates[endIdx],
-        event: ev,
-      });
+      const bandWidth = endIdx - startIdx + 1;
+      const gapIndices = isPresidentialEvent(ev)
+        ? Math.min(3, Math.floor(bandWidth / 10))
+        : 0;
+      let xStart = dates[startIdx];
+      let xEnd = dates[endIdx];
+      if (gapIndices > 0 && bandWidth >= 2 * gapIndices) {
+        xStart = dates[startIdx + gapIndices];
+        xEnd = dates[endIdx - gapIndices];
+      }
+      const band = { xStart, xEnd, event: ev };
+      rangeBandData.push(band);
+      if (isPresidentialEvent(ev)) presidentialBandData.push(band);
     }
+    const regularBandData = rangeBandData.filter((r) => !isPresidentialEvent(r.event));
+    const PresidentialBandOpacity = 0.04;
 
     const oilColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
 
@@ -248,6 +288,8 @@ export function TimelineChart({
       emphasis: { focus: "none" as const },
       tooltip: {
         trigger: "axis",
+        confine: true,
+        extraCssText: "max-width: 320px; overflow-wrap: break-word; word-wrap: break-word; white-space: normal;",
         formatter: (params: unknown) => {
           const arr = Array.isArray(params) ? params : [params];
           const first = arr.find((x) => x && typeof x === "object" && "dataIndex" in x) as
@@ -259,9 +301,8 @@ export function TimelineChart({
           const dateStr = dates[idx] ?? (typeof axisValue === "string" ? axisValue : "") ?? "";
           const hoverTime = dateStr ? new Date(dateStr).getTime() : 0;
           const dayMs = 86400000;
-          const rangeEv = rangeBandData.find(
-            (r) => dateStr >= r.xStart && dateStr <= r.xEnd
-          )?.event;
+          const rangeBand = rangeBandData.find((r) => dateStr >= r.xStart && dateStr <= r.xEnd);
+          const rangeEv = rangeBand?.event;
           const nearestEv = !rangeEv
             ? markLineData
                 .map((m) => ({
@@ -276,36 +317,44 @@ export function TimelineChart({
           )?.event;
           const lines: string[] = [];
           if (ev) {
-            const scope = getEventScope(ev);
-            const scopeLabel = scope === "sanctions" ? "Sanctions" : scope === "world" ? "World event" : "Iran event";
-            lines.push(`<span style="font-size:10px;color:#888">${scopeLabel}</span>`);
-            lines.push(`<span style="font-weight:600">${ev.title}</span>`);
-            if (ev.date_start && ev.date_end) {
-              lines.push(`${ev.date_start} — ${ev.date_end}`);
+            if (rangeBand && isPresidentialEvent(ev)) {
+              lines.push(`<span style="font-size:10px;color:#888">Presidential term</span>`);
+              lines.push(`<span style="font-weight:600">${ev.title}</span> ${ev.date_start} — ${ev.date_end}`);
             } else {
-              lines.push(ev.date ?? "");
-            }
-            if (ev.description) lines.push(ev.description);
-            if (ev.sources && ev.sources.length > 0) {
-              const urlSources = ev.sources.filter((s) => s.startsWith("http"));
-              const textSources = ev.sources.filter((s) => !s.startsWith("http"));
-              const parts: string[] = [];
-              if (urlSources.length) {
-                parts.push(
-                  urlSources
-                    .map((url, i) => {
-                      const label = urlSources.length > 1 ? `Source ${i + 1}` : "Source";
-                      return `<a href="${url}" target="_blank" rel="noopener" style="color:#6b9dc7;font-size:11px">${label}</a>`;
-                    })
-                    .join(" • ")
-                );
+              const scope = getEventScope(ev);
+              const scopeLabel = scope === "sanctions" ? "Sanctions" : scope === "world" ? "World event" : "Iran event";
+              lines.push(`<span style="font-size:10px;color:#888">${scopeLabel}</span>`);
+              lines.push(`<span style="font-weight:600">${ev.title}</span>`);
+              if (ev.date_start && ev.date_end) {
+                lines.push(`${ev.date_start} — ${ev.date_end}`);
+              } else {
+                lines.push(ev.date ?? "");
               }
-              if (textSources.length) {
-                parts.push(`Sources: ${textSources.join(", ")}`);
-              }
-              lines.push(parts.join(" • "));
+              if (ev.description) lines.push(ev.description);
             }
-            if (ev.confidence && scope !== "sanctions") lines.push(`Confidence: ${ev.confidence}`);
+            if (!(rangeBand && isPresidentialEvent(ev))) {
+              if (ev.sources && ev.sources.length > 0) {
+                const urlSources = ev.sources.filter((s) => s.startsWith("http"));
+                const textSources = ev.sources.filter((s) => !s.startsWith("http"));
+                const parts: string[] = [];
+                if (urlSources.length) {
+                  parts.push(
+                    urlSources
+                      .map((url, i) => {
+                        const label = urlSources.length > 1 ? `Source ${i + 1}` : "Source";
+                        return `<a href="${url}" target="_blank" rel="noopener" style="color:#6b9dc7;font-size:11px">${label}</a>`;
+                      })
+                      .join(" • ")
+                  );
+                }
+                if (textSources.length) {
+                  parts.push(`Sources: ${textSources.join(", ")}`);
+                }
+                lines.push(parts.join(" • "));
+              }
+              const scopeForConfidence = ev.scope ?? (ev.layer === "world_core" || ev.layer === "world_1900" ? "world" : ev.layer === "sanctions" ? "sanctions" : "iran");
+              if (ev.confidence && scopeForConfidence !== "sanctions") lines.push(`Confidence: ${ev.confidence}`);
+            }
             lines.push("—");
           }
           lines.push(dateStr);
@@ -356,7 +405,23 @@ export function TimelineChart({
         data: dates,
         boundaryGap: false,
         axisLine: { lineStyle: { color: borderColor } },
-        axisLabel: { color: mutedFg, fontSize: 11 },
+        axisLabel: {
+          color: mutedFg,
+          fontSize: 11,
+          interval: (() => {
+            const maxLabels = 12;
+            const n = dates.length;
+            if (n <= maxLabels) return 0;
+            return Math.max(1, Math.floor(n / maxLabels));
+          })(),
+          formatter: (value: string) => {
+            const n = dates.length;
+            if (n > 365) return value.slice(0, 4); // year only (long daily)
+            if (n <= 100) return value.slice(0, 4); // year only (sparse/annual)
+            if (n > 60) return value.slice(0, 7); // YYYY-MM
+            return value; // full date for short ranges
+          },
+        },
       },
       yAxis: hasMultiSeries && multiSeries
         ? multiSeries
@@ -407,11 +472,12 @@ export function TimelineChart({
               show: hasData,
             },
             {
-              type: "value" as const,
+              type: (yAxisLog ? "log" : "value") as "value" | "log",
               position: "right" as const,
               name:
                 (secondSeries?.label ?? "Brent oil") +
-                (secondSeries?.unit?.includes("toman") ? " (k toman/USD)" : secondSeries?.unit ? ` (${secondSeries.unit})` : ""),
+                (secondSeries?.unit?.includes("toman") ? " (k toman/USD)" : secondSeries?.unit ? ` (${secondSeries.unit})` : "") +
+                (yAxisNameSuffix ? ` ${yAxisNameSuffix}` : ""),
               nameTextStyle: { color: mutedFg, fontSize: 11 },
               nameGap: 8,
               axisLine: { show: false },
@@ -419,10 +485,15 @@ export function TimelineChart({
               axisLabel: {
                 color: mutedFg,
                 fontSize: 11,
-                ...(secondSeries?.unit?.includes("toman")
+                ...(secondSeries?.unit?.includes("toman") && !yAxisLog
                   ? {
                       formatter: (v: number) =>
                         typeof v === "number" ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k` : String(v),
+                    }
+                  : yAxisLog
+                  ? {
+                      formatter: (v: number) =>
+                        typeof v === "number" && v >= 1000 ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k` : String(v),
                     }
                   : {}),
               },
@@ -455,9 +526,17 @@ export function TimelineChart({
                           borderColor: withAlphaHsl(muted, 0.2),
                           borderWidth: 1,
                         },
-                        data: rangeBandData.map((r) =>
-                          [{ xAxis: r.xStart }, { xAxis: r.xEnd }] as [{ xAxis: string }, { xAxis: string }]
-                        ),
+                        data: [
+                          ...regularBandData.map((r) =>
+                            [{ xAxis: r.xStart }, { xAxis: r.xEnd }] as [{ xAxis: string }, { xAxis: string }]
+                          ),
+                          ...presidentialBandData.map((r) =>
+                            [
+                              { xAxis: r.xStart, itemStyle: { color: withAlphaHsl(muted, PresidentialBandOpacity), borderColor: "transparent" } },
+                              { xAxis: r.xEnd },
+                            ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }]
+                          ),
+                        ],
                       }
                     : undefined,
               },
@@ -515,37 +594,51 @@ export function TimelineChart({
                   },
                 },
                 markLine:
-                  markLineData.length > 0
+                  markLineData.length > 0 || referenceLine
                     ? {
                         symbol: "none",
-                        data: markLineData.map((d) => {
-                          const scope = getEventScope(d.event);
-                          const isSanctions = scope === "sanctions";
-                          const isWorld = scope === "world";
-                          const opacity = isSanctions ? SanctionsOpacity : isWorld ? WorldOpacity : IranOpacity;
-                          const color = d.isAnchor ? mutedFg : withAlphaHsl(muted, opacity);
-                          const width = d.isAnchor ? 1.5 : isSanctions ? 1 : isWorld ? 1 : 1.15;
-                          const lineType = "dashed" as const;
-                          return {
-                            xAxis: d.xAxis,
-                            label: { show: false },
-                            lineStyle: { color, width, type: lineType },
-                          };
-                        }),
+                        data: [
+                          ...markLineData.map((d) => {
+                            const scope = getEventScope(d.event);
+                            const isSanctions = scope === "sanctions";
+                            const isWorld = scope === "world";
+                            const opacity = isSanctions ? SanctionsOpacity : isWorld ? WorldOpacity : IranOpacity;
+                            const lineColor = d.isAnchor ? mutedFg : withAlphaHsl(muted, opacity);
+                            const lineWidth = d.isAnchor ? (mutedEventLines ? 1 : 1.5) : (mutedEventLines ? (isSanctions ? SanctionsLineWidth : EventLineWidth) : (isSanctions ? SanctionsLineWidth : isWorld ? 1 : 1.15));
+                            return {
+                              xAxis: d.xAxis,
+                              label: { show: false },
+                              lineStyle: { color: lineColor, width: lineWidth, type: "dashed" as const },
+                            };
+                          }),
+                          ...(referenceLine
+                            ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
+                            : []),
+                        ],
                       }
                     : undefined,
                 markArea:
-                  rangeBandData.length > 0
+                  rangeBandData.length > 0 || regimeArea
                     ? {
                         silent: true,
+                        z: 0,
                         itemStyle: {
                           color: withAlphaHsl(muted, RangeBandOpacity),
                           borderColor: withAlphaHsl(muted, 0.2),
                           borderWidth: 1,
                         },
-                        data: rangeBandData.map((r) =>
-                          [{ xAxis: r.xStart }, { xAxis: r.xEnd }] as [{ xAxis: string }, { xAxis: string }]
-                        ),
+                        data: [
+                          ...regularBandData.map((r) =>
+                            [{ xAxis: r.xStart }, { xAxis: r.xEnd }] as [{ xAxis: string }, { xAxis: string }]
+                          ),
+                          ...presidentialBandData.map((r) =>
+                            [
+                              { xAxis: r.xStart, itemStyle: { color: withAlphaHsl(muted, PresidentialBandOpacity), borderColor: "transparent" } },
+                              { xAxis: r.xEnd },
+                            ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }]
+                          ),
+                          ...(regimeArea ? [[{ xAxis: regimeArea.xStart }, { xAxis: regimeArea.xEnd }] as [{ xAxis: string }, { xAxis: string }]] : []),
+                        ],
                       }
                     : undefined,
               },
@@ -554,41 +647,67 @@ export function TimelineChart({
               {
                 name: "events",
                 type: "line" as const,
+                yAxisIndex: hasOil ? 1 : 0,
                 data: dates.map(() => null),
                 symbol: "none",
                 emphasis: { focus: "none" as const },
                 markLine:
-                  markLineData.length > 0
+                  !hasOil && (markLineData.length > 0 || referenceLine)
                     ? {
                         symbol: "none",
-                        data: markLineData.map((d) => {
-                          const scope = getEventScope(d.event);
-                          const isSanctions = scope === "sanctions";
-                          const isWorld = scope === "world";
-                          const opacity = isSanctions ? SanctionsOpacity : isWorld ? WorldOpacity : IranOpacity;
-                          const color = d.isAnchor ? mutedFg : withAlphaHsl(muted, opacity);
-                          const width = d.isAnchor ? 1.5 : isSanctions ? 1 : isWorld ? 1 : 1.15;
-                          const lineType = "dashed" as const;
-                          return {
-                            xAxis: d.xAxis,
-                            label: { show: false },
-                            lineStyle: { color, width, type: lineType },
-                          };
-                        }),
+                        data: [
+                          ...markLineData.map((d) => {
+                            const scope = getEventScope(d.event);
+                            const isSanctions = scope === "sanctions";
+                            const isWorld = scope === "world";
+                            const opacity = isSanctions ? SanctionsOpacity : isWorld ? WorldOpacity : IranOpacity;
+                            const lineColor = d.isAnchor ? mutedFg : withAlphaHsl(muted, opacity);
+                            const lineWidth = d.isAnchor ? (mutedEventLines ? 1 : 1.5) : (mutedEventLines ? (isSanctions ? SanctionsLineWidth : EventLineWidth) : (isSanctions ? SanctionsLineWidth : isWorld ? 1 : 1.15));
+                            return {
+                              xAxis: d.xAxis,
+                              label: { show: false },
+                              lineStyle: { color: lineColor, width: lineWidth, type: "dashed" as const },
+                            };
+                          }),
+                          ...(referenceLine
+                            ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
+                            : []),
+                        ],
                       }
                     : undefined,
                 markArea:
-                  rangeBandData.length > 0
+                  rangeBandData.length > 0 || regimeArea
                     ? {
                         silent: true,
+                        z: 0,
                         itemStyle: {
                           color: withAlphaHsl(muted, RangeBandOpacity),
-                          borderColor: withAlphaHsl(muted, 0.2),
+                          borderColor: withAlphaHsl(muted, regimeArea ? 0.12 : 0.2),
                           borderWidth: 1,
                         },
-                        data: rangeBandData.map((r) =>
-                          [{ xAxis: r.xStart }, { xAxis: r.xEnd }] as [{ xAxis: string }, { xAxis: string }]
-                        ),
+                        data: [
+                          ...regularBandData.map((r) =>
+                            [{ xAxis: r.xStart }, { xAxis: r.xEnd }] as [{ xAxis: string }, { xAxis: string }]
+                          ),
+                          ...presidentialBandData.map((r) =>
+                            [
+                              { xAxis: r.xStart, itemStyle: { color: withAlphaHsl(muted, PresidentialBandOpacity), borderColor: "transparent" } },
+                              { xAxis: r.xEnd },
+                            ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }]
+                          ),
+                          ...(regimeArea
+                            ? [
+                                [
+                                  {
+                                    xAxis: regimeArea.xStart,
+                                    itemStyle: { color: withAlphaHsl(muted, 0.04), borderColor: "transparent" },
+                                    label: regimeArea.label ? { show: true, formatter: regimeArea.label, color: mutedFg, fontSize: 9, position: "insideTop" as const } : undefined,
+                                  },
+                                  { xAxis: regimeArea.xEnd },
+                                ] as [{ xAxis: string; itemStyle?: object; label?: object }, { xAxis: string }],
+                              ]
+                            : []),
+                        ],
                       }
                     : undefined,
               },
@@ -607,6 +726,31 @@ export function TimelineChart({
                 lineStyle: { color: oilColor, width: 1.5 },
                 itemStyle: { color: oilColor },
                 emphasis: { focus: "none" as const, lineStyle: { color: oilColor }, itemStyle: { color: oilColor } },
+                markLine:
+                  markLineData.length > 0 || referenceLine
+                    ? {
+                        symbol: "none",
+                        silent: false,
+                        data: [
+                          ...markLineData.map((d) => {
+                            const scope = getEventScope(d.event);
+                            const isSanctions = scope === "sanctions";
+                            const isWorld = scope === "world";
+                            const opacity = isSanctions ? SanctionsOpacity : isWorld ? WorldOpacity : IranOpacity;
+                            const lineColor = d.isAnchor ? mutedFg : withAlphaHsl(muted, opacity);
+                            const lineWidth = d.isAnchor ? (mutedEventLines ? 1 : 1.5) : (mutedEventLines ? (isSanctions ? SanctionsLineWidth : EventLineWidth) : (isSanctions ? SanctionsLineWidth : isWorld ? 1 : 1.15));
+                            return {
+                              xAxis: d.xAxis,
+                              label: { show: false },
+                              lineStyle: { color: lineColor, width: lineWidth, type: "dashed" as const },
+                            };
+                          }),
+                          ...(referenceLine
+                            ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
+                            : []),
+                        ],
+                      }
+                    : undefined,
               },
             ]
           : []),
@@ -636,7 +780,7 @@ export function TimelineChart({
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
     };
-  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, timeRange, mutedBands]);
+  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis]);
 
   useEffect(() => {
     return () => {

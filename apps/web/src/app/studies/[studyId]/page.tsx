@@ -5,6 +5,12 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TimelineChart } from "@/components/timeline-chart";
+import { SourceInfo } from "@/components/source-info";
+import { RealOilDescription } from "@/components/real-oil-description";
+import { OilPppIranDescription } from "@/components/oil-ppp-iran-description";
+import { LearningNote } from "@/components/learning-note";
+import { ConceptsUsed } from "@/components/concepts-used";
+import { CurrentSnapshot } from "@/components/current-snapshot";
 import { getStudyById } from "@/lib/studies";
 import { fetchJson } from "@/lib/api";
 
@@ -29,8 +35,8 @@ type Event = {
   description?: string;
   confidence?: string;
   sources?: string[];
-  layer?: "iran_core" | "world_core" | "world_1900";
-  scope?: "iran" | "world";
+  layer?: "iran_core" | "world_core" | "world_1900" | "sanctions" | "iran_presidents";
+  scope?: "iran" | "world" | "sanctions";
 };
 
 type EventsData = {
@@ -70,6 +76,23 @@ type FxUsdTomanSignalData = {
   points: Array<{ date: string; value: number }>;
 };
 
+type RealOilSignalData = {
+  signal: string;
+  unit: string;
+  source: { oil: string; cpi: string };
+  metadata?: { base_year?: number; base_month?: string; formula?: string };
+  points: Array<{ date: string; value: number }>;
+};
+
+type OilPppIranSignalData = {
+  signal: string;
+  unit: string;
+  country: string;
+  source: { oil: string; ppp: string };
+  resolution: string;
+  points: Array<{ date: string; value: number }>;
+};
+
 const WINDOW_OPTIONS = [
   { value: 7, label: "±7 days" },
   { value: 30, label: "±30 days" },
@@ -102,10 +125,12 @@ function computeOilKpis(points: { value: number }[]) {
   if (points.length === 0) return null;
   const vals = points.map((p) => p.value);
   const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
   return {
-    avg: avg.toFixed(2),
-    min: Math.min(...vals).toFixed(2),
-    max: Math.max(...vals).toFixed(2),
+    avg: Math.round(avg).toLocaleString(),
+    min: Math.round(min).toLocaleString(),
+    max: Math.round(max).toLocaleString(),
   };
 }
 
@@ -123,7 +148,8 @@ function computeFxKpis(points: { date: string; value: number }[]) {
 export default function StudyDetailPage() {
   const params = useParams();
   const studyId = params.studyId as string;
-  const study = getStudyById(studyId);
+  const studyRaw = getStudyById(studyId);
+  const study = studyRaw?.visible !== false ? studyRaw : undefined;
   const [data, setData] = useState<OverviewData | null>(null);
   const [events, setEvents] = useState<EventsData["events"]>([]);
   const [anchorEventId, setAnchorEventId] = useState<string>("");
@@ -133,6 +159,8 @@ export default function StudyDetailPage() {
   const [showIranEvents, setShowIranEvents] = useState(true);
   const [showWorldEvents, setShowWorldEvents] = useState(false);
   const [showSanctionsEvents, setShowSanctionsEvents] = useState(false);
+  const [showPresidentialTerms, setShowPresidentialTerms] = useState(false);
+  const [pppYAxisLog, setPppYAxisLog] = useState(true);
   const [oilPoints, setOilPoints] = useState<OilSignalData["points"]>([]);
   const [oilSource, setOilSource] = useState<OilSource | null>(null);
   const [oilSourceAnnual, setOilSourceAnnual] = useState<OilSource | null>(null);
@@ -141,6 +169,11 @@ export default function StudyDetailPage() {
   const [goldSource, setGoldSource] = useState<OilSource | null>(null);
   const [fxPoints, setFxPoints] = useState<FxUsdTomanSignalData["points"]>([]);
   const [fxSource, setFxSource] = useState<FxUsdTomanSource | null>(null);
+  const [realOilPoints, setRealOilPoints] = useState<RealOilSignalData["points"]>([]);
+  const [realOilSource, setRealOilSource] = useState<RealOilSignalData["source"] | null>(null);
+  const [realOilMetadata, setRealOilMetadata] = useState<RealOilSignalData["metadata"] | null>(null);
+  const [pppIranPoints, setPppIranPoints] = useState<OilPppIranSignalData["points"]>([]);
+  const [pppIranSource, setPppIranSource] = useState<OilPppIranSignalData["source"] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -150,6 +183,8 @@ export default function StudyDetailPage() {
   const isGoldAndOil = study?.primarySignal.kind === "gold_and_oil";
   const isFxUsdToman = study?.primarySignal.kind === "fx_usd_toman";
   const isOilAndFx = study?.primarySignal.kind === "oil_and_fx";
+  const isRealOil = study?.primarySignal.kind === "real_oil";
+  const isOilPppIran = study?.primarySignal.kind === "oil_ppp_iran";
 
   const windowOptions = isGoldAndOil ? WINDOW_OPTIONS_LONG_RANGE : WINDOW_OPTIONS;
   const effectiveWindowDays = useMemo(
@@ -158,7 +193,7 @@ export default function StudyDetailPage() {
   );
 
   const oilTimeRange = useMemo((): [string, string] | null => {
-    if (!study || !(isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx)) return null;
+    if (!study || !(isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isRealOil || isOilPppIran)) return null;
     if (anchorEventId) {
       const ev = events.find((e) => e.id === anchorEventId);
       if (ev) {
@@ -167,7 +202,7 @@ export default function StudyDetailPage() {
       }
     }
     return study.timeRange;
-  }, [study, isOilBrent, isOilGlobalLong, isGoldAndOil, isOilAndFx, anchorEventId, events, effectiveWindowDays]);
+  }, [study, isOilBrent, isOilGlobalLong, isGoldAndOil, isOilAndFx, isRealOil, isOilPppIran, anchorEventId, events, effectiveWindowDays]);
 
   const fxTimeRange = useMemo((): [string, string] | null => {
     if (!study || !(isFxUsdToman || isOilAndFx)) return null;
@@ -193,22 +228,32 @@ export default function StudyDetailPage() {
     return study.timeRange;
   }, [study, isOilAndFx, anchorEventId, events, effectiveWindowDays]);
 
+  const pppEarlierPeriodMedian = useMemo(() => {
+    if (!isOilPppIran || pppIranPoints.length === 0) return undefined;
+    const earlier = pppIranPoints.filter((p) => p.date < "2016-01-01").map((p) => p.value);
+    if (earlier.length === 0) return undefined;
+    const sorted = [...earlier].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+  }, [isOilPppIran, pppIranPoints]);
+
   useEffect(() => {
     if (!study) return;
     let mounted = true;
     const params = new URLSearchParams({
       study_id: isFxUsdToman || isOilAndFx ? "iran" : studyId,
     });
-    const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx;
+    const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran;
     if (hasEventLayers) {
       let layers: string[];
-      if ((isOilGlobalLong || isGoldAndOil) && study.eventLayers?.length) {
+      if ((isOilGlobalLong || isGoldAndOil || isRealOil) && study.eventLayers?.length) {
         layers = study.eventLayers;
       } else {
         layers = [
           ...(showIranEvents ? ["iran_core"] : []),
-          ...(showWorldEvents ? ["world_core"] : []),
+          ...(showWorldEvents ? ["world_core", "world_1900"] : []),
           ...(showSanctionsEvents ? ["sanctions"] : []),
+          ...(showPresidentialTerms && (isFxUsdToman || isOilPppIran) ? ["iran_presidents"] : []),
         ];
       }
       params.set("layers", layers.length ? layers.join(",") : "none");
@@ -219,7 +264,7 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, showIranEvents, showWorldEvents, showSanctionsEvents]);
+  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms]);
 
   useEffect(() => {
     if (!study || !isOverviewStub) return;
@@ -240,8 +285,8 @@ export default function StudyDetailPage() {
   }, [studyId, study, isOverviewStub, anchorEventId, effectiveWindowDays, data]);
 
   useEffect(() => {
-    if (!oilTimeRange || !(isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx)) {
-      if (isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx) {
+    if (!oilTimeRange || !(isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isRealOil || isOilPppIran)) {
+      if (isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isRealOil || isOilPppIran) {
         setOilPoints([]);
         setOilSource(null);
         setOilSourceAnnual(null);
@@ -250,10 +295,65 @@ export default function StudyDetailPage() {
           setGoldPoints([]);
           setGoldSource(null);
         }
+        if (isRealOil) {
+          setRealOilPoints([]);
+          setRealOilSource(null);
+          setRealOilMetadata(null);
+        }
+        if (isOilPppIran) {
+          setPppIranPoints([]);
+          setPppIranSource(null);
+        }
       }
       return;
     }
     if (isOilAndFx) return;
+    if (isOilPppIran) {
+      const [start, end] = oilTimeRange;
+      let mounted = true;
+      setLoading(true);
+      setError(null);
+      fetchJson<OilPppIranSignalData>(`/api/signals/oil/ppp-iran?start=${start}&end=${end}`)
+        .then((res) => {
+          if (mounted) {
+            setPppIranPoints(res.points ?? []);
+            setPppIranSource(res.source ?? null);
+          }
+        })
+        .catch((e) => {
+          if (mounted) {
+            setPppIranPoints([]);
+            setPppIranSource(null);
+            setError(e instanceof Error ? e.message : "Signal fetch failed");
+          }
+        })
+        .finally(() => mounted && setLoading(false));
+      return () => { mounted = false; };
+    }
+    if (isRealOil) {
+      const [start, end] = oilTimeRange;
+      let mounted = true;
+      setLoading(true);
+      setError(null);
+      fetchJson<RealOilSignalData>(`/api/signals/oil/real?start=${start}&end=${end}`)
+        .then((res) => {
+          if (mounted) {
+            setRealOilPoints(res.points ?? []);
+            setRealOilSource(res.source ?? null);
+            setRealOilMetadata(res.metadata ?? null);
+          }
+        })
+        .catch((e) => {
+          if (mounted) {
+            setRealOilPoints([]);
+            setRealOilSource(null);
+            setRealOilMetadata(null);
+            setError(e instanceof Error ? e.message : "Signal fetch failed");
+          }
+        })
+        .finally(() => mounted && setLoading(false));
+      return () => { mounted = false; };
+    }
     if (isGoldAndOil) {
       const [start, end] = oilTimeRange;
       let mounted = true;
@@ -315,7 +415,7 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [oilTimeRange, isOilBrent, isOilGlobalLong, isGoldAndOil, isOilAndFx]);
+  }, [oilTimeRange, isOilBrent, isOilGlobalLong, isGoldAndOil, isOilAndFx, isRealOil, isOilPppIran]);
 
   useEffect(() => {
     if (!dualTimeRange || !isOilAndFx) return;
@@ -425,7 +525,7 @@ export default function StudyDetailPage() {
 
   const showError = error || (isOverviewStub && !data);
 
-  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx;
+  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran;
   const singleSignalReady =
     isGoldAndOil
       ? goldPoints.length > 0 && oilPoints.length > 0
@@ -435,7 +535,11 @@ export default function StudyDetailPage() {
         ? fxPoints.length > 0
         : isOilAndFx
           ? oilPoints.length > 0 && fxPoints.length > 0
-          : false;
+          : isRealOil
+            ? realOilPoints.length > 0
+            : isOilPppIran
+              ? pppIranPoints.length > 0
+              : false;
   if (loading && (isOverviewStub ? !data : isSingleSignalStudy && !singleSignalReady)) {
     return (
       <div className="container mx-auto max-w-4xl px-4 py-12 animate-pulse space-y-8">
@@ -465,6 +569,8 @@ export default function StudyDetailPage() {
   }
 
   const oilKpis = (isOilBrent || isOilGlobalLong) ? computeOilKpis(oilPoints) : null;
+  const realOilKpis = isRealOil ? computeOilKpis(realOilPoints) : null;
+  const pppIranKpis = isOilPppIran ? computeOilKpis(pppIranPoints) : null;
   const fxKpis = isFxUsdToman ? computeFxKpis(fxPoints) : null;
 
   return (
@@ -528,6 +634,102 @@ export default function StudyDetailPage() {
                 {oilKpis.max}
                 <span className="ml-1 text-sm font-normal text-muted-foreground">
                   USD/barrel
+                </span>
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      ) : isRealOil && realOilKpis ? (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Card className="border-border">
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Avg price
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-medium">
+                {realOilKpis.avg}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  USD/bbl (2015)
+                </span>
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-border">
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Min
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-medium">
+                {realOilKpis.min}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  USD/bbl (2015)
+                </span>
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-border">
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Max
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-medium">
+                {realOilKpis.max}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  USD/bbl (2015)
+                </span>
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      ) : isOilPppIran && pppIranKpis ? (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Card className="border-border">
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Avg
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-medium">
+                {pppIranKpis.avg}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  toman/bbl (PPP)
+                </span>
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-border">
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Min
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-medium">
+                {pppIranKpis.min}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  toman/bbl (PPP)
+                </span>
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-border">
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Max
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-medium">
+                {pppIranKpis.max}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  toman/bbl (PPP)
                 </span>
               </p>
             </CardContent>
@@ -616,6 +818,10 @@ export default function StudyDetailPage() {
               ? "Oil price"
               : isOilBrent
               ? "Brent oil price"
+              : isRealOil
+              ? "Real oil price"
+              : isOilPppIran
+              ? "Oil price burden (PPP)"
               : isFxUsdToman
                 ? "USD→Toman (open market)"
                 : isOilAndFx
@@ -631,6 +837,10 @@ export default function StudyDetailPage() {
               ? "Oil price (USD/barrel) with event markers. Annual data pre-1987; daily Brent from 1987."
               : isOilBrent
               ? "Daily Brent crude oil price (USD/barrel) with event markers"
+              : isRealOil
+              ? "Inflation-adjusted oil price (constant 2015 USD/bbl) with world event overlays"
+              : isOilPppIran
+              ? "PPP-adjusted oil burden in Iran (annual) with event overlays"
               : isFxUsdToman
                 ? "Open-market USD/toman rate (toman per USD) with event markers"
                 : isOilAndFx
@@ -687,10 +897,21 @@ export default function StudyDetailPage() {
                 Show gold price
               </label>
             )}
+            {isOilPppIran && (
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={pppYAxisLog}
+                  onChange={(e) => setPppYAxisLog(e.target.checked)}
+                  className="rounded border-border"
+                />
+                Log scale
+              </label>
+            )}
           </div>
         </CardHeader>
         <CardContent>
-          {(isOverviewStub || isOilBrent || isFxUsdToman || isOilAndFx) && !isOilGlobalLong && !isGoldAndOil && (
+          {(isOverviewStub || isOilBrent || isFxUsdToman || isOilAndFx || isOilPppIran) && !isOilGlobalLong && !isGoldAndOil && !isRealOil && (
             <div className="mb-3 flex flex-shrink-0 items-center gap-4 border-b border-border pb-3">
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                 <input
@@ -719,9 +940,184 @@ export default function StudyDetailPage() {
                 />
                 Show sanctions
               </label>
+              {(isFxUsdToman || isOilPppIran) && (
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showPresidentialTerms}
+                    onChange={(e) => setShowPresidentialTerms(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  Show presidential terms
+                </label>
+              )}
             </div>
           )}
-          {isGoldAndOil ? (
+          {isOilPppIran ? (
+            <>
+              <TimelineChart
+                data={[]}
+                valueKey="value"
+                label="Oil price burden"
+                events={events}
+                anchorEventId={anchorEventId || undefined}
+                secondSeries={{
+                  label: "Oil price burden",
+                  unit: "toman/bbl (PPP)",
+                  points: pppIranPoints,
+                  yAxisIndex: 1,
+                }}
+                timeRange={oilTimeRange ?? study.timeRange}
+                mutedBands={false}
+                yAxisLog={pppYAxisLog}
+                yAxisNameSuffix={pppYAxisLog ? "(log scale)" : undefined}
+                mutedEventLines
+                referenceLine={
+                  pppYAxisLog && pppEarlierPeriodMedian != null
+                    ? { value: pppEarlierPeriodMedian, label: "Earlier-period median" }
+                    : undefined
+                }
+              />
+              <OilPppIranDescription />
+              <LearningNote
+                sections={[
+                  {
+                    heading: "What this measures",
+                    bullets: [
+                      "PPP-adjusted oil burden in Iran: nominal oil price × Iran PPP conversion factor.",
+                      "Expresses the domestic purchasing power equivalent of a barrel of oil.",
+                    ],
+                  },
+                  {
+                    heading: "Purpose",
+                    bullets: [
+                      "PPP is used instead of market exchange rates to approximate domestic burden.",
+                      "Useful when comparing affordability across countries or over time.",
+                    ],
+                  },
+                  {
+                    heading: "Reading guidance",
+                    bullets: [
+                      "Y-axis: PPP-adjusted toman per barrel. Use the Log scale toggle in the card header.",
+                      "Resolution: annual. One point per year.",
+                    ],
+                  },
+                  {
+                    heading: "Pitfalls",
+                    bullets: [
+                      "This is a burden proxy, not a market price. Do not infer causality.",
+                      "PPP data are annual; intra-year volatility is not captured.",
+                    ],
+                  },
+                ]}
+                links={[{ label: "Purchasing power parity (Wikipedia)", href: "https://en.wikipedia.org/wiki/Purchasing_power_parity" }]}
+              />
+              {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
+              <CurrentSnapshot asOf="March 2026">
+                <p>
+                  As of March 2026, PPP-adjusted oil burden in Iran remains elevated relative to the previous decade.
+                  The series appears to show a step-up in levels from the late 2010s onward. Volatility is moderate, with annual
+                  data absorbing intra-year swings.
+                </p>
+                <p>
+                  Limitation: World Bank PPP data lag by one year or more; the most recent point may reflect prior-year
+                  conversion factors.
+                </p>
+              </CurrentSnapshot>
+              {pppIranSource && (
+                <SourceInfo
+                  items={[
+                    {
+                      label: "Oil price burden (PPP)",
+                      sourceName: `${pppIranSource.oil}; ${pppIranSource.ppp}`,
+                      sourceDetail: "Annual average oil × Iran PPP conversion factor",
+                      unitLabel: "PPP-adjusted toman per barrel",
+                      unitNote: "PPP values reflect domestic purchasing power; values are not market exchange rates.",
+                    },
+                  ]}
+                  note="PPP values reflect domestic purchasing power; values are not market exchange rates. Annual resolution."
+                />
+              )}
+            </>
+          ) : isRealOil ? (
+            <>
+              <TimelineChart
+                data={[]}
+                valueKey="value"
+                label="Real oil price"
+                events={events}
+                anchorEventId={anchorEventId || undefined}
+                secondSeries={{
+                  label: "Oil price",
+                  unit: "USD/bbl, 2015 dollars",
+                  points: realOilPoints,
+                  yAxisIndex: 1,
+                }}
+                timeRange={oilTimeRange ?? study.timeRange}
+                mutedBands={false}
+              />
+              <RealOilDescription />
+              <LearningNote
+                sections={[
+                  {
+                    heading: "What this measures",
+                    bullets: [
+                      "Oil price in constant 2015 US dollars.",
+                      "Nominal price divided by US CPI and scaled to 2015 purchasing power.",
+                    ],
+                  },
+                  {
+                    heading: "Purpose",
+                    bullets: [
+                      "Real prices are used for long-term comparison across decades.",
+                      "Inflation adjustment removes nominal currency effects.",
+                    ],
+                  },
+                  {
+                    heading: "Reading guidance",
+                    bullets: [
+                      "Y-axis: USD per barrel in 2015-dollar terms. Scale is linear.",
+                      "Resolution: daily (from Brent).",
+                    ],
+                  },
+                  {
+                    heading: "Pitfalls",
+                    bullets: [
+                      "Base year (2015) is arbitrary; levels depend on base choice.",
+                      "US CPI is used; domestic burdens differ by country. Do not infer causality.",
+                    ],
+                  },
+                ]}
+                links={[{ label: "Real price (Wikipedia)", href: "https://en.wikipedia.org/wiki/Real_price" }]}
+              />
+              {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
+              <CurrentSnapshot asOf="March 2026">
+                <p>
+                  As of March 2026, real oil prices remain in a moderate range relative to the 2015 baseline. Recent
+                  volatility has been moderate compared with earlier periods. Levels are comparable to those seen in the
+                  early 2020s.
+                </p>
+                <p>
+                  Limitation: Data lag and CPI revisions may affect the most recent values; the trailing month may be
+                  incomplete.
+                </p>
+              </CurrentSnapshot>
+              {realOilSource && (
+                <SourceInfo
+                  items={[
+                    {
+                      label: "Real oil price",
+                      sourceName: `${realOilSource.oil}; ${realOilSource.cpi}`,
+                      sourceDetail: "Nominal Brent divided by U.S. CPI",
+                      unitLabel: "USD/bbl (2015 dollars)",
+                      unitNote: "Base year: 2015 (US CPI)",
+                    },
+                  ]}
+                  note="Base year: 2015 (US CPI). FRED CPIAUCSL (Consumer Price Index, All Urban Consumers)."
+                />
+              )}
+            </>
+          ) : isGoldAndOil ? (
             <>
               <TimelineChart
                 data={[]}
@@ -735,19 +1131,82 @@ export default function StudyDetailPage() {
                 timeRange={oilTimeRange ?? study.timeRange}
                 mutedBands
               />
-              <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                {goldSource && (
-                  <p>Gold: {goldSource.name} ({goldSource.publisher}), annual data (USD/oz).</p>
-                )}
-                {(oilSourceAnnual || oilSource) && (
-                  <p>
-                    Oil: Pre-1987: {oilSourceAnnual?.name ?? "EIA"} ({oilSourceAnnual?.publisher ?? "U.S. Energy Information Administration"}) U.S. Crude Oil First Purchase Price (annual). From 1987: {oilSource?.name} ({oilSource?.publisher}) Brent spot (daily).
-                  </p>
-                )}
-                <p className="text-xs text-muted-foreground/80">
-                  Gold and oil prices are shown on separate axes due to differing scales and historical roles. Earlier periods use lower-frequency data where daily prices are unavailable.
+              <LearningNote
+                sections={[
+                  {
+                    heading: "What this measures",
+                    bullets: [
+                      "Gold price (USD/oz) on the left axis; oil price (USD/bbl) on the right axis.",
+                      "Dual axes because the two series have different scales.",
+                    ],
+                  },
+                  {
+                    heading: "Purpose",
+                    bullets: [
+                      "Gold and oil are used as separate macroeconomic stress indicators.",
+                      "Long-range view supports comparison across periods.",
+                    ],
+                  },
+                  {
+                    heading: "Reading guidance",
+                    bullets: [
+                      "Left y-axis: gold (USD/oz). Right y-axis: oil (USD/bbl). Scale differs; do not compare numerically.",
+                      "Resolution: gold is annual; oil is annual pre-1987, daily from 1987.",
+                    ],
+                  },
+                  {
+                    heading: "Pitfalls",
+                    bullets: [
+                      "Different y-axes; do not compare gold and oil levels.",
+                      "Do not infer causality from co-movement or event overlays.",
+                    ],
+                  },
+                ]}
+                links={[
+                  { label: "Brent Crude (Wikipedia)", href: "https://en.wikipedia.org/wiki/Brent_Crude" },
+                  { label: "West Texas Intermediate (Wikipedia)", href: "https://en.wikipedia.org/wiki/West_Texas_Intermediate" },
+                ]}
+              />
+              <CurrentSnapshot asOf="March 2026">
+                <p>
+                  As of March 2026, gold and oil both trade at elevated levels relative to pre-2020 norms. Gold shows
+                  a sustained upward trend over the observation period; oil displays more cyclical volatility. The two
+                  series have moved in broadly similar directions in recent years.
                 </p>
-              </div>
+                <p>
+                  Limitation: Gold data are annual; oil switches from annual to daily in 1987. Alignment of peaks and
+                  troughs across the two series is approximate.
+                </p>
+              </CurrentSnapshot>
+              {(goldSource || oilSource) && (
+                <SourceInfo
+                  items={[
+                    ...(goldSource
+                      ? [
+                          {
+                            label: "Gold",
+                            sourceName: goldSource.name,
+                            sourceDetail: goldSource.publisher,
+                            unitLabel: "USD/oz",
+                            unitNote: "annual data only",
+                          },
+                        ]
+                      : []),
+                    ...(oilSourceAnnual || oilSource
+                      ? [
+                          {
+                            label: "Oil",
+                            sourceName: "EIA, FRED",
+                            sourceDetail: "Pre-1987: EIA U.S. Crude Oil First Purchase Price (annual); from 1987: FRED Brent spot (daily)",
+                            unitLabel: "USD/bbl",
+                            unitNote: "bbl = barrel (42 US gal ≈ 159 L)",
+                          },
+                        ]
+                      : []),
+                  ]}
+                  note="Gold and oil are shown on separate axes due to differing scales. Earlier periods use lower-frequency data where daily prices are unavailable."
+                />
+              )}
             </>
           ) : isOilBrent || isOilGlobalLong ? (
             <>
@@ -766,17 +1225,63 @@ export default function StudyDetailPage() {
                 timeRange={oilTimeRange ?? study.timeRange}
                 mutedBands={isOilGlobalLong}
               />
+              <LearningNote
+                  sections={[
+                    {
+                      heading: "What this measures",
+                      bullets: [
+                        "Spot price of Brent crude oil, a global benchmark for light sweet crude.",
+                        "Brent is traded in USD and reflects international market conditions.",
+                      ],
+                    },
+                    {
+                      heading: "Purpose",
+                      bullets: [
+                        "Nominal oil is used as a context signal for energy and commodity markets.",
+                        "Daily resolution supports event-anchored analysis.",
+                      ],
+                    },
+                    {
+                      heading: "Reading guidance",
+                      bullets: [
+                        "Y-axis: USD per barrel. Scale is linear.",
+                        "Resolution: daily. Event overlays are exogenous; use for context only.",
+                      ],
+                    },
+                    {
+                      heading: "Pitfalls",
+                      bullets: [
+                        "Nominal prices are not inflation-adjusted; use real oil for long-term comparison.",
+                        "Do not infer causality from event overlays. Regional premiums differ from spot.",
+                      ],
+                    },
+                  ]}
+                  links={[{ label: "Brent Crude (Wikipedia)", href: "https://en.wikipedia.org/wiki/Brent_Crude" }]}
+                />
+              <CurrentSnapshot asOf="March 2026">
+                <p>
+                  As of March 2026, Brent crude trades in a moderate range relative to the 2021–2024 period. Volatility
+                  has eased from the spikes seen in 2022. Nominal levels remain above the pre-2020 average.
+                </p>
+                <p>
+                  Limitation: Nominal prices are not inflation-adjusted; for long-term comparison, use the real oil
+                  study. Spot data may lag by one trading day.
+                </p>
+              </CurrentSnapshot>
               {oilSource && (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {isOilGlobalLong
-                    ? "Pre-1987: EIA U.S. Crude Oil First Purchase Price (annual). From 1987: FRED Brent spot (daily)."
-                    : `Source: ${oilSource.name} (${oilSource.publisher}), Brent crude oil spot price (USD/barrel).`}
-                </p>
-              )}
-              {isOilGlobalLong && oilResolutionNote && (
-                <p className="mt-1 text-xs text-muted-foreground/80">
-                  {oilResolutionNote}
-                </p>
+                <SourceInfo
+                  items={[
+                    {
+                      label: isOilGlobalLong ? "Oil" : "Brent oil",
+                      sourceName: oilSource.name,
+                      sourceDetail: isOilGlobalLong
+                        ? "Pre-1987: EIA annual; from 1987: FRED Brent daily"
+                        : oilSource.series_id,
+                      unitLabel: "USD/bbl",
+                      unitNote: "bbl = barrel (42 US gal ≈ 159 L)",
+                    },
+                  ]}
+                />
               )}
             </>
           ) : isOilAndFx ? (
@@ -812,19 +1317,44 @@ export default function StudyDetailPage() {
                   timeRange={dualTimeRange ?? study.timeRange}
                 />
               )}
-              <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                {oilSource && (
-                  <p>Brent oil: {oilSource.name} ({oilSource.publisher}), spot price (USD/barrel).</p>
-                )}
-                {fxSource && (
-                  <p>USD→Toman: {fxSource.name} (open market proxy). Values in toman (1 toman = 10 rials).</p>
-                )}
-                {showGold && (
-                  <p className="text-xs text-muted-foreground/80">
-                    Gold: LBMA/Treasury annual data only (one point per year). Shown on separate axis due to differing scale. Daily gold prices are not available for this series.
-                  </p>
-                )}
-              </div>
+              {(oilSource || fxSource) && (
+                <SourceInfo
+                  items={[
+                    ...(oilSource
+                      ? [
+                          {
+                            label: "Brent oil",
+                            sourceName: oilSource.name,
+                            sourceDetail: oilSource.series_id,
+                            unitLabel: "USD/bbl",
+                            unitNote: "bbl = barrel (42 US gal ≈ 159 L)",
+                          },
+                        ]
+                      : []),
+                    ...(fxSource
+                      ? [
+                          {
+                            label: "USD→Toman",
+                            sourceName: fxSource.name,
+                            sourceDetail: fxSource.publisher,
+                            unitLabel: "toman/USD",
+                            unitNote: "1 toman = 10 rials",
+                          },
+                        ]
+                      : []),
+                    ...(showGold
+                      ? [
+                          {
+                            label: "Gold",
+                            sourceName: "LBMA / Treasury",
+                            sourceDetail: "annual data only",
+                            unitLabel: "USD/oz",
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              )}
             </>
           ) : isFxUsdToman ? (
             <>
@@ -843,9 +1373,17 @@ export default function StudyDetailPage() {
                 timeRange={fxTimeRange ?? study.timeRange}
               />
               {fxSource && (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Source: {fxSource.name} (open market proxy). Values in toman (1 toman = 10 rials).
-                </p>
+                <SourceInfo
+                  items={[
+                    {
+                      label: "USD→Toman",
+                      sourceName: fxSource.name,
+                      sourceDetail: fxSource.publisher,
+                      unitLabel: "toman/USD",
+                      unitNote: "1 toman = 10 rials",
+                    },
+                  ]}
+                />
               )}
             </>
           ) : (

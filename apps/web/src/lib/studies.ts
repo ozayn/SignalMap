@@ -4,7 +4,11 @@ export type PrimarySignal =
   | { kind: "oil_global_long" }
   | { kind: "gold_and_oil" }
   | { kind: "fx_usd_toman" }
-  | { kind: "oil_and_fx" };
+  | { kind: "oil_and_fx" }
+  | { kind: "real_oil" }
+  | { kind: "oil_ppp_iran" };
+
+import type { ConceptKey } from "./concepts";
 
 export type StudyMeta = {
   id: string;
@@ -15,6 +19,10 @@ export type StudyMeta = {
   status: string;
   primarySignal: PrimarySignal;
   eventLayers?: string[];
+  /** When false, study is hidden from list and not directly accessible. Default: true. */
+  visible?: boolean;
+  /** Concepts used in this study for educational display. */
+  concepts?: ConceptKey[];
 };
 
 export const STUDIES: StudyMeta[] = [
@@ -27,6 +35,7 @@ export const STUDIES: StudyMeta[] = [
       "Longitudinal exploration of sentiment, interaction volume, and hashtag coverage across a defined time window.",
     status: "active",
     primarySignal: { kind: "overview_stub" },
+    visible: false,
   },
   {
     id: "iran",
@@ -69,8 +78,37 @@ export const STUDIES: StudyMeta[] = [
     primarySignal: { kind: "gold_and_oil" },
     eventLayers: ["world_1900"],
   },
+  {
+    id: "real_oil_price",
+    number: 6,
+    title: "Real oil prices and global economic burden",
+    timeRange: ["1987-05-20", new Date().toISOString().slice(0, 10)],
+    description:
+      "Oil prices adjusted for inflation to examine long-term economic burden rather than market signaling.",
+    status: "active",
+    primarySignal: { kind: "real_oil" },
+    eventLayers: ["world_core", "world_1900"],
+    concepts: ["real_price", "cpi"],
+  },
+  {
+    id: "iran_oil_ppp",
+    number: 7,
+    title: "Oil price burden in Iran (PPP-based)",
+    timeRange: ["1990-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "An estimate of the domestic economic burden of oil prices in Iran using purchasing power parity (PPP) rather than market exchange rates.",
+    status: "active",
+    primarySignal: { kind: "oil_ppp_iran" },
+    eventLayers: ["iran_core", "world_core"],
+    concepts: ["ppp", "log_scale", "structural_break"],
+  },
 ];
 
 export function getStudyById(id: string): StudyMeta | undefined {
   return STUDIES.find((s) => s.id === id);
+}
+
+/** Studies visible in the list. Excludes those with visible: false. */
+export function getVisibleStudies(): StudyMeta[] {
+  return STUDIES.filter((s) => s.visible !== false);
 }

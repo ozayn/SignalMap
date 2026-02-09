@@ -7,6 +7,8 @@ from signalmap.data.gold_annual import GOLD_ANNUAL
 from signalmap.data.oil_annual import BRENT_DAILY_START, OIL_ANNUAL_EIA
 from signalmap.sources.bonbast_usd_toman import fetch_usd_toman_series
 from signalmap.sources.fred_brent import fetch_brent_series
+from signalmap.sources.fred_cpi import fetch_cpi_series
+from signalmap.sources.world_bank_ppp import fetch_iran_ppp_series
 from signalmap.sources.fred_iran_fx import fetch_iran_fx_series
 from signalmap.sources.rial_archive_usd_toman import fetch_archive_usd_toman_series
 from signalmap.store.signals_repo import get_points, upsert_points
@@ -14,8 +16,14 @@ from signalmap.utils.ttl_cache import get as cache_get, set as cache_set
 
 SIGNAL_BRENT = "brent_oil_price"
 SIGNAL_OIL_GLOBAL_LONG = "oil_global_long"
+SIGNAL_REAL_OIL = "real_oil_price"
+SIGNAL_OIL_PPP_IRAN = "oil_price_ppp_iran"
 SIGNAL_USD_TOMAN = "usd_toman_open_market"
 CACHE_TTL = 21600  # 6 hours
+
+# Base year for inflation adjustment (CPI reference month)
+CPI_BASE_YEAR = 2015
+CPI_BASE_MONTH = "2015-01"
 
 BRENT_SOURCE = {
     "name": "FRED",
@@ -204,6 +212,137 @@ def get_gold_price_global_series(start: str, end: str) -> dict:
         "signal": "gold_price_global",
         "unit": "USD/oz",
         "source": GOLD_SOURCE,
+        "resolution": "annual",
+        "points": points,
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
+
+
+def _get_cpi_by_month() -> dict[str, float]:
+    """Return CPI by month (YYYY-MM). Cached 6h."""
+    ck = "signal:cpi:full"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+    rows = fetch_cpi_series()
+    by_month = {p["date"][:7]: p["value"] for p in rows}
+    cache_set(ck, by_month, CACHE_TTL)
+    return by_month
+
+
+def get_real_oil_series(start: str, end: str) -> dict:
+    """
+    Real oil price: nominal (Brent) / CPI * CPI_base.
+    Base year: 2015 (CPI value at 2015-01).
+    Returns USD/bbl in constant 2015 dollars.
+    """
+    ck = f"{_cache_key(SIGNAL_REAL_OIL, start, end)}:base{CPI_BASE_YEAR}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    brent_result = get_brent_series(start, end)
+    oil_points = brent_result.get("points", [])
+    cpi_by_month = _get_cpi_by_month()
+    cpi_base = cpi_by_month.get(CPI_BASE_MONTH)
+    if not cpi_base:
+        raise ValueError(f"CPI base {CPI_BASE_MONTH} not available")
+
+    real_points: list[dict] = []
+    for p in oil_points:
+        month_key = p["date"][:7]
+        cpi = cpi_by_month.get(month_key)
+        if cpi is None or cpi <= 0:
+            continue
+        real_val = round(p["value"] * cpi_base / cpi, 2)
+        real_points.append({"date": p["date"], "value": real_val})
+
+    result = {
+        "signal": SIGNAL_REAL_OIL,
+        "unit": "USD/bbl (2015 dollars)",
+        "base_year": CPI_BASE_YEAR,
+        "source": {
+            "oil": "FRED DCOILBRENTEU (Brent)",
+            "cpi": "FRED CPIAUCSL",
+        },
+        "metadata": {
+            "base_year": CPI_BASE_YEAR,
+            "base_month": CPI_BASE_MONTH,
+            "formula": "real_oil_price = nominal_oil_price * CPI_base / CPI_date",
+        },
+        "points": real_points,
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
+
+
+def _get_oil_annual_avg_by_year(start_year: int, end_year: int) -> dict[int, float]:
+    """Return annual average oil price (USD/bbl) by year. Uses EIA for pre-1987, Brent for 1987+."""
+    result: dict[int, float] = {}
+    for y in range(start_year, end_year + 1):
+        if y in OIL_ANNUAL_EIA:
+            result[y] = OIL_ANNUAL_EIA[y]
+    if end_year >= 1987:
+        brent_start = f"{max(start_year, 1987)}-01-01"
+        brent_end = f"{end_year}-12-31"
+        brent = get_brent_series(brent_start, brent_end)
+        pts = brent.get("points", [])
+        by_year: dict[int, list[float]] = {}
+        for p in pts:
+            y = int(p["date"][:4])
+            if start_year <= y <= end_year:
+                by_year.setdefault(y, []).append(p["value"])
+        for y, vals in by_year.items():
+            result[y] = round(sum(vals) / len(vals), 2)
+    return result
+
+
+def _get_iran_ppp_by_year() -> dict[int, float]:
+    """Return Iran PPP conversion factor by year. Cached 24h."""
+    ck = "signal:ppp_iran:by_year"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+    rows = fetch_iran_ppp_series()
+    by_year = {r["year"]: r["value"] for r in rows}
+    cache_set(ck, by_year, 86400)
+    return by_year
+
+
+def get_oil_ppp_iran_series(start: str, end: str) -> dict:
+    """
+    Oil price burden in Iran (PPP-adjusted). Annual only.
+    oil_price_ppp_iran(year) = nominal_oil_avg(year) * ppp_conversion_factor(year)
+    Returns PPP-adjusted toman per barrel (1 toman = 10 rials). Burden proxy, not market price.
+    """
+    ck = f"{_cache_key(SIGNAL_OIL_PPP_IRAN, start, end)}:toman"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    start_year = max(1990, int(start[:4]))
+    end_year = min(int(end[:4]), 2024)
+    ppp_by_year = _get_iran_ppp_by_year()
+    oil_by_year = _get_oil_annual_avg_by_year(start_year, end_year)
+
+    points: list[dict] = []
+    for y in range(start_year, end_year + 1):
+        oil_avg = oil_by_year.get(y)
+        ppp = ppp_by_year.get(y)
+        if oil_avg is None or ppp is None or ppp <= 0:
+            continue
+        val = round(oil_avg * ppp / 10, 0)  # 1 toman = 10 rials
+        points.append({"date": f"{y}-01-01", "value": val})
+
+    result = {
+        "signal": SIGNAL_OIL_PPP_IRAN,
+        "unit": "PPP-adjusted toman per barrel",
+        "country": "Iran",
+        "source": {
+            "oil": "FRED DCOILBRENTEU (Brent)",
+            "ppp": "World Bank / ICP (PA.NUS.PPP)",
+        },
         "resolution": "annual",
         "points": points,
     }
