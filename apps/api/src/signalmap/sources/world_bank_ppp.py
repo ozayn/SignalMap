@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 
 WB_API_URL = "https://api.worldbank.org/v2/country/IRN/indicator/PA.NUS.PPP"
+USER_AGENT = "SignalMap/1.0 (research; +https://github.com/ozayn/SignalMap)"
 CACHE_TTL = 86400  # 24 hours (annual data, infrequent updates)
 
 
@@ -14,7 +15,7 @@ def fetch_iran_ppp_series() -> list[dict[str, Any]]:
     Returns [{year: int, value: float}, ...] for years with non-null data.
     Annual frequency. Data available from 1990.
     """
-    with httpx.Client(timeout=15.0) as client:
+    with httpx.Client(timeout=15.0, headers={"User-Agent": USER_AGENT}) as client:
         r = client.get(f"{WB_API_URL}?format=json&per_page=100")
         r.raise_for_status()
         data = r.json()

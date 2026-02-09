@@ -17,10 +17,17 @@ export async function GET(request: NextRequest) {
       next: { revalidate: 0 },
     });
     if (!res.ok) {
-      return NextResponse.json(
-        { error: `API returned ${res.status}` },
-        { status: 502 }
-      );
+      let body: { error?: string; hint?: string } = { error: `API returned ${res.status}` };
+      try {
+        const parsed = await res.json();
+        if (parsed?.detail) body.error = parsed.detail;
+      } catch {}
+      if (body.error === `API returned ${res.status}`) {
+        body.hint = !process.env.API_URL
+          ? "Set API_URL on the web service (e.g. https://api.your-app.railway.app)"
+          : "Check API_URL and that the API service is running.";
+      }
+      return NextResponse.json(body, { status: 502 });
     }
     const data = await res.json();
     return NextResponse.json(data);

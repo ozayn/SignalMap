@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 
 FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL"
+USER_AGENT = "SignalMap/1.0 (research; +https://github.com/ozayn/SignalMap)"
 FRED_TXT_URL = "https://fred.stlouisfed.org/data/CPIAUCSL.txt"
 _DATA_LINE = re.compile(r"^[|]?(\d{4}-\d{2}-\d{2})\s*[|]\s*([^|]+)")
 
@@ -56,7 +57,7 @@ def fetch_cpi_series() -> list[dict[str, Any]]:
     Returns [{date, value}, ...] sorted by date ascending.
     Monthly frequency. Index 1982-84=100.
     """
-    with httpx.Client(timeout=10.0) as client:
+    with httpx.Client(timeout=10.0, headers={"User-Agent": USER_AGENT}) as client:
         try:
             r = client.get(FRED_CSV_URL)
             r.raise_for_status()

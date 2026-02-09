@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 
 FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=XRNCUSIRA618NRUG"
+USER_AGENT = "SignalMap/1.0 (research; +https://github.com/ozayn/SignalMap)"
 FRED_TXT_URL = "https://fred.stlouisfed.org/data/XRNCUSIRA618NRUG.txt"
 _DATA_LINE = re.compile(r"^[|]?(\d{4}-\d{2}-\d{2})\s*[|]\s*([^|]+)")
 
@@ -61,7 +62,7 @@ def fetch_iran_fx_series() -> list[dict[str, Any]]:
     Values are in rials per USD; we convert to toman (÷10).
     Skips missing values (".").
     """
-    with httpx.Client(timeout=10.0) as client:
+    with httpx.Client(timeout=10.0, headers={"User-Agent": USER_AGENT}) as client:
         try:
             r = client.get(FRED_CSV_URL)
             r.raise_for_status()
