@@ -1128,6 +1128,7 @@ export default function StudyDetailPage() {
                           heading: "How to read this chart",
                           bullets: [
                             "Y-axis: Index (base year = first common year). Both series are scaled so the first year with data for both countries equals 100.",
+                            "The base year is not chosen—it is the first year when both Iran and Turkey have PPP data in the World Bank dataset. That year is determined by data availability.",
                             "Values above 100 indicate a higher estimated burden relative to that baseline; values below 100 indicate a lower burden.",
                             "Example: 200 = twice the baseline burden; 50 = half.",
                             "Because the chart is indexed, relative evolution is emphasized rather than absolute levels.",
