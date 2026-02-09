@@ -2,6 +2,7 @@
   "name": "api",
   "private": true,
   "scripts": {
-    "dev": "uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    "dev": "uvicorn main:app --host 0.0.0.0 --port 8000 --reload",
+    "ingest:signals": "PYTHONPATH=src python -m signalmap.jobs.ingest_signals"
   }
 }

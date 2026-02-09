@@ -1,3 +1,7 @@
+export type PrimarySignal =
+  | { kind: "overview_stub" }
+  | { kind: "oil_brent" };
+
 export type StudyMeta = {
   id: string;
   number: number;
@@ -5,6 +9,7 @@ export type StudyMeta = {
   timeRange: [string, string];
   description: string;
   status: string;
+  primarySignal: PrimarySignal;
 };
 
 export const STUDIES: StudyMeta[] = [
@@ -16,15 +21,17 @@ export const STUDIES: StudyMeta[] = [
     description:
       "Longitudinal exploration of sentiment, interaction volume, and hashtag coverage across a defined time window.",
     status: "active",
+    primarySignal: { kind: "overview_stub" },
   },
   {
     id: "iran",
     number: 2,
-    title: "Iran discourse 2021–2026",
+    title: "Brent oil price as an exogenous context signal",
     timeRange: ["2021-01-15", "2026-02-06"],
     description:
-      "Longitudinal analysis of public discourse with event overlays for Mahsa Amini protests, internet restrictions, and related events.",
+      "A baseline study illustrating event-anchored windows on a macroeconomic series.",
     status: "active",
+    primarySignal: { kind: "oil_brent" },
   },
 ];
 

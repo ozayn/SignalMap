@@ -1,0 +1,36 @@
+---
+description: ECharts chart disappearing on hover - fix to remember
+globs: **/timeline-chart*.tsx
+alwaysApply: false
+---
+
+# ECharts Chart Disappearing on Hover
+
+When using `tooltip.trigger: 'axis'`, ECharts applies a default emphasis effect that fades the area/line on hover—often making the plot seem to disappear.
+
+## Fix
+
+Add explicit `emphasis` styles to each series so they match the normal state (no fade):
+
+1. **Main series with areaStyle** – Set `emphasis.areaStyle` with the same gradient and `opacity: 1`:
+   ```ts
+   emphasis: {
+     focus: "none",
+     areaStyle: {
+       opacity: 1,
+       color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+         { offset: 0, color: withAlphaHsl(color, 0.25) },
+         { offset: 1, color: withAlphaHsl(color, 0.03) },
+       ]),
+     },
+   },
+   ```
+
+2. **Line series** – Set `emphasis.lineStyle` and `emphasis.itemStyle` to match normal:
+   ```ts
+   emphasis: { focus: "none", lineStyle: { color: oilColor }, itemStyle: { color: oilColor } },
+   ```
+
+3. **Placeholder series** – Add `emphasis: { focus: "none" }` for consistency.
+
+Also keep chart disposal in a separate unmount-only effect—don't dispose in the main effect cleanup when deps change, so the chart isn't destroyed on parent re-renders.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +27,8 @@ type Event = {
   description?: string;
   confidence?: string;
   sources?: string[];
+  layer?: "iran_core" | "world_core";
+  scope?: "iran" | "world";
 };
 
 type EventsData = {
@@ -34,11 +36,51 @@ type EventsData = {
   events: Event[];
 };
 
+type OilSource = {
+  name: string;
+  series_id: string;
+  publisher: string;
+  url: string;
+};
+
+type OilSignalData = {
+  signal: string;
+  unit: string;
+  source: OilSource;
+  points: Array<{ date: string; value: number }>;
+};
+
 const WINDOW_OPTIONS = [
   { value: 7, label: "±7 days" },
   { value: 30, label: "±30 days" },
   { value: 90, label: "±90 days" },
 ] as const;
+
+function computeWindowRange(
+  eventDate: string,
+  windowDays: number
+): [string, string] {
+  const d = new Date(eventDate);
+  const start = new Date(d);
+  start.setDate(start.getDate() - windowDays);
+  const end = new Date(d);
+  end.setDate(end.getDate() + windowDays);
+  return [
+    start.toISOString().slice(0, 10),
+    end.toISOString().slice(0, 10),
+  ];
+}
+
+function computeOilKpis(points: { value: number }[]) {
+  if (points.length === 0) return null;
+  const vals = points.map((p) => p.value);
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+  return {
+    avg: avg.toFixed(2),
+    min: Math.min(...vals).toFixed(2),
+    max: Math.max(...vals).toFixed(2),
+  };
+}
 
 export default function StudyDetailPage() {
   const params = useParams();
@@ -48,37 +90,105 @@ export default function StudyDetailPage() {
   const [events, setEvents] = useState<EventsData["events"]>([]);
   const [anchorEventId, setAnchorEventId] = useState<string>("");
   const [windowDays, setWindowDays] = useState<number>(30);
+  const [showOil, setShowOil] = useState(false);
+  const [showWorldEvents, setShowWorldEvents] = useState(false);
+  const [oilPoints, setOilPoints] = useState<OilSignalData["points"]>([]);
+  const [oilSource, setOilSource] = useState<OilSource | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const isOverviewStub = study?.primarySignal.kind === "overview_stub";
+  const isOilBrent = study?.primarySignal.kind === "oil_brent";
+
+  const oilTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isOilBrent) return null;
+    if (anchorEventId) {
+      const ev = events.find((e) => e.id === anchorEventId);
+      if (ev) return computeWindowRange(ev.date, windowDays);
+    }
+    return study.timeRange;
+  }, [study, isOilBrent, anchorEventId, events, windowDays]);
 
   useEffect(() => {
     if (!study) return;
     let mounted = true;
-    fetchJson<EventsData>(`/api/events?study_id=${studyId}`)
+    const params = new URLSearchParams({ study_id: studyId });
+    if (isOilBrent) {
+      params.set("layers", showWorldEvents ? "iran_core,world_core" : "iran_core");
+    }
+    fetchJson<EventsData>(`/api/events?${params}`)
       .then((res) => mounted && setEvents(res.events ?? []))
       .catch(() => {});
     return () => {
       mounted = false;
     };
-  }, [studyId, study]);
+  }, [studyId, study, isOilBrent, showWorldEvents]);
 
   useEffect(() => {
-    if (!study) return;
+    if (!study || !isOverviewStub) return;
     let mounted = true;
     if (!data) setLoading(true);
-    const params = new URLSearchParams({ study_id: studyId });
+    const qs = new URLSearchParams({ study_id: studyId });
     if (anchorEventId) {
-      params.set("anchor_event_id", anchorEventId);
-      params.set("window_days", String(windowDays));
+      qs.set("anchor_event_id", anchorEventId);
+      qs.set("window_days", String(windowDays));
     }
-    fetchJson<OverviewData>(`/api/overview?${params}`)
+    fetchJson<OverviewData>(`/api/overview?${qs}`)
       .then((res) => mounted && setData(res))
       .catch((e) => mounted && setError(e instanceof Error ? e.message : "Unknown error"))
       .finally(() => mounted && setLoading(false));
     return () => {
       mounted = false;
     };
-  }, [studyId, study, anchorEventId, windowDays]);
+  }, [studyId, study, isOverviewStub, anchorEventId, windowDays, data]);
+
+  useEffect(() => {
+    if (!oilTimeRange || !isOilBrent) {
+      if (isOilBrent) {
+        setOilPoints([]);
+        setOilSource(null);
+      }
+      return;
+    }
+    const [start, end] = oilTimeRange;
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+    fetchJson<OilSignalData>(`/api/signals/oil/brent?start=${start}&end=${end}`)
+      .then((res) => {
+        if (mounted) {
+          setOilPoints(res.points ?? []);
+          setOilSource(res.source ?? null);
+        }
+      })
+      .catch((e) => {
+        if (mounted) {
+          setOilPoints([]);
+          setOilSource(null);
+          setError(e instanceof Error ? e.message : "Signal fetch failed");
+        }
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => {
+      mounted = false;
+    };
+  }, [oilTimeRange, isOilBrent]);
+
+  useEffect(() => {
+    if (!study || !isOverviewStub) return;
+    if (!data || (!showOil && isOverviewStub)) {
+      setOilPoints([]);
+      return;
+    }
+    const [start, end] = data.window_range ?? data.time_range;
+    let mounted = true;
+    fetchJson<OilSignalData>(`/api/signals/oil/brent?start=${start}&end=${end}`)
+      .then((res) => mounted && setOilPoints(res.points ?? []))
+      .catch(() => mounted && setOilPoints([]));
+    return () => {
+      mounted = false;
+    };
+  }, [study, isOverviewStub, data, showOil]);
 
   if (!study) {
     return (
@@ -94,7 +204,9 @@ export default function StudyDetailPage() {
     );
   }
 
-  if (loading) {
+  const showError = error || (isOverviewStub && !data);
+
+  if (loading && (isOverviewStub ? !data : isOilBrent && !oilPoints.length)) {
     return (
       <div className="container mx-auto max-w-4xl px-4 py-12 animate-pulse space-y-8">
         <div className="h-8 w-48 rounded bg-muted" />
@@ -108,7 +220,7 @@ export default function StudyDetailPage() {
     );
   }
 
-  if (error || !data) {
+  if (showError) {
     return (
       <div className="container mx-auto max-w-4xl py-12 space-y-4">
         <p className="text-muted-foreground">{error || "No data available"}</p>
@@ -121,6 +233,8 @@ export default function StudyDetailPage() {
       </div>
     );
   }
+
+  const oilKpis = isOilBrent ? computeOilKpis(oilPoints) : null;
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-12 space-y-10">
@@ -140,37 +254,95 @@ export default function StudyDetailPage() {
         </p>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        {data.kpis.map((kpi) => (
-          <Card key={kpi.label} className="border-border">
+      {isOilBrent && oilKpis ? (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Card className="border-border">
             <CardHeader className="pb-1">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                {kpi.label}
+                Avg price
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-medium">
-                {typeof kpi.value === "number" && Number.isInteger(kpi.value)
-                  ? kpi.value.toLocaleString()
-                  : kpi.value}
-                {kpi.unit && (
-                  <span className="ml-1 text-sm font-normal text-muted-foreground">
-                    {kpi.unit}
-                  </span>
-                )}
+                {oilKpis.avg}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  USD/barrel
+                </span>
               </p>
             </CardContent>
           </Card>
-        ))}
-      </div>
+          <Card className="border-border">
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Min
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-medium">
+                {oilKpis.min}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  USD/barrel
+                </span>
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-border">
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Max
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-medium">
+                {oilKpis.max}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  USD/barrel
+                </span>
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      ) : data?.kpis && data.kpis.length > 0 ? (
+        <div className="grid gap-4 sm:grid-cols-3">
+          {data.kpis.map((kpi) => (
+            <Card key={kpi.label} className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  {kpi.label}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-medium">
+                  {typeof kpi.value === "number" && Number.isInteger(kpi.value)
+                    ? kpi.value.toLocaleString()
+                    : kpi.value}
+                  {kpi.unit && (
+                    <span className="ml-1 text-sm font-normal text-muted-foreground">
+                      {kpi.unit}
+                    </span>
+                  )}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : null}
 
       <Card className="border-border">
         <CardHeader>
           <CardTitle className="text-base font-medium">
-            Sentiment over time
+            {isOilBrent
+              ? "Brent oil price"
+              : data?.timeline?.length
+                ? "Sentiment over time"
+                : "Timeline"}
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Average sentiment score (sampled over time)
+            {isOilBrent
+              ? "Daily Brent crude oil price (USD/barrel) with event markers"
+              : data?.timeline?.length
+                ? "Average sentiment score (sampled over time)"
+                : "Event markers and optional external signals"}
           </p>
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <select
@@ -197,16 +369,73 @@ export default function StudyDetailPage() {
                 </option>
               ))}
             </select>
+            {isOverviewStub && (
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showOil}
+                  onChange={(e) => setShowOil(e.target.checked)}
+                  className="rounded border-border"
+                />
+                Show Brent oil price
+              </label>
+            )}
+            {isOilBrent && (
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showWorldEvents}
+                  onChange={(e) => setShowWorldEvents(e.target.checked)}
+                  className="rounded border-border"
+                />
+                Show world events
+              </label>
+            )}
           </div>
         </CardHeader>
         <CardContent>
-          <TimelineChart
-            data={data.timeline}
-            valueKey="value"
-            label="Sentiment"
-            events={events}
-            anchorEventId={anchorEventId || undefined}
-          />
+          {isOilBrent ? (
+            <>
+              <TimelineChart
+                data={[]}
+                valueKey="value"
+                label="Brent oil"
+                events={events}
+                anchorEventId={anchorEventId || undefined}
+                secondSeries={{
+                  label: "Brent oil",
+                  unit: "USD/barrel",
+                  points: oilPoints,
+                  yAxisIndex: 1,
+                }}
+                timeRange={oilTimeRange ?? study.timeRange}
+              />
+              {oilSource && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Source: {oilSource.name} ({oilSource.publisher}), Brent crude oil spot price (USD/barrel).
+                </p>
+              )}
+            </>
+          ) : (
+            <TimelineChart
+              data={data!.timeline}
+              valueKey="value"
+              label="Sentiment"
+              events={events}
+              anchorEventId={anchorEventId || undefined}
+              secondSeries={
+                showOil
+                  ? {
+                      label: "Brent oil",
+                      unit: "USD/barrel",
+                      points: oilPoints,
+                      yAxisIndex: 1,
+                    }
+                  : undefined
+              }
+              timeRange={data!.time_range}
+            />
+          )}
         </CardContent>
       </Card>
     </div>

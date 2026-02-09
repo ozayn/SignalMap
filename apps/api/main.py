@@ -103,11 +103,18 @@ def api_version():
 
 
 @app.get("/api/events")
-def get_events(study_id: str = "1"):
+def get_events(
+    study_id: str = "1",
+    layers: Optional[str] = Query(None, description="Comma-separated layers, e.g. iran_core,world_core"),
+):
     """Return contextual events for a study. Events are exogenous anchors, not outcome variables."""
-    from signalmap.data.load_events import load_events
+    from signalmap.data.load_events import load_events, get_events_by_layers
 
-    events = load_events(study_id)
+    if layers:
+        layer_list = [s.strip() for s in layers.split(",") if s.strip()]
+        events = get_events_by_layers(study_id, layer_list)
+    else:
+        events = load_events(study_id)
     return {
         "study_id": study_id,
         "events": events,
@@ -201,6 +208,35 @@ def _filter_overview_by_event(
     }
 
 
+def _validate_date(s: str) -> bool:
+    """Check YYYY-MM-DD format."""
+    if len(s) != 10 or s[4] != "-" or s[7] != "-":
+        return False
+    try:
+        from datetime import datetime
+        datetime.strptime(s, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+
+
+@app.get("/api/signals/oil/brent")
+def get_brent_oil_signal(
+    start: str = Query(..., description="Start date YYYY-MM-DD"),
+    end: str = Query(..., description="End date YYYY-MM-DD"),
+):
+    """Return Brent crude oil price (FRED DCOILBRENTEU) for date range."""
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    try:
+        from signalmap.services.signals import get_brent_series
+        return get_brent_series(start, end)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="Signal fetch failed")
+
+
 @app.get("/api/overview")
 def get_overview(
     study_id: str = "1",
@@ -212,6 +248,15 @@ def get_overview(
     if anchor_event_id:
         days = window_days if window_days is not None and window_days > 0 else 30
         result = _filter_overview_by_event(study_id, anchor_event_id, days)
+    if study_id == "iran":
+        result = {
+            **result,
+            "study_title": "Brent oil price as an exogenous context signal",
+            "kpis": [],
+            "timeline": [],
+        }
+        if not result.get("anchor_event_id"):
+            result["time_range"] = ["2021-01-15", "2026-02-06"]
     return result
 
 

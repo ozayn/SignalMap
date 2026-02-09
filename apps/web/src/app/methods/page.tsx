@@ -60,6 +60,13 @@ export default function MethodsPage() {
           not absolute values. The emphasis is on conditional change and
           comparative patterns rather than point estimates.
         </p>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Where relevant, exogenous macroeconomic signals (e.g., Brent crude
+          oil price from FRED) are used to contextualize discourse patterns.
+          These signals are treated as external context, not as dependent
+          variables, and are sourced from the Federal Reserve Economic Data
+          (FRED) series DCOILBRENTEU.
+        </p>
       </section>
 
       <section className="space-y-4">

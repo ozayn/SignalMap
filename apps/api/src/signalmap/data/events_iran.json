@@ -1,0 +1,155 @@
+[
+  {
+    "id": "ir-001",
+    "title": "Natanz nuclear facility incident",
+    "date": "2021-04-11",
+    "type": "political",
+    "description": "Electrical grid failure at Natanz enrichment facility; widely attributed to sabotage.",
+    "sources": ["https://en.wikipedia.org/wiki/2021_Natanz_incident"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-002",
+    "title": "Raisi elected president",
+    "date": "2021-06-18",
+    "type": "political",
+    "description": "Ebrahim Raisi wins presidential election amid low turnout.",
+    "sources": ["https://en.wikipedia.org/wiki/2021_Iranian_presidential_election"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-003",
+    "title": "Raisi sworn in",
+    "date": "2021-08-03",
+    "type": "political",
+    "description": "Ebrahim Raisi inaugurated as president; Rouhani presidency ends.",
+    "sources": ["https://en.wikipedia.org/wiki/2021_in_Iran"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-004",
+    "title": "Khuzestan water protests",
+    "date": "2021-07-15",
+    "type": "social",
+    "description": "Protests erupt over water shortages and drought in Khuzestan and other regions.",
+    "sources": ["https://en.wikipedia.org/wiki/2021_in_Iran"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-005",
+    "title": "Mahsa Amini protests begin",
+    "date": "2022-09-16",
+    "type": "social",
+    "description": "Nationwide protests begin following death of Mahsa Amini in custody.",
+    "sources": ["https://www.reuters.com/world/middle-east/iran-protests-2022-09-16/"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-006",
+    "title": "Iranian internet restrictions announced",
+    "date": "2022-09-21",
+    "type": "platform",
+    "description": "Authorities announce restrictions on internet access and social media platforms.",
+    "sources": ["https://netblocks.org/reports/iran-internet-2022"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-007",
+    "title": "EU sanctions announcement",
+    "date": "2022-10-17",
+    "type": "political",
+    "description": "European Union announces sanctions on Iranian officials over protest crackdown.",
+    "sources": ["https://www.consilium.europa.eu/en/press/press-releases/2022/10/17/"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-008",
+    "title": "First executions linked to protests",
+    "date": "2022-12-08",
+    "type": "political",
+    "description": "Iran executes first individuals charged in connection with protest-related offenses.",
+    "sources": ["https://www.ohchr.org/en/news/2022/12/iran"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-009",
+    "title": "Iranian government anniversary statement",
+    "date": "2023-02-11",
+    "type": "political",
+    "description": "State-led commemorations mark anniversary of 1979 revolution.",
+    "sources": ["https://www.irna.ir/news/2023-02-11"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-010",
+    "title": "Kerman bombings",
+    "date": "2024-01-03",
+    "type": "political",
+    "description": "Twin bombings at memorial event in Kerman kill dozens.",
+    "sources": ["https://www.reuters.com/world/middle-east/iran-bombings-2024-01-03/"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-011",
+    "title": "Iran-Israel escalation",
+    "date": "2024-04-13",
+    "type": "political",
+    "description": "Iran launches direct strikes on Israel; international responses follow.",
+    "sources": ["https://www.reuters.com/world/middle-east/iran-israel-2024-04-14/"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-012",
+    "title": "Raisi helicopter crash",
+    "date": "2024-05-19",
+    "type": "political",
+    "description": "President Raisi and foreign minister killed in helicopter crash in northwest Iran.",
+    "sources": ["https://www.reuters.com/world/middle-east/iran-raisi-helicopter-crash-2024/"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-013",
+    "title": "Russia strategic partnership",
+    "date": "2025-01-15",
+    "type": "political",
+    "description": "Comprehensive strategic partnership treaty signed with Russia.",
+    "sources": ["https://en.wikipedia.org/wiki/2025_in_Iran"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-014",
+    "title": "Tehran Palace of Justice shooting",
+    "date": "2025-01-22",
+    "type": "political",
+    "description": "Two Supreme Court judges assassinated in shooting; attacker committed suicide.",
+    "sources": ["https://en.wikipedia.org/wiki/2025_in_Iran"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-015",
+    "title": "Bandar Abbas port explosion",
+    "date": "2025-04-15",
+    "type": "political",
+    "description": "Explosion at port kills 57 and injures over 1,000.",
+    "sources": ["https://en.wikipedia.org/wiki/2025_in_Iran"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-016",
+    "title": "2025–2026 protests",
+    "date": "2025-09-01",
+    "type": "social",
+    "description": "Large-scale protests continue from 2025 into 2026.",
+    "sources": ["https://en.wikipedia.org/wiki/2025%E2%80%932026_Iranian_protests"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-017",
+    "title": "Ongoing unrest",
+    "date": "2026-01-15",
+    "type": "social",
+    "description": "Protests and domestic unrest continue into early 2026.",
+    "sources": ["https://en.wikipedia.org/wiki/2025%E2%80%932026_Iranian_protests"],
+    "confidence": "high"
+  }
+]
