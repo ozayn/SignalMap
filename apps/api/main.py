@@ -234,7 +234,7 @@ def get_brent_oil_signal(
         from signalmap.services.signals import get_brent_series
         return get_brent_series(start, end)
     except Exception as e:
-        raise HTTPException(status_code=502, detail="Signal fetch failed")
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
 @app.get("/api/signals/gold/global")
@@ -251,7 +251,7 @@ def get_gold_price_global_signal(
         from signalmap.services.signals import get_gold_price_global_series
         return get_gold_price_global_series(start, end)
     except Exception as e:
-        raise HTTPException(status_code=502, detail="Signal fetch failed")
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
 @app.get("/api/signals/oil/real")
@@ -268,7 +268,7 @@ def get_real_oil_signal(
         from signalmap.services.signals import get_real_oil_series
         return get_real_oil_series(start, end)
     except Exception as e:
-        raise HTTPException(status_code=502, detail="Signal fetch failed")
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
 @app.get("/api/signals/oil/ppp-iran")
@@ -285,7 +285,7 @@ def get_oil_ppp_iran_signal(
         from signalmap.services.signals import get_oil_ppp_iran_series
         return get_oil_ppp_iran_series(start, end)
     except Exception as e:
-        raise HTTPException(status_code=502, detail="Signal fetch failed")
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
 @app.get("/api/signals/oil/global-long")
@@ -302,7 +302,7 @@ def get_oil_global_long_signal(
         from signalmap.services.signals import get_oil_global_long_series
         return get_oil_global_long_series(start, end)
     except Exception as e:
-        raise HTTPException(status_code=502, detail="Signal fetch failed")
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
 @app.get("/api/signals/fx/usd-toman")
@@ -319,7 +319,7 @@ def get_usd_toman_signal(
         from signalmap.services.signals import get_usd_toman_series
         return get_usd_toman_series(start, end)
     except Exception as e:
-        raise HTTPException(status_code=502, detail="Signal fetch failed")
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
 @app.get("/api/overview")

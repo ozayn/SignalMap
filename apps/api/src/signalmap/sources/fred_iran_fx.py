@@ -62,7 +62,7 @@ def fetch_iran_fx_series() -> list[dict[str, Any]]:
     Values are in rials per USD; we convert to toman (÷10).
     Skips missing values (".").
     """
-    with httpx.Client(timeout=10.0, headers={"User-Agent": USER_AGENT}) as client:
+    with httpx.Client(timeout=20.0, headers={"User-Agent": USER_AGENT}) as client:
         try:
             r = client.get(FRED_CSV_URL)
             r.raise_for_status()

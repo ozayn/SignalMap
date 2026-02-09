@@ -57,7 +57,7 @@ def fetch_brent_series() -> list[dict[str, Any]]:
     Returns [{date, value}, ...] sorted by date ascending.
     Skips missing values (".").
     """
-    with httpx.Client(timeout=10.0, headers={"User-Agent": USER_AGENT}) as client:
+    with httpx.Client(timeout=20.0, headers={"User-Agent": USER_AGENT}) as client:
         try:
             r = client.get(FRED_CSV_URL)
             r.raise_for_status()
