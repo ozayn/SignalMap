@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from signalmap.models.events import Event
 
-from signalmap.data.event_layers import EVENTS_WORLD_CORE
+from signalmap.data.event_layers import EVENTS_SANCTIONS, EVENTS_WORLD_CORE
 
 
 def _load_iran_events() -> list[dict]:
@@ -52,5 +52,8 @@ def get_events_by_layers(study_id: str, layers: Optional[List[str]] = None) -> l
     if "world_core" in layers:
         for ev in EVENTS_WORLD_CORE:
             events.append({**ev, "layer": "world_core", "scope": "world"})
+    if "sanctions" in layers:
+        for ev in EVENTS_SANCTIONS:
+            events.append({**ev, "layer": "sanctions", "scope": "sanctions"})
     events.sort(key=lambda e: e["date"])
     return events

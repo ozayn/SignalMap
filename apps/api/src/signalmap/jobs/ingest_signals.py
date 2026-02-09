@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Ingest external signals into the DB. Safe to run repeatedly (idempotent upsert).
-Run from apps/api: python -m signalmap.jobs.ingest_signals --signal brent [--date YYYY-MM-DD] [--days N]
+Run from apps/api: python -m signalmap.jobs.ingest_signals --signal brent|usd_toman [--date YYYY-MM-DD] [--days N]
 """
 
 import argparse
@@ -26,7 +26,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Ingest signal data into DB")
     parser.add_argument(
         "--signal",
-        choices=["brent"],
+        choices=["brent", "usd_toman"],
         required=True,
         help="Signal to ingest",
     )
@@ -39,7 +39,7 @@ def main() -> int:
         "--days",
         type=int,
         default=7,
-        help="Number of days to ingest (default: 7)",
+        help="Number of days to ingest (default: 7). For usd_toman, use large value (e.g. 3650) for full history.",
     )
     args = parser.parse_args()
 
@@ -55,13 +55,15 @@ def main() -> int:
     start_str = start_date.strftime("%Y-%m-%d")
     end_str = end_date.strftime("%Y-%m-%d")
 
+    from signalmap.store.signals_repo import _has_db, upsert_points
+
+    if not _has_db():
+        print("DATABASE_URL not set. Cannot ingest.", file=sys.stderr)
+        return 1
+
     if args.signal == "brent":
         from signalmap.sources.fred_brent import fetch_brent_series
-        from signalmap.store.signals_repo import upsert_points, _has_db
 
-        if not _has_db():
-            print("DATABASE_URL not set. Cannot ingest.", file=sys.stderr)
-            return 1
         full = fetch_brent_series()
         points = [p for p in full if start_str <= p["date"] <= end_str]
         count = upsert_points(
@@ -72,6 +74,21 @@ def main() -> int:
         )
         print(f"Ingested {count} points for brent_oil_price ({start_str} to {end_str})")
         return 0
+
+    if args.signal == "usd_toman":
+        from signalmap.services.signals import fetch_usd_toman_merged
+
+        merged = fetch_usd_toman_merged()
+        points = [p for p in merged if start_str <= p["date"] <= end_str]
+        count = upsert_points(
+            "usd_toman_open_market",
+            points,
+            source="bonbast_archive_fred",
+            metadata={"ingested_by": "ingest_signals"},
+        )
+        print(f"Ingested {count} points for usd_toman_open_market ({start_str} to {end_str})")
+        return 0
+
     return 1
 
 

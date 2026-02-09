@@ -117,7 +117,9 @@ export default function StudyDetailPage() {
   const [anchorEventId, setAnchorEventId] = useState<string>("");
   const [windowDays, setWindowDays] = useState<number>(30);
   const [showOil, setShowOil] = useState(false);
+  const [showIranEvents, setShowIranEvents] = useState(true);
   const [showWorldEvents, setShowWorldEvents] = useState(false);
+  const [showSanctionsEvents, setShowSanctionsEvents] = useState(false);
   const [oilPoints, setOilPoints] = useState<OilSignalData["points"]>([]);
   const [oilSource, setOilSource] = useState<OilSource | null>(null);
   const [fxPoints, setFxPoints] = useState<FxUsdTomanSignalData["points"]>([]);
@@ -163,8 +165,14 @@ export default function StudyDetailPage() {
     const params = new URLSearchParams({
       study_id: isFxUsdToman || isOilAndFx ? "iran" : studyId,
     });
-    if (isOilBrent || isFxUsdToman || isOilAndFx) {
-      params.set("layers", showWorldEvents ? "iran_core,world_core" : "iran_core");
+    const hasEventLayers = isOverviewStub || isOilBrent || isFxUsdToman || isOilAndFx;
+    if (hasEventLayers) {
+      const layers = [
+        ...(showIranEvents ? ["iran_core"] : []),
+        ...(showWorldEvents ? ["world_core"] : []),
+        ...(showSanctionsEvents ? ["sanctions"] : []),
+      ];
+      params.set("layers", layers.length ? layers.join(",") : "none");
     }
     fetchJson<EventsData>(`/api/events?${params}`)
       .then((res) => mounted && setEvents(res.events ?? []))
@@ -172,7 +180,7 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [studyId, study, isOilBrent, isFxUsdToman, isOilAndFx, showWorldEvents]);
+  }, [studyId, study, isOverviewStub, isOilBrent, isFxUsdToman, isOilAndFx, showIranEvents, showWorldEvents, showSanctionsEvents]);
 
   useEffect(() => {
     if (!study || !isOverviewStub) return;
@@ -557,7 +565,20 @@ export default function StudyDetailPage() {
                 Show Brent oil price
               </label>
             )}
-            {(isOilBrent || isFxUsdToman || isOilAndFx) && (
+          </div>
+        </CardHeader>
+        <CardContent>
+          {(isOverviewStub || isOilBrent || isFxUsdToman || isOilAndFx) && (
+            <div className="mb-3 flex flex-shrink-0 items-center gap-4 border-b border-border pb-3">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showIranEvents}
+                  onChange={(e) => setShowIranEvents(e.target.checked)}
+                  className="rounded border-border"
+                />
+                Show Iran events
+              </label>
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                 <input
                   type="checkbox"
@@ -567,10 +588,17 @@ export default function StudyDetailPage() {
                 />
                 Show world events
               </label>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showSanctionsEvents}
+                  onChange={(e) => setShowSanctionsEvents(e.target.checked)}
+                  className="rounded border-border"
+                />
+                Show sanctions
+              </label>
+            </div>
+          )}
           {isOilBrent ? (
             <>
               <TimelineChart

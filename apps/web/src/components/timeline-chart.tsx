@@ -13,8 +13,9 @@ export type TimelineEvent = {
   type?: string;
   description?: string;
   confidence?: string;
-  layer?: "iran_core" | "world_core";
-  scope?: "iran" | "world";
+  sources?: string[];
+  layer?: "iran_core" | "world_core" | "sanctions";
+  scope?: "iran" | "world" | "sanctions";
 };
 
 type OilPoint = { date: string; value: number };
@@ -78,10 +79,11 @@ export function TimelineChart({
     const borderColor = cssHsl("--border", "hsl(240, 5.9%, 90%)");
     const mutedFg = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
 
-    const getEventScope = (ev: TimelineEvent): "iran" | "world" =>
-      ev.scope ?? (ev.layer === "world_core" ? "world" : "iran");
+    const getEventScope = (ev: TimelineEvent): "iran" | "world" | "sanctions" =>
+      ev.scope ?? (ev.layer === "world_core" ? "world" : ev.layer === "sanctions" ? "sanctions" : "iran");
     const IranOpacity = 0.5;
     const WorldOpacity = 0.3;
+    const SanctionsOpacity = 0.28;
 
     const oilPointsResolved = secondSeries?.points ?? oilPoints;
     const hasData = data.length > 0;
@@ -163,11 +165,22 @@ export function TimelineChart({
           )?.event;
           const lines: string[] = [];
           if (ev) {
-            const scopeLabel = getEventScope(ev) === "world" ? "World event" : "Iran event";
+            const scope = getEventScope(ev);
+            const scopeLabel = scope === "sanctions" ? "Sanctions" : scope === "world" ? "World event" : "Iran event";
             lines.push(`<span style="font-size:10px;color:#888">${scopeLabel}</span>`);
             lines.push(`<span style="font-weight:600">${ev.title}</span>`, ev.date);
             if (ev.description) lines.push(ev.description);
-            if (ev.confidence) lines.push(`Confidence: ${ev.confidence}`);
+            if (ev.sources && ev.sources.length > 0) {
+              lines.push(
+                ev.sources
+                  .map((url, i) => {
+                    const label = ev.sources!.length > 1 ? `Source ${i + 1}` : "Source";
+                    return `<a href="${url}" target="_blank" rel="noopener" style="color:#6b9dc7;font-size:11px">${label}</a>`;
+                  })
+                  .join(" • ")
+              );
+            }
+            if (ev.confidence && scope !== "sanctions") lines.push(`Confidence: ${ev.confidence}`);
             lines.push("—");
           }
           lines.push(dateStr);
@@ -287,9 +300,11 @@ export function TimelineChart({
                         symbol: "none",
                         data: markLineData.map((d) => {
                           const scope = getEventScope(d.event);
+                          const isSanctions = scope === "sanctions";
                           const isWorld = scope === "world";
-                          const color = d.isAnchor ? mutedFg : withAlphaHsl(muted, isWorld ? WorldOpacity : IranOpacity);
-                          const width = d.isAnchor ? 1.5 : isWorld ? 1 : 1.15;
+                          const opacity = isSanctions ? SanctionsOpacity : isWorld ? WorldOpacity : IranOpacity;
+                          const color = d.isAnchor ? mutedFg : withAlphaHsl(muted, opacity);
+                          const width = d.isAnchor ? 1.5 : isSanctions ? 1 : isWorld ? 1 : 1.15;
                           const lineType = "dashed" as const;
                           return {
                             xAxis: d.xAxis,
@@ -314,9 +329,11 @@ export function TimelineChart({
                         symbol: "none",
                         data: markLineData.map((d) => {
                           const scope = getEventScope(d.event);
+                          const isSanctions = scope === "sanctions";
                           const isWorld = scope === "world";
-                          const color = d.isAnchor ? mutedFg : withAlphaHsl(muted, isWorld ? WorldOpacity : IranOpacity);
-                          const width = d.isAnchor ? 1.5 : isWorld ? 1 : 1.15;
+                          const opacity = isSanctions ? SanctionsOpacity : isWorld ? WorldOpacity : IranOpacity;
+                          const color = d.isAnchor ? mutedFg : withAlphaHsl(muted, opacity);
+                          const width = d.isAnchor ? 1.5 : isSanctions ? 1 : isWorld ? 1 : 1.15;
                           const lineType = "dashed" as const;
                           return {
                             xAxis: d.xAxis,

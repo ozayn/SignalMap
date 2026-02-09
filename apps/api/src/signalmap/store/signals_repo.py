@@ -15,43 +15,14 @@ def _has_db() -> bool:
     return bool(DATABASE_URL and cursor)
 
 
-def upsert_points(
+def get_points(
     signal_key: str,
-    points: list[dict[str, Any]],
-    source: str,
-    metadata: Optional[dict[str, Any]] = None,
-) -> int:
-    """Insert or update points. Idempotent on (signal_key, date). Returns count upserted."""
-    if not _has_db():
-        return 0
-    meta_json = json.dumps(metadata or {})
-    count = 0
-    with cursor() as cur:
-        for p in points:
-            date = p.get("date")
-            value = p.get("value")
-            if not date or value is None:
-                continue
-            confidence = p.get("confidence")
-            cur.execute(
-                """
-                INSERT INTO signal_points (signal_key, date, value, source, confidence, metadata, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, NOW())
-                ON CONFLICT (signal_key, date) DO UPDATE SET
-                    value = EXCLUDED.value,
-                    source = EXCLUDED.source,
-                    confidence = EXCLUDED.confidence,
-                    metadata = EXCLUDED.metadata,
-                    updated_at = NOW()
-                """,
-                (signal_key, date, value, source, confidence, meta_json),
-            )
-            count += 1
-    return count
-
-
-def get_points(signal_key: str, start: str, end: str) -> list[dict[str, Any]]:
-    """Return points for signal_key in [start, end]. Sorted by date."""
+    start: str,
+    end: str,
+) -> list[dict[str, Any]]:
+    """Return points for signal_key in [start, end]. Sorted by date.
+    Each point: {date, value, confidence?, metadata?}.
+    """
     if not _has_db():
         return []
     with cursor() as cur:
@@ -69,6 +40,46 @@ def get_points(signal_key: str, start: str, end: str) -> list[dict[str, Any]]:
         {
             "date": r["date"],
             "value": float(r["value"]) if r["value"] is not None else None,
+            **({"confidence": r["confidence"]} if r.get("confidence") is not None else {}),
+            **({"metadata": r["metadata"]} if r.get("metadata") is not None else {}),
         }
         for r in rows
     ]
+
+
+def upsert_points(
+    signal_key: str,
+    points: list[dict[str, Any]],
+    source: str,
+    confidence: Optional[float] = None,
+    metadata: Optional[dict[str, Any]] = None,
+) -> int:
+    """Insert or update points. Idempotent on (signal_key, date). Returns count upserted.
+    source: short identifier (e.g. FRED:DCOILBRENTEU). Full source info can go in metadata.
+    """
+    if not _has_db():
+        return 0
+    meta_json = json.dumps(metadata or {})
+    count = 0
+    with cursor() as cur:
+        for p in points:
+            date = p.get("date")
+            value = p.get("value")
+            if not date or value is None:
+                continue
+            confidence_val = p.get("confidence") if p.get("confidence") is not None else confidence
+            cur.execute(
+                """
+                INSERT INTO signal_points (signal_key, date, value, source, confidence, metadata, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                ON CONFLICT (signal_key, date) DO UPDATE SET
+                    value = EXCLUDED.value,
+                    source = EXCLUDED.source,
+                    confidence = EXCLUDED.confidence,
+                    metadata = EXCLUDED.metadata,
+                    updated_at = NOW()
+                """,
+                (signal_key, date, value, source, confidence_val, meta_json),
+            )
+            count += 1
+    return count
