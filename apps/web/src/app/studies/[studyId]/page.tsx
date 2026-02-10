@@ -187,7 +187,7 @@ export default function StudyDetailPage() {
   const [exportCapacityBaseYear, setExportCapacityBaseYear] = useState<number | null>(null);
   const [fxDualOfficialPoints, setFxDualOfficialPoints] = useState<{ date: string; value: number }[]>([]);
   const [fxDualOpenPoints, setFxDualOpenPoints] = useState<{ date: string; value: number }[]>([]);
-  const [fxDualOfficialSource, setFxDualOfficialSource] = useState<OilSource | null>(null);
+  const [fxDualOfficialSource, setFxDualOfficialSource] = useState<FxUsdTomanSource | null>(null);
   const [fxDualOpenSource, setFxDualOpenSource] = useState<FxUsdTomanSource | null>(null);
   const [showFxSpread, setShowFxSpread] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -571,8 +571,8 @@ export default function StudyDetailPage() {
         if (mounted) {
           setFxDualOfficialPoints(res.official?.points ?? []);
           setFxDualOpenPoints(res.open_market?.points ?? []);
-          setFxDualOfficialSource((res.official?.source ?? null) as FxUsdTomanSource | null);
-          setFxDualOpenSource((res.open_market?.source ?? null) as FxUsdTomanSource | null);
+          setFxDualOfficialSource(res.official?.source ?? null);
+          setFxDualOpenSource(res.open_market?.source ?? null);
         }
       })
       .catch((e) => {
