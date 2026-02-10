@@ -143,5 +143,41 @@ def init_tables() -> None:
                     PRIMARY KEY (signal_key, date)
                 )
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS youtube_channel_snapshots (
+                    id SERIAL PRIMARY KEY,
+                    channel_id TEXT NOT NULL,
+                    channel_handle TEXT,
+                    captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    subscriber_count BIGINT,
+                    view_count BIGINT,
+                    video_count BIGINT,
+                    raw JSONB
+                )
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_youtube_channel_snapshots_channel_captured
+                ON youtube_channel_snapshots (channel_id, captured_at)
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS youtube_comment_snapshots (
+                    id SERIAL PRIMARY KEY,
+                    channel_id TEXT NOT NULL,
+                    video_id TEXT,
+                    comment_id TEXT,
+                    comment_text TEXT NOT NULL,
+                    captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    published_at TIMESTAMPTZ,
+                    raw JSONB
+                )
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_youtube_comment_snapshots_channel_captured
+                ON youtube_comment_snapshots (channel_id, captured_at)
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_youtube_comment_snapshots_channel_published
+                ON youtube_comment_snapshots (channel_id, published_at)
+            """)
     except Exception:
         pass  # DB may not be available; job endpoints will return 503

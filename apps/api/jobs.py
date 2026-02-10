@@ -1470,3 +1470,172 @@ def _run_youtube_job(job_id: str) -> None:
                 "UPDATE wayback_jobs SET status = %s, error = %s, finished_at = NOW() WHERE job_id = %s",
                 ("failed", str(e), job_id),
             )
+
+
+# --- YouTube Data API v3 channel snapshots (cache-first) ---
+
+def get_cached_youtube_channel_snapshots(
+    channel_id: Optional[str] = None,
+    handle: Optional[str] = None,
+    limit: int = 30,
+) -> list[dict]:
+    """Return cached rows from youtube_channel_snapshots by channel_id or channel_handle. Order by captured_at DESC."""
+    channel_id = (channel_id or "").strip()
+    handle = (handle or "").strip().lstrip("@").split("/")[0].split("?")[0] or None
+    if not channel_id and not handle:
+        return []
+    limit = min(max(limit, 1), 100)
+    try:
+        with cursor() as cur:
+            if channel_id:
+                cur.execute(
+                    """
+                    SELECT captured_at, subscriber_count, view_count, video_count, channel_id, channel_handle
+                    FROM youtube_channel_snapshots
+                    WHERE channel_id = %s
+                    ORDER BY captured_at DESC
+                    LIMIT %s
+                    """,
+                    (channel_id, limit),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT captured_at, subscriber_count, view_count, video_count, channel_id, channel_handle
+                    FROM youtube_channel_snapshots
+                    WHERE channel_handle IS NOT NULL AND LOWER(TRIM(channel_handle)) = LOWER(%s)
+                    ORDER BY captured_at DESC
+                    LIMIT %s
+                    """,
+                    (handle or "", limit),
+                )
+            rows = [dict(r) for r in cur.fetchall()]
+    except Exception:
+        return []
+    return rows
+
+
+def upsert_youtube_channel_snapshot(snapshot: dict) -> None:
+    """Insert one row into youtube_channel_snapshots. captured_at defaults to NOW()."""
+    from psycopg2.extras import Json
+    channel_id = (snapshot.get("channel_id") or "").strip()
+    if not channel_id:
+        return
+    channel_handle = (snapshot.get("handle") or snapshot.get("channel_handle") or "").strip() or None
+    subscriber_count = snapshot.get("subscriber_count")
+    view_count = snapshot.get("view_count")
+    video_count = snapshot.get("video_count")
+    raw = snapshot.get("raw")
+    try:
+        with cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO youtube_channel_snapshots
+                (channel_id, channel_handle, subscriber_count, view_count, video_count, raw)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    channel_id,
+                    channel_handle,
+                    subscriber_count,
+                    view_count,
+                    video_count,
+                    Json(raw) if raw is not None else None,
+                ),
+            )
+    except Exception:
+        pass  # Non-fatal
+
+
+def get_youtube_channel_cache_first(
+    handle: Optional[str] = None,
+    channel_id: Optional[str] = None,
+    force_live: bool = False,
+    limit: int = 30,
+) -> dict:
+    """
+    Cache-first: return cache only if present and not force_live; else call YouTube API once, write snapshot, return.
+    Response: platform, handle, channel_id, source (cache|live|mixed), snapshots, meta (cache_rows, api_calls, notes).
+    """
+    handle = (handle or "").strip().lstrip("@") or None
+    channel_id = (channel_id or "").strip() or None
+    if not handle and not channel_id:
+        return {
+            "platform": "youtube",
+            "handle": "",
+            "channel_id": "",
+            "source": "live",
+            "snapshots": [],
+            "meta": {"cache_rows": 0, "api_calls": 0, "notes": ["Either handle or channel_id is required."]},
+        }
+    limit = min(max(limit, 1), 100)
+    notes: list[str] = []
+
+    cache_rows = get_cached_youtube_channel_snapshots(channel_id=channel_id, handle=handle, limit=limit)
+    if cache_rows and not force_live:
+        snapshots = [
+            {
+                "captured_at": r["captured_at"].isoformat() if hasattr(r["captured_at"], "isoformat") else str(r["captured_at"]),
+                "subscribers": r.get("subscriber_count"),
+                "views": r.get("view_count"),
+                "videos": r.get("video_count"),
+            }
+            for r in cache_rows
+        ]
+        return {
+            "platform": "youtube",
+            "handle": (cache_rows[0].get("channel_handle") or handle or ""),
+            "channel_id": (cache_rows[0].get("channel_id") or channel_id or ""),
+            "source": "cache",
+            "snapshots": snapshots,
+            "meta": {"cache_rows": len(cache_rows), "api_calls": 0, "notes": notes},
+        }
+
+    api_calls = 0
+    try:
+        from signalmap.connectors.youtube import fetch_channel
+        live = fetch_channel(channel_id=channel_id, handle=handle)
+        api_calls = 1
+        upsert_youtube_channel_snapshot(live)
+        cid = live.get("channel_id") or ""
+        h = live.get("handle") or handle or ""
+        all_rows = get_cached_youtube_channel_snapshots(channel_id=cid, handle=None, limit=limit)
+        snapshots = [
+            {
+                "captured_at": r["captured_at"].isoformat() if hasattr(r["captured_at"], "isoformat") else str(r["captured_at"]),
+                "subscribers": r.get("subscriber_count"),
+                "views": r.get("view_count"),
+                "videos": r.get("video_count"),
+            }
+            for r in all_rows
+        ]
+        return {
+            "platform": "youtube",
+            "handle": h,
+            "channel_id": cid,
+            "source": "mixed" if cache_rows else "live",
+            "snapshots": snapshots,
+            "meta": {"cache_rows": len(all_rows), "api_calls": api_calls, "notes": notes},
+        }
+    except ValueError:
+        raise  # Missing API key etc. -> route returns 500
+    except RuntimeError:
+        raise  # Quota/auth -> route returns 502
+    except Exception as e:
+        notes.append(str(e))
+        return {
+            "platform": "youtube",
+            "handle": handle or "",
+            "channel_id": channel_id or "",
+            "source": "cache" if cache_rows else "live",
+            "snapshots": [
+                {
+                    "captured_at": r["captured_at"].isoformat() if hasattr(r["captured_at"], "isoformat") else str(r["captured_at"]),
+                    "subscribers": r.get("subscriber_count"),
+                    "views": r.get("view_count"),
+                    "videos": r.get("video_count"),
+                }
+                for r in cache_rows
+            ] if cache_rows else [],
+            "meta": {"cache_rows": len(cache_rows), "api_calls": api_calls, "notes": notes},
+        }

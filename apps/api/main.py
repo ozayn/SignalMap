@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Body, FastAPI, HTTPException, Query, Request
 
 from connectors.wayback import get_snapshots_with_metrics
 from connectors.wayback_instagram import (
@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from signalmap.connectors.wayback_youtube import get_youtube_archival_metrics
 from signalmap.connectors.wayback_twitter import get_twitter_archival_metrics
 
-from db import init_tables
+from db import cursor, init_tables
 from jobs import (
     cache_first_instagram,
     cache_first_twitter,
@@ -36,11 +36,13 @@ from jobs import (
     create_instagram_job,
     create_youtube_job,
     create_twitter_job,
+    get_cached_youtube_channel_snapshots,
     get_job,
     get_job_results,
     list_jobs,
     cancel_job,
     delete_job,
+    get_youtube_channel_cache_first,
     _run_instagram_job,
     _run_youtube_job,
     _run_twitter_job,
@@ -831,3 +833,184 @@ def delete_wayback_job(job_id: str):
     if not delete_job(job_id):
         raise HTTPException(status_code=404, detail="Job not found")
     return {"job_id": job_id, "status": "deleted"}
+
+
+# --- YouTube Data API v3 channel (cache-first + job) ---
+
+# When set, only requests that send header X-Youtube-Api-Secret: <this value> can trigger live YouTube API calls.
+YOUTUBE_API_ALLOWED_SECRET = (os.getenv("YOUTUBE_API_ALLOWED_SECRET") or "").strip()
+# Set to 1 or true to disable the secret check (e.g. for local testing).
+YOUTUBE_API_SECRET_CHECK_DISABLED = (os.getenv("YOUTUBE_API_SECRET_CHECK_DISABLED") or "").strip().lower() in ("1", "true", "yes")
+
+
+def _require_youtube_live_secret(request: Request) -> None:
+    """Raise 403 if YOUTUBE_API_ALLOWED_SECRET is set and request does not send a matching secret."""
+    if YOUTUBE_API_SECRET_CHECK_DISABLED or not YOUTUBE_API_ALLOWED_SECRET:
+        return
+    secret = (request.headers.get("X-Youtube-Api-Secret") or "").strip()
+    if secret != YOUTUBE_API_ALLOWED_SECRET:
+        raise HTTPException(
+            status_code=403,
+            detail="YouTube API access restricted. Set X-Youtube-Api-Secret header to use live channel data.",
+        )
+
+
+def _youtube_channel_cache_response(cache_rows: list, handle: Optional[str], channel_id: Optional[str], limit: int):
+    """Build the same response shape as get_youtube_channel_cache_first for cache-only."""
+    if not cache_rows:
+        return None
+    snapshots = [
+        {
+            "captured_at": r["captured_at"].isoformat() if hasattr(r["captured_at"], "isoformat") else str(r["captured_at"]),
+            "subscribers": r.get("subscriber_count"),
+            "views": r.get("view_count"),
+            "videos": r.get("video_count"),
+        }
+        for r in cache_rows
+    ]
+    return {
+        "platform": "youtube",
+        "handle": (cache_rows[0].get("channel_handle") or handle or ""),
+        "channel_id": (cache_rows[0].get("channel_id") or channel_id or ""),
+        "source": "cache",
+        "snapshots": snapshots,
+        "meta": {"cache_rows": len(cache_rows), "api_calls": 0, "notes": []},
+    }
+
+
+@app.get("/api/youtube/channel/cache-first")
+def youtube_channel_cache_first(
+    request: Request,
+    handle: Optional[str] = Query(None),
+    channel_id: Optional[str] = Query(None),
+    force_live: bool = Query(False),
+    limit: int = Query(30, ge=1, le=100),
+):
+    """Cache-first channel snapshots (subscriber/view/video counts). Prefer handle; channel_id optional."""
+    h = (handle or "").strip() or None
+    cid = (channel_id or "").strip() or None
+    if not h and not cid:
+        raise HTTPException(status_code=422, detail="Either handle or channel_id is required.")
+    limit = min(max(limit, 1), 100)
+    cache_rows = get_cached_youtube_channel_snapshots(channel_id=cid, handle=h, limit=limit)
+    if cache_rows and not force_live:
+        out = _youtube_channel_cache_response(cache_rows, h, cid, limit)
+        if out:
+            return out
+    _require_youtube_live_secret(request)
+    try:
+        return get_youtube_channel_cache_first(
+            handle=h,
+            channel_id=cid,
+            force_live=force_live,
+            limit=limit,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+class YouTubeChannelJobBody(BaseModel):
+    handle: Optional[str] = None
+    channel_id: Optional[str] = None
+
+
+@app.post("/api/youtube/channel/jobs")
+def create_youtube_channel_job(
+    request: Request,
+    handle: Optional[str] = Query(None),
+    channel_id: Optional[str] = Query(None),
+    force_live: bool = Query(False),
+    limit: int = Query(30, ge=1, le=100),
+    body: Optional[YouTubeChannelJobBody] = Body(None),
+):
+    """
+    Fetch channel snapshot (same logic as cache-first). Query params preferred; optional body for backward compat.
+    Returns the same normalized shape as GET /api/youtube/channel/cache-first.
+    Example: curl -X POST "http://localhost:8000/api/youtube/channel/jobs?handle=googledevelopers"
+    """
+    _require_youtube_live_secret(request)
+    # Prefer query params; fall back to body if provided
+    h = (handle or (body.handle if body else None) or "").strip() or None
+    cid = (channel_id or (body.channel_id if body else None) or "").strip() or None
+    if not h and not cid:
+        raise HTTPException(status_code=422, detail="Either handle or channel_id is required (query or body).")
+    try:
+        return get_youtube_channel_cache_first(
+            handle=h,
+            channel_id=cid,
+            force_live=force_live,
+            limit=limit,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+# --- YouTube comments word cloud (observational, descriptive only) ---
+
+@app.get("/api/youtube/comments/wordcloud")
+def youtube_comments_wordcloud(
+    channel_id: str = Query(..., description="YouTube channel ID"),
+    window_start: str = Query(..., description="Window start (ISO date or datetime)"),
+    window_end: str = Query(..., description="Window end (ISO date or datetime)"),
+    by: str = Query("published_at", description="Window by: published_at (when comment was posted) | captured_at (when we ingested)"),
+    top_n: int = Query(80, ge=1, le=200),
+    channel_terms: Optional[str] = Query(None, description="Comma-separated terms to exclude (e.g. bplus,podcast)"),
+):
+    """
+    Word frequencies from comment text in the given window. Observational only; no topic or sentiment.
+    Returns { items: [{ token, count }], window_start, window_end }.
+    Sample channel UC-test-wordcloud works without DB (in-memory fallback).
+    """
+    terms = None
+    if channel_terms:
+        terms = {t.strip().lower() for t in channel_terms.split(",") if t.strip()}
+    cid = channel_id.strip()
+    from signalmap.services.comment_wordcloud import (
+        BPLUS_HANDLE_NORMALIZED,
+        BPLUS_SAMPLE_COMMENTS,
+        SAMPLE_CHANNEL_ID,
+        SAMPLE_COMMENTS_FALLBACK,
+        get_wordcloud_data,
+        get_wordcloud_data_from_texts,
+        _normalize_handle_for_fallback,
+    )
+    # Sample channel: serve from memory when DB not configured or has no rows
+    if cid == SAMPLE_CHANNEL_ID and not os.getenv("DATABASE_URL"):
+        data = get_wordcloud_data_from_texts(
+            SAMPLE_COMMENTS_FALLBACK,
+            window_start=window_start.strip(),
+            window_end=window_end.strip(),
+            top_n=top_n,
+            channel_terms=terms,
+        )
+        return data
+    # Bplus Podcast by handle: serve from memory when DB not configured
+    if _normalize_handle_for_fallback(cid) == BPLUS_HANDLE_NORMALIZED and not os.getenv("DATABASE_URL"):
+        data = get_wordcloud_data_from_texts(
+            BPLUS_SAMPLE_COMMENTS,
+            window_start=window_start.strip(),
+            window_end=window_end.strip(),
+            top_n=top_n,
+            channel_terms=terms,
+        )
+        return data
+    if not os.getenv("DATABASE_URL"):
+        raise HTTPException(status_code=503, detail="Database not configured.")
+    try:
+        with cursor() as cur:
+            data = get_wordcloud_data(
+                cur,
+                channel_id=cid,
+                window_start=window_start.strip(),
+                window_end=window_end.strip(),
+                by=by if by in ("captured_at", "published_at") else "captured_at",
+                top_n=top_n,
+                channel_terms=terms,
+            )
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
