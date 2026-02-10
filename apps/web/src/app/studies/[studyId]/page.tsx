@@ -99,32 +99,24 @@ type OilPppIranSignalData = {
 };
 
 const WINDOW_OPTIONS = [
-  { value: 7, label: "±7 days" },
-  { value: 30, label: "±30 days" },
-  { value: 90, label: "±90 days" },
+  { value: 1, label: "±1 year" },
+  { value: 2, label: "±2 years" },
+  { value: 5, label: "±5 years" },
 ] as const;
 
 const WINDOW_OPTIONS_LONG_RANGE = [
-  { value: 90, label: "±90 days" },
-  { value: 180, label: "±6 months" },
-  { value: 365, label: "±1 year" },
-  { value: 730, label: "±2 years" },
+  { value: 2, label: "±2 years" },
+  { value: 5, label: "±5 years" },
+  { value: 10, label: "±10 years" },
 ] as const;
 
-
-function computeWindowRange(
-  eventDate: string,
-  windowDays: number
-): [string, string] {
+function computeWindowRange(eventDate: string, windowYears: number): [string, string] {
   const d = new Date(eventDate);
   const start = new Date(d);
-  start.setDate(start.getDate() - windowDays);
+  start.setFullYear(start.getFullYear() - windowYears);
   const end = new Date(d);
-  end.setDate(end.getDate() + windowDays);
-  return [
-    start.toISOString().slice(0, 10),
-    end.toISOString().slice(0, 10),
-  ];
+  end.setFullYear(end.getFullYear() + windowYears);
+  return [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)];
 }
 
 function computeOilKpis(points: { value: number }[]) {
@@ -159,7 +151,7 @@ export default function StudyDetailPage() {
   const [data, setData] = useState<OverviewData | null>(null);
   const [events, setEvents] = useState<EventsData["events"]>([]);
   const [anchorEventId, setAnchorEventId] = useState<string>("");
-  const [windowDays, setWindowDays] = useState<number>(30);
+  const [windowYears, setWindowYears] = useState<number>(2);
   const [showOil, setShowOil] = useState(false);
   const [showGold, setShowGold] = useState(false);
   const [showIranEvents, setShowIranEvents] = useState(true);
@@ -234,9 +226,9 @@ export default function StudyDetailPage() {
   const isWageCpiReal = study?.primarySignal.kind === "wage_cpi_real";
 
   const windowOptions = isGoldAndOil ? WINDOW_OPTIONS_LONG_RANGE : WINDOW_OPTIONS;
-  const effectiveWindowDays = useMemo(
-    () => (windowOptions.some((o) => o.value === windowDays) ? windowDays : windowOptions[0].value),
-    [isGoldAndOil, windowDays]
+  const effectiveWindowYears = useMemo(
+    () => (windowOptions.some((o) => o.value === windowYears) ? windowYears : windowOptions[0].value),
+    [isGoldAndOil, windowYears]
   );
 
   const oilTimeRange = useMemo((): [string, string] | null => {
@@ -245,11 +237,11 @@ export default function StudyDetailPage() {
       const ev = events.find((e) => e.id === anchorEventId);
       if (ev) {
         const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
-        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowDays);
+        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowYears);
       }
     }
     return study.timeRange;
-  }, [study, isOilBrent, isOilGlobalLong, isGoldAndOil, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, anchorEventId, events, effectiveWindowDays]);
+  }, [study, isOilBrent, isOilGlobalLong, isGoldAndOil, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, anchorEventId, events, effectiveWindowYears]);
 
   const exportCapacityTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isOilExportCapacity) return null;
@@ -263,8 +255,15 @@ export default function StudyDetailPage() {
 
   const wageTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isWageCpiReal) return null;
+    if (anchorEventId) {
+      const ev = events.find((e) => e.id === anchorEventId);
+      if (ev) {
+        const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
+        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowYears);
+      }
+    }
     return study.timeRange;
-  }, [study, isWageCpiReal]);
+  }, [study, isWageCpiReal, anchorEventId, events, effectiveWindowYears]);
 
   const fxTimeRange = useMemo((): [string, string] | null => {
     if (!study || !(isFxUsdToman || isOilAndFx)) return null;
@@ -272,11 +271,11 @@ export default function StudyDetailPage() {
       const ev = events.find((e) => e.id === anchorEventId);
       if (ev) {
         const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
-        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowDays);
+        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowYears);
       }
     }
     return study.timeRange;
-  }, [study, isFxUsdToman, isOilAndFx, anchorEventId, events, effectiveWindowDays]);
+  }, [study, isFxUsdToman, isOilAndFx, anchorEventId, events, effectiveWindowYears]);
 
   const dualTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isOilAndFx) return null;
@@ -284,11 +283,11 @@ export default function StudyDetailPage() {
       const ev = events.find((e) => e.id === anchorEventId);
       if (ev) {
         const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
-        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowDays);
+        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowYears);
       }
     }
     return study.timeRange;
-  }, [study, isOilAndFx, anchorEventId, events, effectiveWindowDays]);
+  }, [study, isOilAndFx, anchorEventId, events, effectiveWindowYears]);
 
   const pppEarlierPeriodMedian = useMemo(() => {
     if (!isOilPppIran || pppIranPoints.length === 0) return undefined;
@@ -302,7 +301,11 @@ export default function StudyDetailPage() {
   const wageRealPoints = useMemo(() => {
     if (wageNominalPoints.length === 0 || wageCpiPoints.length === 0 || wageBaseYear == null) return [];
     const cpiByDate = new Map(wageCpiPoints.map((p) => [p.date, p.value]));
-    const cpiBase = cpiByDate.get(`${wageBaseYear}-01-01`);
+    const baseYearStr = String(wageBaseYear);
+    const cpiBasePoint = [...wageCpiPoints]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .find((p) => p.date.slice(0, 4) === baseYearStr);
+    const cpiBase = cpiBasePoint?.value;
     if (cpiBase == null || cpiBase <= 0) return [];
     return wageNominalPoints
       .map((p) => {
@@ -323,6 +326,26 @@ export default function StudyDetailPage() {
     }));
   }, [wageRealPoints]);
 
+  // Wage chart: API returns million rials/month. 1 toman = 10 rials → 1 million rials = 100k tomans.
+  const MILLION_RIALS_TO_K_TOMANS = 100;
+  /** Nominal and real wage in thousand tomans/month (k tomans) for chart. */
+  const wageNominalKTomans = useMemo(
+    () =>
+      wageNominalPoints.map((p) => ({
+        date: p.date,
+        value: Math.round(p.value * MILLION_RIALS_TO_K_TOMANS * 10) / 10,
+      })),
+    [wageNominalPoints],
+  );
+  const wageRealKTomans = useMemo(
+    () =>
+      wageRealPoints.map((p) => ({
+        date: p.date,
+        value: Math.round(p.value * MILLION_RIALS_TO_K_TOMANS * 10) / 10,
+      })),
+    [wageRealPoints],
+  );
+
   const sanctionsPeriodsFromEvents = useMemo(() => {
     if (!isOilExportCapacity || !showSanctionsPeriods || !study) return undefined;
     const rangeEnd = exportCapacityTimeRange?.[1] ?? study.timeRange[1];
@@ -342,7 +365,7 @@ export default function StudyDetailPage() {
     const params = new URLSearchParams({
       study_id: isFxUsdToman || isOilAndFx ? "iran" : studyId,
     });
-    const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isEventsTimeline;
+    const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isWageCpiReal || isEventsTimeline;
     if (hasEventLayers && !isEventsTimeline) {
       let layers: string[];
       if (((isOilGlobalLong || isGoldAndOil || isRealOil || isOilExportCapacity) && study.eventLayers?.length) || (hasTurkeyComparator && study.eventLayers !== undefined)) {
@@ -370,7 +393,7 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, hasTurkeyComparator, isEventsTimeline, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms, showSanctionsPeriods]);
+  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, isWageCpiReal, hasTurkeyComparator, isEventsTimeline, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms, showSanctionsPeriods]);
 
   useEffect(() => {
     if (study && (isEventsTimeline || isFollowerGrowthDynamics)) {
@@ -385,7 +408,7 @@ export default function StudyDetailPage() {
     const qs = new URLSearchParams({ study_id: studyId });
     if (anchorEventId) {
       qs.set("anchor_event_id", anchorEventId);
-      qs.set("window_days", String(effectiveWindowDays));
+      qs.set("window_days", String(effectiveWindowYears * 365));
     }
     fetchJson<OverviewData>(`/api/overview?${qs}`)
       .then((res) => mounted && setData(res))
@@ -394,7 +417,7 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [studyId, study, isOverviewStub, anchorEventId, effectiveWindowDays, data]);
+  }, [studyId, study, isOverviewStub, anchorEventId, effectiveWindowYears, data]);
 
   useEffect(() => {
     if (!oilTimeRange || !(isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isRealOil || isOilPppIran)) {
@@ -1575,8 +1598,8 @@ export default function StudyDetailPage() {
                   ))}
                 </select>
                 <select
-                  value={effectiveWindowDays}
-                  onChange={(e) => setWindowDays(Number(e.target.value))}
+                  value={effectiveWindowYears}
+                  onChange={(e) => setWindowYears(Number(e.target.value))}
                   disabled={!anchorEventId}
                   className="text-xs text-muted-foreground bg-transparent border border-border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                 >
@@ -2006,21 +2029,22 @@ export default function StudyDetailPage() {
                     data={[]}
                     valueKey="value"
                     label="Nominal"
-                    events={[]}
+                    events={events}
+                    anchorEventId={anchorEventId || undefined}
                     multiSeries={[
                       {
                         key: "nominal",
                         label: "Nominal minimum wage",
                         yAxisIndex: 0,
-                        unit: "million rials/month",
-                        points: wageNominalPoints,
+                        unit: "k tomans/month",
+                        points: wageNominalKTomans,
                       },
                       {
                         key: "real",
                         label: "Real minimum wage",
                         yAxisIndex: 0,
-                        unit: `million rials/month (${wageBaseYear ?? ""} prices)`,
-                        points: wageRealPoints,
+                        unit: `k tomans/month (${wageBaseYear ?? ""} prices)`,
+                        points: wageRealKTomans,
                       },
                       ...(showWageIndex
                         ? [
@@ -2056,7 +2080,7 @@ export default function StudyDetailPage() {
                       {
                         heading: "Measurement choices & limitations",
                         bullets: [
-                          "Nominal minimum wage: annual, in million rials per month (ILO/national sources). CPI: annual, index 2010 = 100 (World Bank, Iran).",
+                          "Chart shows minimum wage in thousand tomans per month (k tomans); source data are in million rials (1 million rials = 100 k tomans). Nominal: annual (ILO/national). CPI: annual, index 2010 = 100 (World Bank, Iran).",
                           wageBaseYear != null
                             ? `Real wage = nominal × (CPI_base / CPI_t); base year ${wageBaseYear}. Real wage is expressed in ${wageBaseYear} purchasing power.`
                             : "Real wage = nominal × (CPI_base / CPI_t); a fixed base year is used so levels are comparable across years.",
@@ -2083,8 +2107,8 @@ export default function StudyDetailPage() {
                         label: "Nominal minimum wage",
                         sourceName: wageSource?.nominal ?? "—",
                         sourceUrl: "https://ilostat.ilo.org/data/",
-                        sourceDetail: "Annual, million rials per month",
-                        unitLabel: "million rials/month",
+                        sourceDetail: "Annual, chart in k tomans/month (source: million rials)",
+                        unitLabel: "k tomans/month",
                       },
                       {
                         label: "CPI",
@@ -2097,7 +2121,7 @@ export default function StudyDetailPage() {
                         label: "Real minimum wage",
                         sourceName: "Derived",
                         sourceDetail: "Nominal × (CPI_base / CPI_t)",
-                        unitLabel: wageBaseYear != null ? `million rials/month (${wageBaseYear} prices)` : "million rials/month (constant prices)",
+                        unitLabel: wageBaseYear != null ? `k tomans/month (${wageBaseYear} prices)` : "k tomans/month (constant prices)",
                       },
                     ]}
                     note={wageBaseYear != null ? `Real wage base year: ${wageBaseYear}. Educational use; not for policy or causal inference.` : undefined}
@@ -2107,7 +2131,7 @@ export default function StudyDetailPage() {
                       The nominal minimum wage is the official number set each year. The real minimum wage adjusts that number for inflation so you can compare purchasing power across years. When prices rise faster than the nominal wage, the real wage falls—workers can buy less with their pay.
                     </p>
                     <p>
-                      This chart shows both: the nominal minimum wage in Iran (current million rials per month) and the same wage expressed in constant purchasing power (real wage). It describes how these series have evolved. It does not explain why they move or what should be done.
+                      This chart shows both: the nominal minimum wage in Iran (current thousand tomans per month, k tomans) and the same wage expressed in constant purchasing power (real wage). It describes how these series have evolved. It does not explain why they move or what should be done.
                     </p>
                     <p>
                       Measurement limits apply: the data come from official and international sources. Definitions and coverage may differ from what people actually earn or spend. The study aims to illustrate nominal vs real and the role of CPI adjustment, not to make causal or policy claims.

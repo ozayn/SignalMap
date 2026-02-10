@@ -505,7 +505,10 @@ export function TimelineChart({
           if (hasMultiSeries && multiSeries && multiSeriesValues) {
             multiSeries.forEach((s, i) => {
               const val = multiSeriesValues[i]?.[idx];
-              const formatted = val != null ? `${val} ${s.unit}` : "—";
+              const formatted =
+                val != null
+                  ? `${Number(val).toLocaleString(undefined, { maximumFractionDigits: 20 })} ${s.unit}`
+                  : "—";
               lines.push(`${s.label}: ${formatted}`);
             });
           } else if (hasOil) {
