@@ -3,6 +3,8 @@ import { Card, CardContent } from "@/components/ui/card";
 export type SourceInfoItem = {
   label: string;
   sourceName: string;
+  /** Optional URL for the source (opens in new tab). */
+  sourceUrl?: string;
   sourceDetail?: string;
   unitLabel?: string;
   unitNote?: string;
@@ -30,7 +32,18 @@ export function SourceInfo({
             <div key={item.label} className="space-y-0.5 min-w-0 break-words">
               <p className="text-sm font-medium text-foreground/90">{item.label}</p>
               <p className="text-sm text-muted-foreground">
-                {item.sourceName}
+                {item.sourceUrl ? (
+                  <a
+                    href={item.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-muted-foreground hover:text-foreground underline underline-offset-2"
+                  >
+                    {item.sourceName}
+                  </a>
+                ) : (
+                  item.sourceName
+                )}
                 {item.sourceDetail && (
                   <span className="text-muted-foreground/90"> ({item.sourceDetail})</span>
                 )}

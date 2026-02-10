@@ -10,7 +10,8 @@ export type PrimarySignal =
   | { kind: "oil_export_capacity" }
   | { kind: "events_timeline" }
   | { kind: "follower_growth_dynamics" }
-  | { kind: "fx_usd_irr_dual" };
+  | { kind: "fx_usd_irr_dual" }
+  | { kind: "wage_cpi_real" };
 
 import type { ConceptKey } from "./concepts";
 
@@ -18,6 +19,8 @@ export type StudyMeta = {
   id: string;
   number: number;
   title: string;
+  /** Optional short subtitle (e.g. "Inflation-adjusted minimum wage (CPI)"). */
+  subtitle?: string;
   timeRange: [string, string];
   description: string;
   status: string;
@@ -29,6 +32,8 @@ export type StudyMeta = {
   concepts?: ConceptKey[];
   /** When set, show Turkey as a comparator (always-on for Study 8). */
   comparatorCountry?: "Turkey";
+  /** Observational bullets for "What this chart shows (in this dataset)". 3–6 short bullets, no causality. */
+  observations?: string[];
 };
 
 export const STUDIES: StudyMeta[] = [
@@ -98,7 +103,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "real_oil" },
     eventLayers: ["world_core", "world_1900"],
-    concepts: ["real_price", "cpi", "event_overlay"],
+    concepts: ["real_price", "cpi", "real_oil_price", "derived_series", "event_overlay"],
   },
   {
     id: "iran_oil_ppp",
@@ -110,7 +115,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "oil_ppp_iran" },
     eventLayers: ["iran_core", "world_core"],
-    concepts: ["ppp", "log_scale", "structural_break", "event_overlay"],
+    concepts: ["ppp", "ppp_oil_burden", "log_scale", "structural_break", "derived_series", "event_overlay"],
   },
   {
     id: "iran_oil_ppp_turkey",
@@ -122,7 +127,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "oil_ppp_iran" },
     eventLayers: [],
-    concepts: ["ppp", "log_scale", "structural_break"],
+    concepts: ["ppp", "ppp_oil_burden", "log_scale", "structural_break", "derived_series"],
     comparatorCountry: "Turkey",
   },
   {
@@ -135,7 +140,13 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "oil_export_capacity" },
     eventLayers: ["sanctions"],
-    concepts: ["oil_benchmark", "price_vs_quantity", "indexing", "event_overlay"],
+    concepts: ["oil_benchmark", "price_vs_quantity", "oil_export_volume", "indexing", "export_capacity_proxy", "derived_series", "event_overlay"],
+    observations: [
+      "Over the period shown, oil price and the export capacity proxy often move in the same direction but not in lockstep.",
+      "The proxy series appears to fall in some years when volume declines, even when price rises.",
+      "The gap between price and proxy widens when estimated export volume is relatively low.",
+      "In this dataset, the proxy remains below its early-period peak in several later years.",
+    ],
   },
   {
     id: "follower_growth_dynamics",
@@ -147,6 +158,12 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "follower_growth_dynamics" },
     concepts: ["linear_vs_exponential_growth", "logistic_growth_saturation", "model_fitting_intuition", "overfitting_simple"],
+    observations: [
+      "In this dataset, the raw follower count rises over the period shown.",
+      "Growth appears to slow toward the end of the series in many cases.",
+      "The fitted curves diverge from each other in the later part of the chart; which sits closest to the points depends on the loaded data.",
+      "The line connecting points often shows irregular steps; spacing between points varies over the period.",
+    ],
   },
   {
     id: "events_timeline",
@@ -167,7 +184,25 @@ export const STUDIES: StudyMeta[] = [
     description: "Official vs open-market USD/IRR.",
     status: "active",
     primarySignal: { kind: "fx_usd_irr_dual" },
-    concepts: ["multiple_exchange_rates", "capital_controls", "price_controls", "measurement_vs_reality"],
+    concepts: ["multiple_exchange_rates", "official_exchange_rate", "fx_rate", "capital_controls", "price_controls", "measurement_vs_reality", "fx_spread", "derived_series"],
+  },
+  {
+    id: "iran_real_wage_cpi",
+    number: 13,
+    title: "Real Minimum Wage in Iran",
+    subtitle: "Inflation-adjusted minimum wage (CPI)",
+    timeRange: ["2010-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "Nominal and CPI-adjusted (real) minimum wage in Iran. Emphasizes purchasing power and measurement limits.",
+    status: "active",
+    primarySignal: { kind: "wage_cpi_real" },
+    concepts: ["real_price", "cpi", "purchasing_power", "nominal_minimum_wage", "real_wage", "measurement_vs_reality", "derived_series"],
+    observations: [
+      "Nominal minimum wage rises sharply in later years over the period shown.",
+      "Real minimum wage is flat or declining for much of the period in this dataset.",
+      "The gap between nominal and real widens in high-inflation years.",
+      "Real purchasing power appears to recover only partially toward the end of the series.",
+    ],
   },
 ];
 

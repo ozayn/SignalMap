@@ -18,7 +18,17 @@ export type ConceptKey =
   | "multiple_exchange_rates"
   | "capital_controls"
   | "price_controls"
-  | "measurement_vs_reality";
+  | "measurement_vs_reality"
+  | "purchasing_power"
+  | "derived_series"
+  | "real_wage"
+  | "real_oil_price"
+  | "export_capacity_proxy"
+  | "fx_spread"
+  | "nominal_minimum_wage"
+  | "official_exchange_rate"
+  | "oil_export_volume"
+  | "ppp_oil_burden";
 
 export type ConceptLink = {
   label: string;
@@ -45,7 +55,7 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
   nominal_price: {
     title: "Nominal price",
     description:
-      "The price as quoted in current currency, without inflation adjustment. Reflects market value at the time of observation.",
+      "The price as quoted in current currency, without inflation adjustment. Reflects market value at the time of observation. Significance: nominal series show what was actually paid or quoted; for comparison across long periods, real (inflation-adjusted) or indexed series are often used.",
     links: [
       { label: "Real and nominal value (Wikipedia)", href: "https://en.wikipedia.org/wiki/Real_and_nominal_value" },
       { label: "Real GDP and nominal GDP (Khan Academy)", href: "https://www.youtube.com/watch?v=lBDT2w5Wl84", type: "video" },
@@ -92,9 +102,9 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
     ],
   },
   oil_benchmark: {
-    title: "What oil prices represent",
+    title: "Brent oil price (what we plot)",
     description:
-      "Oil prices reflect the cost of a barrel of crude oil on world markets. Brent is a benchmark used for international pricing. They signal energy costs and broader economic conditions.",
+      "Oil prices reflect the cost of a barrel of crude oil on world markets. Brent is a benchmark used for international pricing. Significance: they signal energy costs and broader economic conditions; used as a context signal for commodity and macroeconomic analysis. Nominal (current) price is what we plot when showing oil alone; for long-term burden, real (inflation-adjusted) or PPP-adjusted series are used in other studies.",
     links: [
       { label: "Brent Crude (Wikipedia)", href: "https://en.wikipedia.org/wiki/Brent_Crude" },
       { label: "Supply and demand in the global oil market", href: "https://www.youtube.com/watch?v=9eMo_UGOLZk", type: "video" },
@@ -109,17 +119,17 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
     ],
   },
   fx_rate: {
-    title: "Open market exchange rate",
+    title: "Open market exchange rate (what we plot)",
     description:
-      "The rate at which one currency trades for another in the open market. When official rates differ from market rates, the market rate often reflects what traders are willing to pay.",
+      "The rate at which one currency trades for another in the open market (e.g. USD/toman). When official rates differ from market rates, the market rate often reflects what traders are willing to pay. Significance: used as a lived economic pressure indicator; higher rate means a weaker local currency per dollar. We plot this in FX and dual-rate studies to show how the market values the currency.",
     links: [
       { label: "Exchange rate (Wikipedia)", href: "https://en.wikipedia.org/wiki/Exchange_rate" },
     ],
   },
   gold_price: {
-    title: "Gold price as a stress indicator",
+    title: "Gold price (what we plot)",
     description:
-      "Gold is used as a macroeconomic stress indicator and store of value. Gold and oil prices often move together during periods of geopolitical or monetary uncertainty.",
+      "Gold price in USD per ounce. Gold is used as a macroeconomic stress indicator and store of value. Significance: gold and oil often move together during geopolitical or monetary uncertainty; long-range gold series give context for monetary and crisis periods. We plot it alongside oil in the global context study.",
     links: [
       { label: "Price of gold (Wikipedia)", href: "https://en.wikipedia.org/wiki/Gold_as_an_investment" },
     ],
@@ -180,6 +190,80 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
     title: "Measurement vs reality",
     description:
       "Reported series (official rates, indices) are measurements. They may lag, exclude informal activity, or reflect definitions that differ from lived experience. Interpretation should allow for that gap.",
+  },
+  purchasing_power: {
+    title: "Purchasing power",
+    description:
+      "The amount of goods and services that a given amount of money can buy. Real wages (wages adjusted for inflation) reflect purchasing power over time; nominal wages alone do not.",
+    links: [
+      { label: "Purchasing power (Wikipedia)", href: "https://en.wikipedia.org/wiki/Purchasing_power" },
+    ],
+  },
+  derived_series: {
+    title: "Derived series",
+    description:
+      "A derived series is computed from other data using a formula, rather than measured directly. Examples: real wage = nominal wage × (CPI_base / CPI_t); real oil price = nominal price ÷ CPI × base; export capacity proxy = oil price × export volume; spread (%) = (open rate − official rate) ÷ official rate. The formula is usually shown in Sources. Derived series depend on the choice of inputs and base period.",
+    links: [
+      { label: "Derived quantity (Wikipedia)", href: "https://en.wikipedia.org/wiki/Derived_quantity" },
+    ],
+  },
+  real_wage: {
+    title: "Real minimum wage",
+    description:
+      "Real minimum wage is nominal minimum wage adjusted for inflation using a consumer price index (CPI): real wage = nominal wage × (CPI_base / CPI_t). It is expressed in constant purchasing power (e.g. base-year prices). Significance: it shows whether workers can buy more or less with their pay over time. When nominal wages rise but inflation rises faster, real wages fall—purchasing power declines. Real minimum wage is used to compare the burden or adequacy of the wage floor across years without being misled by nominal increases.",
+    links: [
+      { label: "Real wages (Wikipedia)", href: "https://en.wikipedia.org/wiki/Real_wages" },
+    ],
+  },
+  real_oil_price: {
+    title: "Real oil price",
+    description:
+      "Real oil price is nominal oil price (e.g. Brent USD/bbl) adjusted for inflation using a consumer price index: real = nominal × (CPI_base / CPI_t). It is expressed in constant dollars (e.g. 2015 USD). Significance: it allows comparison of oil’s economic burden or cost across decades. Nominal prices from the past look much lower than today’s; real prices show whether oil was relatively more or less expensive in terms of purchasing power. Used for long-term context, not for short-term market signals.",
+    links: [
+      { label: "Real price (Wikipedia)", href: "https://en.wikipedia.org/wiki/Real_price" },
+    ],
+  },
+  export_capacity_proxy: {
+    title: "Export capacity proxy",
+    description:
+      "A derived indicator: oil price × estimated export volume, often indexed to a base year (e.g. 100). It is a proxy for export earning capacity—how much revenue-like potential exists from oil exports—not realized revenue. Significance: under sanctions or constraints, volume can fall while price rises; the product of price and volume captures both. It does not equal government receipts (discounts, payment terms, non-crude exports are excluded). Used for contextual comparison over time.",
+  },
+  fx_spread: {
+    title: "FX spread (%)",
+    description:
+      "The percentage gap between two exchange rates, e.g. (open-market rate − official rate) ÷ official rate × 100. A derived series when official and open rates coexist. Significance: the spread reflects the wedge between policy-set and market-clearing rates—constraints, expectations, or informal market conditions. A large or widening spread often coincides with capital controls or rationing. It is descriptive of the gap, not causal; interpretation should allow for measurement and definition differences between the two series.",
+  },
+  nominal_minimum_wage: {
+    title: "Nominal minimum wage (what we plot)",
+    description:
+      "The statutory minimum wage as set in current currency (e.g. million rials per month), without inflation adjustment. It is the official floor that employers must pay. Significance: nominal minimum wage shows policy and legal levels over time; by itself it does not show whether workers can buy more or less, because inflation erodes purchasing power. We plot it alongside real (CPI-adjusted) minimum wage so both the headline number and its purchasing power are visible.",
+    links: [
+      { label: "Minimum wage (Wikipedia)", href: "https://en.wikipedia.org/wiki/Minimum_wage" },
+    ],
+  },
+  official_exchange_rate: {
+    title: "Official exchange rate (what we plot)",
+    description:
+      "The policy-set or officially reported exchange rate (e.g. USD/IRR or a proxy in toman). Often differs from the rate at which currency actually trades in the open market. Significance: we plot it in the dual-rate study alongside the open-market rate to show the gap between policy and market. The official rate reflects policy and reporting; it does not by itself indicate what people pay or receive in parallel markets.",
+    links: [
+      { label: "Exchange rate (Wikipedia)", href: "https://en.wikipedia.org/wiki/Exchange_rate" },
+    ],
+  },
+  oil_export_volume: {
+    title: "Oil export volume (what we plot)",
+    description:
+      "Estimated volume of crude oil (and sometimes condensate) exported by a country, typically in million barrels per year. Often based on tanker tracking, customs, or agency estimates. Significance: we plot it alongside oil price in the export capacity study because capacity depends on both price and how much can be sold. Under sanctions, volume constraints often matter more than price. Volume data are estimates; uncertainty is higher when exports are constrained.",
+    links: [
+      { label: "EIA Iran analysis", href: "https://www.eia.gov/international/content/analysis/countries_long/iran/" },
+    ],
+  },
+  ppp_oil_burden: {
+    title: "PPP-adjusted oil burden (what we plot)",
+    description:
+      "Oil price converted into local purchasing power using a PPP factor (e.g. nominal Brent × Iran PPP), so the burden is expressed in domestic terms—how much local currency is needed to buy the same barrel. Significance: we plot this in the Iran (and Turkey) PPP studies to compare how heavy oil is in local purchasing power over time and across countries. It is a derived series: nominal oil × PPP conversion factor.",
+    links: [
+      { label: "Purchasing power parity (Wikipedia)", href: "https://en.wikipedia.org/wiki/Purchasing_power_parity" },
+    ],
   },
 };
 

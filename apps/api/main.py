@@ -424,6 +424,23 @@ def get_usd_irr_dual_signal(
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
+@app.get("/api/signals/wage/iran-minimum-cpi")
+def get_iran_wage_cpi_signal(
+    start: str = Query(..., description="Start date YYYY-MM-DD"),
+    end: str = Query(..., description="End date YYYY-MM-DD"),
+):
+    """Return Iran nominal minimum wage and CPI (annual) for real wage study."""
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    try:
+        from signalmap.services.signals import get_iran_wage_cpi_series
+        return get_iran_wage_cpi_series(start, end)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
+
+
 @app.get("/api/overview")
 def get_overview(
     study_id: str = "1",

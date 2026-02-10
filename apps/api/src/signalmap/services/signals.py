@@ -5,6 +5,11 @@ Read path: cache → Postgres → fetcher (with upsert).
 
 from signalmap.data.gold_annual import GOLD_ANNUAL
 from signalmap.data.iran_export_volume import IRAN_EXPORT_VOLUME_EST
+from signalmap.data.iran_wage_cpi import (
+    IRAN_CPI_2010_BASE,
+    IRAN_NOMINAL_MINIMUM_WAGE,
+    WAGE_CPI_BASE_YEAR,
+)
 from signalmap.data.oil_annual import BRENT_DAILY_START, OIL_ANNUAL_EIA
 from signalmap.sources.bonbast_usd_toman import fetch_usd_toman_series
 from signalmap.sources.fred_brent import fetch_brent_series
@@ -622,5 +627,38 @@ def get_usd_irr_dual_series(start: str, end: str) -> dict:
         "open_market": {
             "points": open_points,
             "source": open_result.get("source", USD_TOMAN_SOURCE),
+        },
+    }
+
+
+def get_iran_wage_cpi_series(start: str, end: str) -> dict:
+    """
+    Return Iran nominal minimum wage and CPI (annual) for real wage study.
+    Frontend computes: real_wage = nominal_wage * (CPI_base / CPI_t).
+    base_year = 2010 (CPI 2010 = 100).
+    """
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    years = [y for y in range(start_year, end_year + 1) if y in IRAN_NOMINAL_MINIMUM_WAGE and y in IRAN_CPI_2010_BASE]
+    cpi_base = IRAN_CPI_2010_BASE.get(WAGE_CPI_BASE_YEAR)
+    if not cpi_base or cpi_base <= 0:
+        return {
+            "nominal": [],
+            "cpi": [],
+            "base_year": WAGE_CPI_BASE_YEAR,
+            "source": {
+                "nominal": "ILO ILOSTAT / national sources (million rials/month)",
+                "cpi": "World Bank FP.CPI.TOTL (Iran, 2010=100)",
+            },
+        }
+    nominal = [{"date": f"{y}-01-01", "value": IRAN_NOMINAL_MINIMUM_WAGE[y]} for y in years]
+    cpi = [{"date": f"{y}-01-01", "value": IRAN_CPI_2010_BASE[y]} for y in years]
+    return {
+        "nominal": nominal,
+        "cpi": cpi,
+        "base_year": WAGE_CPI_BASE_YEAR,
+        "source": {
+            "nominal": "ILO ILOSTAT / national sources (million rials/month)",
+            "cpi": "World Bank FP.CPI.TOTL (Iran, 2010=100)",
         },
     }

@@ -9,6 +9,7 @@ import { SourceInfo } from "@/components/source-info";
 import { RealOilDescription } from "@/components/real-oil-description";
 import { OilPppIranDescription } from "@/components/oil-ppp-iran-description";
 import { LearningNote } from "@/components/learning-note";
+import { DataObservations } from "@/components/data-observations";
 import { ConceptsUsed } from "@/components/concepts-used";
 import { CurrentSnapshot } from "@/components/current-snapshot";
 import { InSimpleTerms } from "@/components/in-simple-terms";
@@ -191,6 +192,11 @@ export default function StudyDetailPage() {
   const [fxDualOpenSource, setFxDualOpenSource] = useState<FxUsdTomanSource | null>(null);
   const [showFxSpread, setShowFxSpread] = useState(false);
   const [fxDualYAxisLog, setFxDualYAxisLog] = useState(false);
+  const [wageNominalPoints, setWageNominalPoints] = useState<{ date: string; value: number }[]>([]);
+  const [wageCpiPoints, setWageCpiPoints] = useState<{ date: string; value: number }[]>([]);
+  const [wageBaseYear, setWageBaseYear] = useState<number | null>(null);
+  const [wageSource, setWageSource] = useState<{ nominal: string; cpi: string } | null>(null);
+  const [showWageIndex, setShowWageIndex] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fgPlatform, setFgPlatform] = useState<"twitter" | "instagram" | "youtube">("twitter");
@@ -225,6 +231,7 @@ export default function StudyDetailPage() {
   const isEventsTimeline = study?.primarySignal.kind === "events_timeline";
   const isFollowerGrowthDynamics = study?.primarySignal.kind === "follower_growth_dynamics";
   const isFxUsdIrrDual = study?.primarySignal.kind === "fx_usd_irr_dual";
+  const isWageCpiReal = study?.primarySignal.kind === "wage_cpi_real";
 
   const windowOptions = isGoldAndOil ? WINDOW_OPTIONS_LONG_RANGE : WINDOW_OPTIONS;
   const effectiveWindowDays = useMemo(
@@ -253,6 +260,11 @@ export default function StudyDetailPage() {
     if (!study || !isFxUsdIrrDual) return null;
     return study.timeRange;
   }, [study, isFxUsdIrrDual]);
+
+  const wageTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isWageCpiReal) return null;
+    return study.timeRange;
+  }, [study, isWageCpiReal]);
 
   const fxTimeRange = useMemo((): [string, string] | null => {
     if (!study || !(isFxUsdToman || isOilAndFx)) return null;
@@ -286,6 +298,30 @@ export default function StudyDetailPage() {
     const mid = Math.floor(sorted.length / 2);
     return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
   }, [isOilPppIran, pppIranPoints]);
+
+  const wageRealPoints = useMemo(() => {
+    if (wageNominalPoints.length === 0 || wageCpiPoints.length === 0 || wageBaseYear == null) return [];
+    const cpiByDate = new Map(wageCpiPoints.map((p) => [p.date, p.value]));
+    const cpiBase = cpiByDate.get(`${wageBaseYear}-01-01`);
+    if (cpiBase == null || cpiBase <= 0) return [];
+    return wageNominalPoints
+      .map((p) => {
+        const cpi = cpiByDate.get(p.date);
+        if (cpi == null || cpi <= 0) return null;
+        return { date: p.date, value: Math.round((p.value * cpiBase) / cpi * 100) / 100 };
+      })
+      .filter((q): q is { date: string; value: number } => q != null);
+  }, [wageNominalPoints, wageCpiPoints, wageBaseYear]);
+
+  const wageIndexPoints = useMemo(() => {
+    if (wageRealPoints.length === 0) return [];
+    const baseVal = wageRealPoints[0]?.value;
+    if (baseVal == null || baseVal <= 0) return [];
+    return wageRealPoints.map((p) => ({
+      date: p.date,
+      value: Math.round((p.value / baseVal) * 1000) / 10,
+    }));
+  }, [wageRealPoints]);
 
   const sanctionsPeriodsFromEvents = useMemo(() => {
     if (!isOilExportCapacity || !showSanctionsPeriods || !study) return undefined;
@@ -590,6 +626,39 @@ export default function StudyDetailPage() {
   }, [fxDualTimeRange, isFxUsdIrrDual]);
 
   useEffect(() => {
+    if (!wageTimeRange || !isWageCpiReal) return;
+    const [start, end] = wageTimeRange;
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+    fetchJson<{
+      nominal: { date: string; value: number }[];
+      cpi: { date: string; value: number }[];
+      base_year: number;
+      source: { nominal: string; cpi: string };
+    }>(`/api/signals/wage/iran-minimum-cpi?start=${start}&end=${end}`)
+      .then((res) => {
+        if (mounted) {
+          setWageNominalPoints(res.nominal ?? []);
+          setWageCpiPoints(res.cpi ?? []);
+          setWageBaseYear(res.base_year ?? null);
+          setWageSource(res.source ?? null);
+        }
+      })
+      .catch((e) => {
+        if (mounted) {
+          setWageNominalPoints([]);
+          setWageCpiPoints([]);
+          setWageBaseYear(null);
+          setWageSource(null);
+          setError(e instanceof Error ? e.message : "Signal fetch failed");
+        }
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => { mounted = false; };
+  }, [wageTimeRange, isWageCpiReal]);
+
+  useEffect(() => {
     if (!dualTimeRange || !isOilAndFx) return;
     const [start, end] = dualTimeRange;
     let mounted = true;
@@ -697,7 +766,7 @@ export default function StudyDetailPage() {
 
   const showError = error || (isOverviewStub && !data);
 
-  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isFxUsdIrrDual;
+  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isFxUsdIrrDual || isWageCpiReal;
   const singleSignalReady =
     isGoldAndOil
       ? goldPoints.length > 0 && oilPoints.length > 0
@@ -715,7 +784,9 @@ export default function StudyDetailPage() {
                 ? exportCapacityOilPoints.length > 0 && exportCapacityProxyPoints.length > 0
                 : isFxUsdIrrDual
                   ? fxDualOpenPoints.length > 0
-                  : false;
+                  : isWageCpiReal
+                    ? wageNominalPoints.length > 0 && wageCpiPoints.length > 0
+                    : false;
   if (loading && (isOverviewStub ? !data : isSingleSignalStudy && !singleSignalReady)) {
     return (
       <div className="container mx-auto max-w-4xl px-4 py-12 animate-pulse space-y-8">
@@ -778,6 +849,9 @@ export default function StudyDetailPage() {
           Study {study.number}
         </h1>
         <p className="text-lg text-muted-foreground">{study.title}</p>
+        {study.subtitle ? (
+          <p className="text-sm text-muted-foreground">{study.subtitle}</p>
+        ) : null}
         <p className="text-sm text-muted-foreground">
           {study.timeRange[0]} — {study.timeRange[1]}
         </p>
@@ -1026,27 +1100,28 @@ export default function StudyDetailPage() {
               {
                 heading: "Raw data",
                 bullets: [
-                  "Points show follower counts at snapshot dates. The line connects them in time order.",
-                  "Irregular spacing reflects when the archive captured the profile.",
-                ],
-              },
-              {
-                heading: "Fitted models",
-                bullets: [
-                  "Models are fit to the observed data only. No extrapolation beyond the last point.",
+                  "Points show follower counts; the line connects them in time order.",
                   "Linear: constant growth per day. Exponential: percentage growth. Logistic: S-curve with saturation.",
                   "Models are descriptive aids, not predictions or causal explanations.",
                 ],
               },
               {
+                heading: "Measurement choices & limitations",
+                bullets: [
+                  "Points are follower counts at the snapshot dates returned by the archive for the entered handle. Spacing between points is irregular and depends on archive coverage.",
+                  "Models are fit to the loaded points only; they are not extrapolated beyond the last date.",
+                  "Wayback coverage is sparse; gaps and missing values are expected.",
+                ],
+              },
+              {
                 heading: "Pitfalls",
                 bullets: [
-                  "Wayback coverage is sparse; gaps and missing values are expected.",
                   "Do not infer causality. Different models may fit similarly; overfitting is a risk.",
                 ],
               },
             ]}
           />
+          {study.observations?.length ? <DataObservations observations={study.observations} /> : null}
           {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
           <InSimpleTerms>
             <p>
@@ -1173,6 +1248,7 @@ export default function StudyDetailPage() {
                   },
                 ]}
               />
+              {study.observations?.length ? <DataObservations observations={study.observations} /> : null}
               {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
               <SourceInfo
                 items={[
@@ -1181,6 +1257,7 @@ export default function StudyDetailPage() {
                         {
                           label: "Official (proxy)",
                           sourceName: fxDualOfficialSource.name ?? "FRED",
+                          sourceUrl: fxDualOfficialSource.url || undefined,
                           sourceDetail: fxDualOfficialSource.publisher ?? "",
                           unitLabel: "toman/USD",
                           unitNote: fxDualOfficialSource.notes ?? undefined,
@@ -1192,6 +1269,7 @@ export default function StudyDetailPage() {
                         {
                           label: "Open market",
                           sourceName: fxDualOpenSource.name ?? "",
+                          sourceUrl: fxDualOpenSource.url || undefined,
                           sourceDetail: fxDualOpenSource.publisher ?? "",
                           unitLabel: "toman/USD",
                           unitNote: fxDualOpenSource.notes ?? undefined,
@@ -1708,6 +1786,7 @@ export default function StudyDetailPage() {
                       ]
                 }
               />
+              {study.observations?.length ? <DataObservations observations={study.observations} /> : null}
               {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
               <CurrentSnapshot asOf="March 2026">
                 {hasTurkeyComparator ? (
@@ -1748,6 +1827,7 @@ export default function StudyDetailPage() {
                           {
                             label: "Iran (PPP)",
                             sourceName: `${pppIranSource.oil}; ${pppIranSource.ppp}`,
+                            sourceUrl: "https://data.worldbank.org/indicator/PA.NUS.PRVT.PP?locations=IR",
                             sourceDetail: "Annual average oil × Iran PPP conversion factor",
                             unitLabel: "PPP-adjusted toman per barrel",
                             unitNote: "PPP values reflect domestic purchasing power.",
@@ -1759,6 +1839,7 @@ export default function StudyDetailPage() {
                           {
                             label: "Turkey (PPP)",
                             sourceName: `${pppTurkeySource.oil}; ${pppTurkeySource.ppp}`,
+                            sourceUrl: "https://data.worldbank.org/indicator/PA.NUS.PRVT.PP?locations=TR",
                             sourceDetail: "Annual average oil × Turkey PPP conversion factor",
                             unitLabel: "PPP-adjusted lira per barrel",
                             unitNote: "PPP values reflect domestic purchasing power.",
@@ -1808,9 +1889,6 @@ export default function StudyDetailPage() {
                 mutedBands={false}
                 sanctionsPeriods={sanctionsPeriodsFromEvents}
               />
-              <p className="mt-3 text-xs text-muted-foreground max-w-2xl break-words">
-                Export capacity proxy = oil price × estimated export volume. Indexed to first year = 100. Proxy for earning capacity, not realized revenue.
-              </p>
               <LearningNote
                 sections={[
                   {
@@ -1841,10 +1919,16 @@ export default function StudyDetailPage() {
                     ],
                   },
                   {
+                    heading: "Measurement choices & limitations",
+                    bullets: [
+                      "Oil price: Brent crude, USD per barrel, annual average. Export volume: estimated crude and condensate exports, annual.",
+                      "Proxy = oil price × estimated export volume; indexed to the first year in the chart (= 100). Values above 100 indicate higher estimated capacity relative to that baseline.",
+                      "Export volumes are estimates. Volumes under sanctions are uncertain. Does not equal government revenue; pricing, discounts, and payment terms vary.",
+                    ],
+                  },
+                  {
                     heading: "Pitfalls",
                     bullets: [
-                      "Export volumes are estimates. Volumes under sanctions are uncertain.",
-                      "Does not equal government revenue. Pricing, discounts, and payment terms vary.",
                       "Does not capture discounts or informal trade.",
                       "Do not infer causality from co-movement with sanctions events.",
                     ],
@@ -1854,18 +1938,21 @@ export default function StudyDetailPage() {
                   { label: "EIA Iran Country Analysis", href: "https://www.eia.gov/international/content/analysis/countries_long/iran/" },
                 ]}
               />
+              {study.observations?.length ? <DataObservations observations={study.observations} /> : null}
               {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
               <SourceInfo
                 items={[
                   {
                     label: "Oil price",
                     sourceName: "FRED DCOILBRENTEU",
+                    sourceUrl: "https://fred.stlouisfed.org/series/DCOILBRENTEU",
                     sourceDetail: "Brent crude, annual average",
                     unitLabel: "USD/barrel",
                   },
                   {
                     label: "Export volume",
                     sourceName: "EIA / tanker tracking estimates",
+                    sourceUrl: "https://www.eia.gov/international/content/analysis/countries_long/iran/",
                     sourceDetail: "Estimated crude oil and condensate exports",
                     unitLabel: "million barrels/year",
                     unitNote: "Estimates; uncertain under sanctions.",
@@ -1893,6 +1980,141 @@ export default function StudyDetailPage() {
                   When exports are constrained, volume often matters more than price. World oil prices can rise or fall, but if you cannot sell as much, the price alone says little about earning capacity. Volume reflects how much can actually be exported—the bottleneck is often how much you can sell, not the price at which you could sell it.
                 </p>
               </InSimpleTerms>
+            </>
+          ) : isWageCpiReal ? (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Real minimum wage (CPI-adjusted)</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {study.subtitle ?? study.description}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3 pt-2">
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showWageIndex}
+                        onChange={(e) => setShowWageIndex(e.target.checked)}
+                        className="rounded border-border"
+                      />
+                      Real wage index (base = 100)
+                    </label>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <TimelineChart
+                    data={[]}
+                    valueKey="value"
+                    label="Nominal"
+                    events={[]}
+                    multiSeries={[
+                      {
+                        key: "nominal",
+                        label: "Nominal minimum wage",
+                        yAxisIndex: 0,
+                        unit: "million rials/month",
+                        points: wageNominalPoints,
+                      },
+                      {
+                        key: "real",
+                        label: "Real minimum wage",
+                        yAxisIndex: 0,
+                        unit: `million rials/month (${wageBaseYear ?? ""} prices)`,
+                        points: wageRealPoints,
+                      },
+                      ...(showWageIndex
+                        ? [
+                            {
+                              key: "index",
+                              label: "Real wage index",
+                              yAxisIndex: 1,
+                              unit: "Index (base=100)",
+                              points: wageIndexPoints,
+                            } as ChartSeries,
+                          ]
+                        : []),
+                    ]}
+                    timeRange={wageTimeRange ?? study.timeRange}
+                    mutedBands={false}
+                  />
+                  <LearningNote
+                    sections={[
+                      {
+                        heading: "How to read this chart",
+                        bullets: [
+                          "Nominal minimum wage: the official monthly minimum wage in current terms.",
+                          "Real minimum wage: nominal adjusted for inflation (CPI) so values are comparable in purchasing power over time.",
+                        ],
+                      },
+                      {
+                        heading: "Why real wages matter",
+                        bullets: [
+                          "Nominal wages can rise while purchasing power falls if inflation is high. Real wages show whether workers can buy more or less over time.",
+                          "This study describes the evolution of inflation-adjusted minimum wage in Iran. It does not explain causes or predict future levels.",
+                        ],
+                      },
+                      {
+                        heading: "Measurement choices & limitations",
+                        bullets: [
+                          "Nominal minimum wage: annual, in million rials per month (ILO/national sources). CPI: annual, index 2010 = 100 (World Bank, Iran).",
+                          wageBaseYear != null
+                            ? `Real wage = nominal × (CPI_base / CPI_t); base year ${wageBaseYear}. Real wage is expressed in ${wageBaseYear} purchasing power.`
+                            : "Real wage = nominal × (CPI_base / CPI_t); a fixed base year is used so levels are comparable across years.",
+                          "The optional real wage index rescales real wage so the first year in the dataset equals 100.",
+                          "Minimum wage is statutory; actual pay and informal work may differ. CPI is a national index and may not reflect all households or regions equally.",
+                          "Data are annual. Revisions in source data may change historical values.",
+                        ],
+                      },
+                      {
+                        heading: "What this study does not claim",
+                        bullets: [
+                          "It does not explain why real wages change or what causes inflation.",
+                          "It does not forecast or project future wages or prices.",
+                          "It does not measure poverty, inequality, or adequacy of the minimum wage.",
+                    ],
+                  },
+                ]}
+                  />
+                  {study.observations?.length ? <DataObservations observations={study.observations} /> : null}
+                  {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
+                  <SourceInfo
+                    items={[
+                      {
+                        label: "Nominal minimum wage",
+                        sourceName: wageSource?.nominal ?? "—",
+                        sourceUrl: "https://ilostat.ilo.org/data/",
+                        sourceDetail: "Annual, million rials per month",
+                        unitLabel: "million rials/month",
+                      },
+                      {
+                        label: "CPI",
+                        sourceName: wageSource?.cpi ?? "—",
+                        sourceUrl: "https://data.worldbank.org/indicator/FP.CPI.TOTL?locations=IR",
+                        sourceDetail: wageBaseYear != null ? `Base year ${wageBaseYear} for real wage` : "Consumer price index",
+                        unitLabel: "Index",
+                      },
+                      {
+                        label: "Real minimum wage",
+                        sourceName: "Derived",
+                        sourceDetail: "Nominal × (CPI_base / CPI_t)",
+                        unitLabel: wageBaseYear != null ? `million rials/month (${wageBaseYear} prices)` : "million rials/month (constant prices)",
+                      },
+                    ]}
+                    note={wageBaseYear != null ? `Real wage base year: ${wageBaseYear}. Educational use; not for policy or causal inference.` : undefined}
+                  />
+                  <InSimpleTerms>
+                    <p>
+                      The nominal minimum wage is the official number set each year. The real minimum wage adjusts that number for inflation so you can compare purchasing power across years. When prices rise faster than the nominal wage, the real wage falls—workers can buy less with their pay.
+                    </p>
+                    <p>
+                      This chart shows both: the nominal minimum wage in Iran (current million rials per month) and the same wage expressed in constant purchasing power (real wage). It describes how these series have evolved. It does not explain why they move or what should be done.
+                    </p>
+                    <p>
+                      Measurement limits apply: the data come from official and international sources. Definitions and coverage may differ from what people actually earn or spend. The study aims to illustrate nominal vs real and the role of CPI adjustment, not to make causal or policy claims.
+                    </p>
+                  </InSimpleTerms>
+                </CardContent>
+              </Card>
             </>
           ) : isRealOil ? (
             <>
@@ -1944,6 +2166,7 @@ export default function StudyDetailPage() {
                   },
                 ]}
               />
+              {study.observations?.length ? <DataObservations observations={study.observations} /> : null}
               {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
               <CurrentSnapshot asOf="March 2026">
                 <p>
@@ -1962,6 +2185,7 @@ export default function StudyDetailPage() {
                     {
                       label: "Real oil price",
                       sourceName: `${realOilSource.oil}; ${realOilSource.cpi}`,
+                      sourceUrl: "https://fred.stlouisfed.org/series/DCOILBRENTEU",
                       sourceDetail: "Nominal Brent divided by U.S. CPI",
                       unitLabel: "USD/bbl (2015 dollars)",
                       unitNote: "Base year: 2015 (US CPI)",
@@ -2027,6 +2251,7 @@ export default function StudyDetailPage() {
                   },
                 ]}
               />
+              {study.observations?.length ? <DataObservations observations={study.observations} /> : null}
               {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
               <CurrentSnapshot asOf="March 2026">
                 <p>
@@ -2047,6 +2272,7 @@ export default function StudyDetailPage() {
                           {
                             label: "Gold",
                             sourceName: goldSource.name,
+                            sourceUrl: goldSource.url,
                             sourceDetail: goldSource.publisher,
                             unitLabel: "USD/oz",
                             unitNote: "annual data only",
@@ -2058,6 +2284,7 @@ export default function StudyDetailPage() {
                           {
                             label: "Oil",
                             sourceName: "EIA, FRED",
+                            sourceUrl: "https://fred.stlouisfed.org/series/DCOILBRENTEU",
                             sourceDetail: "Pre-1987: EIA U.S. Crude Oil First Purchase Price (annual); from 1987: FRED Brent spot (daily)",
                             unitLabel: "USD/bbl",
                             unitNote: "bbl = barrel (42 US gal ≈ 159 L)",
@@ -2118,6 +2345,7 @@ export default function StudyDetailPage() {
                     },
                   ]}
                 />
+              {study.observations?.length ? <DataObservations observations={study.observations} /> : null}
               {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
               <CurrentSnapshot asOf="March 2026">
                 <p>
@@ -2135,6 +2363,7 @@ export default function StudyDetailPage() {
                     {
                       label: isOilGlobalLong ? "Oil" : "Brent oil",
                       sourceName: oilSource.name,
+                      sourceUrl: oilSource.url,
                       sourceDetail: isOilGlobalLong
                         ? "Pre-1987: EIA annual; from 1987: FRED Brent daily"
                         : oilSource.series_id,
@@ -2196,6 +2425,7 @@ export default function StudyDetailPage() {
                           {
                             label: "Brent oil",
                             sourceName: oilSource.name,
+                            sourceUrl: oilSource.url,
                             sourceDetail: oilSource.series_id,
                             unitLabel: "USD/bbl",
                             unitNote: "bbl = barrel (42 US gal ≈ 159 L)",
@@ -2207,6 +2437,7 @@ export default function StudyDetailPage() {
                           {
                             label: "USD→Toman",
                             sourceName: fxSource.name,
+                            sourceUrl: fxSource.url,
                             sourceDetail: fxSource.publisher,
                             unitLabel: "toman/USD",
                             unitNote: "1 toman = 10 rials",
@@ -2218,6 +2449,7 @@ export default function StudyDetailPage() {
                           {
                             label: "Gold",
                             sourceName: "LBMA / Treasury",
+                            sourceUrl: "https://www.gold.org/goldhub/data/gold-prices",
                             sourceDetail: "annual data only",
                             unitLabel: "USD/oz",
                           },
@@ -2260,6 +2492,7 @@ export default function StudyDetailPage() {
                     {
                       label: "USD→Toman",
                       sourceName: fxSource.name,
+                      sourceUrl: fxSource.url,
                       sourceDetail: fxSource.publisher,
                       unitLabel: "toman/USD",
                       unitNote: "1 toman = 10 rials",

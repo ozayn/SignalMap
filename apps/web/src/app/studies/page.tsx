@@ -18,7 +18,7 @@ const SECTIONS: { title: string; description: string; studyIds: string[]; startH
   {
     title: "Burden & adjustment (methods)",
     description: "Inflation-adjusted and PPP-based measures of economic burden.",
-    studyIds: ["real_oil_price", "iran_oil_ppp"],
+    studyIds: ["real_oil_price", "iran_oil_ppp", "iran_real_wage_cpi"],
   },
   {
     title: "Comparisons & constraints",

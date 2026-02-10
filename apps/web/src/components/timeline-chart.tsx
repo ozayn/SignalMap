@@ -768,10 +768,45 @@ export function TimelineChart({
                 const isOfficial = s.key === "official";
                 const isOpen = s.key === "open";
                 const isSpread = s.key === "spread";
-                const lineColor = isGold ? goldColor : isOil ? color : isOfficial ? color : isOpen ? chart2Color : isSpread ? oilColorMuted : oilColorMuted;
+                const isWageNominal = s.key === "nominal";
+                const isWageReal = s.key === "real";
+                const isWageIndex = s.key === "index";
+                const lineColor = isGold
+                  ? goldColor
+                  : isOil
+                    ? color
+                    : isOfficial
+                      ? color
+                      : isOpen
+                        ? chart2Color
+                        : isSpread
+                          ? oilColorMuted
+                          : isWageNominal
+                            ? color
+                            : isWageReal
+                              ? chart2Color
+                              : isWageIndex
+                                ? oilColorMuted
+                                : oilColorMuted;
                 const lineWidth = isGold || isOil ? 1.5 : 1;
                 const symbolSize = isGold ? 4 : isOil ? 3 : 2.5;
-                const symbol = isGold ? "circle" : isProxy || s.yAxisIndex === 1 ? "diamond" : isOfficial ? "circle" : isOpen ? "diamond" : isSpread ? "triangle" : "circle";
+                const symbol = isGold
+                  ? "circle"
+                  : isProxy || (s.yAxisIndex === 1 && !isWageIndex)
+                    ? "diamond"
+                    : isOfficial
+                      ? "circle"
+                      : isOpen
+                        ? "diamond"
+                        : isSpread
+                          ? "triangle"
+                          : isWageNominal
+                            ? "circle"
+                            : isWageReal
+                              ? "diamond"
+                              : isWageIndex
+                                ? "triangle"
+                                : "circle";
                 return {
                   name: s.label,
                   type: "line" as const,
