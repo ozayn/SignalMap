@@ -14,7 +14,11 @@ export type ConceptKey =
   | "linear_vs_exponential_growth"
   | "logistic_growth_saturation"
   | "model_fitting_intuition"
-  | "overfitting_simple";
+  | "overfitting_simple"
+  | "multiple_exchange_rates"
+  | "capital_controls"
+  | "price_controls"
+  | "measurement_vs_reality";
 
 export type ConceptLink = {
   label: string;
@@ -156,6 +160,26 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
     links: [
       { label: "Overfitting (Wikipedia)", href: "https://en.wikipedia.org/wiki/Overfitting" },
     ],
+  },
+  multiple_exchange_rates: {
+    title: "Multiple exchange rates",
+    description:
+      "When a country maintains both an official rate (set by policy) and an open-market rate (where currency trades freely), the gap between them reflects constraints and expectations rather than a single “true” price.",
+  },
+  capital_controls: {
+    title: "Capital controls",
+    description:
+      "Restrictions on moving money across borders. They can create a wedge between official and market exchange rates and give rise to informal or parallel markets.",
+  },
+  price_controls: {
+    title: "Price controls",
+    description:
+      "Policy-set prices (e.g. an official exchange rate) that differ from market-clearing levels. The gap is descriptive; it does not by itself explain cause or effect.",
+  },
+  measurement_vs_reality: {
+    title: "Measurement vs reality",
+    description:
+      "Reported series (official rates, indices) are measurements. They may lag, exclude informal activity, or reflect definitions that differ from lived experience. Interpretation should allow for that gap.",
   },
 };
 

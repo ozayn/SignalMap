@@ -9,7 +9,8 @@ export type PrimarySignal =
   | { kind: "oil_ppp_iran" }
   | { kind: "oil_export_capacity" }
   | { kind: "events_timeline" }
-  | { kind: "follower_growth_dynamics" };
+  | { kind: "follower_growth_dynamics" }
+  | { kind: "fx_usd_irr_dual" };
 
 import type { ConceptKey } from "./concepts";
 
@@ -157,6 +158,16 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "events_timeline" },
     concepts: ["event_overlay"],
+  },
+  {
+    id: "iran_fx_spread",
+    number: 12,
+    title: "Dual Exchange Rates in Iran",
+    timeRange: ["2012-01-01", new Date().toISOString().slice(0, 10)],
+    description: "Official vs open-market USD/IRR.",
+    status: "active",
+    primarySignal: { kind: "fx_usd_irr_dual" },
+    concepts: ["multiple_exchange_rates", "capital_controls", "price_controls", "measurement_vs_reality"],
   },
 ];
 

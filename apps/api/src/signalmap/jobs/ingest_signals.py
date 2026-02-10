@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """
 Ingest external signals into the DB. Safe to run repeatedly (idempotent upsert).
-Run from apps/api: python -m signalmap.jobs.ingest_signals --signal brent|usd_toman [--date YYYY-MM-DD] [--days N]
+
+Run from repo root:
+  python3 apps/api/src/signalmap/jobs/ingest_signals.py --signal usd_toman --days 3650
+
+Or from apps/api with PYTHONPATH set:
+  cd apps/api && PYTHONPATH=src python3 -m signalmap.jobs.ingest_signals --signal usd_toman --days 3650
 """
 
 import argparse
@@ -9,17 +14,20 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# Ensure apps/api and apps/api/src on path (for db and signalmap)
+# Ensure apps/api/src on path so "signalmap" and "db" are findable (works when run by path or -m from apps/api)
 _api_root = Path(__file__).resolve().parent.parent.parent.parent
 _src = _api_root / "src"
-for p in (_api_root, _src):
-    if str(p) not in sys.path:
-        sys.path.insert(0, str(p))
+for p in (_src, _api_root):
+    p_str = str(p)
+    if p_str not in sys.path:
+        sys.path.insert(0, p_str)
 
-from dotenv import load_dotenv
-
-load_dotenv(_api_root / ".env")
-load_dotenv(_api_root / ".env.local")
+try:
+    from dotenv import load_dotenv
+    load_dotenv(_api_root / ".env")
+    load_dotenv(_api_root / ".env.local")
+except ImportError:
+    pass  # optional: .env not loaded if python-dotenv not installed
 
 
 def main() -> int:

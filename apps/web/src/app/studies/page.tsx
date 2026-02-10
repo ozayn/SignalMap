@@ -23,7 +23,7 @@ const SECTIONS: { title: string; description: string; studyIds: string[]; startH
   {
     title: "Comparisons & constraints",
     description: "Cross-country comparisons and capacity under constraints.",
-    studyIds: ["iran_oil_ppp_turkey", "iran_oil_export_capacity"],
+    studyIds: ["iran_oil_ppp_turkey", "iran_oil_export_capacity", "iran_fx_spread"],
   },
   {
     title: "Audience dynamics (growth & networks)",

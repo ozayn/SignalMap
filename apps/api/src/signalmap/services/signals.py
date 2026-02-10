@@ -547,7 +547,9 @@ def get_oil_ppp_turkey_series(start: str, end: str) -> dict:
 def get_usd_toman_series(start: str, end: str) -> dict:
     """
     Return USD→Toman points in [start, end].
-    Read path: cache → Postgres → fetchers (with upsert).
+    Read path: cache → Postgres (if covers range from start) → fetchers (with upsert).
+    If DB has points but only from a later date (e.g. 2022+), we fetch merged so
+    open market can show from archive start (2012-10-09) instead of DB start.
     """
     ck = _cache_key(SIGNAL_USD_TOMAN, start, end)
     cached = cache_get(ck)
@@ -555,7 +557,12 @@ def get_usd_toman_series(start: str, end: str) -> dict:
         return cached
 
     db_points = get_points(SIGNAL_USD_TOMAN, start, end)
-    if db_points:
+    db_covers_range = (
+        db_points
+        and db_points[0].get("date")
+        and db_points[0]["date"] <= start
+    )
+    if db_covers_range:
         result = {
             "signal": SIGNAL_USD_TOMAN,
             "unit": "toman_per_usd",
@@ -583,3 +590,37 @@ def get_usd_toman_series(start: str, end: str) -> dict:
     }
     cache_set(ck, result, CACHE_TTL)
     return result
+
+
+OFFICIAL_IRR_SOURCE = {
+    "name": "FRED XRNCUSIRA618NRUG",
+    "publisher": "Federal Reserve Bank of St. Louis (Penn World Table)",
+    "type": "official_proxy",
+    "url": "https://fred.stlouisfed.org/series/XRNCUSIRA618NRUG",
+    "notes": "Annual data, rials per USD converted to toman (÷10). Series ends 2019.",
+}
+
+
+def get_usd_irr_dual_series(start: str, end: str) -> dict:
+    """
+    Return official (FRED proxy) and open-market USD/IRR series for dual exchange rate study.
+    official: annual, toman per USD (FRED). open_market: daily where available (Bonbast archive).
+    """
+    official_points = []
+    try:
+        fred_series = fetch_iran_fx_series()
+        official_points = [p for p in fred_series if start <= p["date"] <= end]
+    except Exception:
+        pass
+    open_result = get_usd_toman_series(start, end)
+    open_points = open_result.get("points", [])
+    return {
+        "official": {
+            "points": official_points,
+            "source": OFFICIAL_IRR_SOURCE,
+        },
+        "open_market": {
+            "points": open_points,
+            "source": open_result.get("source", USD_TOMAN_SOURCE),
+        },
+    }

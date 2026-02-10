@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TimelineChart } from "@/components/timeline-chart";
+import { TimelineChart, type ChartSeries } from "@/components/timeline-chart";
 import { SourceInfo } from "@/components/source-info";
 import { RealOilDescription } from "@/components/real-oil-description";
 import { OilPppIranDescription } from "@/components/oil-ppp-iran-description";
@@ -185,6 +185,11 @@ export default function StudyDetailPage() {
   const [exportCapacityOilPoints, setExportCapacityOilPoints] = useState<{ date: string; value: number }[]>([]);
   const [exportCapacityProxyPoints, setExportCapacityProxyPoints] = useState<{ date: string; value: number }[]>([]);
   const [exportCapacityBaseYear, setExportCapacityBaseYear] = useState<number | null>(null);
+  const [fxDualOfficialPoints, setFxDualOfficialPoints] = useState<{ date: string; value: number }[]>([]);
+  const [fxDualOpenPoints, setFxDualOpenPoints] = useState<{ date: string; value: number }[]>([]);
+  const [fxDualOfficialSource, setFxDualOfficialSource] = useState<OilSource | null>(null);
+  const [fxDualOpenSource, setFxDualOpenSource] = useState<FxUsdTomanSource | null>(null);
+  const [showFxSpread, setShowFxSpread] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fgPlatform, setFgPlatform] = useState<"twitter" | "instagram" | "youtube">("twitter");
@@ -218,6 +223,7 @@ export default function StudyDetailPage() {
   const isOilExportCapacity = study?.primarySignal.kind === "oil_export_capacity";
   const isEventsTimeline = study?.primarySignal.kind === "events_timeline";
   const isFollowerGrowthDynamics = study?.primarySignal.kind === "follower_growth_dynamics";
+  const isFxUsdIrrDual = study?.primarySignal.kind === "fx_usd_irr_dual";
 
   const windowOptions = isGoldAndOil ? WINDOW_OPTIONS_LONG_RANGE : WINDOW_OPTIONS;
   const effectiveWindowDays = useMemo(
@@ -241,6 +247,11 @@ export default function StudyDetailPage() {
     if (!study || !isOilExportCapacity) return null;
     return study.timeRange;
   }, [study, isOilExportCapacity]);
+
+  const fxDualTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isFxUsdIrrDual) return null;
+    return study.timeRange;
+  }, [study, isFxUsdIrrDual]);
 
   const fxTimeRange = useMemo((): [string, string] | null => {
     if (!study || !(isFxUsdToman || isOilAndFx)) return null;
@@ -539,6 +550,45 @@ export default function StudyDetailPage() {
   }, [exportCapacityTimeRange, isOilExportCapacity]);
 
   useEffect(() => {
+    if (!fxDualTimeRange || !isFxUsdIrrDual) {
+      if (isFxUsdIrrDual) {
+        setFxDualOfficialPoints([]);
+        setFxDualOpenPoints([]);
+        setFxDualOfficialSource(null);
+        setFxDualOpenSource(null);
+      }
+      return;
+    }
+    const [start, end] = fxDualTimeRange;
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+    fetchJson<{
+      official: { points: { date: string; value: number }[]; source?: FxUsdTomanSource };
+      open_market: { points: { date: string; value: number }[]; source?: FxUsdTomanSource };
+    }>(`/api/signals/fx/usd-irr-dual?start=${start}&end=${end}`)
+      .then((res) => {
+        if (mounted) {
+          setFxDualOfficialPoints(res.official?.points ?? []);
+          setFxDualOpenPoints(res.open_market?.points ?? []);
+          setFxDualOfficialSource((res.official?.source ?? null) as FxUsdTomanSource | null);
+          setFxDualOpenSource((res.open_market?.source ?? null) as FxUsdTomanSource | null);
+        }
+      })
+      .catch((e) => {
+        if (mounted) {
+          setFxDualOfficialPoints([]);
+          setFxDualOpenPoints([]);
+          setFxDualOfficialSource(null);
+          setFxDualOpenSource(null);
+          setError(e instanceof Error ? e.message : "Signal fetch failed");
+        }
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => { mounted = false; };
+  }, [fxDualTimeRange, isFxUsdIrrDual]);
+
+  useEffect(() => {
     if (!dualTimeRange || !isOilAndFx) return;
     const [start, end] = dualTimeRange;
     let mounted = true;
@@ -646,7 +696,7 @@ export default function StudyDetailPage() {
 
   const showError = error || (isOverviewStub && !data);
 
-  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity;
+  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isFxUsdIrrDual;
   const singleSignalReady =
     isGoldAndOil
       ? goldPoints.length > 0 && oilPoints.length > 0
@@ -662,7 +712,9 @@ export default function StudyDetailPage() {
               ? pppIranPoints.length > 0
               : isOilExportCapacity
                 ? exportCapacityOilPoints.length > 0 && exportCapacityProxyPoints.length > 0
-                : false;
+                : isFxUsdIrrDual
+                  ? fxDualOpenPoints.length > 0
+                  : false;
   if (loading && (isOverviewStub ? !data : isSingleSignalStudy && !singleSignalReady)) {
     return (
       <div className="container mx-auto max-w-4xl px-4 py-12 animate-pulse space-y-8">
@@ -1005,6 +1057,149 @@ export default function StudyDetailPage() {
               It is exploratory and descriptive only.
             </p>
           </InSimpleTerms>
+        </>
+      ) : isFxUsdIrrDual ? (
+        <>
+          <Card className="border-border overflow-hidden">
+            <CardHeader>
+              <CardTitle className="text-base font-medium">
+                Official vs open-market USD/IRR
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                {study.description}
+              </p>
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showFxSpread}
+                    onChange={(e) => setShowFxSpread(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  Show FX spread (%)
+                </label>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <TimelineChart
+                data={[]}
+                valueKey="value"
+                label="Official"
+                events={[]}
+                multiSeries={[
+                  {
+                    key: "official",
+                    label: "Official (proxy)",
+                    yAxisIndex: 0,
+                    unit: "toman/USD",
+                    points: fxDualOfficialPoints,
+                  },
+                  {
+                    key: "open",
+                    label: "Open market",
+                    yAxisIndex: 0,
+                    unit: "toman/USD",
+                    points: fxDualOpenPoints,
+                  },
+                  ...(showFxSpread
+                    ? [
+                        {
+                          key: "spread",
+                          label: "Spread (%)",
+                          yAxisIndex: 1,
+                          unit: "%",
+                          points: (() => {
+                            const byDate: Record<string, number> = {};
+                            fxDualOfficialPoints.forEach((p) => {
+                              byDate[p.date] = p.value;
+                            });
+                            return fxDualOfficialPoints
+                              .map((p) => {
+                                const openPt = fxDualOpenPoints.find((o) => o.date === p.date);
+                                if (!openPt || p.value === 0) return null;
+                                return { date: p.date, value: ((openPt.value - p.value) / p.value) * 100 };
+                              })
+                              .filter((q): q is { date: string; value: number } => q != null);
+                          })(),
+                        } as ChartSeries,
+                      ]
+                    : []),
+                ]}
+                timeRange={fxDualTimeRange ?? study.timeRange}
+                mutedBands={false}
+              />
+              <LearningNote
+                sections={[
+                  {
+                    heading: "How to read this chart",
+                    bullets: [
+                      "Two lines: official rate (policy-set proxy, FRED annual) and open-market rate (toman per USD).",
+                      "Same unit on the y-axis: toman per USD. Higher values mean a weaker rial/toman.",
+                    ],
+                  },
+                  {
+                    heading: "Why the FX spread matters",
+                    bullets: [
+                      "When official and market rates diverge, the gap reflects constraints and expectations rather than a single “true” price.",
+                      "Large or persistent spreads often coincide with capital controls, rationing of foreign exchange, or informal markets.",
+                    ],
+                  },
+                  {
+                    heading: "Measurement choices & limitations",
+                    bullets: [
+                      "Official series used here is a FRED proxy (Penn World Table); it is annual and ends 2019.",
+                      "Open-market data is from Bonbast/archive (daily where available). Different resolutions and sources imply the two series are not strictly comparable at each date.",
+                      "Spread (%) is computed only where both series have a value; interpretation should allow for measurement gaps.",
+                    ],
+                  },
+                  {
+                    heading: "What this study does not claim",
+                    bullets: [
+                      "This study does not explain why the spread exists or what causes it to change.",
+                      "It does not predict future rates or policy. It describes the coexistence of two rates and the gap between them.",
+                    ],
+                  },
+                ]}
+              />
+              {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
+              <SourceInfo
+                items={[
+                  ...(fxDualOfficialSource
+                    ? [
+                        {
+                          label: "Official (proxy)",
+                          sourceName: fxDualOfficialSource.name ?? "FRED",
+                          sourceDetail: fxDualOfficialSource.publisher ?? "",
+                          unitLabel: "toman/USD",
+                          unitNote: fxDualOfficialSource.notes ?? undefined,
+                        },
+                      ]
+                    : []),
+                  ...(fxDualOpenSource
+                    ? [
+                        {
+                          label: "Open market",
+                          sourceName: fxDualOpenSource.name ?? "",
+                          sourceDetail: fxDualOpenSource.publisher ?? "",
+                          unitLabel: "toman/USD",
+                          unitNote: fxDualOpenSource.notes ?? undefined,
+                        },
+                      ]
+                    : []),
+                ]}
+                note="Official series is annual and ends 2019. Open-market data is daily where available. Do not infer causality from the spread."
+              />
+              <InSimpleTerms>
+                <p>
+                  Iran has at times had an official exchange rate set by policy and a different rate at which people actually buy and sell currency in the open market.
+                  This chart shows both: the official (proxy) series and the open-market rate. The gap between them is descriptive—it does not explain why the gap exists or what will happen next.
+                </p>
+                <p>
+                  The study emphasizes constraint and measurement: two rates can coexist, and the way we measure them (sources, frequency) affects what we see. It does not make causal or predictive claims.
+                </p>
+              </InSimpleTerms>
+            </CardContent>
+          </Card>
         </>
       ) : (isOilBrent || isOilGlobalLong) && oilKpis ? (
         <div className="grid gap-4 sm:grid-cols-3">
