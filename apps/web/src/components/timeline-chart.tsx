@@ -631,11 +631,13 @@ export function TimelineChart({
                       : first.unit
                         ? `${first.label} (${first.unit})`
                         : first.label;
+              const nameWithSuffix = yAxisNameSuffix ? `${shortName} ${yAxisNameSuffix}` : shortName;
+              const useLog = yAxisLog && isLeft;
               return {
-                type: "value" as const,
+                type: (useLog ? "log" : "value") as "value" | "log",
                 position: (isLeft ? "left" : "right") as "left" | "right",
                 offset: isRight ? rightOffset : 0,
-                name: shortName,
+                name: nameWithSuffix,
                 nameLocation: "end" as const,
                 nameTextStyle: { color: mutedFg, fontSize: 10 },
                 nameGap: 12,
@@ -645,10 +647,17 @@ export function TimelineChart({
                   color: mutedFg,
                   fontSize: 11,
                   ...(first.unit?.includes("toman")
-                    ? {
-                        formatter: (v: number) =>
-                          typeof v === "number" ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k` : String(v),
-                      }
+                    ? useLog
+                      ? {
+                          formatter: (v: number) =>
+                            typeof v === "number" && v >= 1000
+                              ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k`
+                              : String(v),
+                        }
+                      : {
+                          formatter: (v: number) =>
+                            typeof v === "number" ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k` : String(v),
+                        }
                     : {}),
                 },
               };

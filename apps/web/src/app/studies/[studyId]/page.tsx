@@ -190,6 +190,7 @@ export default function StudyDetailPage() {
   const [fxDualOfficialSource, setFxDualOfficialSource] = useState<FxUsdTomanSource | null>(null);
   const [fxDualOpenSource, setFxDualOpenSource] = useState<FxUsdTomanSource | null>(null);
   const [showFxSpread, setShowFxSpread] = useState(false);
+  const [fxDualYAxisLog, setFxDualYAxisLog] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fgPlatform, setFgPlatform] = useState<"twitter" | "instagram" | "youtube">("twitter");
@@ -1078,6 +1079,15 @@ export default function StudyDetailPage() {
                   />
                   Show FX spread (%)
                 </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={fxDualYAxisLog}
+                    onChange={(e) => setFxDualYAxisLog(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  Y-axis log scale
+                </label>
               </div>
             </CardHeader>
             <CardContent>
@@ -1086,6 +1096,8 @@ export default function StudyDetailPage() {
                 valueKey="value"
                 label="Official"
                 events={[]}
+                yAxisLog={fxDualYAxisLog}
+                yAxisNameSuffix={fxDualYAxisLog ? "log scale" : undefined}
                 multiSeries={[
                   {
                     key: "official",
