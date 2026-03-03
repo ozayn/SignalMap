@@ -15,7 +15,7 @@ import { CurrentSnapshot } from "@/components/current-snapshot";
 import { InSimpleTerms } from "@/components/in-simple-terms";
 import { EventsTimeline, type TimelineEvent } from "@/components/events-timeline";
 import { FollowerGrowthChart } from "@/components/follower-growth-chart";
-import { getStudyById } from "@/lib/studies";
+import { getStudyById, getPrevNextStudies } from "@/lib/studies";
 import { fetchJson } from "@/lib/api";
 
 type OverviewData = {
@@ -843,6 +843,65 @@ export default function StudyDetailPage() {
   const pppIranKpis = isOilPppIran ? computeOilKpis(pppIranPoints) : null;
   const fxKpis = isFxUsdToman ? computeFxKpis(fxPoints) : null;
 
+  /** Header date range: min/max from all data arrays. Expand to requested range when chart axis extends beyond data. */
+  const displayTimeRange = (() => {
+    const collect = (arr: { date: string }[]) => arr.map((p) => p.date);
+
+    const allDates: string[] = [];
+    if ((isFxUsdToman || isOilAndFx) && fxPoints.length > 0) allDates.push(...collect(fxPoints));
+    if ((isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx) && oilPoints.length > 0) allDates.push(...collect(oilPoints));
+    if (isGoldAndOil && goldPoints.length > 0) allDates.push(...collect(goldPoints));
+    if (isRealOil && realOilPoints.length > 0) allDates.push(...collect(realOilPoints));
+    if (isOilPppIran && pppIranPoints.length > 0) allDates.push(...collect(pppIranPoints));
+    if (hasTurkeyComparator && pppTurkeyPoints.length > 0) allDates.push(...collect(pppTurkeyPoints));
+    if (isOilExportCapacity) {
+      if (exportCapacityOilPoints.length > 0) allDates.push(...collect(exportCapacityOilPoints));
+      if (exportCapacityProxyPoints.length > 0) allDates.push(...collect(exportCapacityProxyPoints));
+    }
+    if (isFollowerGrowthDynamics && fgData) {
+      const list = fgData.snapshots ?? fgData.results ?? [];
+      const dates = list
+        .filter((r) => (r.followers ?? (r as { subscribers?: number }).subscribers ?? null) != null)
+        .map((r) => {
+          const ts = r.timestamp;
+          return ts.includes("-") ? ts.slice(0, 10) : ts.length >= 8 ? `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}` : ts;
+        })
+        .filter(Boolean);
+      allDates.push(...dates);
+    }
+    if (isEventsTimeline && events.length > 0) {
+      const eventDates: string[] = [];
+      for (const e of events) {
+        if (e.date) eventDates.push(e.date);
+        if (e.date_start) eventDates.push(e.date_start);
+        if (e.date_end) eventDates.push(e.date_end);
+      }
+      allDates.push(...eventDates);
+    }
+    if (isFxUsdIrrDual) {
+      if (fxDualOpenPoints.length > 0) allDates.push(...collect(fxDualOpenPoints));
+      if (fxDualOfficialPoints.length > 0) allDates.push(...collect(fxDualOfficialPoints));
+    }
+    if (isWageCpiReal) {
+      if (wageNominalPoints.length > 0) allDates.push(...collect(wageNominalPoints));
+      if (wageCpiPoints.length > 0) allDates.push(...collect(wageCpiPoints));
+    }
+
+    const requestedRange =
+      oilTimeRange ?? fxTimeRange ?? dualTimeRange ?? exportCapacityTimeRange ?? fxDualTimeRange ?? wageTimeRange ?? study.timeRange;
+    if (allDates.length === 0) return null;
+    const sorted = [...allDates].sort();
+    const dataMin = sorted[0]!;
+    const dataMax = sorted[sorted.length - 1]!;
+    const reqMin = requestedRange[0];
+    const reqMax = requestedRange[1];
+    const min = reqMin && reqMin < dataMin ? reqMin : dataMin;
+    const max = reqMax && reqMax > dataMax ? reqMax : dataMax;
+    return [min, max] as [string, string];
+  })();
+
+  const { prev: prevStudy, next: nextStudy } = getPrevNextStudies(studyId);
+
   return (
     <div className="container mx-auto max-w-4xl px-4 py-12 space-y-10 min-w-0">
       <header className="space-y-1">
@@ -868,15 +927,44 @@ export default function StudyDetailPage() {
             </Link>
           )}
         </div>
-        <h1 className="text-2xl font-medium tracking-tight text-foreground">
-          Study {study.number}
-        </h1>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-medium tracking-tight text-foreground">
+              Study {study.number}
+            </h1>
+          </div>
+          <div className="flex items-center gap-3 text-sm">
+            {prevStudy ? (
+              <Link
+                href={`/studies/${prevStudy.id}`}
+                className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                title={`Study ${prevStudy.number}: ${prevStudy.title}`}
+              >
+                <span aria-hidden>←</span>
+                <span>Previous</span>
+              </Link>
+            ) : null}
+            {prevStudy && nextStudy ? (
+              <span className="text-muted-foreground/50">|</span>
+            ) : null}
+            {nextStudy ? (
+              <Link
+                href={`/studies/${nextStudy.id}`}
+                className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                title={`Study ${nextStudy.number}: ${nextStudy.title}`}
+              >
+                <span>Next</span>
+                <span aria-hidden>→</span>
+              </Link>
+            ) : null}
+          </div>
+        </div>
         <p className="text-lg text-muted-foreground">{study.title}</p>
         {study.subtitle ? (
           <p className="text-sm text-muted-foreground">{study.subtitle}</p>
         ) : null}
         <p className="text-sm text-muted-foreground">
-          {study.timeRange[0]} — {study.timeRange[1]}
+          {displayTimeRange ? `${displayTimeRange[0]} — ${displayTimeRange[1]}` : "No data loaded"}
         </p>
       </header>
 

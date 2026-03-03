@@ -155,6 +155,42 @@ def api_version():
     return {"version": "jobs-v1", "has_jobs": True}
 
 
+@app.post("/api/cron/daily-update")
+def cron_daily_update():
+    """Append-only daily update for macro signals (brent, fx_usd_toman, gold).
+    Safe to run multiple times per day. Fetches only missing dates."""
+    from datetime import datetime
+    from signalmap.services.daily_updates import (
+        update_brent_prices,
+        update_fx_usd_toman,
+        update_gold_prices,
+    )
+
+    updated = {}
+    for name, fn in [
+        ("brent", update_brent_prices),
+        ("fx", update_fx_usd_toman),
+        ("gold", update_gold_prices),
+    ]:
+        try:
+            updated[name] = fn()
+        except Exception as e:
+            updated[name] = {"rows_added": 0, "start_date": None, "end_date": None, "error": str(e)}
+
+    return {
+        "updated": updated,
+        "run_timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
+@app.post("/api/cron/update-all")
+def cron_update_all():
+    """Unified daily update for all time-varying data sources.
+    Safe to run multiple times. Fetches only missing data, never overwrites."""
+    from signalmap.services.daily_updates import update_all_data_sources
+    return update_all_data_sources()
+
+
 @app.get("/api/events")
 def get_events(
     study_id: str = "1",
@@ -443,6 +479,11 @@ def get_iran_wage_cpi_signal(
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
+def _today_iso() -> str:
+    from datetime import date
+    return date.today().strftime("%Y-%m-%d")
+
+
 @app.get("/api/overview")
 def get_overview(
     study_id: str = "1",
@@ -451,6 +492,7 @@ def get_overview(
 ):
     """Return study overview. Optionally filter by event-centered window."""
     result = {**OVERVIEW_STUB, "study_id": study_id}
+    result["time_range"] = ["2021-01-15", _today_iso()]
     if anchor_event_id:
         days = window_days if window_days is not None and window_days > 0 else 30
         result = _filter_overview_by_event(study_id, anchor_event_id, days)
@@ -462,7 +504,7 @@ def get_overview(
             "timeline": [],
         }
         if not result.get("anchor_event_id"):
-            result["time_range"] = ["2021-01-15", "2026-02-06"]
+            result["time_range"] = ["2021-01-15", _today_iso()]
     return result
 
 
@@ -1010,6 +1052,35 @@ def youtube_comments_wordcloud(
                 by=by if by in ("captured_at", "published_at") else "captured_at",
                 top_n=top_n,
                 channel_terms=terms,
+            )
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- YouTube comments sentiment (one video) ---
+
+@app.get("/api/youtube/comments/sentiment")
+def youtube_comments_sentiment(
+    channel_id: str = Query(..., description="YouTube channel ID"),
+    video_id: str = Query(..., description="YouTube video ID"),
+    include_polarities: bool = Query(False, description="Include per-comment polarity list"),
+):
+    """
+    Sentiment for one video's comments (from youtube_comment_snapshots).
+    Returns aggregate: count, avg_polarity, positive_pct, neutral_pct, negative_pct.
+    English-oriented; other languages may score neutral.
+    """
+    if not os.getenv("DATABASE_URL"):
+        raise HTTPException(status_code=503, detail="Database not configured.")
+    try:
+        from signalmap.services.comment_sentiment import get_sentiment_for_video
+        with cursor() as cur:
+            data = get_sentiment_for_video(
+                cur,
+                channel_id=channel_id.strip(),
+                video_id=video_id.strip(),
+                include_polarities=include_polarities,
             )
         return data
     except Exception as e:

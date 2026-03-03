@@ -57,8 +57,23 @@ Add a **Postgres** database and link it to the API service for Wayback jobs (cac
 | Web | `API_URL` | **Required.** Backend URL for server-side proxy: `https://api-production-XXXX.up.railway.app` or `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:8080` |
 | API | `DATABASE_URL` | Postgres URL (link Postgres service). Required for Wayback jobs. |
 | API | `YOUTUBE_API_KEY` | Optional. YouTube Data API v3 key for channel snapshots (subscriber/view/video counts). Create at [Google Cloud Console](https://console.cloud.google.com/apis/credentials); do not commit real keys. |
+| API | `YOUTUBE_DAILY_UPDATE_CHANNELS` | Optional. Comma-separated handles or channel IDs to refresh daily via cron (e.g. `googledevelopers,@bpluspodcast`). |
 | API | `WEB_ORIGIN` | Optional. Web URL for CORS (only needed if clients hit API directly) |
 
 **Custom domain:** With a custom domain on the web service, the client uses same-origin fetches (`/api/...`). Next.js proxies to the backend, so no CORS or `NEXT_PUBLIC_API_URL` is needed.
 
 **Debug:** Hit `https://your-web.up.railway.app/api/health` to check API connectivity.
+
+### Daily data updates
+
+Unified endpoint updates all time-varying sources (oil, fx, fx_dual, gold, youtube_followers):
+
+```bash
+curl -X POST https://your-api.up.railway.app/api/cron/update-all
+```
+
+**Legacy:** `POST /api/cron/daily-update` still works for oil/fx/gold only.
+
+**Schedule it:** Use [Railway Cron](https://docs.railway.app/reference/cron-jobs), [cron-job.org](https://cron-job.org), or GitHub Actions. Idempotent—safe to run multiple times.
+
+**YouTube channels:** Set `YOUTUBE_DAILY_UPDATE_CHANNELS` (comma-separated handles or channel IDs) and `YOUTUBE_API_KEY` to refresh channel snapshots daily.

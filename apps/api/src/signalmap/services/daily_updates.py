@@ -1,0 +1,212 @@
+"""Daily append-only updates for macro time-series signals.
+Idempotent: fetches only missing dates, never overwrites historical rows."""
+
+import logging
+import os
+from datetime import datetime, timedelta
+from typing import Any, Callable
+
+from signalmap.data.oil_annual import BRENT_DAILY_START
+from signalmap.store.signals_repo import get_max_date, insert_points_ignore_conflict, _has_db
+
+logger = logging.getLogger(__name__)
+
+SIGNAL_BRENT = "brent_oil_price"
+SIGNAL_FX_USD_TOMAN = "usd_toman_open_market"
+SIGNAL_FX_OFFICIAL = "usd_irr_official"
+FX_DEFAULT_START = "2012-10-09"  # rial-exchange-rates-archive start
+FX_OFFICIAL_DEFAULT_START = "1955-01-01"  # FRED XRNCUSIRA618NRUG starts ~1955
+
+
+def _add_days(date_str: str, days: int) -> str:
+    """Add days to YYYY-MM-DD string. Returns YYYY-MM-DD."""
+    d = datetime.strptime(date_str, "%Y-%m-%d").date()
+    return (d + timedelta(days=days)).strftime("%Y-%m-%d")
+
+
+def update_brent_prices() -> dict[str, Any]:
+    """Append-only update for Brent oil. Fetches only missing dates."""
+    if not _has_db():
+        logger.warning("brent: DATABASE_URL not set, skipping")
+        return {"rows_added": 0, "start_date": None, "end_date": None, "error": "no db"}
+
+    try:
+        last = get_max_date(SIGNAL_BRENT)
+        start_date = _add_days(last, 1) if last else BRENT_DAILY_START
+        end_date = datetime.now().date().strftime("%Y-%m-%d")
+
+        if start_date > end_date:
+            return {"rows_added": 0, "start_date": start_date, "end_date": end_date}
+
+        from signalmap.sources.fred_brent import fetch_brent_series
+
+        full = fetch_brent_series()
+        points = [p for p in full if start_date <= p["date"] <= end_date]
+        rows = insert_points_ignore_conflict(
+            SIGNAL_BRENT,
+            points,
+            source="FRED:DCOILBRENTEU",
+            metadata={"ingested_by": "daily_update"},
+        )
+        logger.info("brent: rows_added=%s start=%s end=%s", rows, start_date, end_date)
+        return {"rows_added": rows, "start_date": start_date, "end_date": end_date}
+    except Exception as e:
+        logger.exception("brent: %s", e)
+        return {"rows_added": 0, "start_date": None, "end_date": None, "error": str(e)}
+
+
+def update_fx_usd_toman() -> dict[str, Any]:
+    """Append-only update for USD/toman. Fetches only missing dates."""
+    if not _has_db():
+        logger.warning("fx_usd_toman: DATABASE_URL not set, skipping")
+        return {"rows_added": 0, "start_date": None, "end_date": None, "error": "no db"}
+
+    try:
+        last = get_max_date(SIGNAL_FX_USD_TOMAN)
+        start_date = _add_days(last, 1) if last else FX_DEFAULT_START
+        end_date = datetime.now().date().strftime("%Y-%m-%d")
+
+        if start_date > end_date:
+            return {"rows_added": 0, "start_date": start_date, "end_date": end_date}
+
+        from signalmap.services.signals import fetch_usd_toman_merged
+
+        merged = fetch_usd_toman_merged()
+        points = [p for p in merged if start_date <= p["date"] <= end_date]
+        rows = insert_points_ignore_conflict(
+            SIGNAL_FX_USD_TOMAN,
+            points,
+            source="bonbast_archive_fred",
+            metadata={"ingested_by": "daily_update"},
+        )
+        logger.info("fx_usd_toman: rows_added=%s start=%s end=%s", rows, start_date, end_date)
+        return {"rows_added": rows, "start_date": start_date, "end_date": end_date}
+    except Exception as e:
+        logger.exception("fx_usd_toman: %s", e)
+        return {"rows_added": 0, "start_date": None, "end_date": None, "error": str(e)}
+
+
+def update_gold_prices() -> dict[str, Any]:
+    """Append-only update for daily gold. No daily gold source in codebase; returns no-op."""
+    if not _has_db():
+        logger.warning("gold: DATABASE_URL not set, skipping")
+        return {"rows_added": 0, "start_date": None, "end_date": None, "error": "no db"}
+
+    # Gold is annual-only (GOLD_ANNUAL); no daily source. Return consistent shape.
+    logger.info("gold: rows_added=0 (daily gold not supported; annual only)")
+    return {"rows_added": 0, "start_date": None, "end_date": None}
+
+
+def update_dual_fx_rates() -> dict[str, Any]:
+    """Append-only update for official USD/IRR (FRED). Open market is updated by fx."""
+    if not _has_db():
+        logger.warning("fx_dual: DATABASE_URL not set, skipping")
+        return {"rows_added": 0, "start_date": None, "end_date": None, "error": "no db"}
+
+    try:
+        last = get_max_date(SIGNAL_FX_OFFICIAL)
+        start_date = _add_days(last, 1) if last else FX_OFFICIAL_DEFAULT_START
+        end_date = datetime.now().date().strftime("%Y-%m-%d")
+
+        if start_date > end_date:
+            return {"rows_added": 0, "start_date": start_date, "end_date": end_date}
+
+        from signalmap.sources.fred_iran_fx import fetch_iran_fx_series
+
+        full = fetch_iran_fx_series()
+        points = [p for p in full if start_date <= p["date"] <= end_date]
+        rows = insert_points_ignore_conflict(
+            SIGNAL_FX_OFFICIAL,
+            points,
+            source="FRED:XRNCUSIRA618NRUG",
+            metadata={"ingested_by": "daily_update"},
+        )
+        logger.info("fx_dual: rows_added=%s start=%s end=%s", rows, start_date, end_date)
+        return {"rows_added": rows, "start_date": start_date, "end_date": end_date}
+    except Exception as e:
+        logger.exception("fx_dual: %s", e)
+        return {"rows_added": 0, "start_date": None, "end_date": None, "error": str(e)}
+
+
+def update_youtube_channel_snapshots() -> dict[str, Any]:
+    """Append-only update for YouTube channel snapshots. Uses YOUTUBE_DAILY_UPDATE_CHANNELS env (comma-separated handles/IDs)."""
+    if not _has_db():
+        logger.warning("youtube_followers: DATABASE_URL not set, skipping")
+        return {"rows_added": 0, "channels_updated": 0, "error": "no db"}
+
+    channels_str = (os.getenv("YOUTUBE_DAILY_UPDATE_CHANNELS") or "").strip()
+    if not channels_str:
+        logger.info("youtube_followers: YOUTUBE_DAILY_UPDATE_CHANNELS not set, skipping")
+        return {"rows_added": 0, "channels_updated": 0, "note": "YOUTUBE_DAILY_UPDATE_CHANNELS not set"}
+
+    channels = [c.strip().lstrip("@") for c in channels_str.split(",") if c.strip()]
+    if not channels:
+        return {"rows_added": 0, "channels_updated": 0}
+
+    try:
+        from db import cursor
+
+        today = datetime.now().date()
+
+        def _already_captured_today(channel_id: str | None, handle: str | None) -> bool:
+            if not channel_id and not handle:
+                return False
+            with cursor() as cur:
+                if channel_id:
+                    cur.execute(
+                        "SELECT 1 FROM youtube_channel_snapshots WHERE channel_id = %s AND captured_at::date = %s LIMIT 1",
+                        (channel_id, today),
+                    )
+                else:
+                    cur.execute(
+                        "SELECT 1 FROM youtube_channel_snapshots WHERE channel_handle IS NOT NULL AND LOWER(TRIM(channel_handle)) = LOWER(%s) AND captured_at::date = %s LIMIT 1",
+                        (handle or "", today),
+                    )
+                return cur.fetchone() is not None
+
+        from signalmap.connectors.youtube import fetch_channel
+        from jobs import upsert_youtube_channel_snapshot
+
+        rows_added = 0
+        for entry in channels:
+            is_channel_id = entry.startswith("UC") and len(entry) == 24
+            channel_id = entry if is_channel_id else None
+            handle = None if is_channel_id else entry
+            if _already_captured_today(channel_id, handle):
+                continue
+            try:
+                live = fetch_channel(channel_id=channel_id, handle=handle)
+                upsert_youtube_channel_snapshot(live)
+                rows_added += 1
+            except Exception as e:
+                logger.warning("youtube_followers: %s failed: %s", entry, e)
+
+        logger.info("youtube_followers: rows_added=%s channels=%s", rows_added, len(channels))
+        return {"rows_added": rows_added, "channels_updated": rows_added}
+    except Exception as e:
+        logger.exception("youtube_followers: %s", e)
+        return {"rows_added": 0, "channels_updated": 0, "error": str(e)}
+
+
+DATA_SOURCE_UPDATERS: dict[str, Callable[[], dict[str, Any]]] = {
+    "oil": update_brent_prices,
+    "fx": update_fx_usd_toman,
+    "gold": update_gold_prices,
+    "fx_dual": update_dual_fx_rates,
+    "youtube_followers": update_youtube_channel_snapshots,
+}
+
+
+def update_all_data_sources() -> dict[str, Any]:
+    """Execute all registered updaters. Catches per-source exceptions."""
+    results: dict[str, Any] = {}
+    for name, fn in DATA_SOURCE_UPDATERS.items():
+        try:
+            results[name] = fn()
+        except Exception as e:
+            logger.exception("%s: %s", name, e)
+            results[name] = {"rows_added": 0, "error": str(e)}
+    return {
+        "updated": results,
+        "run_timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }

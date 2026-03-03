@@ -52,7 +52,7 @@ export const STUDIES: StudyMeta[] = [
     id: "iran",
     number: 2,
     title: "Brent oil price as an exogenous context signal",
-    timeRange: ["2021-01-15", "2026-02-06"],
+    timeRange: ["2021-01-15", new Date().toISOString().slice(0, 10)],
     description:
       "A baseline study illustrating event-anchored windows on a macroeconomic series.",
     status: "active",
@@ -63,7 +63,7 @@ export const STUDIES: StudyMeta[] = [
     id: "usd-toman",
     number: 3,
     title: "USD→Toman (open market) as a socio-economic signal",
-    timeRange: ["2018-01-01", "2027-01-01"],
+    timeRange: ["2018-01-01", new Date().toISOString().slice(0, 10)],
     description:
       "Open-market USD/toman rate as a lived economic pressure indicator.",
     status: "active",
@@ -74,7 +74,7 @@ export const STUDIES: StudyMeta[] = [
     id: "oil-and-fx",
     number: 4,
     title: "Oil and USD/toman: dual macroeconomic signals",
-    timeRange: ["2021-01-15", "2027-01-01"],
+    timeRange: ["2021-01-15", new Date().toISOString().slice(0, 10)],
     description:
       "Brent oil price (left axis) and USD→toman open-market rate (right axis) overlaid for comparative context.",
     status: "active",
@@ -213,4 +213,18 @@ export function getStudyById(id: string): StudyMeta | undefined {
 /** Studies visible in the list. Excludes those with visible: false. */
 export function getVisibleStudies(): StudyMeta[] {
   return STUDIES.filter((s) => s.visible !== false);
+}
+
+/** Prev/next study for navigation. Uses visible studies ordered by number. */
+export function getPrevNextStudies(currentId: string): {
+  prev: StudyMeta | null;
+  next: StudyMeta | null;
+} {
+  const visible = getVisibleStudies();
+  const idx = visible.findIndex((s) => s.id === currentId);
+  if (idx < 0) return { prev: null, next: null };
+  return {
+    prev: idx > 0 ? visible[idx - 1] ?? null : null,
+    next: idx < visible.length - 1 ? visible[idx + 1] ?? null : null,
+  };
 }

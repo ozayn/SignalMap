@@ -204,7 +204,7 @@ EVENTS_WORLD_1900: list[dict] = [
         "id": "g1900-ukraine",
         "title": "Russia–Ukraine war",
         "date_start": "2022-02-24",
-        "date_end": "2026-02-06",
+        "date_end": "2026-03-03",  # ongoing; update periodically
         "type": "conflict",
         "scope": "world",
         "confidence": "high",

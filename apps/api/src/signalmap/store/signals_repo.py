@@ -15,6 +15,52 @@ def _has_db() -> bool:
     return bool(DATABASE_URL and cursor)
 
 
+def get_max_date(signal_key: str) -> Optional[str]:
+    """Return max(date) for signal_key, or None if table empty."""
+    if not _has_db():
+        return None
+    with cursor() as cur:
+        cur.execute(
+            "SELECT MAX(date) AS max_date FROM signal_points WHERE signal_key = %s",
+            (signal_key,),
+        )
+        row = cur.fetchone()
+    return row["max_date"] if row and row.get("max_date") else None
+
+
+def insert_points_ignore_conflict(
+    signal_key: str,
+    points: list[dict[str, Any]],
+    source: str,
+    confidence: Optional[float] = None,
+    metadata: Optional[dict[str, Any]] = None,
+) -> int:
+    """Insert points; skip on (signal_key, date) conflict. Returns count actually inserted.
+    Never overwrites existing rows."""
+    if not _has_db():
+        return 0
+    meta_json = json.dumps(metadata or {})
+    count = 0
+    with cursor() as cur:
+        for p in points:
+            date = p.get("date")
+            value = p.get("value")
+            if not date or value is None:
+                continue
+            confidence_val = p.get("confidence") if p.get("confidence") is not None else confidence
+            cur.execute(
+                """
+                INSERT INTO signal_points (signal_key, date, value, source, confidence, metadata, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                ON CONFLICT (signal_key, date) DO NOTHING
+                """,
+                (signal_key, date, value, source, confidence_val, meta_json),
+            )
+            if cur.rowcount > 0:
+                count += 1
+    return count
+
+
 def get_points(
     signal_key: str,
     start: str,
