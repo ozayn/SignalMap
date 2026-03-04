@@ -77,7 +77,7 @@ curl -X POST https://your-api.up.railway.app/api/cron/update-all
 
 **Schedule it:** See `docs/RAILWAY_CRON_SETUP.md`. Options:
 
-- **Railway Cron (recommended):** New service, same build as API. Start Command: `python cron_daily_update.py`. Cron Schedule: `0 7 * * *`. Shares env vars (DATABASE_URL, FRED_API_KEY).
+- **Railway Cron (recommended):** New service, root `apps/api`, config `apps/api/railway.cron.json`. Cron Schedule: `0 7 * * *`. Shares env vars (DATABASE_URL, FRED_API_KEY). See `docs/RAILWAY_CRON_SETUP.md`.
 - **GitHub Actions:** `.github/workflows/cron-update-data.yml` runs daily. Add `CRON_API_URL` as repo secret.
 - **cron-job.org:** POST to `/api/cron/update-all` on a schedule.
 

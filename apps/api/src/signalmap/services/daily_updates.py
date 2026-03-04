@@ -205,7 +205,15 @@ def update_all_data_sources() -> dict[str, Any]:
         except Exception as e:
             logger.exception("%s: %s", name, e)
             results[name] = {"rows_added": 0, "error": str(e)}
+
+    run_timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        from db import upsert_data_update
+        upsert_data_update("global_update")
+    except Exception:
+        pass
+
     return {
         "updated": results,
-        "run_timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "run_timestamp": run_timestamp,
     }

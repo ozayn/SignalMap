@@ -155,6 +155,14 @@ def api_version():
     return {"version": "jobs-v1", "has_jobs": True}
 
 
+@app.get("/api/meta/last-update")
+def api_meta_last_update():
+    """Return when the cron update last ran. UTC ISO string."""
+    from db import get_data_update
+    last = get_data_update("global_update")
+    return {"last_updated": last}
+
+
 @app.post("/api/cron/daily-update")
 def cron_daily_update():
     """Append-only daily update for macro signals (brent, fx_usd_toman, gold).

@@ -179,5 +179,49 @@ def init_tables() -> None:
                 CREATE INDEX IF NOT EXISTS idx_youtube_comment_snapshots_channel_published
                 ON youtube_comment_snapshots (channel_id, published_at)
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS data_updates (
+                    key TEXT PRIMARY KEY,
+                    last_updated TIMESTAMPTZ NOT NULL
+                )
+            """)
     except Exception:
         pass  # DB may not be available; job endpoints will return 503
+
+
+def upsert_data_update(key: str) -> None:
+    """Record current UTC time for a data update key. Idempotent."""
+    if not DATABASE_URL:
+        return
+    try:
+        with cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO data_updates (key, last_updated)
+                VALUES (%s, NOW())
+                ON CONFLICT (key)
+                DO UPDATE SET last_updated = EXCLUDED.last_updated
+                """,
+                (key,),
+            )
+    except Exception:
+        pass
+
+
+def get_data_update(key: str) -> str | None:
+    """Return last_updated as ISO string for key, or None."""
+    if not DATABASE_URL:
+        return None
+    try:
+        with cursor() as cur:
+            cur.execute(
+                "SELECT last_updated FROM data_updates WHERE key = %s",
+                (key,),
+            )
+            row = cur.fetchone()
+            if row and row.get("last_updated"):
+                ts = row["last_updated"]
+                return ts.isoformat() if hasattr(ts, "isoformat") else str(ts)
+            return None
+    except Exception:
+        return None

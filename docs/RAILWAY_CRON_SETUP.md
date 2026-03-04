@@ -17,19 +17,18 @@ The API service runs a web server and never exits. Railway cron requires the pro
    - Same branch (e.g. main)
 
 3. **Build**
-   - Same as API: Root directory `apps/api`, Dockerfile `Dockerfile` (see `apps/api/railway.json`)
+   - Root directory: `apps/api`
+   - Dockerfile: `Dockerfile`
 
-4. **Override Start Command**
-   - Settings → **Deploy** → Start Command (or custom start command):
-   ```text
-   python cron_daily_update.py
-   ```
+4. **Config File**
+   - Settings → **Config** (or **Service Settings**): set **Railway config file** to `apps/api/railway.cron.json`
+   - This sets the start command to `python cron_daily_update.py` (no web server, script exits)
 
 5. **Add Cron Schedule**
    - Settings → **Cron Schedule**
    - Example: `0 7 * * *` (daily at 7:00 UTC)
 
-6. **Environment Variables**
+6. **Variables**
    - Copy from API service or use shared variables:
      - `DATABASE_URL`
      - `FRED_API_KEY`

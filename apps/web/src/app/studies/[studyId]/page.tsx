@@ -143,6 +143,21 @@ function computeFxKpis(points: { date: string; value: number }[]) {
   };
 }
 
+function getLatestDate(arrays: { date: string }[][]): Date | null {
+  const dates = arrays
+    .flat()
+    .map((p) => new Date(p.date))
+    .filter((d) => !isNaN(d.getTime()));
+
+  if (dates.length === 0) return null;
+
+  return new Date(Math.max(...dates.map((d) => d.getTime())));
+}
+
+function formatDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
 export default function StudyDetailPage() {
   const params = useParams();
   const studyId = params.studyId as string;
@@ -200,6 +215,7 @@ export default function StudyDetailPage() {
     meta?: { cache_hit?: boolean; cache_rows?: number; wayback_calls?: number; last_cached_at?: string | null };
   } | null>(null);
   const [fgLoading, setFgLoading] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [fgError, setFgError] = useState<string | null>(null);
   const [fgShowLinear, setFgShowLinear] = useState(true);
   const [fgShowExponential, setFgShowExponential] = useState(true);
@@ -400,6 +416,16 @@ export default function StudyDetailPage() {
       setLoading(false);
     }
   }, [study, isEventsTimeline, isFollowerGrowthDynamics]);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchJson<{ last_updated: string | null }>("/api/meta/last-update")
+      .then((res) => mounted && res.last_updated && setLastUpdated(res.last_updated))
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!study || !isOverviewStub) return;
@@ -900,6 +926,57 @@ export default function StudyDetailPage() {
     return [min, max] as [string, string];
   })();
 
+  /** Latest data date from arrays used by this study. */
+  const latestDataDate = getLatestDate(
+    (() => {
+      const arrays: { date: string }[][] = [];
+      if (isOverviewStub) {
+        if (data?.timeline?.length) arrays.push(data.timeline);
+        if (oilPoints.length > 0) arrays.push(oilPoints);
+      }
+      if ((isFxUsdToman || isOilAndFx) && fxPoints.length > 0) arrays.push(fxPoints);
+      if ((isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx) && oilPoints.length > 0) arrays.push(oilPoints);
+      if (isGoldAndOil && goldPoints.length > 0) arrays.push(goldPoints);
+      if (isRealOil && realOilPoints.length > 0) arrays.push(realOilPoints);
+      if (isOilPppIran && pppIranPoints.length > 0) arrays.push(pppIranPoints);
+      if (hasTurkeyComparator && pppTurkeyPoints.length > 0) arrays.push(pppTurkeyPoints);
+      if (isOilExportCapacity) {
+        if (exportCapacityOilPoints.length > 0) arrays.push(exportCapacityOilPoints);
+        if (exportCapacityProxyPoints.length > 0) arrays.push(exportCapacityProxyPoints);
+      }
+      if (isFollowerGrowthDynamics && fgData) {
+        const list = fgData.snapshots ?? fgData.results ?? [];
+        const points = list
+          .filter((r) => (r.followers ?? (r as { subscribers?: number }).subscribers ?? null) != null)
+          .map((r) => {
+            const ts = r.timestamp;
+            const date = ts.includes("-") ? ts.slice(0, 10) : ts.length >= 8 ? `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}` : ts;
+            return { date };
+          })
+          .filter((p) => p.date);
+        if (points.length > 0) arrays.push(points);
+      }
+      if (isEventsTimeline && events.length > 0) {
+        const eventPoints: { date: string }[] = [];
+        for (const e of events) {
+          if (e.date) eventPoints.push({ date: e.date });
+          if (e.date_start) eventPoints.push({ date: e.date_start });
+          if (e.date_end) eventPoints.push({ date: e.date_end });
+        }
+        if (eventPoints.length > 0) arrays.push(eventPoints);
+      }
+      if (isFxUsdIrrDual) {
+        if (fxDualOpenPoints.length > 0) arrays.push(fxDualOpenPoints);
+        if (fxDualOfficialPoints.length > 0) arrays.push(fxDualOfficialPoints);
+      }
+      if (isWageCpiReal) {
+        if (wageNominalPoints.length > 0) arrays.push(wageNominalPoints);
+        if (wageCpiPoints.length > 0) arrays.push(wageCpiPoints);
+      }
+      return arrays;
+    })()
+  );
+
   const { prev: prevStudy, next: nextStudy } = getPrevNextStudies(studyId);
 
   return (
@@ -966,6 +1043,16 @@ export default function StudyDetailPage() {
         <p className="text-sm text-muted-foreground">
           {displayTimeRange ? `${displayTimeRange[0]} — ${displayTimeRange[1]}` : "No data loaded"}
         </p>
+        {latestDataDate && (
+          <p className="text-sm text-muted-foreground">
+            Data last available: {formatDate(latestDataDate)}
+          </p>
+        )}
+        {lastUpdated && (
+          <p className="text-sm text-muted-foreground">
+            Last updated: {new Date(lastUpdated).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+          </p>
+        )}
       </header>
 
       {isEventsTimeline ? (
