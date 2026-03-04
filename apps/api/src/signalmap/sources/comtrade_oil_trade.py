@@ -129,7 +129,7 @@ def _fetch_comtrade_year_reporter(
 
 
 def fetch_comtrade_oil_trade(
-    start_year: int = 2018,
+    start_year: int = 2010,
     end_year: int | None = None,
 ) -> list[dict[str, Any]]:
     """

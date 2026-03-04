@@ -188,19 +188,23 @@ def update_youtube_channel_snapshots() -> dict[str, Any]:
 
 
 def update_oil_trade_network() -> dict[str, Any]:
-    """Refresh latest year of oil trade edges from Comtrade. Idempotent upsert."""
+    """Fetch missing years from UN Comtrade and populate oil_trade_edges. Idempotent."""
     if not _has_db():
         logger.warning("oil_trade_network: DATABASE_URL not set, skipping")
         return {"rows_added": 0, "error": "no db"}
 
     try:
-        from signalmap.services.oil_trade_network import get_oil_trade_network
+        from signalmap.services.oil_trade_network import ingest_missing_years_from_comtrade
+
         current_year = datetime.now().year
-        result = get_oil_trade_network(start_year=current_year, end_year=current_year, force_refresh=True)
-        years = result.get("years") or {}
-        total_edges = sum(len(edges) for edges in years.values())
-        logger.info("oil_trade_network: refreshed year %s, edges=%s", current_year, total_edges)
-        return {"rows_added": total_edges, "year": current_year}
+        result = ingest_missing_years_from_comtrade(end_year=current_year)
+        rows = result.get("rows_upserted", 0)
+        years_fetched = result.get("years_fetched", [])
+        logger.info("oil_trade_network: rows_upserted=%s years_fetched=%s", rows, years_fetched)
+        return {
+            "rows_added": rows,
+            "years_fetched": years_fetched,
+        }
     except Exception as e:
         logger.exception("oil_trade_network: %s", e)
         return {"rows_added": 0, "error": str(e)}

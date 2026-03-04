@@ -2236,12 +2236,13 @@ export default function StudyDetailPage() {
                 items={[
                   {
                     label: "Oil trade flows",
-                    sourceName: "Curated dataset",
-                    sourceDetail: "Based on publicly available international energy trade statistics.",
+                    sourceName: "UN Comtrade",
+                    sourceUrl: "https://comtrade.un.org/",
+                    sourceDetail: "HS 2709 crude petroleum. Curated fallback when Comtrade unavailable.",
                     unitLabel: "Thousand barrels per day",
                   },
                 ]}
-                note="Unit: thousand barrels per day."
+                note="Unit: thousand barrels per day. Values converted from net weight (kg) using 1 tonne ≈ 7.33 barrels."
               />
               <InSimpleTerms>
                 <p>

@@ -470,19 +470,19 @@ def get_oil_global_long_signal(
 def _oil_trade_fallback(start_year: int, end_year: int) -> dict:
     """Curated fallback when oil_trade_network service unavailable."""
     try:
-        from signalmap.services.oil_trade_network import _curated_fallback
-        fb = _curated_fallback()
+        from signalmap.data.oil_trade_curated import get_curated_years
+        return {"years": get_curated_years(start_year, end_year)}
     except Exception:
         fb = {
             "2018": [{"source": "Russia", "target": "EU", "value": 1500}, {"source": "Saudi Arabia", "target": "China", "value": 1100}],
             "2023": [{"source": "Russia", "target": "India", "value": 1600}, {"source": "United States", "target": "EU", "value": 900}],
         }
-    return {"years": {k: v for k, v in fb.items() if start_year <= int(k) <= end_year}}
+        return {"years": {k: v for k, v in fb.items() if start_year <= int(k) <= end_year}}
 
 
 @app.get("/api/networks/oil-trade")
 def api_oil_trade_network(
-    start_year: int = Query(2018, description="Start year"),
+    start_year: int = Query(2010, description="Start year"),
     end_year: int = Query(2023, description="End year"),
 ):
     """Return bilateral crude oil trade flows (HS 2709) by year. Values in thousand barrels/day."""

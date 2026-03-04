@@ -1,132 +1,22 @@
-"""Oil trade network service: fetch from Comtrade, store in DB, return edges by year."""
+"""Oil trade network service: query DB, fallback to curated dataset.
+
+Real data is ingested by the cron job (update_oil_trade_network) which fetches
+missing years from UN Comtrade and populates oil_trade_edges.
+
+Service logic per year:
+  1. Query oil_trade_edges for the requested year.
+  2. If data exists → return database results.
+  3. If no data exists → return curated dataset.
+"""
 
 import logging
 from typing import Any
 
+from signalmap.data.oil_trade_curated import get_curated_edges
+
 logger = logging.getLogger(__name__)
 
-# Fallback when DB empty and Comtrade unavailable (e.g. initial setup, API limits)
-def _curated_fallback() -> dict[str, list[dict[str, Any]]]:
-    """Curated approximate flows (thousand bbl/day). Each year has distinct edges for visible evolution."""
-    return {
-        # 2018–2019: Russia exports strongly to EU; smaller flows to India/China; US exports modest
-        "2018": [
-            {"source": "Saudi Arabia", "target": "China", "value": 1100},
-            {"source": "Saudi Arabia", "target": "India", "value": 750},
-            {"source": "Saudi Arabia", "target": "Japan", "value": 1000},
-            {"source": "Russia", "target": "China", "value": 500},
-            {"source": "Russia", "target": "India", "value": 200},
-            {"source": "Russia", "target": "EU", "value": 1500},
-            {"source": "United States", "target": "EU", "value": 450},
-            {"source": "United States", "target": "South Korea", "value": 250},
-            {"source": "United States", "target": "Japan", "value": 180},
-            {"source": "United States", "target": "India", "value": 120},
-            {"source": "United States", "target": "Singapore", "value": 80},
-            {"source": "Iran", "target": "China", "value": 600},
-            {"source": "Iraq", "target": "China", "value": 550},
-            {"source": "Iraq", "target": "India", "value": 480},
-            {"source": "UAE", "target": "Japan", "value": 420},
-            {"source": "UAE", "target": "India", "value": 650},
-            {"source": "UAE", "target": "China", "value": 320},
-        ],
-        "2019": [
-            {"source": "Saudi Arabia", "target": "China", "value": 1200},
-            {"source": "Saudi Arabia", "target": "India", "value": 800},
-            {"source": "Saudi Arabia", "target": "Japan", "value": 980},
-            {"source": "Russia", "target": "China", "value": 550},
-            {"source": "Russia", "target": "India", "value": 280},
-            {"source": "Russia", "target": "EU", "value": 1480},
-            {"source": "United States", "target": "EU", "value": 520},
-            {"source": "United States", "target": "South Korea", "value": 300},
-            {"source": "United States", "target": "Japan", "value": 220},
-            {"source": "United States", "target": "India", "value": 180},
-            {"source": "United States", "target": "Singapore", "value": 120},
-            {"source": "Iran", "target": "China", "value": 480},
-            {"source": "Iraq", "target": "China", "value": 620},
-            {"source": "Iraq", "target": "India", "value": 500},
-            {"source": "UAE", "target": "Japan", "value": 460},
-            {"source": "UAE", "target": "India", "value": 720},
-            {"source": "UAE", "target": "China", "value": 350},
-        ],
-        # 2020–2021: US exports increase; Russia still strong to EU
-        "2020": [
-            {"source": "Saudi Arabia", "target": "China", "value": 1300},
-            {"source": "Saudi Arabia", "target": "India", "value": 680},
-            {"source": "Saudi Arabia", "target": "Japan", "value": 920},
-            {"source": "Russia", "target": "China", "value": 750},
-            {"source": "Russia", "target": "India", "value": 420},
-            {"source": "Russia", "target": "EU", "value": 1400},
-            {"source": "United States", "target": "EU", "value": 700},
-            {"source": "United States", "target": "South Korea", "value": 400},
-            {"source": "United States", "target": "Japan", "value": 300},
-            {"source": "United States", "target": "India", "value": 280},
-            {"source": "United States", "target": "Singapore", "value": 200},
-            {"source": "Iran", "target": "China", "value": 520},
-            {"source": "Iraq", "target": "China", "value": 680},
-            {"source": "Iraq", "target": "India", "value": 460},
-            {"source": "UAE", "target": "Japan", "value": 400},
-            {"source": "UAE", "target": "India", "value": 600},
-            {"source": "UAE", "target": "China", "value": 380},
-        ],
-        "2021": [
-            {"source": "Saudi Arabia", "target": "China", "value": 1400},
-            {"source": "Saudi Arabia", "target": "India", "value": 780},
-            {"source": "Saudi Arabia", "target": "Japan", "value": 950},
-            {"source": "Russia", "target": "China", "value": 900},
-            {"source": "Russia", "target": "India", "value": 550},
-            {"source": "Russia", "target": "EU", "value": 1350},
-            {"source": "United States", "target": "EU", "value": 720},
-            {"source": "United States", "target": "South Korea", "value": 440},
-            {"source": "United States", "target": "Japan", "value": 340},
-            {"source": "United States", "target": "India", "value": 380},
-            {"source": "United States", "target": "Singapore", "value": 280},
-            {"source": "Iran", "target": "China", "value": 580},
-            {"source": "Iraq", "target": "China", "value": 720},
-            {"source": "Iraq", "target": "India", "value": 520},
-            {"source": "UAE", "target": "Japan", "value": 430},
-            {"source": "UAE", "target": "India", "value": 780},
-            {"source": "UAE", "target": "China", "value": 360},
-        ],
-        # 2022–2023: Russia shifts to Asia; EU flow collapses; US fills EU gap, exports grow
-        "2022": [
-            {"source": "Saudi Arabia", "target": "China", "value": 1550},
-            {"source": "Saudi Arabia", "target": "India", "value": 920},
-            {"source": "Saudi Arabia", "target": "Japan", "value": 1000},
-            {"source": "Russia", "target": "China", "value": 1200},
-            {"source": "Russia", "target": "India", "value": 1600},
-            {"source": "Russia", "target": "EU", "value": 200},
-            {"source": "United States", "target": "EU", "value": 900},
-            {"source": "United States", "target": "South Korea", "value": 500},
-            {"source": "United States", "target": "Japan", "value": 380},
-            {"source": "United States", "target": "India", "value": 520},
-            {"source": "United States", "target": "Singapore", "value": 350},
-            {"source": "Iran", "target": "China", "value": 640},
-            {"source": "Iraq", "target": "China", "value": 780},
-            {"source": "Iraq", "target": "India", "value": 580},
-            {"source": "UAE", "target": "Japan", "value": 480},
-            {"source": "UAE", "target": "India", "value": 850},
-            {"source": "UAE", "target": "China", "value": 400},
-        ],
-        "2023": [
-            {"source": "Saudi Arabia", "target": "China", "value": 1650},
-            {"source": "Saudi Arabia", "target": "India", "value": 880},
-            {"source": "Saudi Arabia", "target": "Japan", "value": 580},
-            {"source": "Russia", "target": "China", "value": 1200},
-            {"source": "Russia", "target": "India", "value": 1600},
-            {"source": "Russia", "target": "EU", "value": 250},
-            {"source": "United States", "target": "EU", "value": 900},
-            {"source": "United States", "target": "South Korea", "value": 480},
-            {"source": "United States", "target": "Japan", "value": 360},
-            {"source": "United States", "target": "India", "value": 580},
-            {"source": "United States", "target": "Singapore", "value": 400},
-            {"source": "Iran", "target": "China", "value": 680},
-            {"source": "Iraq", "target": "China", "value": 760},
-            {"source": "Iraq", "target": "India", "value": 560},
-            {"source": "UAE", "target": "Japan", "value": 470},
-            {"source": "UAE", "target": "India", "value": 880},
-            {"source": "UAE", "target": "China", "value": 420},
-        ],
-    }
+OIL_TRADE_START_YEAR = 2010
 
 # EU member states (Comtrade reports individually; we aggregate to EU for network)
 EU_IMPORTERS = frozenset({
@@ -138,58 +28,6 @@ EU_IMPORTERS = frozenset({
 def _aggregate_importer(name: str) -> str:
     """Aggregate EU member importers to 'EU' for network display."""
     return "EU" if name in EU_IMPORTERS else name
-
-
-def _has_data_for_years(start_year: int, end_year: int) -> bool:
-    """Check if oil_trade_edges has data for the full year range."""
-    from db import DATABASE_URL, cursor
-    if not DATABASE_URL:
-        return False
-    try:
-        with cursor() as cur:
-            cur.execute(
-                """
-                SELECT COUNT(DISTINCT year) AS cnt
-                FROM oil_trade_edges
-                WHERE year >= %s AND year <= %s
-                """,
-                (start_year, end_year),
-            )
-            row = cur.fetchone()
-            expected = end_year - start_year + 1
-            return row and row.get("cnt", 0) >= expected
-    except Exception:
-        return False
-
-
-def _upsert_edges(rows: list[dict[str, Any]], source: str = "comtrade") -> int:
-    """Upsert edges into oil_trade_edges. Returns count of rows upserted."""
-    from db import DATABASE_URL, cursor
-    if not DATABASE_URL or not rows:
-        return 0
-    count = 0
-    try:
-        with cursor() as cur:
-            for r in rows:
-                cur.execute(
-                    """
-                    INSERT INTO oil_trade_edges (year, exporter, importer, value, source, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, NOW())
-                    ON CONFLICT (year, exporter, importer)
-                    DO UPDATE SET value = EXCLUDED.value, source = EXCLUDED.source, updated_at = NOW()
-                    """,
-                    (
-                        r["year"],
-                        r["exporter"],
-                        r["importer"],
-                        r["value"],
-                        source,
-                    ),
-                )
-                count += 1
-    except Exception as e:
-        logger.exception("oil_trade_edges upsert: %s", e)
-    return count
 
 
 def _query_edges_by_year(start_year: int, end_year: int) -> dict[str, list[dict[str, Any]]]:
@@ -230,40 +68,117 @@ def _query_edges_by_year(start_year: int, end_year: int) -> dict[str, list[dict[
 
 
 def get_oil_trade_network(
-    start_year: int = 2018,
+    start_year: int = 2010,
     end_year: int = 2023,
-    force_refresh: bool = False,
 ) -> dict[str, Any]:
     """
     Return oil trade edges grouped by year.
-    If data missing, fetches from Comtrade and upserts.
-    Output: { years: { "2018": [...], "2019": [...], ... } }
+
+    For each year in [start_year, end_year]:
+      - If oil_trade_edges has data → use database results.
+      - If no data → use curated fallback.
+
+    Output: { years: { "2010": [...], "2011": [...], ... } }
     Each edge: { source, target, value } (value = thousand barrels/day).
     """
     if start_year > end_year:
         start_year, end_year = end_year, start_year
 
-    from db import DATABASE_URL
-    has_data = _has_data_for_years(start_year, end_year) if DATABASE_URL else False
+    db_result = _query_edges_by_year(start_year, end_year)
 
-    if not has_data or force_refresh:
-        try:
-            from signalmap.sources.comtrade_oil_trade import fetch_comtrade_oil_trade
-            rows = fetch_comtrade_oil_trade(start_year, end_year)
-            if rows:
-                n = _upsert_edges(rows, source="comtrade")
-                logger.info("oil_trade_network: upserted %s edges from Comtrade", n)
-        except Exception as e:
-            logger.warning("oil_trade_network: Comtrade fetch failed: %s", e)
-
-    result = _query_edges_by_year(start_year, end_year)
-
-    if not result:
-        logger.info("oil_trade_network: using curated fallback (no Comtrade/DB data)")
-        fallback = _curated_fallback()
-        result = {
-            k: v for k, v in fallback.items()
-            if start_year <= int(k) <= end_year
-        }
+    result: dict[str, list[dict[str, Any]]] = {}
+    for year in range(start_year, end_year + 1):
+        key = str(year)
+        if key in db_result and db_result[key]:
+            result[key] = db_result[key]
+        else:
+            curated = get_curated_edges(year)
+            if curated:
+                result[key] = curated
+                logger.debug("oil_trade_network: year %s using curated fallback", year)
 
     return {"years": result}
+
+
+def _get_years_in_db() -> set[int]:
+    """Return set of years that have at least one edge in oil_trade_edges."""
+    from db import DATABASE_URL, cursor
+    if not DATABASE_URL:
+        return set()
+    try:
+        with cursor() as cur:
+            cur.execute("SELECT DISTINCT year FROM oil_trade_edges ORDER BY year")
+            return {row["year"] for row in (cur.fetchall() or [])}
+    except Exception as e:
+        logger.warning("oil_trade_edges get years: %s", e)
+        return set()
+
+
+def _upsert_edges(rows: list[dict[str, Any]], source: str = "comtrade") -> int:
+    """Upsert edges into oil_trade_edges. Returns count of rows upserted."""
+    from db import DATABASE_URL, cursor
+    if not DATABASE_URL or not rows:
+        return 0
+    count = 0
+    try:
+        with cursor() as cur:
+            for r in rows:
+                cur.execute(
+                    """
+                    INSERT INTO oil_trade_edges (year, exporter, importer, value, source, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (year, exporter, importer)
+                    DO UPDATE SET value = EXCLUDED.value, source = EXCLUDED.source, updated_at = NOW()
+                    """,
+                    (
+                        r["year"],
+                        r["exporter"],
+                        r["importer"],
+                        r["value"],
+                        source,
+                    ),
+                )
+                count += 1
+    except Exception as e:
+        logger.exception("oil_trade_edges upsert: %s", e)
+    return count
+
+
+def ingest_missing_years_from_comtrade(
+    start_year: int = OIL_TRADE_START_YEAR,
+    end_year: int | None = None,
+) -> dict[str, Any]:
+    """
+    Fetch missing years from UN Comtrade and populate oil_trade_edges.
+    Idempotent: only fetches years that have no data in DB.
+    Returns summary of rows upserted per year.
+    """
+    from datetime import datetime
+    from signalmap.sources.comtrade_oil_trade import fetch_comtrade_oil_trade
+
+    if end_year is None:
+        end_year = datetime.now().year
+
+    years_in_db = _get_years_in_db()
+    missing = [y for y in range(start_year, end_year + 1) if y not in years_in_db]
+
+    if not missing:
+        logger.info("oil_trade_network: all years %s-%s already in DB", start_year, end_year)
+        return {"rows_upserted": 0, "years_fetched": [], "years_already_present": list(years_in_db)}
+
+    total = 0
+    for year in missing:
+        try:
+            rows = fetch_comtrade_oil_trade(year, year)
+            if rows:
+                n = _upsert_edges(rows, source="comtrade")
+                total += n
+                logger.info("oil_trade_network: ingested year %s, %s edges", year, n)
+        except Exception as e:
+            logger.warning("oil_trade_network: Comtrade fetch year %s failed: %s", year, e)
+
+    return {
+        "rows_upserted": total,
+        "years_fetched": missing,
+        "years_already_present": list(years_in_db),
+    }
