@@ -3,13 +3,78 @@
 Returns normalized format: [{date, us, saudi_arabia, russia, iran, total_production}, ...]
 Unit: million barrels per day. Annual data (YYYY-01-01).
 
-Fetches from FRED (IMF REO) when FRED_API_KEY is set; uses hardcoded dicts as fallback.
+Fetches from EIA API when EIA_API_KEY is set; falls back to FRED (if FRED_API_KEY) or static data.
 """
 
 import os
 from typing import Any
 
+import httpx
+
 from signalmap.data.oil_production_exporters import IRAN, RUSSIA, SAUDI_ARABIA, UNITED_STATES
+
+EIA_INTERNATIONAL_URL = "https://api.eia.gov/v2/international/data/"
+USER_AGENT = "SignalMap/1.0 (research; +https://github.com/ozayn/SignalMap)"
+
+# EIA country codes -> our field names
+EIA_COUNTRIES = {
+    "USA": "us",
+    "SAU": "saudi_arabia",
+    "RUS": "russia",
+    "IRN": "iran",
+}
+
+
+def fetch_eia_production(country_code: str) -> dict[int, float]:
+    """
+    Fetch crude oil production for one country from EIA International Data API.
+    country_code: USA, SAU, RUS, or IRN.
+    Returns {year: million_bbl_per_day}. EIA returns thousand bbl/day; we convert to million.
+    Raises on API error or missing key.
+    """
+    key = (os.getenv("EIA_API_KEY") or "").strip()
+    if not key:
+        raise ValueError("EIA_API_KEY not configured")
+    params = {
+        "api_key": key,
+        "frequency": "annual",
+        "data[0]": "value",
+        "facets[product][]": "CRUDEOIL",
+        "facets[flow][]": "PRODUCTION",
+        "facets[country][]": country_code,
+    }
+    with httpx.Client(timeout=20.0, headers={"User-Agent": USER_AGENT}) as client:
+        r = client.get(EIA_INTERNATIONAL_URL, params=params)
+        r.raise_for_status()
+        data = r.json()
+    rows = data.get("response", {}).get("data") or []
+    result: dict[int, float] = {}
+    for row in rows:
+        period = (row.get("period") or "").strip()
+        val_str = (row.get("value") or "").strip()
+        if not period or not val_str or val_str == ".":
+            continue
+        try:
+            year = int(period[:4]) if len(period) >= 4 else int(period)
+            v = float(val_str)
+        except (ValueError, TypeError):
+            continue
+        # EIA international: thousand barrels per day -> million barrels per day
+        result[year] = round(v / 1000.0, 2)
+    return result
+
+
+def _fetch_from_eia() -> dict[str, dict[int, float]] | None:
+    """Fetch all four countries from EIA. Returns None on failure."""
+    if not (os.getenv("EIA_API_KEY") or "").strip():
+        return None
+    out: dict[str, dict[int, float]] = {}
+    try:
+        for code in EIA_COUNTRIES:
+            out[EIA_COUNTRIES[code]] = fetch_eia_production(code)
+    except Exception:
+        return None
+    return out
 
 
 def _fetch_from_fred() -> dict[str, dict[int, float]]:
@@ -26,27 +91,51 @@ def _fetch_from_fred() -> dict[str, dict[int, float]]:
 def fetch_oil_production_exporters() -> list[dict[str, Any]]:
     """
     Fetch oil production for United States, Saudi Arabia, Russia, Iran.
-    Tries FRED first (Saudi, Iran, Russia); US and gaps use hardcoded fallback.
+    Tries EIA API first (all four countries); falls back to FRED + static on failure.
     Returns [{date, us, saudi_arabia, russia, iran, total_production}, ...] sorted by date.
     Values in million barrels per day. Annual resolution.
     """
-    fred_data = _fetch_from_fred()
     us_fallback = UNITED_STATES
     sa_fallback = SAUDI_ARABIA
     ru_fallback = RUSSIA
     ir_fallback = IRAN
 
-    us = {**us_fallback}
-    sa = {**sa_fallback}
-    ru = {**ru_fallback}
-    ir = {**ir_fallback}
+    us: dict[int, float] = {}
+    sa: dict[int, float] = {}
+    ru: dict[int, float] = {}
+    ir: dict[int, float] = {}
 
-    for year, val in (fred_data.get("saudi_arabia") or {}).items():
-        sa[year] = val
-    for year, val in (fred_data.get("iran") or {}).items():
-        ir[year] = val
-    for year, val in (fred_data.get("russia") or {}).items():
-        ru[year] = val
+    eia_data = _fetch_from_eia()
+    if eia_data:
+        us = eia_data.get("us") or {}
+        sa = eia_data.get("saudi_arabia") or {}
+        ru = eia_data.get("russia") or {}
+        ir = eia_data.get("iran") or {}
+        # Merge fallback for any gaps
+        for year, val in us_fallback.items():
+            if year not in us:
+                us[year] = val
+        for year, val in sa_fallback.items():
+            if year not in sa:
+                sa[year] = val
+        for year, val in ru_fallback.items():
+            if year not in ru:
+                ru[year] = val
+        for year, val in ir_fallback.items():
+            if year not in ir:
+                ir[year] = val
+    else:
+        fred_data = _fetch_from_fred()
+        us = {**us_fallback}
+        sa = {**sa_fallback}
+        ru = {**ru_fallback}
+        ir = {**ir_fallback}
+        for year, val in (fred_data.get("saudi_arabia") or {}).items():
+            sa[year] = val
+        for year, val in (fred_data.get("iran") or {}).items():
+            ir[year] = val
+        for year, val in (fred_data.get("russia") or {}).items():
+            ru[year] = val
 
     all_years = sorted(set(us) | set(sa) | set(ru) | set(ir))
     result: list[dict[str, Any]] = []
