@@ -36,6 +36,23 @@ pnpm dev
 - API docs: http://localhost:8000/docs
 - Health: http://localhost:8000/health
 
+### Run cron locally
+
+Update oil, fx, gold, fx_dual, and YouTube channel data. Requires `DATABASE_URL` and `FRED_API_KEY` in `apps/api/.env`.
+
+```bash
+cd apps/api && source .venv/bin/activate
+PYTHONPATH=src python cron_daily_update.py
+```
+
+Or trigger via HTTP (with API running):
+
+```bash
+curl -X POST http://localhost:8000/api/cron/update-all
+```
+
+The study page shows "Last updated" after a successful run.
+
 ## Railway deployment
 
 Add a **Postgres** database and link it to the API service for Wayback jobs (cache + job queue).
