@@ -306,7 +306,22 @@ export default function StudyDetailPage() {
     const saudi = extend(productionSaudiPoints);
     const russia = extend(productionRussiaPoints);
     const iran = extend(productionIranPoints);
-    const total = extend(productionTotalPoints);
+    // Use API total when available; otherwise compute from country series (fallback for older API/cache)
+    const totalFromApi = extend(productionTotalPoints);
+    const totalComputed =
+      totalFromApi.length > 0
+        ? totalFromApi
+        : (() => {
+            const byDate = new Map<string, number>();
+            for (const p of productionUsPoints) byDate.set(p.date, (byDate.get(p.date) ?? 0) + p.value);
+            for (const p of productionSaudiPoints) byDate.set(p.date, (byDate.get(p.date) ?? 0) + p.value);
+            for (const p of productionRussiaPoints) byDate.set(p.date, (byDate.get(p.date) ?? 0) + p.value);
+            for (const p of productionIranPoints) byDate.set(p.date, (byDate.get(p.date) ?? 0) + p.value);
+            const computed = [...byDate.entries()]
+              .sort((a, b) => a[0].localeCompare(b[0]))
+              .map(([date, value]) => ({ date, value: Math.round(value * 100) / 100 }));
+            return extend(computed);
+          })();
     const allLastDates = [
       ...productionUsPoints.map((p) => p.date),
       ...productionSaudiPoints.map((p) => p.date),
@@ -323,7 +338,7 @@ export default function StudyDetailPage() {
       extendedProductionSaudiPoints: saudi,
       extendedProductionRussiaPoints: russia,
       extendedProductionIranPoints: iran,
-      extendedProductionTotalPoints: total,
+      extendedProductionTotalPoints: totalComputed,
       productionExtendedDates: extendedDates,
       productionLastOfficialDate: lastOfficial ? lastOfficial.slice(0, 4) : undefined,
     };
