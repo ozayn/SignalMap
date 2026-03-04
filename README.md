@@ -75,7 +75,13 @@ curl -X POST https://your-api.up.railway.app/api/cron/update-all
 
 **Legacy:** `POST /api/cron/daily-update` still works for oil/fx/gold only.
 
-**Schedule it:** Use [Railway Cron](https://docs.railway.app/reference/cron-jobs), [cron-job.org](https://cron-job.org), or GitHub Actions. Idempotent—safe to run multiple times.
+**Schedule it:** See `docs/RAILWAY_CRON_SETUP.md`. Options:
+
+- **Railway Cron (recommended):** New service, same build as API. Start Command: `python cron_daily_update.py`. Cron Schedule: `0 7 * * *`. Shares env vars (DATABASE_URL, FRED_API_KEY).
+- **GitHub Actions:** `.github/workflows/cron-update-data.yml` runs daily. Add `CRON_API_URL` as repo secret.
+- **cron-job.org:** POST to `/api/cron/update-all` on a schedule.
+
+Idempotent—safe to run multiple times.
 
 **YouTube channels:** Set `YOUTUBE_DAILY_UPDATE_CHANNELS` (comma-separated handles or channel IDs) and `YOUTUBE_API_KEY` to refresh channel snapshots daily.
 

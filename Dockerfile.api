@@ -9,6 +9,7 @@ COPY apps/api/main.py .
 COPY apps/api/run.py .
 COPY apps/api/db.py .
 COPY apps/api/jobs.py .
+COPY apps/api/cron_daily_update.py .
 COPY apps/api/connectors/ ./connectors/
 COPY apps/api/src/ ./src/
 
