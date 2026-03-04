@@ -2107,6 +2107,9 @@ export default function StudyDetailPage() {
                   <label className="text-sm font-medium text-foreground">
                     Year:
                   </label>
+                  <span className="text-sm text-muted-foreground tabular-nums">
+                    {networkYears[0]} – {networkYears[networkYears.length - 1]}
+                  </span>
                   <input
                     type="range"
                     min={networkYears[0]}

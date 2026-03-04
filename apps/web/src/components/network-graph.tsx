@@ -84,6 +84,9 @@ export function NetworkGraph({ nodes, edges, year }: NetworkGraphProps) {
       else color = "#3b82f6"; // balanced
 
       const [x, y] = getNodePosition(n.id, i, nodes.length, width, height);
+      // Nodes on the right edge: place label to the left so it stays visible
+      const pos = NODE_POSITIONS[n.id];
+      const labelPosition = pos && pos[0] >= 80 ? ("left" as const) : ("right" as const);
 
       return {
         name: n.id,
@@ -95,7 +98,7 @@ export function NetworkGraph({ nodes, edges, year }: NetworkGraphProps) {
           show: true,
           fontSize: 13,
           fontWeight: 500,
-          position: "right" as const,
+          position: labelPosition,
           distance: 7,
         },
       };
