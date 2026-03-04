@@ -1,10 +1,13 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import * as echarts from "echarts";
 
 export type NetworkNode = { id: string };
 export type NetworkEdge = { source: string; target: string; value: number };
+
+/** Major nodes: always show labels on mobile to reduce clutter. */
+const MAJOR_NODES = new Set(["China", "India", "Russia", "Saudi Arabia", "United States", "EU"]);
 
 /** Fixed positions for stable layout across years. Normalized 0–100, scaled to pixels in use. */
 const NODE_POSITIONS: Record<string, [number, number]> = {
@@ -29,11 +32,11 @@ function getNodePosition(
   index: number,
   total: number,
   width: number,
-  height: number
+  height: number,
+  margin: number = 80
 ): [number, number] {
-  const margin = 80;
-  const w = Math.max(400, width - margin * 2);
-  const h = Math.max(400, height - margin * 2);
+  const w = Math.max(300, width - margin * 2);
+  const h = Math.max(300, height - margin * 2);
   const pos = NODE_POSITIONS[id];
   if (pos) {
     return [margin + (pos[0] / 100) * w, margin + (pos[1] / 100) * h];
@@ -50,14 +53,29 @@ type NetworkGraphProps = {
 
 export function NetworkGraph({ nodes, edges, year }: NetworkGraphProps) {
   const chartRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState({ width: 800, height: 720 });
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const el = chartRef.current;
+    const observer = new ResizeObserver(() => {
+      const rect = el.getBoundingClientRect();
+      setContainerSize({ width: rect.width || 800, height: rect.height || 720 });
+    });
+    observer.observe(el);
+    const rect = el.getBoundingClientRect();
+    setContainerSize({ width: rect.width || 800, height: rect.height || 720 });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!chartRef.current || nodes.length === 0) return;
 
     const chart = echarts.init(chartRef.current);
-    const rect = chartRef.current.getBoundingClientRect();
-    const width = rect.width || 800;
-    const height = rect.height || 720;
+    const { width, height } = containerSize;
+    const isMobile = width < 768;
+    const nodeSizeScale = isMobile ? 0.6 : 1;
+    const margin = isMobile ? 40 : 80;
 
     // Compute trade role per node: source = exporter, target = importer
     const totalExports: Record<string, number> = {};
@@ -83,32 +101,39 @@ export function NetworkGraph({ nodes, edges, year }: NetworkGraphProps) {
       else if (exportRatio <= 0.4) color = "#60a5fa"; // mostly importer
       else color = "#3b82f6"; // balanced
 
-      const [x, y] = getNodePosition(n.id, i, nodes.length, width, height);
+      const [x, y] = getNodePosition(n.id, i, nodes.length, width, height, margin);
       // Nodes on the right edge: place label to the left so it stays visible
       const pos = NODE_POSITIONS[n.id];
       const labelPosition = pos && pos[0] >= 80 ? ("left" as const) : ("right" as const);
+
+      const baseSize = 18 + Math.sqrt(totalTrade);
+      const showLabel = isMobile ? MAJOR_NODES.has(n.id) : true;
 
       return {
         name: n.id,
         x,
         y,
-        symbolSize: 18 + Math.sqrt(totalTrade),
+        symbolSize: baseSize * nodeSizeScale,
         itemStyle: { color },
         label: {
-          show: true,
-          fontSize: 13,
+          show: showLabel,
+          fontSize: isMobile ? 11 : 13,
           fontWeight: 500,
           position: labelPosition,
           distance: 7,
         },
+        emphasis: {
+          label: { show: true },
+        },
       };
     });
 
+    const lineWidthScale = isMobile ? 0.7 : 1;
     const graphLinks = edges.map((e) => ({
       source: e.source,
       target: e.target,
       lineStyle: {
-        width: Math.sqrt(e.value) / 4,
+        width: (Math.sqrt(e.value) / 4) * lineWidthScale,
         opacity: 0.85,
         curveness: 0.35,
       },
@@ -153,9 +178,15 @@ export function NetworkGraph({ nodes, edges, year }: NetworkGraphProps) {
       window.removeEventListener("resize", handleResize);
       chart.dispose();
     };
-  }, [nodes, edges]);
+  }, [nodes, edges, containerSize]);
 
   if (nodes.length === 0) return null;
 
-  return <div ref={chartRef} className="w-full" style={{ height: 720 }} />;
+  return (
+    <div
+      ref={chartRef}
+      className="w-full h-[70vh] md:h-[520px]"
+      style={{ width: "100%", minHeight: 360 }}
+    />
+  );
 }

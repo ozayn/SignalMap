@@ -1129,7 +1129,9 @@ export default function StudyDetailPage() {
       if (wageNominalPoints.length > 0) allDates.push(...collect(wageNominalPoints));
       if (wageCpiPoints.length > 0) allDates.push(...collect(wageCpiPoints));
     }
-
+    if (isOilTradeNetwork && networkYears.length > 0) {
+      return [networkYears[0]!, networkYears[networkYears.length - 1]!] as [string, string];
+    }
     const requestedRange =
       oilTimeRange ?? fxTimeRange ?? dualTimeRange ?? exportCapacityTimeRange ?? productionTimeRange ?? fxDualTimeRange ?? wageTimeRange ?? study.timeRange;
     if (allDates.length === 0) return null;
@@ -1204,6 +1206,9 @@ export default function StudyDetailPage() {
       if (isWageCpiReal) {
         if (wageNominalPoints.length > 0) arrays.push(wageNominalPoints);
         if (wageCpiPoints.length > 0) arrays.push(wageCpiPoints);
+      }
+      if (isOilTradeNetwork && networkYears.length > 0) {
+        arrays.push(networkYears.map((y) => ({ date: `${y}-01-01` })));
       }
       return arrays;
     })()
@@ -2102,12 +2107,18 @@ export default function StudyDetailPage() {
         <CardContent>
           {isOilTradeNetwork ? (
             <>
+              <NetworkGraph
+                key={networkSelectedYear || networkYears[networkYears.length - 1]}
+                nodes={networkNodesForYear}
+                edges={networkEdgesForYear}
+                year={networkSelectedYear}
+              />
               {networkYears.length > 0 && (
-                <div className="mb-4 flex flex-wrap items-center gap-3">
-                  <label className="text-sm font-medium text-foreground">
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center py-2">
+                  <label className="text-sm font-medium text-foreground shrink-0">
                     Year:
                   </label>
-                  <span className="text-sm text-muted-foreground tabular-nums">
+                  <span className="text-sm text-muted-foreground tabular-nums shrink-0">
                     {networkYears[0]} – {networkYears[networkYears.length - 1]}
                   </span>
                   <input
@@ -2117,19 +2128,13 @@ export default function StudyDetailPage() {
                     step={1}
                     value={networkSelectedYear || networkYears[networkYears.length - 1]!}
                     onChange={(e) => setNetworkSelectedYear(e.target.value)}
-                    className="w-40 accent-primary"
+                    className="oil-trade-year-slider accent-primary min-h-[44px] w-full min-w-0 sm:w-40 flex-1 sm:flex-none touch-manipulation"
                   />
-                  <span className="text-sm text-muted-foreground tabular-nums min-w-[4ch]">
+                  <span className="text-base font-medium tabular-nums min-w-[4ch] shrink-0">
                     {networkSelectedYear || networkYears[networkYears.length - 1]}
                   </span>
                 </div>
               )}
-              <NetworkGraph
-                key={networkSelectedYear || networkYears[networkYears.length - 1]}
-                nodes={networkNodesForYear}
-                edges={networkEdgesForYear}
-                year={networkSelectedYear}
-              />
               <div className="mt-4 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm">
                 <h4 className="mb-3 font-medium text-foreground">How to read this network</h4>
                 <div className="space-y-3">

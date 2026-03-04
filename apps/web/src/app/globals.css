@@ -59,6 +59,19 @@
   }
 }
 
+/* Oil trade year slider: larger thumb for touch */
+.oil-trade-year-slider {
+  padding: 12px 0;
+}
+.oil-trade-year-slider::-webkit-slider-thumb {
+  width: 24px;
+  height: 24px;
+}
+.oil-trade-year-slider::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+}
+
 @keyframes progress-indeterminate {
   0% {
     width: 20%;
