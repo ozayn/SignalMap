@@ -232,7 +232,13 @@ export const STUDIES: StudyMeta[] = [
 ];
 
 export function getStudyById(id: string): StudyMeta | undefined {
-  return STUDIES.find((s) => s.id === id);
+  const byId = STUDIES.find((s) => s.id === id);
+  if (byId) return byId;
+  const num = parseInt(id, 10);
+  if (!Number.isNaN(num)) {
+    return STUDIES.find((s) => s.number === num);
+  }
+  return undefined;
 }
 
 /** Studies visible in the list. Excludes those with visible: false. */

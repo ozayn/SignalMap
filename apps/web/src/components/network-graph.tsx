@@ -19,6 +19,7 @@ const NODE_POSITIONS: Record<string, [number, number]> = {
   EU: [90, 55],
   Japan: [85, 75],
   "South Korea": [80, 25],
+  Singapore: [70, 55],
 };
 
 function getNodePosition(

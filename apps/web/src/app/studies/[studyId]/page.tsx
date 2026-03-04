@@ -1209,7 +1209,7 @@ export default function StudyDetailPage() {
     })()
   );
 
-  const { prev: prevStudy, next: nextStudy } = getPrevNextStudies(studyId);
+  const { prev: prevStudy, next: nextStudy } = getPrevNextStudies(study?.id ?? studyId);
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-12 space-y-10 min-w-0">
