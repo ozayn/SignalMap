@@ -17,8 +17,7 @@ The API service runs a web server and never exits. Railway cron requires the pro
    - Same branch (e.g. main)
 
 3. **Build**
-   - Use same config as API: `Dockerfile.api` at repo root
-   - Root directory: `/` (repo root)
+   - Same as API: Root directory `apps/api`, Dockerfile `Dockerfile` (see `apps/api/railway.json`)
 
 4. **Override Start Command**
    - Settings → **Deploy** → Start Command (or custom start command):
@@ -57,5 +56,5 @@ The API service runs a web server and never exits. Railway cron requires the pro
 ## Notes
 
 - **Service must exit**: The script runs `update_all_data_sources()` and exits. No web server.
-- **Same image as API**: Uses `Dockerfile.api`; only the start command differs.
+- **Same image as API**: Uses `apps/api/Dockerfile`; only the start command differs.
 - **Minimum interval**: Railway requires ≥5 minutes between cron runs.

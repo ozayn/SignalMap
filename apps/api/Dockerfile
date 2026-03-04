@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py run.py db.py jobs.py .
+COPY main.py run.py db.py jobs.py cron_daily_update.py .
 COPY connectors/ ./connectors/
 COPY src/ ./src/
 
