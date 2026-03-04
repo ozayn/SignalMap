@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CommentWordCloud } from "@/components/comment-word-cloud";
@@ -12,6 +12,9 @@ const SAMPLE_URL =
   "/explore/youtube/wordcloud?channel_id=UC-test-wordcloud&window_start=2024-06-01&window_end=2024-06-30";
 const BPLUS_URL =
   "/explore/youtube/wordcloud?channel_id=bpluspodcast&window_start=2024-06-01&window_end=2024-06-30";
+/** Real Bplus data (after running ingest script): use channel ID and a wide window by published_at */
+const BPLUS_REAL_URL =
+  "/explore/youtube/wordcloud?channel_id=UChWB95_-n9rUc3H9srsn9bQ&window_start=2024-01-01&window_end=2025-12-31";
 
 type WordCloudData = {
   items: Array<{ token: string; count: number }>;
@@ -19,7 +22,7 @@ type WordCloudData = {
   window_end: string;
 };
 
-export default function YouTubeWordCloudPage() {
+function YouTubeWordCloudContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const channelId = searchParams.get("channel_id") ?? "";
@@ -45,11 +48,15 @@ export default function YouTubeWordCloudPage() {
 
   const tryChannel = (e: React.FormEvent) => {
     e.preventDefault();
-    const params = new URLSearchParams({
-      channel_id: formChannelId.trim(),
-      window_start: formWindowStart.trim(),
-      window_end: formWindowEnd.trim(),
-    });
+    const cid = formChannelId.trim();
+    const start = formWindowStart.trim();
+    const end = formWindowEnd.trim();
+    if (!cid || !start || !end) {
+      setError("Please enter a channel ID or handle and both date fields.");
+      return;
+    }
+    setError(null);
+    const params = new URLSearchParams({ channel_id: cid, window_start: start, window_end: end });
     if (formShowCounts) params.set("show_counts", "1");
     router.push(`/explore/youtube/wordcloud?${params.toString()}`);
   };
@@ -84,13 +91,20 @@ export default function YouTubeWordCloudPage() {
           </p>
           <p className="text-xs text-muted-foreground pt-1">
             <Link href={SAMPLE_URL} className="underline text-foreground/80 hover:text-foreground">
-              Try sample data
+              Sample data
             </Link>
             {" · "}
             <Link href={BPLUS_URL} className="underline text-foreground/80 hover:text-foreground">
-              Bplus Podcast
+              Bplus (demo)
             </Link>
-            {" "}(demo data, no database). For your own data, run the seed script or ingest into youtube_comment_snapshots.
+            {" · "}
+            <Link href={BPLUS_REAL_URL} className="underline text-foreground/80 hover:text-foreground">
+              Bplus (real data)
+            </Link>
+            {" "}— real data needs API on port 8000, DATABASE_URL set, and ingest script run.{" "}
+            <Link href="/explore/youtube/sentiment" className="underline text-foreground/80 hover:text-foreground">
+              Sentiment (one video)
+            </Link>
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -164,5 +178,13 @@ export default function YouTubeWordCloudPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function YouTubeWordCloudPage() {
+  return (
+    <Suspense fallback={<div className="container max-w-3xl py-6 text-sm text-muted-foreground">Loading…</div>}>
+      <YouTubeWordCloudContent />
+    </Suspense>
   );
 }
