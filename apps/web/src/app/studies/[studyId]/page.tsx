@@ -2417,7 +2417,7 @@ export default function StudyDetailPage() {
                   { key: "russia", label: "Russia", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionRussiaPoints },
                   { key: "iran", label: "Iran", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionIranPoints },
                   ...(extendedProductionTotalPoints.length > 0
-                    ? [{ key: "total", label: "Total (US + Saudi + Russia + Iran)", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionTotalPoints }]
+                    ? [{ key: "total", label: "Total (US + Saudi + Russia + Iran)", yAxisIndex: 0 as const, unit: "million bbl/day", points: extendedProductionTotalPoints }]
                     : []),
                 ]}
                 timeRange={productionTimeRange ?? study.timeRange}
