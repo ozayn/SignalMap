@@ -2,5 +2,4 @@
 FROM curlimages/curl:latest
 WORKDIR /app
 COPY cron-http.sh .
-RUN chmod +x cron-http.sh
-CMD ["./cron-http.sh"]
+CMD ["sh", "cron-http.sh"]

@@ -5,6 +5,6 @@
     "dockerfilePath": "Dockerfile.cron-http"
   },
   "deploy": {
-    "startCommand": "./cron-http.sh"
+    "startCommand": "sh cron-http.sh"
   }
 }
