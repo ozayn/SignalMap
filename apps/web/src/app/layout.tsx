@@ -17,8 +17,7 @@ export const metadata: Metadata = {
   },
 };
 
-const gaId =
-  process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || process.env.GA_MEASUREMENT_ID || "";
+const gaId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || "";
 const isProduction = process.env.NODE_ENV === "production";
 
 const navLinks = [
