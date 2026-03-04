@@ -330,3 +330,36 @@ EVENTS_WORLD_CORE: list[dict] = [
         "sources": ["https://www.reuters.com/business/energy/opec-2024-09"],
     },
 ]
+
+EVENTS_OPEC_DECISIONS: list[dict] = [
+    {
+        "id": "opec-2016-cut",
+        "date": "2016-11-30",
+        "title": "OPEC production cut agreement",
+        "description": "OPEC agreed to reduce oil production for the first time since 2008.",
+        "type": "energy",
+        "scope": "world",
+        "layer": "opec_decisions",
+        "confidence": "high",
+    },
+    {
+        "id": "opec-2020-covid-cut",
+        "date": "2020-04-12",
+        "title": "OPEC+ historic COVID production cuts",
+        "description": "OPEC and allies agreed to record production cuts during the COVID oil demand collapse.",
+        "type": "energy",
+        "scope": "world",
+        "layer": "opec_decisions",
+        "confidence": "high",
+    },
+    {
+        "id": "opec-2023-cuts",
+        "date": "2023-04-02",
+        "title": "OPEC+ surprise production cuts",
+        "description": "OPEC+ announced voluntary cuts aimed at stabilizing oil markets.",
+        "type": "energy",
+        "scope": "world",
+        "layer": "opec_decisions",
+        "confidence": "high",
+    },
+]

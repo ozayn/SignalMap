@@ -113,8 +113,10 @@ SANCTIONS_POINT = [
     {"id": "sanctions-2011-cbi", "title": "CBI sanctions", "date": "2011-12-31", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "Central Bank sanctions (NDAA 1245).", "confidence": "high"},
     {"id": "sanctions-2012-oil", "title": "Oil sector sanctions", "date": "2012-07-01", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "Oil export sanctions tightened.", "confidence": "high"},
     {"id": "sanctions-2016-implementation", "title": "JCPOA Implementation Day", "date": "2016-01-16", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "Sanctions relief under JCPOA.", "confidence": "high"},
+    {"id": "sanctions-iran-2018", "title": "US reimposes sanctions on Iranian oil exports", "date": "2018-05-08", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "The United States withdrew from the JCPOA and reinstated sanctions targeting Iranian oil exports.", "confidence": "high"},
     {"id": "sanctions-2018-reimposition", "title": "Sanctions reimposed", "date": "2018-08-06", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "US reimposed JCPOA-lifted sanctions.", "confidence": "high"},
     {"id": "sanctions-2021-vienna", "title": "Vienna JCPOA talks begin", "date": "2021-04-06", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "Negotiations to restore JCPOA resume in Vienna.", "confidence": "high"},
+    {"id": "sanctions-russia-2022", "title": "Sanctions on Russian energy sector after Ukraine invasion", "date": "2022-02-24", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "Western countries imposed sanctions affecting Russian oil exports.", "confidence": "high"},
     {"id": "sanctions-2022-eu-pause", "title": "EU removes JCPOA from agenda", "date": "2022-08-08", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "EU coordinator pauses JCPOA restoration talks.", "confidence": "high"},
     {"id": "sanctions-2024-eu-iran", "title": "EU sanctions on Iran (after Israel strike)", "date": "2024-04-18", "type": "economic", "scope": "sanctions", "layer": "sanctions", "description": "EU expands sanctions on Iran following April 2024 drone and missile attack on Israel.", "confidence": "high"},
 ]
@@ -136,12 +138,17 @@ def _get_world_1900():
     from signalmap.data.event_layers import EVENTS_WORLD_1900
     return EVENTS_WORLD_1900
 
+def _get_opec_decisions():
+    from signalmap.data.event_layers import EVENTS_OPEC_DECISIONS
+    return EVENTS_OPEC_DECISIONS
+
 _LAYER_REGISTRY = {
     "iran_presidents": IRAN_PRESIDENTS,
     "iran_core": IRAN_CORE,
     "world_core": _get_world_core(),
     "world_1900": _get_world_1900(),
     "sanctions": SANCTIONS,
+    "opec_decisions": _get_opec_decisions(),
 }
 
 

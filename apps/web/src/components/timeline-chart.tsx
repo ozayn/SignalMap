@@ -16,7 +16,7 @@ export type TimelineEvent = {
   description?: string;
   confidence?: string;
   sources?: string[];
-  layer?: "iran_core" | "world_core" | "world_1900" | "sanctions" | "iran_presidents";
+  layer?: "iran_core" | "world_core" | "world_1900" | "sanctions" | "iran_presidents" | "opec_decisions";
   scope?: "iran" | "world" | "sanctions" | "oil_exports";
 };
 
@@ -194,7 +194,7 @@ export function TimelineChart({
     };
 
     const getEventScope = (ev: TimelineEvent): "iran" | "world" | "sanctions" =>
-      (ev.scope === "oil_exports" ? "sanctions" : ev.scope) ?? (ev.layer === "world_core" || ev.layer === "world_1900" ? "world" : ev.layer === "sanctions" ? "sanctions" : "iran");
+      (ev.scope === "oil_exports" ? "sanctions" : ev.scope) ?? (ev.layer === "world_core" || ev.layer === "world_1900" || ev.layer === "opec_decisions" ? "world" : ev.layer === "sanctions" ? "sanctions" : "iran");
     const isPresidentialEvent = (ev: TimelineEvent) => ev.layer === "iran_presidents";
     const IranOpacity = mutedEventLines ? 0.35 : 0.5;
     const WorldOpacity = mutedEventLines ? 0.3 : 0.3;
@@ -776,6 +776,31 @@ export function TimelineChart({
                 data: dates.map(() => null),
                 symbol: "none",
                 emphasis: { focus: "none" as const },
+                markLine:
+                  markLineData.length > 0 || referenceLine
+                    ? {
+                        symbol: "none",
+                        silent: false,
+                        data: [
+                          ...markLineData.map((d) => {
+                            const scope = getEventScope(d.event);
+                            const isSanctions = scope === "sanctions";
+                            const isWorld = scope === "world";
+                            const opacity = isSanctions ? SanctionsOpacity : isWorld ? WorldOpacity : IranOpacity;
+                            const lineColor = d.isAnchor ? mutedFg : withAlphaHsl(muted, opacity);
+                            const lineWidth = d.isAnchor ? (mutedEventLines ? 1 : 1.5) : (mutedEventLines ? (isSanctions ? SanctionsLineWidth : EventLineWidth) : (isSanctions ? SanctionsLineWidth : isWorld ? 1 : 1.15));
+                            return {
+                              xAxis: d.xAxis,
+                              label: { show: false },
+                              lineStyle: { color: lineColor, width: lineWidth, type: "dashed" as const },
+                            };
+                          }),
+                          ...(referenceLine
+                            ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
+                            : []),
+                        ],
+                      }
+                    : undefined,
                 markArea:
                   rangeBandData.length > 0 || sanctionsPeriods.length > 0
                     ? {

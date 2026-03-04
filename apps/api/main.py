@@ -210,6 +210,10 @@ def get_events(
     if layers:
         layer_list = [s.strip() for s in layers.split(",") if s.strip()]
         events = get_events_by_layers(study_id, layer_list)
+        if "opec_decisions" in layer_list:
+            opec_count = sum(1 for e in events if e.get("layer") == "opec_decisions")
+            import sys
+            print(f"[events] layers={layer_list} study_id={study_id} events={len(events)} opec={opec_count}", file=sys.stderr)
     else:
         events = load_events(study_id)
     return {

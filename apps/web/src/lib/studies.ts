@@ -158,6 +158,7 @@ export const STUDIES: StudyMeta[] = [
       "Crude oil production for Saudi Arabia, Russia, and Iran. Annual data in million barrels per day.",
     status: "active",
     primarySignal: { kind: "oil_production_major_exporters" },
+    eventLayers: ["iran_core", "sanctions", "opec_decisions"],
     concepts: ["oil_production", "oil_production_vs_exports", "barrels_per_day", "supply_shocks"],
   },
   {

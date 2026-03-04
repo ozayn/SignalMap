@@ -40,7 +40,7 @@ type Event = {
   description?: string;
   confidence?: string;
   sources?: string[];
-  layer?: "iran_core" | "world_core" | "world_1900" | "sanctions" | "iran_presidents";
+  layer?: "iran_core" | "world_core" | "world_1900" | "sanctions" | "iran_presidents" | "opec_decisions";
   scope?: "iran" | "world" | "sanctions" | "oil_exports";
   category?: string;
 };
@@ -172,8 +172,9 @@ export default function StudyDetailPage() {
   const [showGold, setShowGold] = useState(false);
   const [showIranEvents, setShowIranEvents] = useState(true);
   const [showWorldEvents, setShowWorldEvents] = useState(false);
-  const [showSanctionsEvents, setShowSanctionsEvents] = useState(false);
+  const [showSanctionsEvents, setShowSanctionsEvents] = useState(true);
   const [showPresidentialTerms, setShowPresidentialTerms] = useState(false);
+  const [showOpecEvents, setShowOpecEvents] = useState(true);
   const [pppYAxisLog, setPppYAxisLog] = useState(true);
   const [showSanctionsPeriods, setShowSanctionsPeriods] = useState(false);
   const [showShocks, setShowShocks] = useState(true);
@@ -411,12 +412,18 @@ export default function StudyDetailPage() {
     const params = new URLSearchParams({
       study_id: isFxUsdToman || isOilAndFx ? "iran" : studyId,
     });
-    const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isWageCpiReal || isEventsTimeline;
+    const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isWageCpiReal || isEventsTimeline;
     if (hasEventLayers && !isEventsTimeline) {
       let layers: string[];
-      if (((isOilGlobalLong || isGoldAndOil || isRealOil || isOilExportCapacity) && study.eventLayers?.length) || (hasTurkeyComparator && study.eventLayers !== undefined)) {
+      if (((isOilGlobalLong || isGoldAndOil || isRealOil || isOilExportCapacity || isOilProductionMajorExporters) && study.eventLayers?.length) || (hasTurkeyComparator && study.eventLayers !== undefined)) {
         if (isOilExportCapacity) {
           layers = showSanctionsPeriods ? ["sanctions"] : [];
+        } else if (isOilProductionMajorExporters) {
+          layers = [
+            ...(showIranEvents ? ["iran_core"] : []),
+            ...(showSanctionsEvents ? ["sanctions"] : []),
+            ...(showOpecEvents ? ["opec_decisions"] : []),
+          ];
         } else {
           layers = study.eventLayers ?? [];
         }
@@ -434,12 +441,20 @@ export default function StudyDetailPage() {
       params.set("study_id", "events_timeline");
     }
     fetchJson<EventsData>(`/api/events?${params}`)
-      .then((res) => mounted && setEvents(res.events ?? []))
+      .then((res) => {
+        if (mounted) {
+          const evs = res.events ?? [];
+          if (isOilProductionMajorExporters) {
+            console.debug("[Study14] Event fetch layers:", params.get("layers"), "events returned:", evs.length, evs);
+          }
+          setEvents(evs);
+        }
+      })
       .catch(() => {});
     return () => {
       mounted = false;
     };
-  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, isWageCpiReal, hasTurkeyComparator, isEventsTimeline, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms, showSanctionsPeriods]);
+  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, isOilProductionMajorExporters, isWageCpiReal, hasTurkeyComparator, isEventsTimeline, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms, showSanctionsPeriods, showOpecEvents]);
 
   useEffect(() => {
     if (study && (isEventsTimeline || isFollowerGrowthDynamics)) {
@@ -1926,6 +1941,37 @@ export default function StudyDetailPage() {
                 Show sanctions periods
               </label>
             )}
+            {isOilProductionMajorExporters && (
+              <>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showIranEvents}
+                    onChange={(e) => setShowIranEvents(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  Show Iran events
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showSanctionsEvents}
+                    onChange={(e) => setShowSanctionsEvents(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  Show sanctions
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showOpecEvents}
+                    onChange={(e) => setShowOpecEvents(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  Show OPEC decisions
+                </label>
+              </>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -2277,6 +2323,7 @@ export default function StudyDetailPage() {
             </>
           ) : isOilProductionMajorExporters ? (
             <>
+              {typeof window !== "undefined" && console.debug("[Study14] Chart render events:", events.length, events.map((e) => ({ id: e.id, date: e.date ?? e.date_start, layer: e.layer })))}
               <TimelineChart
                 data={[]}
                 valueKey="value"
