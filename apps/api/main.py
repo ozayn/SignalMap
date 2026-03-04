@@ -411,6 +411,7 @@ def get_oil_ppp_turkey_signal(
 def get_oil_production_exporters_signal(
     start: str | None = Query(None, description="Start date YYYY-MM-DD"),
     end: str | None = Query(None, description="End date YYYY-MM-DD"),
+    nocache: bool = Query(False, description="Bypass cache for debugging"),
 ):
     """Return oil production for Saudi Arabia, Russia, Iran (million barrels/day)."""
     if start is None:
@@ -423,8 +424,11 @@ def get_oil_production_exporters_signal(
         raise HTTPException(status_code=400, detail="start must be <= end")
     try:
         from signalmap.services.signals import get_oil_production_exporters_series
-        result = get_oil_production_exporters_series(start, end)
-        return {"data": result["data"], "source": result.get("source"), "unit": result.get("unit")}
+        result = get_oil_production_exporters_series(start, end, nocache=nocache)
+        out = {"data": result["data"], "source": result.get("source"), "unit": result.get("unit")}
+        if result.get("_debug"):
+            out["_debug"] = result["_debug"]
+        return out
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 

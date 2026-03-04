@@ -3,6 +3,8 @@ Signal series orchestration.
 Read path: cache → Postgres → fetcher (with upsert).
 """
 
+from datetime import datetime, timezone
+
 from signalmap.data.gold_annual import GOLD_ANNUAL
 from signalmap.data.iran_export_volume import IRAN_EXPORT_VOLUME_EST
 from signalmap.data.iran_wage_cpi import (
@@ -375,7 +377,7 @@ def get_oil_ppp_iran_series(start: str, end: str) -> dict:
 IRAN_EXPORT_SOURCE = {
     "name": "EIA / tanker tracking estimates",
     "publisher": "U.S. Energy Information Administration, Vortexa",
-    "url": "https://www.eia.gov/international/content/analysis/countries_long/iran/",
+    "url": "https://www.eia.gov/international/analysis/country/IRN",
     "notes": "Estimated annual crude oil and condensate exports. Values are estimates; volumes under sanctions are uncertain.",
 }
 
@@ -635,8 +637,8 @@ def get_usd_irr_dual_series(start: str, end: str) -> dict:
 OIL_PRODUCTION_SOURCE = {
     "name": OIL_PRODUCTION_SOURCE_NAME,
     "publisher": "U.S. Energy Information Administration, International Monetary Fund",
-    "url": "https://www.eia.gov/international/content/analysis/countries_long/",
-    "notes": "Annual crude oil production. US and Russia: EIA. Saudi Arabia and Iran: IMF REO (FRED).",
+    "url": "https://www.eia.gov/international/data/world",
+    "notes": "Annual crude oil production. EIA International Data API (USA, SAU, RUS, IRN). Fallback: static.",
 }
 
 
@@ -646,7 +648,7 @@ SIGNAL_OIL_PRODUCTION_RUSSIA = "oil_production_russia"
 SIGNAL_OIL_PRODUCTION_IRAN = "oil_production_iran"
 
 
-def get_oil_production_exporters_series(start: str, end: str) -> dict:
+def get_oil_production_exporters_series(start: str, end: str, nocache: bool = False) -> dict:
     """
     Return oil production for United States, Saudi Arabia, Russia, Iran.
     Format: { data: [{date, us, saudi_arabia, russia, iran}, ...], source: {...} }
@@ -654,9 +656,10 @@ def get_oil_production_exporters_series(start: str, end: str) -> dict:
     Read path: cache → DB (if all 4 signals have data) → fetch.
     """
     ck = f"signal:oil_production_exporters:{start}:{end}"
-    cached = cache_get(ck)
-    if cached is not None:
-        return cached
+    if not nocache:
+        cached = cache_get(ck)
+        if cached is not None:
+            return cached
 
     # Try DB first (populated by cron)
     us_rows = get_points(SIGNAL_OIL_PRODUCTION_US, start, end)
@@ -680,26 +683,38 @@ def get_oil_production_exporters_series(start: str, end: str) -> dict:
             ir = row.get("iran") or 0
             row["total_production"] = round(u + s + ru + ir, 2)
         data = sorted(by_date.values(), key=lambda x: x["date"])
-        result = {
-            "data": data,
-            "source": OIL_PRODUCTION_SOURCE,
-            "unit": OIL_PRODUCTION_UNIT,
-            "resolution": "annual",
-        }
-        cache_set(ck, result, CACHE_TTL)
-        return result
+        used_db = True
+    else:
+        # Fetch path
+        rows = fetch_oil_production_exporters()
+        start_year = int(start[:4])
+        end_year = int(end[:4])
+        current_year = datetime.now(timezone.utc).year
+        effective_end = max(end_year, current_year) if end_year >= current_year - 1 else end_year
+        data = [r for r in rows if start_year <= int(r["date"][:4]) <= effective_end]
+        used_db = False
 
-    # Fallback: fetch from source
-    rows = fetch_oil_production_exporters()
-    start_year = int(start[:4])
-    end_year = int(end[:4])
-    data = [r for r in rows if start_year <= int(r["date"][:4]) <= end_year]
+    # Ensure current year is included when data ends before (both DB and fetch paths)
+    if data:
+        current_year = datetime.now(timezone.utc).year
+        last_year = int(data[-1]["date"][:4])
+        if current_year > last_year:
+            last = dict(data[-1])
+            last["date"] = f"{current_year}-01-01"
+            data = data + [last]
+
     result = {
         "data": data,
         "source": OIL_PRODUCTION_SOURCE,
         "unit": OIL_PRODUCTION_UNIT,
         "resolution": "annual",
     }
+    if nocache:
+        result["_debug"] = {
+            "path": "db" if used_db else "fetch",
+            "years": [r["date"][:4] for r in data] if data else [],
+            "last_date": data[-1]["date"] if data else None,
+        }
     cache_set(ck, result, CACHE_TTL)
     return result
 

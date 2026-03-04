@@ -261,7 +261,7 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
     description:
       "Estimated volume of crude oil (and sometimes condensate) exported by a country, typically in million barrels per year. Often based on tanker tracking, customs, or agency estimates. Significance: we plot it alongside oil price in the export capacity study because capacity depends on both price and how much can be sold. Under sanctions, volume constraints often matter more than price. Volume data are estimates; uncertainty is higher when exports are constrained.",
     links: [
-      { label: "EIA Iran analysis", href: "https://www.eia.gov/international/content/analysis/countries_long/iran/" },
+      { label: "EIA Iran analysis", href: "https://www.eia.gov/international/analysis/country/IRN" },
     ],
   },
   ppp_oil_burden: {

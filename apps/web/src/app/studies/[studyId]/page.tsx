@@ -291,7 +291,7 @@ export default function StudyDetailPage() {
     productionExtendedDates,
     productionLastOfficialDate,
   } = useMemo(() => {
-    const currentYear = new Date().getFullYear();
+    const currentYear = new Date().getUTCFullYear();
     const extend = (points: { date: string; value: number }[]) => {
       if (points.length === 0) return [];
       const last = points[points.length - 1]!;
@@ -1121,21 +1121,19 @@ export default function StudyDetailPage() {
         if (exportCapacityProxyPoints.length > 0) arrays.push(exportCapacityProxyPoints);
       }
       if (isOilProductionMajorExporters) {
-        const currentYear = new Date().getFullYear();
-        const excludeExtendedAndProjected = (pts: { date: string }[]) => {
-          let filtered = pts;
+        // Label = last date with actual data; exclude current year (projected) and synthetic extensions
+        const currentYear = new Date().getUTCFullYear();
+        const excludeProjectedAndSynthetic = (pts: { date: string }[]) => {
+          let f = pts;
           if (productionExtendedDates.length > 0) {
-            filtered = filtered.filter((p) => !productionExtendedDates.includes(p.date));
+            f = f.filter((p) => !productionExtendedDates.includes(p.date));
           }
-          return filtered.filter((p) => {
-            const year = parseInt(p.date.slice(0, 4), 10);
-            return year < currentYear;
-          });
+          return f.filter((p) => parseInt(p.date.slice(0, 4), 10) < currentYear);
         };
-        if (productionUsPoints.length > 0) arrays.push(excludeExtendedAndProjected(productionUsPoints));
-        if (productionSaudiPoints.length > 0) arrays.push(excludeExtendedAndProjected(productionSaudiPoints));
-        if (productionRussiaPoints.length > 0) arrays.push(excludeExtendedAndProjected(productionRussiaPoints));
-        if (productionIranPoints.length > 0) arrays.push(excludeExtendedAndProjected(productionIranPoints));
+        if (productionUsPoints.length > 0) arrays.push(excludeProjectedAndSynthetic(productionUsPoints));
+        if (productionSaudiPoints.length > 0) arrays.push(excludeProjectedAndSynthetic(productionSaudiPoints));
+        if (productionRussiaPoints.length > 0) arrays.push(excludeProjectedAndSynthetic(productionRussiaPoints));
+        if (productionIranPoints.length > 0) arrays.push(excludeProjectedAndSynthetic(productionIranPoints));
       }
       if (isFollowerGrowthDynamics && fgData) {
         const list = fgData.snapshots ?? fgData.results ?? [];
@@ -2357,7 +2355,7 @@ export default function StudyDetailPage() {
                   },
                 ]}
                 links={[
-                  { label: "EIA Iran Country Analysis", href: "https://www.eia.gov/international/content/analysis/countries_long/iran/" },
+                  { label: "EIA Iran Country Analysis", href: "https://www.eia.gov/international/analysis/country/IRN" },
                 ]}
               />
               {study.observations?.length ? <DataObservations observations={study.observations} /> : null}
@@ -2374,7 +2372,7 @@ export default function StudyDetailPage() {
                   {
                     label: "Export volume",
                     sourceName: "EIA / tanker tracking estimates",
-                    sourceUrl: "https://www.eia.gov/international/content/analysis/countries_long/iran/",
+                    sourceUrl: "https://www.eia.gov/international/analysis/country/IRN",
                     sourceDetail: "Estimated crude oil and condensate exports",
                     unitLabel: "million barrels/year",
                     unitNote: "Estimates; uncertain under sanctions.",

@@ -8,6 +8,7 @@ EIA API is primary source; static dataset is fallback when API fails.
 
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -66,7 +67,9 @@ def fetch_eia_oil_production() -> list[dict[str, Any]]:
         except (ValueError, TypeError):
             continue
         mbpd = round(v / 1000.0, 2)
-        country = (row.get("country") or row.get("countryId") or "").strip().upper()
+        country = (
+            row.get("country") or row.get("countryId") or row.get("country_id") or ""
+        ).strip().upper()
         if country and country in EIA_COUNTRIES:
             by_year.setdefault(year, {})[EIA_COUNTRIES[country]] = mbpd
         else:
@@ -100,7 +103,20 @@ def fetch_eia_oil_production() -> list[dict[str, Any]]:
             "iran": ir_val,
             "total_production": round(total, 2) if total is not None else None,
         })
-    return result
+    return _extend_to_current_year(result)
+
+
+def _extend_to_current_year(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """When data ends before current year, add a row for current year (last values repeated)."""
+    if not rows:
+        return rows
+    current_year = datetime.now(timezone.utc).year
+    last = rows[-1]
+    last_year = int(last["date"][:4])
+    if current_year <= last_year:
+        return rows
+    extended = {**last, "date": f"{current_year}-01-01"}
+    return rows + [extended]
 
 
 def _fetch_eia_per_country() -> list[dict[str, Any]]:
@@ -165,7 +181,7 @@ def _fetch_eia_per_country() -> list[dict[str, Any]]:
             "iran": ir_val,
             "total_production": round(total, 2) if total is not None else None,
         })
-    return result
+    return _extend_to_current_year(result)
 
 
 def _load_static_dataset() -> list[dict[str, Any]]:
