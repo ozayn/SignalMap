@@ -57,7 +57,7 @@ export const STUDIES: StudyMeta[] = [
       "A baseline study illustrating event-anchored windows on a macroeconomic series.",
     status: "active",
     primarySignal: { kind: "oil_brent" },
-    concepts: ["nominal_price", "oil_benchmark", "event_overlay"],
+    concepts: ["nominal_price", "oil_benchmark", "event_overlay", "oil_price_shocks"],
   },
   {
     id: "usd-toman",

@@ -28,7 +28,8 @@ export type ConceptKey =
   | "nominal_minimum_wage"
   | "official_exchange_rate"
   | "oil_export_volume"
-  | "ppp_oil_burden";
+  | "ppp_oil_burden"
+  | "oil_price_shocks";
 
 export type ConceptLink = {
   label: string;
@@ -39,6 +40,8 @@ export type ConceptLink = {
 export type Concept = {
   title: string;
   description: string;
+  /** Optional plain-language explanation for non-experts. */
+  inSimpleTerms?: string;
   links?: ConceptLink[];
 };
 
@@ -264,6 +267,13 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
     links: [
       { label: "Purchasing power parity (Wikipedia)", href: "https://en.wikipedia.org/wiki/Purchasing_power_parity" },
     ],
+  },
+  oil_price_shocks: {
+    title: "Oil price shocks",
+    description:
+      "Oil price shocks are unusually large daily movements in the price of oil. To detect them, we compute the daily return (the percentage change from one day to the next) and compare it to recent volatility. If the daily change is greater than twice the rolling standard deviation of the last 30 days, the movement is classified as a shock. This helps identify moments when geopolitical events, supply disruptions, or financial stress cause oil markets to move far beyond normal day-to-day fluctuations.",
+    inSimpleTerms:
+      "Most days oil prices move a little up or down. Sometimes something big happens — a war, sanctions, or a supply shock — and the price moves much more than usual. Those unusually large moves are highlighted as oil price shocks.",
   },
 };
 

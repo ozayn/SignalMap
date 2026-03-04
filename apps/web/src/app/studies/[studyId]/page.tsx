@@ -17,6 +17,7 @@ import { EventsTimeline, type TimelineEvent } from "@/components/events-timeline
 import { FollowerGrowthChart } from "@/components/follower-growth-chart";
 import { getStudyById, getPrevNextStudies } from "@/lib/studies";
 import { fetchJson } from "@/lib/api";
+import { enrichOilPointsWithVolatility } from "@/lib/oil-volatility";
 
 type OverviewData = {
   study_id: string;
@@ -175,6 +176,7 @@ export default function StudyDetailPage() {
   const [showPresidentialTerms, setShowPresidentialTerms] = useState(false);
   const [pppYAxisLog, setPppYAxisLog] = useState(true);
   const [showSanctionsPeriods, setShowSanctionsPeriods] = useState(false);
+  const [showShocks, setShowShocks] = useState(true);
   const [oilPoints, setOilPoints] = useState<OilSignalData["points"]>([]);
   const [oilSource, setOilSource] = useState<OilSource | null>(null);
   const [oilSourceAnnual, setOilSourceAnnual] = useState<OilSource | null>(null);
@@ -374,6 +376,23 @@ export default function StudyDetailPage() {
         scope: "Oil exports" as const,
       }));
   }, [isOilExportCapacity, showSanctionsPeriods, study, events, exportCapacityTimeRange]);
+
+  const oilPointsWithVolatility = useMemo(
+    () => enrichOilPointsWithVolatility(oilPoints),
+    [oilPoints]
+  );
+  const oilShockDates = useMemo(
+    () => oilPointsWithVolatility.filter((p) => p.is_shock).map((p) => p.date),
+    [oilPointsWithVolatility]
+  );
+  const dailyReturnPoints = useMemo(() => {
+    const byDate = new Map(oilPointsWithVolatility.map((p) => [p.date, p.daily_return]));
+    const dates = [...new Set(oilPointsWithVolatility.map((p) => p.date))].sort();
+    return dates.map((date) => ({
+      date,
+      value: byDate.get(date) as number | null,
+    }));
+  }, [oilPointsWithVolatility]);
 
   useEffect(() => {
     if (!study) return;
@@ -2406,6 +2425,16 @@ export default function StudyDetailPage() {
             </>
           ) : isGoldAndOil ? (
             <>
+              {oilShockDates.length > 0 && (
+                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer mb-2">
+                  <input
+                    type="checkbox"
+                    checked={showShocks}
+                    onChange={(e) => setShowShocks(e.target.checked)}
+                  />
+                  Show shocks
+                </label>
+              )}
               <TimelineChart
                 data={[]}
                 valueKey="value"
@@ -2413,11 +2442,22 @@ export default function StudyDetailPage() {
                 events={events}
                 multiSeries={[
                   { key: "gold", label: "Gold price", yAxisIndex: 0, unit: "USD/oz", points: goldPoints },
-                  { key: "oil", label: "Oil price", yAxisIndex: 1, unit: "USD/bbl", points: oilPoints },
+                  { key: "oil", label: "Oil price", yAxisIndex: 1, unit: "USD/bbl", points: oilPointsWithVolatility },
                 ]}
+                oilShockDates={oilShockDates}
+                showOilShocks={showShocks}
                 timeRange={oilTimeRange ?? study.timeRange}
                 mutedBands
               />
+              {showShocks && oilShockDates.length > 0 && (
+                <div className="flex items-center gap-2 mt-2 text-sm text-gray-600">
+                  <span
+                    className="shrink-0 rounded-full"
+                    style={{ width: 8, height: 8, background: "rgba(180, 30, 30, 0.6)" }}
+                  />
+                  Oil price shock (&gt;2× recent volatility)
+                </div>
+              )}
               <LearningNote
                 sections={[
                   {
@@ -2497,6 +2537,16 @@ export default function StudyDetailPage() {
             </>
           ) : isOilBrent || isOilGlobalLong ? (
             <>
+              {oilShockDates.length > 0 && (
+                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer mb-2">
+                  <input
+                    type="checkbox"
+                    checked={showShocks}
+                    onChange={(e) => setShowShocks(e.target.checked)}
+                  />
+                  Show shocks
+                </label>
+              )}
               <TimelineChart
                 data={[]}
                 valueKey="value"
@@ -2506,12 +2556,35 @@ export default function StudyDetailPage() {
                 secondSeries={{
                   label: isOilGlobalLong ? "Oil price" : "Brent oil",
                   unit: "USD/barrel",
-                  points: oilPoints,
+                  points: oilPointsWithVolatility,
                   yAxisIndex: 1,
                 }}
+                oilShockDates={oilShockDates}
+                showOilShocks={showShocks}
                 timeRange={oilTimeRange ?? study.timeRange}
                 mutedBands={isOilGlobalLong}
               />
+              {showShocks && oilShockDates.length > 0 && (
+                <div className="flex items-center gap-2 mt-2 text-sm text-gray-600">
+                  <span
+                    className="shrink-0 rounded-full"
+                    style={{ width: 8, height: 8, background: "rgba(180, 30, 30, 0.6)" }}
+                  />
+                  Oil price shock (&gt;2× recent volatility)
+                </div>
+              )}
+              {dailyReturnPoints.length > 0 && (
+                <TimelineChart
+                  data={dailyReturnPoints as { date: string; value: number }[]}
+                  valueKey="value"
+                  label="Daily return"
+                  unit="%"
+                  timeRange={oilTimeRange ?? study.timeRange}
+                  chartHeight="h-48"
+                  referenceLine={{ value: 0, label: "0%" }}
+                  gridRight="12%"
+                />
+              )}
               <LearningNote
                   sections={[
                     {
@@ -2585,6 +2658,16 @@ export default function StudyDetailPage() {
             </>
           ) : isOilAndFx ? (
             <>
+              {oilShockDates.length > 0 && (
+                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer mb-2">
+                  <input
+                    type="checkbox"
+                    checked={showShocks}
+                    onChange={(e) => setShowShocks(e.target.checked)}
+                  />
+                  Show shocks
+                </label>
+              )}
               {showGold ? (
                 <TimelineChart
                   data={[]}
@@ -2593,15 +2676,17 @@ export default function StudyDetailPage() {
                   events={events}
                   anchorEventId={anchorEventId || undefined}
                   multiSeries={[
-                    { key: "oil", label: "Brent oil", yAxisIndex: 0, unit: "USD/barrel", points: oilPoints },
+                    { key: "oil", label: "Brent oil", yAxisIndex: 0, unit: "USD/barrel", points: oilPointsWithVolatility },
                     { key: "fx", label: "USD→Toman", yAxisIndex: 1, unit: "toman/USD", points: fxPoints },
                     { key: "gold", label: "Gold price", yAxisIndex: 2, unit: "USD/oz", points: goldPoints },
                   ]}
+                  oilShockDates={oilShockDates}
+                  showOilShocks={showShocks}
                   timeRange={dualTimeRange ?? study.timeRange}
                 />
               ) : (
                 <TimelineChart
-                  data={oilPoints}
+                  data={oilPointsWithVolatility}
                   valueKey="value"
                   label="Brent oil"
                   unit="USD/barrel"
@@ -2613,8 +2698,19 @@ export default function StudyDetailPage() {
                     points: fxPoints,
                     yAxisIndex: 1,
                   }}
+                  oilShockDates={oilShockDates}
+                  showOilShocks={showShocks}
                   timeRange={dualTimeRange ?? study.timeRange}
                 />
+              )}
+              {showShocks && oilShockDates.length > 0 && (
+                <div className="flex items-center gap-2 mt-2 text-sm text-gray-600">
+                  <span
+                    className="shrink-0 rounded-full"
+                    style={{ width: 8, height: 8, background: "rgba(180, 30, 30, 0.6)" }}
+                  />
+                  Oil price shock (&gt;2× recent volatility)
+                </div>
               )}
               {(oilSource || fxSource) && (
                 <SourceInfo

@@ -35,10 +35,15 @@ export function ConceptsUsed({ conceptKeys }: ConceptsUsedProps) {
         <CardContent className="border-t border-border pt-4">
           <ul className="space-y-3 break-words min-w-0">
             {concepts.map((c) => (
-              <li key={c.title} className="text-sm text-muted-foreground">
+              <li key={c.title} className="text-sm text-muted-foreground space-y-1">
                 <span className="font-medium text-foreground/90">{c.title}</span>
                 {" — "}
                 {c.description}
+                {c.inSimpleTerms && (
+                  <p className="mt-1.5 pl-3 border-l-2 border-muted-foreground/30 italic text-muted-foreground/90">
+                    In simple terms: {c.inSimpleTerms}
+                  </p>
+                )}
                 {c.links && c.links.length > 0 && (
                   <span className="mt-1 block">
                     {c.links.map((link) => (

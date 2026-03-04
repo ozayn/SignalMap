@@ -69,6 +69,14 @@ type TimelineChartProps = {
   indexComparator?: boolean;
   /** Optional sanctions periods rendered as low-opacity background bands (Study 9). */
   sanctionsPeriods?: Array<{ date_start: string; date_end: string; title: string; scope?: string }>;
+  /** Dates when oil price had shock moves (|daily_return| > 2× rolling vol). Red markers on oil series. */
+  oilShockDates?: string[];
+  /** When false, shock markers are hidden. Default true. */
+  showOilShocks?: boolean;
+  /** Chart container height (default h-80). Use e.g. "h-48" for smaller charts. */
+  chartHeight?: string;
+  /** Override grid.right (e.g. "12%") to align x-axis with another chart above. */
+  gridRight?: string;
 };
 
 function findEventIndex(dates: string[], eventDate: string): number | null {
@@ -148,6 +156,10 @@ export function TimelineChart({
   comparatorSeries,
   indexComparator = false,
   sanctionsPeriods = [],
+  oilShockDates = [],
+  showOilShocks = true,
+  chartHeight = "h-80",
+  gridRight: gridRightOverride,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
@@ -325,6 +337,30 @@ export function TimelineChart({
       : null;
 
     if (dates.length === 0) return;
+
+    const shockMarkPointData =
+      oilShockDates.length > 0
+        ? oilShockDates
+            .filter((d) => d >= minDate! && d <= maxDate!)
+            .map((d) => {
+              const idx = findEventIndex(dates, d);
+              if (idx == null) return null;
+              const dateStr = dates[idx]!;
+              const yVal =
+                hasMultiSeries && multiSeries
+                  ? (() => {
+                      const oilIdx = multiSeries.findIndex((s) => s.key === "oil");
+                      if (oilIdx < 0) return null;
+                      return multiSeriesValues?.[oilIdx]?.[idx] ?? null;
+                    })()
+                  : hasData
+                    ? valueFn(data, dateStr)
+                    : nearestOil(dateStr);
+              if (yVal == null || typeof yVal !== "number") return null;
+              return { coord: [dateStr, yVal] as [string, number] };
+            })
+            .filter((x): x is { coord: [string, number] } => x != null)
+        : [];
 
     const pointEvents = events.filter((e) => e.date != null);
     const rangeEvents = events.filter((e) => e.date_start != null && e.date_end != null);
@@ -542,11 +578,12 @@ export function TimelineChart({
       grid: {
         left: hasMultiSeries ? "10%" : "3%",
         right:
-          hasMultiSeries && multiSeries && multiSeries.some((s) => s.yAxisIndex >= 2)
+          gridRightOverride ??
+          (hasMultiSeries && multiSeries && multiSeries.some((s) => s.yAxisIndex >= 2)
             ? "26%"
             : hasOil || !hasData || hasMultiSeries
               ? "12%"
-              : "4%",
+              : "4%"),
         bottom: xLabelRotate
           ? "18%"
           : (comparatorSeries && comparatorValuesForChart && hasOil) || (hasMultiSeries && multiSeries) || (hasOil && secondSeries && !comparatorSeries)
@@ -827,6 +864,15 @@ export function TimelineChart({
                     lineStyle: { color: lineColor, width: lineWidth },
                     itemStyle: { color: lineColor },
                   },
+                  markPoint:
+                    showOilShocks && isOil && shockMarkPointData.length > 0
+                      ? {
+                          symbol: "circle",
+                          symbolSize: 5,
+                          itemStyle: { color: "rgba(180, 30, 30, 0.6)", borderWidth: 0, shadowBlur: 0 },
+                          data: shockMarkPointData.map((d) => ({ name: "shock", coord: d.coord })),
+                        }
+                      : undefined,
                 };
               }),
             ]
@@ -879,6 +925,15 @@ export function TimelineChart({
                             ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
                             : []),
                         ],
+                      }
+                    : undefined,
+                markPoint:
+                  showOilShocks && shockMarkPointData.length > 0 && hasData
+                    ? {
+                        symbol: "circle",
+                        symbolSize: 5,
+                        itemStyle: { color: "rgba(180, 30, 30, 0.6)", borderWidth: 0, shadowBlur: 0 },
+                        data: shockMarkPointData.map((d) => ({ name: "shock", coord: d.coord })),
                       }
                     : undefined,
                 markArea:
@@ -999,6 +1054,15 @@ export function TimelineChart({
                   lineStyle: { color: comparatorSeries && comparatorValuesForChart ? color : oilColor },
                   itemStyle: { color: comparatorSeries && comparatorValuesForChart ? color : oilColor },
                 },
+                markPoint:
+                  showOilShocks && shockMarkPointData.length > 0 && !hasData
+                    ? {
+                        symbol: "circle",
+                        symbolSize: 5,
+                        itemStyle: { color: "rgba(180, 30, 30, 0.6)", borderWidth: 0, shadowBlur: 0 },
+                        data: shockMarkPointData.map((d) => ({ name: "shock", coord: d.coord })),
+                      }
+                    : undefined,
                 markLine:
                   markLineData.length > 0 || referenceLine
                     ? {
@@ -1070,7 +1134,7 @@ export function TimelineChart({
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
     };
-  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods, xLabelRotate]);
+  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods, oilShockDates, showOilShocks, gridRightOverride, xLabelRotate]);
 
   useEffect(() => {
     return () => {
@@ -1086,5 +1150,5 @@ export function TimelineChart({
     };
   }, []);
 
-  return <div ref={chartRef} className="h-80 w-full min-w-0" />;
+  return <div ref={chartRef} className={`${chartHeight} w-full min-w-0`} />;
 }
