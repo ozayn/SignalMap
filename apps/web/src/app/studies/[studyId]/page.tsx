@@ -1050,7 +1050,7 @@ export default function StudyDetailPage() {
         )}
         {lastUpdated && (
           <p className="text-sm text-muted-foreground">
-            Last updated: {new Date(lastUpdated).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+            Last updated: {new Date(lastUpdated).toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
           </p>
         )}
       </header>
