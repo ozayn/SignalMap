@@ -1,6 +1,7 @@
 """
 Loader for events_iran.json. Canonical source for modern Iran events (2021+).
 Returns normalized events with id, date_start, date_end, title, description, category, layer.
+Supports optional ACLED-style fields: event_type, actors, scope, signal_relevance.
 """
 
 import json
@@ -26,6 +27,10 @@ def load_events_iran_json() -> list[dict]:
         if not date_start:
             continue
         date_end = ev.get("date_end")
+        actors_raw = ev.get("actors")
+        actors = list(actors_raw) if isinstance(actors_raw, list) else []
+        signal_raw = ev.get("signal_relevance")
+        signal_relevance = list(signal_raw) if isinstance(signal_raw, list) else []
         normalized = {
             "id": str(ev["id"]),
             "date_start": str(date_start),
@@ -38,6 +43,16 @@ def load_events_iran_json() -> list[dict]:
             "type": str(ev.get("type") or "political"),
             "scope": "iran",
             "confidence": "high",
+            "event_type": str(ev.get("event_type") or "political"),
+            "actors": actors,
+            "scope_acl": str(ev.get("scope") or "iran_domestic"),
+            "signal_relevance": signal_relevance,
         }
         out.append(normalized)
     return out
+
+
+def get_events_for_signal(signal_name: str) -> list[dict]:
+    """Return events where signal_name is in event['signal_relevance']."""
+    events = load_events_iran_json()
+    return [e for e in events if signal_name in (e.get("signal_relevance") or [])]
