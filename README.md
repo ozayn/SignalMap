@@ -94,7 +94,8 @@ curl -X POST https://your-api.up.railway.app/api/cron/update-all
 
 **Schedule it:** See `docs/RAILWAY_CRON_SETUP.md`. Options:
 
-- **Railway Cron (recommended):** New service, root `apps/api`, config `apps/api/railway.cron.json`. Cron Schedule: `0 7 * * *`. Shares env vars (DATABASE_URL, FRED_API_KEY). See `docs/RAILWAY_CRON_SETUP.md`.
+- **Railway Cron (HTTP trigger):** New service, root `apps/api`, config `apps/api/railway.cron-http.json`. Set `CRON_API_URL` to your API URL. Triggers the endpoint via curl—no DB in cron service. Use if the Python cron has connection issues.
+- **Railway Cron (Python):** Config `apps/api/railway.cron.json`. Requires DATABASE_URL, FRED_API_KEY. See `docs/RAILWAY_CRON_SETUP.md`.
 - **GitHub Actions:** `.github/workflows/cron-update-data.yml` runs daily. Add `CRON_API_URL` as repo secret.
 - **cron-job.org:** POST to `/api/cron/update-all` on a schedule.
 
