@@ -187,11 +187,69 @@ def update_youtube_channel_snapshots() -> dict[str, Any]:
         return {"rows_added": 0, "channels_updated": 0, "error": str(e)}
 
 
+def update_oil_production_exporters() -> dict[str, Any]:
+    """Append-only update for oil production (Saudi, Russia, Iran). Idempotent."""
+    if not _has_db():
+        logger.warning("oil_production_exporters: DATABASE_URL not set, skipping")
+        return {"rows_added": 0, "error": "no db"}
+
+    try:
+        from signalmap.sources.oil_production_exporters import fetch_oil_production_exporters
+        from signalmap.services.signals import (
+            SIGNAL_OIL_PRODUCTION_US,
+            SIGNAL_OIL_PRODUCTION_SAUDI,
+            SIGNAL_OIL_PRODUCTION_RUSSIA,
+            SIGNAL_OIL_PRODUCTION_IRAN,
+        )
+
+        rows = fetch_oil_production_exporters()
+        total = 0
+        for r in rows:
+            if r.get("us") is not None:
+                n = insert_points_ignore_conflict(
+                    SIGNAL_OIL_PRODUCTION_US,
+                    [{"date": r["date"], "value": r["us"]}],
+                    source="IMF:EIA:oil_production",
+                    metadata={"ingested_by": "daily_update"},
+                )
+                total += n
+            if r.get("saudi_arabia") is not None:
+                n = insert_points_ignore_conflict(
+                    SIGNAL_OIL_PRODUCTION_SAUDI,
+                    [{"date": r["date"], "value": r["saudi_arabia"]}],
+                    source="IMF:EIA:oil_production",
+                    metadata={"ingested_by": "daily_update"},
+                )
+                total += n
+            if r.get("russia") is not None:
+                n = insert_points_ignore_conflict(
+                    SIGNAL_OIL_PRODUCTION_RUSSIA,
+                    [{"date": r["date"], "value": r["russia"]}],
+                    source="IMF:EIA:oil_production",
+                    metadata={"ingested_by": "daily_update"},
+                )
+                total += n
+            if r.get("iran") is not None:
+                n = insert_points_ignore_conflict(
+                    SIGNAL_OIL_PRODUCTION_IRAN,
+                    [{"date": r["date"], "value": r["iran"]}],
+                    source="IMF:EIA:oil_production",
+                    metadata={"ingested_by": "daily_update"},
+                )
+                total += n
+        logger.info("oil_production_exporters: rows_added=%s", total)
+        return {"rows_added": total}
+    except Exception as e:
+        logger.exception("oil_production_exporters: %s", e)
+        return {"rows_added": 0, "error": str(e)}
+
+
 DATA_SOURCE_UPDATERS: dict[str, Callable[[], dict[str, Any]]] = {
     "oil": update_brent_prices,
     "fx": update_fx_usd_toman,
     "gold": update_gold_prices,
     "fx_dual": update_dual_fx_rates,
+    "oil_production_exporters": update_oil_production_exporters,
     "youtube_followers": update_youtube_channel_snapshots,
 }
 

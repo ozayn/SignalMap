@@ -29,7 +29,10 @@ export type ConceptKey =
   | "official_exchange_rate"
   | "oil_export_volume"
   | "ppp_oil_burden"
-  | "oil_price_shocks";
+  | "oil_price_shocks"
+  | "oil_production"
+  | "barrels_per_day"
+  | "supply_shocks";
 
 export type ConceptLink = {
   label: string;
@@ -274,6 +277,27 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
       "Oil price shocks are unusually large daily movements in the price of oil. To detect them, we compute the daily return (the percentage change from one day to the next) and compare it to recent volatility. If the daily change is greater than twice the rolling standard deviation of the last 30 days, the movement is classified as a shock. This helps identify moments when geopolitical events, supply disruptions, or financial stress cause oil markets to move far beyond normal day-to-day fluctuations.",
     inSimpleTerms:
       "Most days oil prices move a little up or down. Sometimes something big happens — a war, sanctions, or a supply shock — and the price moves much more than usual. Those unusually large moves are highlighted as oil price shocks.",
+  },
+  oil_production: {
+    title: "Oil production",
+    description:
+      "Oil production measures the volume of crude oil extracted from the ground per unit of time. Major exporters such as Saudi Arabia, Russia, and Iran produce significant shares of global supply. Production levels can shift due to policy (OPEC+ cuts), geopolitics (sanctions, conflicts), or technical disruptions. This study shows annual production in million barrels per day.",
+    inSimpleTerms:
+      "How much oil is produced each day. When big producers cut or increase output, it affects global supply and prices.",
+  },
+  barrels_per_day: {
+    title: "Barrels per day",
+    description:
+      "A standard unit for measuring oil production and consumption. One barrel equals 42 US gallons (about 159 liters). Million barrels per day (mb/d) is the typical scale for country-level production. Saudi Arabia, Russia, and Iran each produce several million barrels per day.",
+    inSimpleTerms:
+      "The amount of oil pumped out per day. A million barrels per day is a common unit for comparing countries.",
+  },
+  supply_shocks: {
+    title: "Supply shocks",
+    description:
+      "Sudden changes in oil supply—from wars, sanctions, OPEC decisions, or technical failures—can move prices sharply. Production cuts reduce supply; restored production increases it. This study shows production levels over time so you can see when supply changed and how it relates to geopolitical events.",
+    inSimpleTerms:
+      "When something big happens that cuts or boosts oil supply—a war, sanctions, or a producer group cutting output—prices can change a lot.",
   },
 };
 

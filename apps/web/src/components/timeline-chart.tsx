@@ -180,6 +180,18 @@ export function TimelineChart({
     const goldColor = "hsl(42, 85%, 50%)";
     const oilColorMuted = withAlphaHsl(muted, 0.7);
     const chart2Color = cssHsl("--chart-2", "hsl(142, 76%, 36%)");
+    const productionColors: Record<string, string> = {
+      us: "hsl(220, 65%, 50%)",
+      saudi: "hsl(142, 55%, 38%)",
+      russia: "hsl(0, 60%, 50%)",
+      iran: "hsl(35, 85%, 52%)",
+    };
+    const productionSymbols: Record<string, "circle" | "diamond" | "triangle" | "roundRect"> = {
+      us: "circle",
+      saudi: "diamond",
+      russia: "triangle",
+      iran: "roundRect",
+    };
 
     const getEventScope = (ev: TimelineEvent): "iran" | "world" | "sanctions" =>
       (ev.scope === "oil_exports" ? "sanctions" : ev.scope) ?? (ev.layer === "world_core" || ev.layer === "world_1900" ? "world" : ev.layer === "sanctions" ? "sanctions" : "iran");
@@ -811,42 +823,47 @@ export function TimelineChart({
                 const isWageNominal = s.key === "nominal";
                 const isWageReal = s.key === "real";
                 const isWageIndex = s.key === "index";
-                const lineColor = isGold
-                  ? goldColor
-                  : isOil
-                    ? color
-                    : isOfficial
+                const isProductionKey = s.key in productionColors;
+                const lineColor = isProductionKey
+                  ? productionColors[s.key]
+                  : isGold
+                    ? goldColor
+                    : isOil
                       ? color
-                      : isOpen
-                        ? chart2Color
-                        : isSpread
-                          ? oilColorMuted
-                          : isWageNominal
-                            ? color
-                            : isWageReal
-                              ? chart2Color
-                              : isWageIndex
-                                ? oilColorMuted
-                                : oilColorMuted;
-                const lineWidth = isGold || isOil ? 1.5 : 1;
-                const symbolSize = isGold ? 4 : isOil ? 3 : 2.5;
-                const symbol = isGold
-                  ? "circle"
-                  : isProxy || (s.yAxisIndex === 1 && !isWageIndex)
-                    ? "diamond"
-                    : isOfficial
-                      ? "circle"
-                      : isOpen
-                        ? "diamond"
-                        : isSpread
-                          ? "triangle"
-                          : isWageNominal
-                            ? "circle"
-                            : isWageReal
-                              ? "diamond"
-                              : isWageIndex
-                                ? "triangle"
-                                : "circle";
+                      : isOfficial
+                        ? color
+                        : isOpen
+                          ? chart2Color
+                          : isSpread
+                            ? oilColorMuted
+                            : isWageNominal
+                              ? color
+                              : isWageReal
+                                ? chart2Color
+                                : isWageIndex
+                                  ? oilColorMuted
+                                  : oilColorMuted;
+                const lineWidth = isGold || isOil || isProductionKey ? 1.5 : 1;
+                const symbolSize = isGold ? 4 : isOil ? 3 : isProductionKey ? 3 : 2.5;
+                const symbol = isProductionKey
+                  ? productionSymbols[s.key]
+                  : isGold
+                    ? "circle"
+                    : isProxy || (s.yAxisIndex === 1 && !isWageIndex)
+                      ? "diamond"
+                      : isOfficial
+                        ? "circle"
+                        : isOpen
+                          ? "diamond"
+                          : isSpread
+                            ? "triangle"
+                            : isWageNominal
+                              ? "circle"
+                              : isWageReal
+                                ? "diamond"
+                                : isWageIndex
+                                  ? "triangle"
+                                  : "circle";
                 return {
                   name: s.label,
                   type: "line" as const,
@@ -855,7 +872,7 @@ export function TimelineChart({
                   smooth: false,
                   connectNulls: true,
                   step: (isGold ? "start" : false) as "start" | false,
-                  symbol: symbol as "circle" | "diamond" | "triangle",
+                  symbol: symbol as "circle" | "diamond" | "triangle" | "roundRect",
                   symbolSize,
                   lineStyle: { color: lineColor, width: lineWidth },
                   itemStyle: { color: lineColor },

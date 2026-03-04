@@ -195,6 +195,11 @@ export default function StudyDetailPage() {
   const [exportCapacityOilPoints, setExportCapacityOilPoints] = useState<{ date: string; value: number }[]>([]);
   const [exportCapacityProxyPoints, setExportCapacityProxyPoints] = useState<{ date: string; value: number }[]>([]);
   const [exportCapacityBaseYear, setExportCapacityBaseYear] = useState<number | null>(null);
+  const [productionUsPoints, setProductionUsPoints] = useState<{ date: string; value: number }[]>([]);
+  const [productionSaudiPoints, setProductionSaudiPoints] = useState<{ date: string; value: number }[]>([]);
+  const [productionRussiaPoints, setProductionRussiaPoints] = useState<{ date: string; value: number }[]>([]);
+  const [productionIranPoints, setProductionIranPoints] = useState<{ date: string; value: number }[]>([]);
+  const [productionSource, setProductionSource] = useState<{ name: string; url?: string; publisher?: string } | null>(null);
   const [fxDualOfficialPoints, setFxDualOfficialPoints] = useState<{ date: string; value: number }[]>([]);
   const [fxDualOpenPoints, setFxDualOpenPoints] = useState<{ date: string; value: number }[]>([]);
   const [fxDualOfficialSource, setFxDualOfficialSource] = useState<FxUsdTomanSource | null>(null);
@@ -238,6 +243,7 @@ export default function StudyDetailPage() {
   const isOilPppIran = study?.primarySignal.kind === "oil_ppp_iran";
   const hasTurkeyComparator = study?.comparatorCountry === "Turkey";
   const isOilExportCapacity = study?.primarySignal.kind === "oil_export_capacity";
+  const isOilProductionMajorExporters = study?.primarySignal.kind === "oil_production_major_exporters";
   const isEventsTimeline = study?.primarySignal.kind === "events_timeline";
   const isFollowerGrowthDynamics = study?.primarySignal.kind === "follower_growth_dynamics";
   const isFxUsdIrrDual = study?.primarySignal.kind === "fx_usd_irr_dual";
@@ -265,6 +271,11 @@ export default function StudyDetailPage() {
     if (!study || !isOilExportCapacity) return null;
     return study.timeRange;
   }, [study, isOilExportCapacity]);
+
+  const productionTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isOilProductionMajorExporters) return null;
+    return study.timeRange;
+  }, [study, isOilProductionMajorExporters]);
 
   const fxDualTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isFxUsdIrrDual) return null;
@@ -655,6 +666,58 @@ export default function StudyDetailPage() {
   }, [exportCapacityTimeRange, isOilExportCapacity]);
 
   useEffect(() => {
+    if (!productionTimeRange || !isOilProductionMajorExporters) {
+      if (isOilProductionMajorExporters) {
+        setProductionUsPoints([]);
+        setProductionSaudiPoints([]);
+        setProductionRussiaPoints([]);
+        setProductionIranPoints([]);
+        setProductionSource(null);
+      }
+      return;
+    }
+    const [start, end] = productionTimeRange;
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+    fetchJson<{
+      data: Array<{ date: string; us?: number | null; saudi_arabia?: number | null; russia?: number | null; iran?: number | null }>;
+      source?: { name: string; url?: string; publisher?: string };
+    }>(`/api/signals/oil/production-exporters?start=${start}&end=${end}`)
+      .then((res) => {
+        if (mounted && res.data) {
+          const us: { date: string; value: number }[] = [];
+          const saudi: { date: string; value: number }[] = [];
+          const russia: { date: string; value: number }[] = [];
+          const iran: { date: string; value: number }[] = [];
+          for (const r of res.data) {
+            if (r.us != null) us.push({ date: r.date, value: r.us });
+            if (r.saudi_arabia != null) saudi.push({ date: r.date, value: r.saudi_arabia });
+            if (r.russia != null) russia.push({ date: r.date, value: r.russia });
+            if (r.iran != null) iran.push({ date: r.date, value: r.iran });
+          }
+          setProductionUsPoints(us);
+          setProductionSaudiPoints(saudi);
+          setProductionRussiaPoints(russia);
+          setProductionIranPoints(iran);
+          setProductionSource(res.source ?? null);
+        }
+      })
+      .catch((e) => {
+        if (mounted) {
+          setProductionUsPoints([]);
+          setProductionSaudiPoints([]);
+          setProductionRussiaPoints([]);
+          setProductionIranPoints([]);
+          setProductionSource(null);
+          setError(e instanceof Error ? e.message : "Signal fetch failed");
+        }
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => { mounted = false; };
+  }, [productionTimeRange, isOilProductionMajorExporters]);
+
+  useEffect(() => {
     if (!fxDualTimeRange || !isFxUsdIrrDual) {
       if (isFxUsdIrrDual) {
         setFxDualOfficialPoints([]);
@@ -834,7 +897,7 @@ export default function StudyDetailPage() {
 
   const showError = error || (isOverviewStub && !data);
 
-  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isFxUsdIrrDual || isWageCpiReal;
+  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isFxUsdIrrDual || isWageCpiReal;
   const singleSignalReady =
     isGoldAndOil
       ? goldPoints.length > 0 && oilPoints.length > 0
@@ -850,7 +913,9 @@ export default function StudyDetailPage() {
               ? pppIranPoints.length > 0
               : isOilExportCapacity
                 ? exportCapacityOilPoints.length > 0 && exportCapacityProxyPoints.length > 0
-                : isFxUsdIrrDual
+                : isOilProductionMajorExporters
+                  ? productionUsPoints.length > 0 || productionSaudiPoints.length > 0 || productionRussiaPoints.length > 0 || productionIranPoints.length > 0
+                  : isFxUsdIrrDual
                   ? fxDualOpenPoints.length > 0
                   : isWageCpiReal
                     ? wageNominalPoints.length > 0 && wageCpiPoints.length > 0
@@ -903,6 +968,12 @@ export default function StudyDetailPage() {
       if (exportCapacityOilPoints.length > 0) allDates.push(...collect(exportCapacityOilPoints));
       if (exportCapacityProxyPoints.length > 0) allDates.push(...collect(exportCapacityProxyPoints));
     }
+    if (isOilProductionMajorExporters) {
+      if (productionUsPoints.length > 0) allDates.push(...collect(productionUsPoints));
+      if (productionSaudiPoints.length > 0) allDates.push(...collect(productionSaudiPoints));
+      if (productionRussiaPoints.length > 0) allDates.push(...collect(productionRussiaPoints));
+      if (productionIranPoints.length > 0) allDates.push(...collect(productionIranPoints));
+    }
     if (isFollowerGrowthDynamics && fgData) {
       const list = fgData.snapshots ?? fgData.results ?? [];
       const dates = list
@@ -933,7 +1004,7 @@ export default function StudyDetailPage() {
     }
 
     const requestedRange =
-      oilTimeRange ?? fxTimeRange ?? dualTimeRange ?? exportCapacityTimeRange ?? fxDualTimeRange ?? wageTimeRange ?? study.timeRange;
+      oilTimeRange ?? fxTimeRange ?? dualTimeRange ?? exportCapacityTimeRange ?? productionTimeRange ?? fxDualTimeRange ?? wageTimeRange ?? study.timeRange;
     if (allDates.length === 0) return null;
     const sorted = [...allDates].sort();
     const dataMin = sorted[0]!;
@@ -962,6 +1033,12 @@ export default function StudyDetailPage() {
       if (isOilExportCapacity) {
         if (exportCapacityOilPoints.length > 0) arrays.push(exportCapacityOilPoints);
         if (exportCapacityProxyPoints.length > 0) arrays.push(exportCapacityProxyPoints);
+      }
+      if (isOilProductionMajorExporters) {
+        if (productionUsPoints.length > 0) arrays.push(productionUsPoints);
+        if (productionSaudiPoints.length > 0) arrays.push(productionSaudiPoints);
+        if (productionRussiaPoints.length > 0) arrays.push(productionRussiaPoints);
+        if (productionIranPoints.length > 0) arrays.push(productionIranPoints);
       }
       if (isFollowerGrowthDynamics && fgData) {
         const list = fgData.snapshots ?? fgData.results ?? [];
@@ -2195,6 +2272,81 @@ export default function StudyDetailPage() {
                 </p>
                 <p>
                   When exports are constrained, volume often matters more than price. World oil prices can rise or fall, but if you cannot sell as much, the price alone says little about earning capacity. Volume reflects how much can actually be exported—the bottleneck is often how much you can sell, not the price at which you could sell it.
+                </p>
+              </InSimpleTerms>
+            </>
+          ) : isOilProductionMajorExporters ? (
+            <>
+              <TimelineChart
+                data={[]}
+                valueKey="value"
+                label="Oil production"
+                events={events}
+                multiSeries={[
+                  { key: "us", label: "United States", yAxisIndex: 0, unit: "million bbl/day", points: productionUsPoints },
+                  { key: "saudi", label: "Saudi Arabia", yAxisIndex: 0, unit: "million bbl/day", points: productionSaudiPoints },
+                  { key: "russia", label: "Russia", yAxisIndex: 0, unit: "million bbl/day", points: productionRussiaPoints },
+                  { key: "iran", label: "Iran", yAxisIndex: 0, unit: "million bbl/day", points: productionIranPoints },
+                ]}
+                timeRange={productionTimeRange ?? study.timeRange}
+              />
+              <LearningNote
+                sections={[
+                  {
+                    heading: "How to read this chart",
+                    bullets: [
+                      "Four lines show crude oil production for United States, Saudi Arabia, Russia, and Iran.",
+                      "Y-axis: million barrels per day. All series share the same scale.",
+                      "Annual data: one point per year.",
+                      "The United States is currently the world's largest oil producer, followed by Saudi Arabia and Russia, while Iran's production is affected by sanctions and export constraints.",
+                    ],
+                  },
+                  {
+                    heading: "What this measures",
+                    bullets: [
+                      "Crude oil production—the volume of oil extracted per day.",
+                      "US and Russia: EIA. Saudi Arabia and Iran: IMF Regional Economic Outlook (FRED).",
+                    ],
+                  },
+                  {
+                    heading: "Purpose",
+                    bullets: [
+                      "Compare production levels across major exporters over time.",
+                      "Supply changes (OPEC+ cuts, sanctions, conflicts) can move global oil prices.",
+                    ],
+                  },
+                  {
+                    heading: "Pitfalls",
+                    bullets: [
+                      "Annual data; does not show within-year volatility.",
+                      "Do not infer causality from co-movement with events.",
+                    ],
+                  },
+                ]}
+              />
+              {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
+              {productionSource && (
+                <SourceInfo
+                  items={[
+                    {
+                      label: "Oil production",
+                      sourceName: productionSource.name,
+                      sourceUrl: productionSource.url,
+                      sourceDetail: productionSource.publisher,
+                      unitLabel: "million barrels/day",
+                      unitNote: "Annual crude oil production.",
+                    },
+                  ]}
+                />
+              )}
+              <InSimpleTerms>
+                <p>
+                  Oil production is how much crude oil a country pumps out of the ground each day.
+                  The United States, Saudi Arabia, Russia, and Iran are among the world&apos;s largest producers.
+                </p>
+                <p>
+                  When production changes—because of OPEC+ cuts, sanctions, or conflicts—global supply shifts and prices can move.
+                  This chart shows how production levels have evolved over time for these four major producers.
                 </p>
               </InSimpleTerms>
             </>

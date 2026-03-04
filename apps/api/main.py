@@ -402,6 +402,24 @@ def get_oil_ppp_turkey_signal(
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
+@app.get("/api/signals/oil/production-exporters")
+def get_oil_production_exporters_signal(
+    start: str = Query(..., description="Start date YYYY-MM-DD"),
+    end: str = Query(..., description="End date YYYY-MM-DD"),
+):
+    """Return oil production for Saudi Arabia, Russia, Iran (million barrels/day)."""
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    try:
+        from signalmap.services.signals import get_oil_production_exporters_series
+        result = get_oil_production_exporters_series(start, end)
+        return {"data": result["data"], "source": result.get("source"), "unit": result.get("unit")}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
+
+
 @app.get("/api/signals/oil/export-capacity")
 def get_oil_export_capacity_signal(
     start: str = Query(..., description="Start date YYYY-MM-DD"),

@@ -8,6 +8,7 @@ export type PrimarySignal =
   | { kind: "real_oil" }
   | { kind: "oil_ppp_iran" }
   | { kind: "oil_export_capacity" }
+  | { kind: "oil_production_major_exporters" }
   | { kind: "events_timeline" }
   | { kind: "follower_growth_dynamics" }
   | { kind: "fx_usd_irr_dual" }
@@ -147,6 +148,17 @@ export const STUDIES: StudyMeta[] = [
       "The gap between price and proxy widens when estimated export volume is relatively low.",
       "In this dataset, the proxy remains below its early-period peak in several later years.",
     ],
+  },
+  {
+    id: "oil_major_exporters",
+    number: 14,
+    title: "Major oil exporters: production levels",
+    timeRange: ["2000-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "Crude oil production for Saudi Arabia, Russia, and Iran. Annual data in million barrels per day.",
+    status: "active",
+    primarySignal: { kind: "oil_production_major_exporters" },
+    concepts: ["oil_production", "barrels_per_day", "supply_shocks"],
   },
   {
     id: "follower_growth_dynamics",

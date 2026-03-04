@@ -17,6 +17,7 @@ from signalmap.sources.fred_cpi import fetch_cpi_series
 from signalmap.sources.world_bank_ppp import fetch_iran_ppp_series, fetch_turkey_ppp_series
 from signalmap.sources.fred_iran_fx import fetch_iran_fx_series
 from signalmap.sources.rial_archive_usd_toman import fetch_archive_usd_toman_series
+from signalmap.sources.oil_production_exporters import fetch_oil_production_exporters
 from signalmap.store.signals_repo import get_points, upsert_points
 from signalmap.utils.ttl_cache import get as cache_get, set as cache_set
 
@@ -628,6 +629,72 @@ def get_usd_irr_dual_series(start: str, end: str) -> dict:
             "source": open_result.get("source", USD_TOMAN_SOURCE),
         },
     }
+
+
+OIL_PRODUCTION_SOURCE = {
+    "name": "EIA / IMF",
+    "publisher": "U.S. Energy Information Administration, International Monetary Fund",
+    "url": "https://www.eia.gov/international/content/analysis/countries_long/",
+    "notes": "Annual crude oil production. US and Russia: EIA. Saudi Arabia and Iran: IMF REO (FRED).",
+}
+
+
+SIGNAL_OIL_PRODUCTION_US = "oil_production_us"
+SIGNAL_OIL_PRODUCTION_SAUDI = "oil_production_saudi"
+SIGNAL_OIL_PRODUCTION_RUSSIA = "oil_production_russia"
+SIGNAL_OIL_PRODUCTION_IRAN = "oil_production_iran"
+
+
+def get_oil_production_exporters_series(start: str, end: str) -> dict:
+    """
+    Return oil production for United States, Saudi Arabia, Russia, Iran.
+    Format: { data: [{date, us, saudi_arabia, russia, iran}, ...], source: {...} }
+    Unit: million barrels per day. Annual resolution.
+    Read path: cache → DB (if all 4 signals have data) → fetch.
+    """
+    ck = f"signal:oil_production_exporters:{start}:{end}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    # Try DB first (populated by cron)
+    us_rows = get_points(SIGNAL_OIL_PRODUCTION_US, start, end)
+    saudi_rows = get_points(SIGNAL_OIL_PRODUCTION_SAUDI, start, end)
+    russia_rows = get_points(SIGNAL_OIL_PRODUCTION_RUSSIA, start, end)
+    iran_rows = get_points(SIGNAL_OIL_PRODUCTION_IRAN, start, end)
+    if us_rows and saudi_rows and russia_rows and iran_rows:
+        by_date: dict[str, dict[str, Any]] = {}
+        for r in us_rows:
+            by_date.setdefault(r["date"], {"date": r["date"]})["us"] = r["value"]
+        for r in saudi_rows:
+            by_date.setdefault(r["date"], {"date": r["date"]})["saudi_arabia"] = r["value"]
+        for r in russia_rows:
+            by_date.setdefault(r["date"], {"date": r["date"]})["russia"] = r["value"]
+        for r in iran_rows:
+            by_date.setdefault(r["date"], {"date": r["date"]})["iran"] = r["value"]
+        data = sorted(by_date.values(), key=lambda x: x["date"])
+        result = {
+            "data": data,
+            "source": OIL_PRODUCTION_SOURCE,
+            "unit": "million barrels per day",
+            "resolution": "annual",
+        }
+        cache_set(ck, result, CACHE_TTL)
+        return result
+
+    # Fallback: fetch from source
+    rows = fetch_oil_production_exporters()
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    data = [r for r in rows if start_year <= int(r["date"][:4]) <= end_year]
+    result = {
+        "data": data,
+        "source": OIL_PRODUCTION_SOURCE,
+        "unit": "million barrels per day",
+        "resolution": "annual",
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
 
 
 def get_iran_wage_cpi_series(start: str, end: str) -> dict:
