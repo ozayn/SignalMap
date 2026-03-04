@@ -276,7 +276,9 @@ export default function StudyDetailPage() {
 
   const productionTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isOilProductionMajorExporters) return null;
-    return study.timeRange;
+    const [start, end] = study.timeRange;
+    const resolvedEnd = end === "today" ? new Date().toISOString().slice(0, 10) : end;
+    return [start, resolvedEnd];
   }, [study, isOilProductionMajorExporters]);
 
   /** Extend annual production series to current year for display; synthetic points flagged for tooltip. */

@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -408,10 +409,14 @@ def get_oil_ppp_turkey_signal(
 
 @app.get("/api/signals/oil/production-exporters")
 def get_oil_production_exporters_signal(
-    start: str = Query(..., description="Start date YYYY-MM-DD"),
-    end: str = Query(..., description="End date YYYY-MM-DD"),
+    start: str | None = Query(None, description="Start date YYYY-MM-DD"),
+    end: str | None = Query(None, description="End date YYYY-MM-DD"),
 ):
     """Return oil production for Saudi Arabia, Russia, Iran (million barrels/day)."""
+    if start is None:
+        start = "2000-01-01"
+    if end is None:
+        end = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     if not _validate_date(start) or not _validate_date(end):
         raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
     if start > end:

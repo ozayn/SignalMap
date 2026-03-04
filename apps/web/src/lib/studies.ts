@@ -153,7 +153,7 @@ export const STUDIES: StudyMeta[] = [
     id: "oil_major_exporters",
     number: 14,
     title: "Major oil exporters: production levels",
-    timeRange: ["2000-01-01", new Date().toISOString().slice(0, 10)],
+    timeRange: ["2000-01-01", "today"],
     description:
       "Crude oil production for Saudi Arabia, Russia, and Iran. Annual data in million barrels per day.",
     status: "active",
