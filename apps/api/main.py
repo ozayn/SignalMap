@@ -467,6 +467,21 @@ def get_oil_global_long_signal(
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
+@app.get("/api/networks/oil-trade")
+def api_oil_trade_network(
+    start_year: int = Query(2018, description="Start year"),
+    end_year: int = Query(2023, description="End year"),
+):
+    """Return bilateral crude oil trade flows (HS 2709) by year. Values in thousand barrels/day."""
+    if start_year > end_year:
+        start_year, end_year = end_year, start_year
+    try:
+        from signalmap.services.oil_trade_network import get_oil_trade_network
+        return get_oil_trade_network(start_year=start_year, end_year=end_year)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Oil trade fetch failed: {e}")
+
+
 @app.get("/api/signals/fx/usd-toman")
 def get_usd_toman_signal(
     start: str = Query(..., description="Start date YYYY-MM-DD"),

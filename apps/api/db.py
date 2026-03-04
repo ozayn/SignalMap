@@ -185,6 +185,17 @@ def init_tables() -> None:
                     last_updated TIMESTAMPTZ NOT NULL
                 )
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS oil_trade_edges (
+                    year INTEGER NOT NULL,
+                    exporter TEXT NOT NULL,
+                    importer TEXT NOT NULL,
+                    value FLOAT NOT NULL,
+                    source TEXT NOT NULL,
+                    updated_at TIMESTAMPTZ DEFAULT NOW(),
+                    PRIMARY KEY (year, exporter, importer)
+                )
+            """)
     except Exception:
         pass  # DB may not be available; job endpoints will return 503
 

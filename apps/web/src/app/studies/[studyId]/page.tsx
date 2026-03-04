@@ -15,6 +15,7 @@ import { CurrentSnapshot } from "@/components/current-snapshot";
 import { InSimpleTerms } from "@/components/in-simple-terms";
 import { EventsTimeline, type TimelineEvent } from "@/components/events-timeline";
 import { FollowerGrowthChart } from "@/components/follower-growth-chart";
+import { NetworkGraph, type NetworkNode, type NetworkEdge } from "@/components/network-graph";
 import { getStudyById, getPrevNextStudies } from "@/lib/studies";
 import { fetchJson } from "@/lib/api";
 import { enrichOilPointsWithVolatility } from "@/lib/oil-volatility";
@@ -229,6 +230,8 @@ export default function StudyDetailPage() {
   const [fgShowLinear, setFgShowLinear] = useState(true);
   const [fgShowExponential, setFgShowExponential] = useState(true);
   const [fgShowLogistic, setFgShowLogistic] = useState(true);
+  const [networkYearsData, setNetworkYearsData] = useState<Record<string, NetworkEdge[]>>({});
+  const [networkSelectedYear, setNetworkSelectedYear] = useState<string>("");
   const [fgMetadata, setFgMetadata] = useState<{
     source?: "cache" | "live" | "mixed";
     count?: number;
@@ -250,6 +253,7 @@ export default function StudyDetailPage() {
   const isFollowerGrowthDynamics = study?.primarySignal.kind === "follower_growth_dynamics";
   const isFxUsdIrrDual = study?.primarySignal.kind === "fx_usd_irr_dual";
   const isWageCpiReal = study?.primarySignal.kind === "wage_cpi_real";
+  const isOilTradeNetwork = study?.primarySignal.kind === "oil_trade_network";
 
   const windowOptions = isGoldAndOil ? WINDOW_OPTIONS_LONG_RANGE : WINDOW_OPTIONS;
   const effectiveWindowYears = useMemo(
@@ -343,6 +347,24 @@ export default function StudyDetailPage() {
       productionLastOfficialDate: lastOfficial ? lastOfficial.slice(0, 4) : undefined,
     };
   }, [productionUsPoints, productionSaudiPoints, productionRussiaPoints, productionIranPoints, productionTotalPoints]);
+
+  const networkYears = useMemo(() => {
+    const yrs = Object.keys(networkYearsData).sort();
+    return yrs;
+  }, [networkYearsData]);
+
+  const { networkNodesForYear, networkEdgesForYear } = useMemo(() => {
+    const yrs = Object.keys(networkYearsData).sort();
+    const year = networkSelectedYear || yrs[yrs.length - 1] || "";
+    const edges = year ? (networkYearsData[year] ?? []) : [];
+    const ids = new Set<string>();
+    for (const e of edges) {
+      ids.add(e.source);
+      ids.add(e.target);
+    }
+    const nodes = [...ids].sort().map((id) => ({ id }));
+    return { networkNodesForYear: nodes, networkEdgesForYear: edges };
+  }, [networkYearsData, networkSelectedYear]);
 
   const fxDualTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isFxUsdIrrDual) return null;
@@ -527,6 +549,23 @@ export default function StudyDetailPage() {
       setLoading(false);
     }
   }, [study, isEventsTimeline, isFollowerGrowthDynamics]);
+
+  useEffect(() => {
+    if (!study || !isOilTradeNetwork) return;
+    let mounted = true;
+    setLoading(true);
+    fetchJson<{ years: Record<string, NetworkEdge[]> }>("/api/networks/oil-trade")
+      .then((res) => {
+        if (mounted && res.years) {
+          setNetworkYearsData(res.years);
+          const yrs = Object.keys(res.years).sort();
+          if (yrs.length > 0) setNetworkSelectedYear(yrs[yrs.length - 1]!);
+        }
+      })
+      .catch((e) => mounted && setError(e instanceof Error ? e.message : "Network fetch failed"))
+      .finally(() => mounted && setLoading(false));
+    return () => { mounted = false; };
+  }, [study, isOilTradeNetwork]);
 
   useEffect(() => {
     let mounted = true;
@@ -983,7 +1022,7 @@ export default function StudyDetailPage() {
 
   const showError = error || (isOverviewStub && !data);
 
-  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isFxUsdIrrDual || isWageCpiReal;
+  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isFxUsdIrrDual || isWageCpiReal || isOilTradeNetwork;
   const singleSignalReady =
     isGoldAndOil
       ? goldPoints.length > 0 && oilPoints.length > 0
@@ -1005,7 +1044,9 @@ export default function StudyDetailPage() {
                   ? fxDualOpenPoints.length > 0
                   : isWageCpiReal
                     ? wageNominalPoints.length > 0 && wageCpiPoints.length > 0
-                    : false;
+                    : isOilTradeNetwork
+                      ? networkNodesForYear.length > 0
+                      : false;
   if (loading && (isOverviewStub ? !data : isSingleSignalStudy && !singleSignalReady)) {
     return (
       <div className="container mx-auto max-w-4xl px-4 py-12 animate-pulse space-y-8">
@@ -1898,11 +1939,13 @@ export default function StudyDetailPage() {
         </div>
       ) : null}
 
-      {!isEventsTimeline && (
+      {!isEventsTimeline && !isFollowerGrowthDynamics && !isFxUsdIrrDual && !isWageCpiReal && (
       <Card className="border-border overflow-hidden">
         <CardHeader>
           <CardTitle className="text-base font-medium">
-            {isGoldAndOil
+            {isOilTradeNetwork
+              ? "Network"
+              : isGoldAndOil
               ? "Gold and oil prices"
               : isOilGlobalLong
               ? "Oil price"
@@ -1925,7 +1968,9 @@ export default function StudyDetailPage() {
                     : "Timeline"}
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            {isGoldAndOil
+            {isOilTradeNetwork
+              ? "Oil trade flows between major exporters and importers. Nodes are countries/regions; edge width reflects trade volume (thousand barrels/day). Drag nodes, zoom, pan."
+              : isGoldAndOil
               ? "Gold (left axis) and oil (right axis) on shared timeline. World event range overlays."
               : isOilGlobalLong
               ? "Oil price (USD/barrel) with event markers. Annual data pre-1987; daily Brent from 1987."
@@ -1948,7 +1993,7 @@ export default function StudyDetailPage() {
                     : "Event markers and optional external signals"}
           </p>
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            {!hasTurkeyComparator && !isOilExportCapacity && (
+            {!hasTurkeyComparator && !isOilExportCapacity && !isOilTradeNetwork && (
               <>
                 <select
                   value={anchorEventId}
@@ -2055,6 +2100,163 @@ export default function StudyDetailPage() {
           </div>
         </CardHeader>
         <CardContent>
+          {isOilTradeNetwork ? (
+            <>
+              {networkYears.length > 0 && (
+                <div className="mb-4 flex flex-wrap items-center gap-3">
+                  <label className="text-sm font-medium text-foreground">
+                    Year:
+                  </label>
+                  <input
+                    type="range"
+                    min={networkYears[0]}
+                    max={networkYears[networkYears.length - 1]}
+                    step={1}
+                    value={networkSelectedYear || networkYears[networkYears.length - 1]!}
+                    onChange={(e) => setNetworkSelectedYear(e.target.value)}
+                    className="w-40 accent-primary"
+                  />
+                  <span className="text-sm text-muted-foreground tabular-nums min-w-[4ch]">
+                    {networkSelectedYear || networkYears[networkYears.length - 1]}
+                  </span>
+                </div>
+              )}
+              <NetworkGraph
+                key={networkSelectedYear || networkYears[networkYears.length - 1]}
+                nodes={networkNodesForYear}
+                edges={networkEdgesForYear}
+                year={networkSelectedYear}
+              />
+              <div className="mt-4 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm">
+                <h4 className="mb-3 font-medium text-foreground">How to read this network</h4>
+                <div className="space-y-3">
+                  <div>
+                    <p className="mb-1.5 font-medium text-muted-foreground">Node size</p>
+                    <p className="text-muted-foreground">
+                      Larger nodes represent countries with higher total crude oil trade (imports + exports).
+                    </p>
+                    <div className="mt-1.5 flex items-center gap-4">
+                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="inline-block h-4 w-4 rounded-full bg-[#1e40af]" />
+                        Small
+                      </span>
+                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="inline-block h-6 w-6 rounded-full bg-[#1e40af]" />
+                        Large
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-1.5 font-medium text-muted-foreground">Node color</p>
+                    <p className="text-muted-foreground">
+                      Darker nodes represent net exporters. Lighter nodes represent net importers. Intermediate shades indicate more balanced trade.
+                    </p>
+                    <div className="mt-1.5 flex items-center gap-4">
+                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="inline-block h-4 w-4 rounded-full bg-[#1e40af]" />
+                        Exporter
+                      </span>
+                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="inline-block h-4 w-4 rounded-full bg-[#3b82f6]" />
+                        Balanced
+                      </span>
+                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="inline-block h-4 w-4 rounded-full bg-[#60a5fa]" />
+                        Importer
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-1.5 font-medium text-muted-foreground">Edges</p>
+                    <p className="text-muted-foreground">
+                      Arrows show the direction of crude oil trade (exporter → importer). Thicker edges represent larger trade volumes.
+                    </p>
+                    <div className="mt-1.5 flex items-center gap-4">
+                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="inline-block h-0.5 w-8 bg-current opacity-60" />
+                        <span className="text-[10px]">→</span>
+                        Small flow
+                      </span>
+                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="inline-block h-1.5 w-8 bg-current opacity-80" />
+                        <span className="text-[10px]">→</span>
+                        Large flow
+                      </span>
+                    </div>
+                  </div>
+                  <p className="pt-1 text-xs text-muted-foreground">
+                    Trade volume is measured in <strong>thousand barrels per day</strong>.
+                  </p>
+                </div>
+              </div>
+              <LearningNote
+                title="How to read this chart"
+                sections={[
+                  {
+                    heading: "How to read this chart",
+                    bullets: [
+                      "Nodes represent countries or regions involved in crude oil trade.",
+                      "Node size reflects total trade activity (imports + exports).",
+                      "Node color indicates trade balance. Darker nodes represent net exporters, while lighter nodes represent net importers.",
+                      "Edges represent crude oil trade flows between countries.",
+                      "Arrows indicate the direction of trade (exporter → importer).",
+                      "Edge thickness reflects approximate trade volume.",
+                      "The network layout positions highly connected countries closer together.",
+                      "Drag nodes to explore relationships more clearly.",
+                    ],
+                  },
+                  {
+                    heading: "What this measures",
+                    bullets: [
+                      "Bilateral crude oil trade flows between major exporting and importing countries.",
+                      "Total trade activity for each country (imports + exports).",
+                      "Trade volumes are expressed in thousand barrels per day.",
+                    ],
+                  },
+                  {
+                    heading: "Purpose",
+                    bullets: [
+                      "Explore how global oil trade connects major exporters and importers.",
+                      "Identify key hubs in the global oil market.",
+                      "Observe shifts in trade relationships over time using the year slider.",
+                    ],
+                  },
+                  {
+                    heading: "Pitfalls",
+                    bullets: [
+                      "Values represent approximate trade volumes and are intended for visualization purposes.",
+                      "The network focuses on major flows rather than every bilateral trade relationship.",
+                      "Changes in the layout reflect trade relationships but do not imply causality.",
+                    ],
+                  },
+                ]}
+              />
+              {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
+              <SourceInfo
+                items={[
+                  {
+                    label: "Oil trade flows",
+                    sourceName: "Curated dataset",
+                    sourceDetail: "Based on publicly available international energy trade statistics.",
+                    unitLabel: "Thousand barrels per day",
+                  },
+                ]}
+                note="Unit: thousand barrels per day."
+              />
+              <InSimpleTerms>
+                <p>
+                  Countries that produce oil sell it to countries that need it. This network shows those relationships.
+                </p>
+                <p>
+                  Large nodes represent countries with major oil trade activity. Arrows show where oil flows, and thicker lines represent larger trade volumes.
+                </p>
+                <p>
+                  Moving the year slider reveals how these trade routes change over time.
+                </p>
+              </InSimpleTerms>
+            </>
+          ) : (
+            <>
           {(isOverviewStub || isOilBrent || isFxUsdToman || isOilAndFx || (isOilPppIran && !hasTurkeyComparator)) && !isOilGlobalLong && !isGoldAndOil && !isRealOil && (
             <div className="mb-3 flex flex-shrink-0 flex-wrap items-center gap-3 border-b border-border pb-3">
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
@@ -3113,6 +3315,8 @@ export default function StudyDetailPage() {
               timeRange={data.time_range}
             />
           ) : null}
+            </>
+          )}
         </CardContent>
       </Card>
       )}

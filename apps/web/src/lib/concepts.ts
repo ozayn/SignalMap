@@ -33,7 +33,10 @@ export type ConceptKey =
   | "oil_production"
   | "oil_production_vs_exports"
   | "barrels_per_day"
-  | "supply_shocks";
+  | "supply_shocks"
+  | "trade_networks"
+  | "energy_geopolitics"
+  | "export_dependencies";
 
 export type ConceptLink = {
   label: string;
@@ -306,6 +309,27 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
       "Sudden changes in oil supply—from wars, sanctions, OPEC decisions, or technical failures—can move prices sharply. Production cuts reduce supply; restored production increases it. This study shows production levels over time so you can see when supply changed and how it relates to geopolitical events.",
     inSimpleTerms:
       "When something big happens that cuts or boosts oil supply—a war, sanctions, or a producer group cutting output—prices can change a lot.",
+  },
+  trade_networks: {
+    title: "Trade networks",
+    description:
+      "A network representation of trade flows between countries. Nodes are countries or regions; edges show the volume or value of trade between them. Network structure helps visualize dependencies, hubs, and how shocks might propagate.",
+    inSimpleTerms:
+      "Who trades with whom. A network chart shows how countries are connected by trade flows.",
+  },
+  energy_geopolitics: {
+    title: "Energy geopolitics",
+    description:
+      "The interplay between energy resources, trade, and political power. Oil-exporting countries gain leverage; importers depend on supply chains. Sanctions, conflicts, and OPEC decisions shape these relationships.",
+    inSimpleTerms:
+      "How oil and politics shape global relationships. Who controls supply, who depends on it, and how that affects power.",
+  },
+  export_dependencies: {
+    title: "Export dependencies",
+    description:
+      "The extent to which countries rely on specific export partners or markets. High dependency on few buyers or sellers can create vulnerability or leverage.",
+    inSimpleTerms:
+      "How much a country depends on selling to or buying from certain partners. More dependence can mean more risk.",
   },
 };
 

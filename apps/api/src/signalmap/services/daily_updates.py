@@ -187,6 +187,25 @@ def update_youtube_channel_snapshots() -> dict[str, Any]:
         return {"rows_added": 0, "channels_updated": 0, "error": str(e)}
 
 
+def update_oil_trade_network() -> dict[str, Any]:
+    """Refresh latest year of oil trade edges from Comtrade. Idempotent upsert."""
+    if not _has_db():
+        logger.warning("oil_trade_network: DATABASE_URL not set, skipping")
+        return {"rows_added": 0, "error": "no db"}
+
+    try:
+        from signalmap.services.oil_trade_network import get_oil_trade_network
+        current_year = datetime.now().year
+        result = get_oil_trade_network(start_year=current_year, end_year=current_year, force_refresh=True)
+        years = result.get("years") or {}
+        total_edges = sum(len(edges) for edges in years.values())
+        logger.info("oil_trade_network: refreshed year %s, edges=%s", current_year, total_edges)
+        return {"rows_added": total_edges, "year": current_year}
+    except Exception as e:
+        logger.exception("oil_trade_network: %s", e)
+        return {"rows_added": 0, "error": str(e)}
+
+
 def update_oil_production_exporters() -> dict[str, Any]:
     """Append-only update for oil production (Saudi, Russia, Iran). Idempotent."""
     if not _has_db():
@@ -251,6 +270,7 @@ DATA_SOURCE_UPDATERS: dict[str, Callable[[], dict[str, Any]]] = {
     "gold": update_gold_prices,
     "fx_dual": update_dual_fx_rates,
     "oil_production_exporters": update_oil_production_exporters,
+    "oil_trade_network": update_oil_trade_network,
     "youtube_followers": update_youtube_channel_snapshots,
 }
 

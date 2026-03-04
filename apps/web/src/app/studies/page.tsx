@@ -27,8 +27,8 @@ const SECTIONS: { title: string; description: string; studyIds: string[]; startH
   },
   {
     title: "Audience dynamics (growth & networks)",
-    description: "Follower growth and simple growth models.",
-    studyIds: ["follower_growth_dynamics"],
+    description: "Follower growth, simple growth models, and network prototypes.",
+    studyIds: ["follower_growth_dynamics", "oil_trade_network"],
   },
 ];
 

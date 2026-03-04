@@ -12,7 +12,8 @@ export type PrimarySignal =
   | { kind: "events_timeline" }
   | { kind: "follower_growth_dynamics" }
   | { kind: "fx_usd_irr_dual" }
-  | { kind: "wage_cpi_real" };
+  | { kind: "wage_cpi_real" }
+  | { kind: "oil_trade_network" };
 
 import type { ConceptKey } from "./concepts";
 
@@ -198,6 +199,17 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "fx_usd_irr_dual" },
     concepts: ["multiple_exchange_rates", "official_exchange_rate", "fx_rate", "capital_controls", "price_controls", "measurement_vs_reality", "fx_spread", "derived_series"],
+  },
+  {
+    id: "oil_trade_network",
+    number: 15,
+    title: "Oil trade network",
+    timeRange: ["2018", "2023"],
+    description:
+      "Network view of crude oil trade between major exporting and importing countries. Nodes represent countries; edges show directional trade flows (thousand barrels per day).",
+    status: "active",
+    primarySignal: { kind: "oil_trade_network" },
+    concepts: ["trade_networks", "energy_geopolitics", "export_dependencies"],
   },
   {
     id: "iran_real_wage_cpi",
