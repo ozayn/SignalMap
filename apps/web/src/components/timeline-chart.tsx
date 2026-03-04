@@ -191,12 +191,14 @@ export function TimelineChart({
       saudi: "hsl(142, 55%, 38%)",
       russia: "hsl(0, 60%, 50%)",
       iran: "hsl(35, 85%, 52%)",
+      total: "hsl(0, 0%, 55%)",
     };
     const productionSymbols: Record<string, "circle" | "diamond" | "triangle" | "roundRect"> = {
       us: "circle",
       saudi: "diamond",
       russia: "triangle",
       iran: "roundRect",
+      total: "circle",
     };
 
     const getEventScope = (ev: TimelineEvent): "iran" | "world" | "sanctions" =>
@@ -858,6 +860,7 @@ export function TimelineChart({
                 const isWageReal = s.key === "real";
                 const isWageIndex = s.key === "index";
                 const isProductionKey = s.key in productionColors;
+                const isTotal = s.key === "total";
                 const lineColor = isProductionKey
                   ? productionColors[s.key]
                   : isGold
@@ -879,6 +882,7 @@ export function TimelineChart({
                                   : oilColorMuted;
                 const lineWidth = isGold || isOil || isProductionKey ? 1.5 : 1;
                 const symbolSize = isGold ? 4 : isOil ? 3 : isProductionKey ? 3 : 2.5;
+                const lineType = isTotal ? ("dashed" as const) : undefined;
                 const symbol = isProductionKey
                   ? productionSymbols[s.key]
                   : isGold
@@ -908,11 +912,11 @@ export function TimelineChart({
                   step: (isGold ? "start" : false) as "start" | false,
                   symbol: symbol as "circle" | "diamond" | "triangle" | "roundRect",
                   symbolSize,
-                  lineStyle: { color: lineColor, width: lineWidth },
+                  lineStyle: { color: lineColor, width: lineWidth, ...(lineType ? { type: lineType } : {}) },
                   itemStyle: { color: lineColor },
                   emphasis: {
                     focus: "none" as const,
-                    lineStyle: { color: lineColor, width: lineWidth },
+                    lineStyle: { color: lineColor, width: lineWidth, ...(lineType ? { type: lineType } : {}) },
                     itemStyle: { color: lineColor },
                   },
                   markPoint:

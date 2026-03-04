@@ -238,6 +238,7 @@ def update_oil_production_exporters() -> dict[str, Any]:
                 )
                 total += n
         logger.info("oil_production_exporters: rows_added=%s", total)
+        logger.info("Oil production exporters updated")
         return {"rows_added": total}
     except Exception as e:
         logger.exception("oil_production_exporters: %s", e)

@@ -200,6 +200,7 @@ export default function StudyDetailPage() {
   const [productionSaudiPoints, setProductionSaudiPoints] = useState<{ date: string; value: number }[]>([]);
   const [productionRussiaPoints, setProductionRussiaPoints] = useState<{ date: string; value: number }[]>([]);
   const [productionIranPoints, setProductionIranPoints] = useState<{ date: string; value: number }[]>([]);
+  const [productionTotalPoints, setProductionTotalPoints] = useState<{ date: string; value: number }[]>([]);
   const [productionSource, setProductionSource] = useState<{ name: string; url?: string; publisher?: string } | null>(null);
   const [fxDualOfficialPoints, setFxDualOfficialPoints] = useState<{ date: string; value: number }[]>([]);
   const [fxDualOpenPoints, setFxDualOpenPoints] = useState<{ date: string; value: number }[]>([]);
@@ -284,6 +285,7 @@ export default function StudyDetailPage() {
     extendedProductionSaudiPoints,
     extendedProductionRussiaPoints,
     extendedProductionIranPoints,
+    extendedProductionTotalPoints,
     productionExtendedDates,
     productionLastOfficialDate,
   } = useMemo(() => {
@@ -302,6 +304,7 @@ export default function StudyDetailPage() {
     const saudi = extend(productionSaudiPoints);
     const russia = extend(productionRussiaPoints);
     const iran = extend(productionIranPoints);
+    const total = extend(productionTotalPoints);
     const allLastDates = [
       ...productionUsPoints.map((p) => p.date),
       ...productionSaudiPoints.map((p) => p.date),
@@ -318,10 +321,11 @@ export default function StudyDetailPage() {
       extendedProductionSaudiPoints: saudi,
       extendedProductionRussiaPoints: russia,
       extendedProductionIranPoints: iran,
+      extendedProductionTotalPoints: total,
       productionExtendedDates: extendedDates,
       productionLastOfficialDate: lastOfficial ? lastOfficial.slice(0, 4) : undefined,
     };
-  }, [productionUsPoints, productionSaudiPoints, productionRussiaPoints, productionIranPoints]);
+  }, [productionUsPoints, productionSaudiPoints, productionRussiaPoints, productionIranPoints, productionTotalPoints]);
 
   const fxDualTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isFxUsdIrrDual) return null;
@@ -732,6 +736,7 @@ export default function StudyDetailPage() {
         setProductionSaudiPoints([]);
         setProductionRussiaPoints([]);
         setProductionIranPoints([]);
+        setProductionTotalPoints([]);
         setProductionSource(null);
       }
       return;
@@ -741,7 +746,7 @@ export default function StudyDetailPage() {
     setLoading(true);
     setError(null);
     fetchJson<{
-      data: Array<{ date: string; us?: number | null; saudi_arabia?: number | null; russia?: number | null; iran?: number | null }>;
+      data: Array<{ date: string; us?: number | null; saudi_arabia?: number | null; russia?: number | null; iran?: number | null; total_production?: number | null }>;
       source?: { name: string; url?: string; publisher?: string };
     }>(`/api/signals/oil/production-exporters?start=${start}&end=${end}`)
       .then((res) => {
@@ -750,16 +755,19 @@ export default function StudyDetailPage() {
           const saudi: { date: string; value: number }[] = [];
           const russia: { date: string; value: number }[] = [];
           const iran: { date: string; value: number }[] = [];
+          const total: { date: string; value: number }[] = [];
           for (const r of res.data) {
             if (r.us != null) us.push({ date: r.date, value: r.us });
             if (r.saudi_arabia != null) saudi.push({ date: r.date, value: r.saudi_arabia });
             if (r.russia != null) russia.push({ date: r.date, value: r.russia });
             if (r.iran != null) iran.push({ date: r.date, value: r.iran });
+            if (r.total_production != null) total.push({ date: r.date, value: r.total_production });
           }
           setProductionUsPoints(us);
           setProductionSaudiPoints(saudi);
           setProductionRussiaPoints(russia);
           setProductionIranPoints(iran);
+          setProductionTotalPoints(total);
           setProductionSource(res.source ?? null);
         }
       })
@@ -769,6 +777,7 @@ export default function StudyDetailPage() {
           setProductionSaudiPoints([]);
           setProductionRussiaPoints([]);
           setProductionIranPoints([]);
+          setProductionTotalPoints([]);
           setProductionSource(null);
           setError(e instanceof Error ? e.message : "Signal fetch failed");
         }
@@ -1095,10 +1104,21 @@ export default function StudyDetailPage() {
         if (exportCapacityProxyPoints.length > 0) arrays.push(exportCapacityProxyPoints);
       }
       if (isOilProductionMajorExporters) {
-        if (productionUsPoints.length > 0) arrays.push(productionUsPoints);
-        if (productionSaudiPoints.length > 0) arrays.push(productionSaudiPoints);
-        if (productionRussiaPoints.length > 0) arrays.push(productionRussiaPoints);
-        if (productionIranPoints.length > 0) arrays.push(productionIranPoints);
+        const currentYear = new Date().getFullYear();
+        const excludeExtendedAndProjected = (pts: { date: string }[]) => {
+          let filtered = pts;
+          if (productionExtendedDates.length > 0) {
+            filtered = filtered.filter((p) => !productionExtendedDates.includes(p.date));
+          }
+          return filtered.filter((p) => {
+            const year = parseInt(p.date.slice(0, 4), 10);
+            return year < currentYear;
+          });
+        };
+        if (productionUsPoints.length > 0) arrays.push(excludeExtendedAndProjected(productionUsPoints));
+        if (productionSaudiPoints.length > 0) arrays.push(excludeExtendedAndProjected(productionSaudiPoints));
+        if (productionRussiaPoints.length > 0) arrays.push(excludeExtendedAndProjected(productionRussiaPoints));
+        if (productionIranPoints.length > 0) arrays.push(excludeExtendedAndProjected(productionIranPoints));
       }
       if (isFollowerGrowthDynamics && fgData) {
         const list = fgData.snapshots ?? fgData.results ?? [];
@@ -2379,6 +2399,9 @@ export default function StudyDetailPage() {
                   { key: "saudi", label: "Saudi Arabia", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionSaudiPoints },
                   { key: "russia", label: "Russia", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionRussiaPoints },
                   { key: "iran", label: "Iran", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionIranPoints },
+                  ...(extendedProductionTotalPoints.length > 0
+                    ? [{ key: "total", label: "Total (US + Saudi + Russia + Iran)", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionTotalPoints }]
+                    : []),
                 ]}
                 timeRange={productionTimeRange ?? study.timeRange}
                 extendedDates={productionExtendedDates}

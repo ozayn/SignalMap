@@ -17,6 +17,7 @@ from signalmap.sources.fred_cpi import fetch_cpi_series
 from signalmap.sources.world_bank_ppp import fetch_iran_ppp_series, fetch_turkey_ppp_series
 from signalmap.sources.fred_iran_fx import fetch_iran_fx_series
 from signalmap.sources.rial_archive_usd_toman import fetch_archive_usd_toman_series
+from signalmap.data.oil_production_exporters import SOURCE as OIL_PRODUCTION_SOURCE_NAME, UNIT as OIL_PRODUCTION_UNIT
 from signalmap.sources.oil_production_exporters import fetch_oil_production_exporters
 from signalmap.store.signals_repo import get_points, upsert_points
 from signalmap.utils.ttl_cache import get as cache_get, set as cache_set
@@ -632,7 +633,7 @@ def get_usd_irr_dual_series(start: str, end: str) -> dict:
 
 
 OIL_PRODUCTION_SOURCE = {
-    "name": "EIA / IMF",
+    "name": OIL_PRODUCTION_SOURCE_NAME,
     "publisher": "U.S. Energy Information Administration, International Monetary Fund",
     "url": "https://www.eia.gov/international/content/analysis/countries_long/",
     "notes": "Annual crude oil production. US and Russia: EIA. Saudi Arabia and Iran: IMF REO (FRED).",
@@ -672,11 +673,17 @@ def get_oil_production_exporters_series(start: str, end: str) -> dict:
             by_date.setdefault(r["date"], {"date": r["date"]})["russia"] = r["value"]
         for r in iran_rows:
             by_date.setdefault(r["date"], {"date": r["date"]})["iran"] = r["value"]
+        for row in by_date.values():
+            u = row.get("us") or 0
+            s = row.get("saudi_arabia") or 0
+            ru = row.get("russia") or 0
+            ir = row.get("iran") or 0
+            row["total_production"] = round(u + s + ru + ir, 2)
         data = sorted(by_date.values(), key=lambda x: x["date"])
         result = {
             "data": data,
             "source": OIL_PRODUCTION_SOURCE,
-            "unit": "million barrels per day",
+            "unit": OIL_PRODUCTION_UNIT,
             "resolution": "annual",
         }
         cache_set(ck, result, CACHE_TTL)
@@ -690,7 +697,7 @@ def get_oil_production_exporters_series(start: str, end: str) -> dict:
     result = {
         "data": data,
         "source": OIL_PRODUCTION_SOURCE,
-        "unit": "million barrels per day",
+        "unit": OIL_PRODUCTION_UNIT,
         "resolution": "annual",
     }
     cache_set(ck, result, CACHE_TTL)
