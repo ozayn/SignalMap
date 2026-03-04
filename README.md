@@ -56,6 +56,7 @@ Add a **Postgres** database and link it to the API service for Wayback jobs (cac
 |---------|----------|-------|
 | Web | `API_URL` | **Required.** Backend URL for server-side proxy: `https://api-production-XXXX.up.railway.app` or `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:8080` |
 | API | `DATABASE_URL` | Postgres URL (link Postgres service). Required for Wayback jobs. |
+| API | `FRED_API_KEY` | **Required for Brent oil.** FRED API key for DCOILBRENTEU. Get one at [fred.stlouisfed.org/docs/api](https://fred.stlouisfed.org/docs/api/api_key.html). Do not commit. |
 | API | `YOUTUBE_API_KEY` | Optional. YouTube Data API v3 key for channel snapshots (subscriber/view/video counts). Create at [Google Cloud Console](https://console.cloud.google.com/apis/credentials); do not commit real keys. |
 | API | `YOUTUBE_DAILY_UPDATE_CHANNELS` | Optional. Comma-separated handles or channel IDs to refresh daily via cron (e.g. `googledevelopers,@bpluspodcast`). |
 | API | `WEB_ORIGIN` | Optional. Web URL for CORS (only needed if clients hit API directly) |
@@ -77,3 +78,5 @@ curl -X POST https://your-api.up.railway.app/api/cron/update-all
 **Schedule it:** Use [Railway Cron](https://docs.railway.app/reference/cron-jobs), [cron-job.org](https://cron-job.org), or GitHub Actions. Idempotent—safe to run multiple times.
 
 **YouTube channels:** Set `YOUTUBE_DAILY_UPDATE_CHANNELS` (comma-separated handles or channel IDs) and `YOUTUBE_API_KEY` to refresh channel snapshots daily.
+
+**FRED API (Brent oil):** Required for oil signals and cron updates. Local: `export FRED_API_KEY=your_key`. Railway: Add `FRED_API_KEY` in API service variables. Get a key at [fred.stlouisfed.org/docs/api](https://fred.stlouisfed.org/docs/api/api_key.html).

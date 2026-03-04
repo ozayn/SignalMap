@@ -1,71 +1,64 @@
-"""Fetch Brent crude oil price from FRED (DCOILBRENTEU)."""
+"""Fetch Brent crude oil price from FRED (DCOILBRENTEU) via official API."""
 
-import csv
-import io
-import re
+import os
 from typing import Any
 
 import httpx
 
-FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DCOILBRENTEU"
+FRED_OBSERVATIONS_URL = "https://api.stlouisfed.org/fred/series/observations"
+SERIES_ID = "DCOILBRENTEU"
 USER_AGENT = "SignalMap/1.0 (research; +https://github.com/ozayn/SignalMap)"
-FRED_TXT_URL = "https://fred.stlouisfed.org/data/DCOILBRENTEU.txt"
-_DATA_LINE = re.compile(r"^[|]?(\d{4}-\d{2}-\d{2})\s*[|]\s*([^|]+)")
 
 
-def _parse_csv(text: str) -> list[dict[str, Any]]:
-    """Parse FRED CSV. Columns: observation_date or DATE, DCOILBRENTEU or VALUE."""
-    reader = csv.DictReader(io.StringIO(text))
-    rows = []
-    for row in reader:
-        date = (row.get("observation_date") or row.get("DATE") or "").strip()
-        val = (row.get("DCOILBRENTEU") or row.get("VALUE") or "").strip()
-        if not date or not val or val == ".":
-            continue
-        try:
-            v = float(val)
-        except ValueError:
-            continue
-        rows.append({"date": date, "value": round(v, 2)})
-    return rows
+def _require_api_key() -> str:
+    key = (os.getenv("FRED_API_KEY") or "").strip()
+    if not key:
+        raise ValueError("FRED_API_KEY not configured. Set it in the environment.")
+    return key
 
 
-def _parse_txt(text: str) -> list[dict[str, Any]]:
-    """Parse FRED data txt. Format: DATE|VALUE (skip metadata and # lines)."""
-    rows = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "|" not in line:
-            continue
-        m = _DATA_LINE.match(line)
-        if not m:
-            continue
-        date, val = m.group(1), m.group(2).strip().rstrip("|")
+def fetch_brent_from_fred(start_date: str, end_date: str | None = None) -> list[dict[str, Any]]:
+    """
+    Fetch Brent oil observations from FRED API.
+    Uses observation_start for incremental fetching.
+    Returns [{date, value}, ...] sorted by date ascending.
+    Ignores "." missing values.
+    """
+    api_key = _require_api_key()
+    params: dict[str, str] = {
+        "series_id": SERIES_ID,
+        "api_key": api_key,
+        "file_type": "json",
+        "observation_start": start_date,
+    }
+    if end_date:
+        params["observation_end"] = end_date
+
+    with httpx.Client(timeout=20.0, headers={"User-Agent": USER_AGENT}) as client:
+        r = client.get(FRED_OBSERVATIONS_URL, params=params)
+        r.raise_for_status()
+        data = r.json()
+
+    observations = data.get("observations") or []
+    points: list[dict[str, Any]] = []
+    for obs in observations:
+        val = (obs.get("value") or "").strip()
         if not val or val == ".":
             continue
         try:
             v = float(val)
         except ValueError:
             continue
-        rows.append({"date": date, "value": round(v, 2)})
-    return rows
+        date = obs.get("date", "").strip()
+        if date:
+            points.append({"date": date, "value": round(v, 2)})
+    return sorted(points, key=lambda p: p["date"])
 
 
 def fetch_brent_series() -> list[dict[str, Any]]:
     """
-    Fetch full Brent crude oil price series from FRED (DCOILBRENTEU).
-    Returns [{date, value}, ...] sorted by date ascending.
-    Skips missing values (".").
+    Fetch full Brent series from FRED API.
+    Used by get_brent_series when DB is empty. Uses BRENT_DAILY_START.
     """
-    with httpx.Client(timeout=20.0, headers={"User-Agent": USER_AGENT}, follow_redirects=True) as client:
-        try:
-            r = client.get(FRED_CSV_URL)
-            r.raise_for_status()
-            parsed = _parse_csv(r.text)
-        except Exception:
-            r = client.get(FRED_TXT_URL)
-            r.raise_for_status()
-            parsed = _parse_txt(r.text)
-    if not parsed:
-        raise ValueError("No valid data from FRED")
-    return sorted(parsed, key=lambda p: p["date"])
+    from signalmap.data.oil_annual import BRENT_DAILY_START
+    return fetch_brent_from_fred(BRENT_DAILY_START)

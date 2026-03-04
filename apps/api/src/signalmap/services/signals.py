@@ -12,7 +12,7 @@ from signalmap.data.iran_wage_cpi import (
 )
 from signalmap.data.oil_annual import BRENT_DAILY_START, OIL_ANNUAL_EIA
 from signalmap.sources.bonbast_usd_toman import fetch_usd_toman_series
-from signalmap.sources.fred_brent import fetch_brent_series
+from signalmap.sources.fred_brent import fetch_brent_from_fred
 from signalmap.sources.fred_cpi import fetch_cpi_series
 from signalmap.sources.world_bank_ppp import fetch_iran_ppp_series, fetch_turkey_ppp_series
 from signalmap.sources.fred_iran_fx import fetch_iran_fx_series
@@ -122,8 +122,7 @@ def get_brent_series(start: str, end: str) -> dict:
         cache_set(ck, result, CACHE_TTL)
         return result
 
-    full = fetch_brent_series()
-    points = [p for p in full if start <= p["date"] <= end]
+    points = fetch_brent_from_fred(start, end)
     if points:
         upsert_points(
             SIGNAL_BRENT,

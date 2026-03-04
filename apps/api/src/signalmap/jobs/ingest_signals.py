@@ -70,10 +70,9 @@ def main() -> int:
         return 1
 
     if args.signal == "brent":
-        from signalmap.sources.fred_brent import fetch_brent_series
+        from signalmap.sources.fred_brent import fetch_brent_from_fred
 
-        full = fetch_brent_series()
-        points = [p for p in full if start_str <= p["date"] <= end_str]
+        points = fetch_brent_from_fred(start_str, end_str)
         count = upsert_points(
             "brent_oil_price",
             points,

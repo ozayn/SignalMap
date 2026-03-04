@@ -38,10 +38,9 @@ def update_brent_prices() -> dict[str, Any]:
         if start_date > end_date:
             return {"rows_added": 0, "start_date": start_date, "end_date": end_date}
 
-        from signalmap.sources.fred_brent import fetch_brent_series
+        from signalmap.sources.fred_brent import fetch_brent_from_fred
 
-        full = fetch_brent_series()
-        points = [p for p in full if start_date <= p["date"] <= end_date]
+        points = fetch_brent_from_fred(start_date, end_date)
         rows = insert_points_ignore_conflict(
             SIGNAL_BRENT,
             points,
