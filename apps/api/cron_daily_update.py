@@ -11,6 +11,7 @@ Exits when done. Requires DATABASE_URL, FRED_API_KEY (for oil).
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 # Ensure src is on path (when run from /app in container)
@@ -32,6 +33,9 @@ from signalmap.services.daily_updates import update_all_data_sources
 def main() -> int:
     result = update_all_data_sources()
     print(json.dumps(result, indent=2))
+    # Allow DB connections to close gracefully before process exit.
+    # Avoids TCP_ABORT_ON_DATA when Railway tears down the cron process.
+    time.sleep(0.5)
     return 0
 
 
