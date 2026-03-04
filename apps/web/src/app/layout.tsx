@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Link from "next/link";
+import Script from "next/script";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -15,6 +16,10 @@ export const metadata: Metadata = {
     icon: [{ url: "/favicon.ico", type: "image/svg+xml" }],
   },
 };
+
+const gaId =
+  process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || process.env.GA_MEASUREMENT_ID || "";
+const isProduction = process.env.NODE_ENV === "production";
 
 const navLinks = [
   { href: "/studies", label: "Studies" },
@@ -31,6 +36,22 @@ export default function RootLayout({
       <body className={`${inter.variable} font-sans antialiased min-h-screen`} suppressHydrationWarning>
         <ThemeProvider>
           <SuppressDevLogs />
+          {isProduction && gaId && (
+            <>
+              <Script
+                src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
+                strategy="afterInteractive"
+              />
+              <Script id="ga-init" strategy="afterInteractive">
+                {`
+                  window.dataLayer = window.dataLayer || [];
+                  function gtag(){dataLayer.push(arguments);}
+                  gtag('js', new Date());
+                  gtag('config', '${gaId}');
+                `}
+              </Script>
+            </>
+          )}
           <header className="border-b border-border bg-background">
             <nav className="container mx-auto max-w-4xl px-4 py-4 flex items-center justify-between">
               <div className="flex items-center gap-8">
