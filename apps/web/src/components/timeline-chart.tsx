@@ -77,6 +77,10 @@ type TimelineChartProps = {
   chartHeight?: string;
   /** Override grid.right (e.g. "12%") to align x-axis with another chart above. */
   gridRight?: string;
+  /** Dates that are synthetic extensions (e.g. current year when data ends earlier). */
+  extendedDates?: string[];
+  /** Last official data year for extension tooltip (e.g. "2025"). */
+  lastOfficialDateForExtension?: string;
 };
 
 function findEventIndex(dates: string[], eventDate: string): number | null {
@@ -160,6 +164,8 @@ export function TimelineChart({
   showOilShocks = true,
   chartHeight = "h-80",
   gridRight: gridRightOverride,
+  extendedDates = [],
+  lastOfficialDateForExtension,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
@@ -559,6 +565,9 @@ export function TimelineChart({
                   : "—";
               lines.push(`${s.label}: ${formatted}`);
             });
+            if (extendedDates.includes(dateStr) && lastOfficialDateForExtension) {
+              lines.push(`<span style="font-size:10px;color:#888">Estimated extension (latest official data: ${lastOfficialDateForExtension})</span>`);
+            }
           } else if (hasOil) {
             const oilVal = oilValuesForChart[idx];
             const unit = secondSeries?.unit ?? "USD/barrel";
@@ -1176,7 +1185,7 @@ export function TimelineChart({
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
     };
-  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods, oilShockDates, showOilShocks, gridRightOverride, xLabelRotate]);
+  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods, oilShockDates, showOilShocks, gridRightOverride, xLabelRotate, extendedDates, lastOfficialDateForExtension]);
 
   useEffect(() => {
     return () => {

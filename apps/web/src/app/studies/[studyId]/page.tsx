@@ -278,6 +278,51 @@ export default function StudyDetailPage() {
     return study.timeRange;
   }, [study, isOilProductionMajorExporters]);
 
+  /** Extend annual production series to current year for display; synthetic points flagged for tooltip. */
+  const {
+    extendedProductionUsPoints,
+    extendedProductionSaudiPoints,
+    extendedProductionRussiaPoints,
+    extendedProductionIranPoints,
+    productionExtendedDates,
+    productionLastOfficialDate,
+  } = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const extend = (points: { date: string; value: number }[]) => {
+      if (points.length === 0) return [];
+      const last = points[points.length - 1]!;
+      const lastYear = parseInt(last.date.slice(0, 4), 10);
+      if (currentYear <= lastYear) return points;
+      return [
+        ...points,
+        { date: `${currentYear}-01-01`, value: last.value, isExtended: true },
+      ];
+    };
+    const us = extend(productionUsPoints);
+    const saudi = extend(productionSaudiPoints);
+    const russia = extend(productionRussiaPoints);
+    const iran = extend(productionIranPoints);
+    const allLastDates = [
+      ...productionUsPoints.map((p) => p.date),
+      ...productionSaudiPoints.map((p) => p.date),
+      ...productionRussiaPoints.map((p) => p.date),
+      ...productionIranPoints.map((p) => p.date),
+    ];
+    const lastOfficial = allLastDates.length > 0 ? allLastDates.sort().at(-1)! : "";
+    const extendedDates =
+      currentYear > parseInt(lastOfficial.slice(0, 4), 10)
+        ? [`${currentYear}-01-01`]
+        : [];
+    return {
+      extendedProductionUsPoints: us,
+      extendedProductionSaudiPoints: saudi,
+      extendedProductionRussiaPoints: russia,
+      extendedProductionIranPoints: iran,
+      productionExtendedDates: extendedDates,
+      productionLastOfficialDate: lastOfficial ? lastOfficial.slice(0, 4) : undefined,
+    };
+  }, [productionUsPoints, productionSaudiPoints, productionRussiaPoints, productionIranPoints]);
+
   const fxDualTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isFxUsdIrrDual) return null;
     return study.timeRange;
@@ -2330,12 +2375,14 @@ export default function StudyDetailPage() {
                 label="Oil production"
                 events={events}
                 multiSeries={[
-                  { key: "us", label: "United States", yAxisIndex: 0, unit: "million bbl/day", points: productionUsPoints },
-                  { key: "saudi", label: "Saudi Arabia", yAxisIndex: 0, unit: "million bbl/day", points: productionSaudiPoints },
-                  { key: "russia", label: "Russia", yAxisIndex: 0, unit: "million bbl/day", points: productionRussiaPoints },
-                  { key: "iran", label: "Iran", yAxisIndex: 0, unit: "million bbl/day", points: productionIranPoints },
+                  { key: "us", label: "United States", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionUsPoints },
+                  { key: "saudi", label: "Saudi Arabia", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionSaudiPoints },
+                  { key: "russia", label: "Russia", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionRussiaPoints },
+                  { key: "iran", label: "Iran", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionIranPoints },
                 ]}
                 timeRange={productionTimeRange ?? study.timeRange}
+                extendedDates={productionExtendedDates}
+                lastOfficialDateForExtension={productionLastOfficialDate}
               />
               <LearningNote
                 sections={[
