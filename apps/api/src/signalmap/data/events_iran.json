@@ -151,5 +151,23 @@
     "description": "Protests and domestic unrest continue into early 2026.",
     "sources": ["https://en.wikipedia.org/wiki/2025%E2%80%932026_Iranian_protests"],
     "confidence": "high"
+  },
+  {
+    "id": "ir-018",
+    "title": "Khamenei killed in Israeli-US strikes",
+    "date": "2026-03-01",
+    "type": "political",
+    "description": "Supreme Leader Ayatollah Ali Khamenei killed in Israeli and U.S. strikes on his Tehran office; succession crisis and leadership council assumes power.",
+    "sources": ["https://www.reuters.com/world/middle-east/khamenei-killing-shatters-irans-order-triggers-high-stakes-succession-race-2026-03-01/"],
+    "confidence": "high"
+  },
+  {
+    "id": "ir-019",
+    "title": "Iran drone boat attacks on oil tankers",
+    "date": "2026-03-04",
+    "type": "political",
+    "description": "Iran deploys exploding drone boats for the first time in the conflict, striking oil tankers in the Strait of Hormuz and Gulf of Oman; threatens to close the strait.",
+    "sources": ["https://www.abc.net.au/news/2026-03-04/iran-drone-boats-attack-oil-tankers-strait-hormuz-gulf-oman/106408958"],
+    "confidence": "high"
   }
 ]

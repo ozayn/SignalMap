@@ -1,6 +1,7 @@
 """
 Events for the standalone timeline study (1900–present). Categorized for reference use.
 Event IDs are reusable for overlays in other studies.
+Iran domestic 2021+: from events_iran.json (canonical).
 """
 
 EVENTS_CATEGORIES = [
@@ -10,7 +11,7 @@ EVENTS_CATEGORIES = [
     "energy_markets",
 ]
 
-EVENTS_IRAN_DOMESTIC: list[dict] = [
+EVENTS_IRAN_DOMESTIC_PRE_2021: list[dict] = [
     {"id": "ir-1979-revolution", "title": "Iranian Revolution", "category": "iran_domestic", "date_start": "1978-01-01", "date_end": "1979-02-11", "description": "Widespread protests and strikes lead to fall of the monarchy; Islamic Republic established."},
     {"id": "iran-1997-khatami", "title": "Khatami inaugurated", "category": "iran_domestic", "date_start": "1997-08-03", "date_end": None, "description": "Mohammad Khatami became president; reformist policies followed."},
     {"id": "iran-2005-ahmadinejad", "title": "Ahmadinejad inaugurated", "category": "iran_domestic", "date_start": "2005-08-03", "date_end": None, "description": "Mahmoud Ahmadinejad became president."},
@@ -18,12 +19,19 @@ EVENTS_IRAN_DOMESTIC: list[dict] = [
     {"id": "iran-2013-rouhani", "title": "Rouhani inaugurated", "category": "iran_domestic", "date_start": "2013-08-03", "date_end": None, "description": "Hassan Rouhani became president; nuclear negotiations intensify."},
     {"id": "iran-2015-jcpoa", "title": "JCPOA finalized", "category": "iran_domestic", "date_start": "2015-07-14", "date_end": None, "description": "Joint Comprehensive Plan of Action agreed between Iran and P5+1."},
     {"id": "iran-2018-us-withdrawal", "title": "US withdraws from JCPOA", "category": "iran_domestic", "date_start": "2018-05-08", "date_end": None, "description": "US announces withdrawal from nuclear agreement."},
-    {"id": "iran-2021-raisi-elected", "title": "Raisi elected president", "category": "iran_domestic", "date_start": "2021-06-18", "date_end": None, "description": "Ebrahim Raisi wins presidential election amid low turnout."},
-    {"id": "iran-2021-raisi-inaugurated", "title": "Raisi sworn in", "category": "iran_domestic", "date_start": "2021-08-03", "date_end": None, "description": "Ebrahim Raisi inaugurated as president."},
-    {"id": "iran-2022-amini-protests", "title": "Mahsa Amini protests begin", "category": "iran_domestic", "date_start": "2022-09-16", "date_end": None, "description": "Nationwide protests following death of Mahsa Amini in custody."},
-    {"id": "iran-2024-raisi-crash", "title": "Raisi helicopter crash", "category": "iran_domestic", "date_start": "2024-05-19", "date_end": None, "description": "President Raisi and foreign minister killed in helicopter crash."},
+]
+
+EVENTS_IRAN_DOMESTIC_PEZEHSKIAN: list[dict] = [
     {"id": "president-pezeshkian", "title": "Pezeshkian inaugurated", "category": "iran_domestic", "date_start": "2024-07-28", "date_end": None, "description": "Masoud Pezeshkian became president."},
 ]
+
+
+def _get_events_iran_domestic() -> list[dict]:
+    from signalmap.data.events_iran_loader import load_events_iran_json
+    return EVENTS_IRAN_DOMESTIC_PRE_2021 + load_events_iran_json() + EVENTS_IRAN_DOMESTIC_PEZEHSKIAN
+
+
+EVENTS_IRAN_DOMESTIC: list[dict] = _get_events_iran_domestic()
 
 EVENTS_IRAN_EXTERNAL: list[dict] = [
     {"id": "sn-001", "title": "US sanctions after hostage crisis", "category": "iran_external", "date_start": "1979-11-01", "date_end": None, "description": "US froze Iranian assets and imposed sanctions following embassy seizure."},
