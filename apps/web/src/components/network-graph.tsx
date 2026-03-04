@@ -31,18 +31,21 @@ function getNodePosition(
   id: string,
   index: number,
   total: number,
-  width: number,
-  height: number,
-  margin: number = 80
+  graphLeft: number,
+  graphTop: number,
+  graphSize: number
 ): [number, number] {
-  const w = Math.max(300, width - margin * 2);
-  const h = Math.max(300, height - margin * 2);
   const pos = NODE_POSITIONS[id];
   if (pos) {
-    return [margin + (pos[0] / 100) * w, margin + (pos[1] / 100) * h];
+    return [
+      graphLeft + (pos[0] / 100) * graphSize,
+      graphTop + (pos[1] / 100) * graphSize,
+    ];
   }
   const angle = (index / total) * 2 * Math.PI;
-  return [width / 2 + 150 * Math.cos(angle), height / 2 + 150 * Math.sin(angle)];
+  const cx = graphLeft + graphSize / 2;
+  const cy = graphTop + graphSize / 2;
+  return [cx + (graphSize / 4) * Math.cos(angle), cy + (graphSize / 4) * Math.sin(angle)];
 }
 
 type NetworkGraphProps = {
@@ -75,7 +78,9 @@ export function NetworkGraph({ nodes, edges, year }: NetworkGraphProps) {
     const { width, height } = containerSize;
     const isMobile = width < 768;
     const nodeSizeScale = isMobile ? 0.6 : 1;
-    const margin = isMobile ? 40 : 80;
+    const graphSize = Math.max(300, Math.min(width - 80, height - 80));
+    const graphLeft = (width - graphSize) / 2;
+    const graphTop = (height - graphSize) / 2;
 
     // Compute trade role per node: source = exporter, target = importer
     const totalExports: Record<string, number> = {};
@@ -101,26 +106,30 @@ export function NetworkGraph({ nodes, edges, year }: NetworkGraphProps) {
       else if (exportRatio <= 0.4) color = "#60a5fa"; // mostly importer
       else color = "#3b82f6"; // balanced
 
-      const [x, y] = getNodePosition(n.id, i, nodes.length, width, height, margin);
+      const [x, y] = getNodePosition(n.id, i, nodes.length, graphLeft, graphTop, graphSize);
       // Nodes on the right edge: place label to the left so it stays visible
       const pos = NODE_POSITIONS[n.id];
       const labelPosition = pos && pos[0] >= 80 ? ("left" as const) : ("right" as const);
 
-      const baseSize = 18 + Math.sqrt(totalTrade);
+      const nodeSize = 18 + Math.sqrt(totalTrade);
       const showLabel = isMobile ? MAJOR_NODES.has(n.id) : true;
 
       return {
         name: n.id,
         x,
         y,
-        symbolSize: baseSize * nodeSizeScale,
+        symbol: "circle",
+        symbolSize: nodeSize * nodeSizeScale,
         itemStyle: { color },
         label: {
           show: showLabel,
-          fontSize: isMobile ? 11 : 13,
+          fontSize: 13,
           fontWeight: 500,
+          color: "#374151",
           position: labelPosition,
-          distance: 7,
+          distance: 6,
+          backgroundColor: "rgba(255,255,255,0.8)",
+          padding: [2, 4],
         },
         emphasis: {
           label: { show: true },
@@ -133,11 +142,14 @@ export function NetworkGraph({ nodes, edges, year }: NetworkGraphProps) {
       source: e.source,
       target: e.target,
       lineStyle: {
-        width: (Math.sqrt(e.value) / 4) * lineWidthScale,
-        opacity: 0.85,
+        width: (Math.sqrt(e.value) / 4) * 0.8 * lineWidthScale,
+        color: "rgba(59, 130, 246, 0.45)",
         curveness: 0.35,
       },
     }));
+
+    const graphRight = (width - graphSize) / 2;
+    const graphBottom = (height - graphSize) / 2;
 
     const option: echarts.EChartsOption = {
       series: [
@@ -146,19 +158,20 @@ export function NetworkGraph({ nodes, edges, year }: NetworkGraphProps) {
           layout: "none",
           roam: true,
           draggable: true,
-          left: "5%",
-          right: "5%",
-          top: "5%",
-          bottom: "5%",
+          scaleLimit: { min: 0.5, max: 2.5 },
+          symbol: "circle",
+          left: graphLeft,
+          right: graphRight,
+          top: graphTop,
+          bottom: graphBottom,
           data: graphNodes,
           links: graphLinks,
           edgeSymbol: ["none", "arrow"],
-          edgeSymbolSize: [4, 10],
+          edgeSymbolSize: [0, 6],
           emphasis: {
             focus: "adjacency",
           },
           lineStyle: {
-            color: "source",
             curveness: 0.35,
           },
           itemStyle: {
@@ -171,11 +184,19 @@ export function NetworkGraph({ nodes, edges, year }: NetworkGraphProps) {
 
     chart.setOption(option, { notMerge: true });
 
-    const handleResize = () => chart.resize();
-    window.addEventListener("resize", handleResize);
+    const resizeChart = () => {
+      if (chartRef.current) {
+        const rect = chartRef.current.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          chart.resize({ width: rect.width, height: rect.height });
+        }
+      }
+    };
+    resizeChart();
+    window.addEventListener("resize", resizeChart);
 
     return () => {
-      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("resize", resizeChart);
       chart.dispose();
     };
   }, [nodes, edges, containerSize]);
@@ -186,7 +207,10 @@ export function NetworkGraph({ nodes, edges, year }: NetworkGraphProps) {
     <div
       ref={chartRef}
       className="w-full h-[70vh] md:h-[520px]"
-      style={{ width: "100%", minHeight: 360 }}
+      style={{
+        width: "100%",
+        minHeight: 360,
+      }}
     />
   );
 }

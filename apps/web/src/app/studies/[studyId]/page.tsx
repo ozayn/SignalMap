@@ -1226,20 +1226,6 @@ export default function StudyDetailPage() {
           >
             ← Studies
           </Link>
-          <Link
-            href="/learning"
-            className="text-xs text-muted-foreground hover:text-foreground inline-block"
-          >
-            Learning resources
-          </Link>
-          {!isEventsTimeline && (
-            <Link
-              href="/studies/events_timeline"
-              className="text-xs text-muted-foreground hover:text-foreground inline-block"
-            >
-              Reference timeline
-            </Link>
-          )}
         </div>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
@@ -1282,7 +1268,7 @@ export default function StudyDetailPage() {
         </p>
         {latestDataDate && (
           <p className="text-sm text-muted-foreground">
-            Data last available: {formatDate(latestDataDate)}
+            Data last available: {isOilTradeNetwork ? latestDataDate.getFullYear() : formatDate(latestDataDate)}
           </p>
         )}
         {lastUpdated && (
