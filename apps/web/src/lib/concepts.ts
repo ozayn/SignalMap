@@ -31,6 +31,7 @@ export type ConceptKey =
   | "ppp_oil_burden"
   | "oil_price_shocks"
   | "oil_production"
+  | "oil_production_vs_exports"
   | "barrels_per_day"
   | "supply_shocks";
 
@@ -284,6 +285,13 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
       "Oil production measures the volume of crude oil extracted from the ground per unit of time. Major exporters such as Saudi Arabia, Russia, and Iran produce significant shares of global supply. Production levels can shift due to policy (OPEC+ cuts), geopolitics (sanctions, conflicts), or technical disruptions. This study shows annual production in million barrels per day.",
     inSimpleTerms:
       "How much oil is produced each day. When big producers cut or increase output, it affects global supply and prices.",
+  },
+  oil_production_vs_exports: {
+    title: "Oil production vs exports",
+    description:
+      "Oil production refers to the amount of crude oil extracted from the ground. Oil exports represent the portion of production that is sold to other countries. Some countries consume a large share of their production domestically, so exports can differ significantly from total production.",
+    inSimpleTerms:
+      "Production is what you pump out; exports are what you sell abroad. Countries with big domestic demand may export less than they produce.",
   },
   barrels_per_day: {
     title: "Barrels per day",

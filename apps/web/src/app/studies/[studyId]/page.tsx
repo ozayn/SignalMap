@@ -2295,7 +2295,8 @@ export default function StudyDetailPage() {
                   {
                     heading: "How to read this chart",
                     bullets: [
-                      "Four lines show crude oil production for United States, Saudi Arabia, Russia, and Iran.",
+                      "Four lines show crude oil production for the United States, Saudi Arabia, Russia, and Iran, measured in million barrels per day.",
+                      "Production is not the same as exports. Some oil is consumed domestically, so countries with large internal demand may export a smaller share of their production.",
                       "Y-axis: million barrels per day. All series share the same scale.",
                       "Annual data: one point per year.",
                       "The United States is currently the world's largest oil producer, followed by Saudi Arabia and Russia, while Iran's production is affected by sanctions and export constraints.",
@@ -2313,6 +2314,7 @@ export default function StudyDetailPage() {
                     bullets: [
                       "Compare production levels across major exporters over time.",
                       "Supply changes (OPEC+ cuts, sanctions, conflicts) can move global oil prices.",
+                      "U.S. oil production increased sharply after 2010 due to the expansion of shale oil extraction technologies such as hydraulic fracturing and horizontal drilling.",
                     ],
                   },
                   {
