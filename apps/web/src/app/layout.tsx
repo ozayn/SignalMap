@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Link from "next/link";
-import Script from "next/script";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -32,26 +31,27 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased min-h-screen`} suppressHydrationWarning>
-        <ThemeProvider>
-          <SuppressDevLogs />
-          {gaId && (
-            <>
-              <Script
-                src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
-                strategy="beforeInteractive"
-              />
-              <Script id="ga-init" strategy="beforeInteractive">
-                {`
+      <head>
+        {gaId && (
+          <>
+            <script async src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`} />
+            <script
+              dangerouslySetInnerHTML={{
+                __html: `
                   window.dataLayer = window.dataLayer || [];
                   function gtag(){dataLayer.push(arguments);}
                   gtag('js', new Date());
                   gtag('config', '${gaId}');
-                `}
-              </Script>
-              <Analytics gaId={gaId} />
-            </>
-          )}
+                `,
+              }}
+            />
+          </>
+        )}
+      </head>
+      <body className={`${inter.variable} font-sans antialiased min-h-screen`} suppressHydrationWarning>
+        <ThemeProvider>
+          <SuppressDevLogs />
+          {gaId && <Analytics gaId={gaId} />}
           <header className="border-b border-border bg-background">
             <nav className="container mx-auto max-w-4xl px-4 py-4 flex items-center justify-between">
               <div className="flex items-center gap-8">

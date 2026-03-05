@@ -19,6 +19,7 @@ import { NetworkGraph, type NetworkNode, type NetworkEdge } from "@/components/n
 import { getStudyById, getPrevNextStudies } from "@/lib/studies";
 import { fetchJson } from "@/lib/api";
 import { enrichOilPointsWithVolatility } from "@/lib/oil-volatility";
+import { trackEvent } from "@/lib/analytics";
 
 type OverviewData = {
   study_id: string;
@@ -237,6 +238,12 @@ export default function StudyDetailPage() {
     count?: number;
     last_cached_at?: string | null;
   } | null>(null);
+
+  useEffect(() => {
+    if (studyId) {
+      trackEvent("study_viewed", { study_id: studyId });
+    }
+  }, [studyId]);
 
   const isOverviewStub = study?.primarySignal.kind === "overview_stub";
   const isOilBrent = study?.primarySignal.kind === "oil_brent";
@@ -2098,6 +2105,7 @@ export default function StudyDetailPage() {
                 nodes={networkNodesForYear}
                 edges={networkEdgesForYear}
                 year={networkSelectedYear}
+                onNodeClick={(country) => trackEvent("network_node_clicked", { country })}
               />
               {networkYears.length > 0 && (
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center py-2">
@@ -2113,7 +2121,11 @@ export default function StudyDetailPage() {
                     max={networkYears[networkYears.length - 1]}
                     step={1}
                     value={networkSelectedYear || networkYears[networkYears.length - 1]!}
-                    onChange={(e) => setNetworkSelectedYear(e.target.value)}
+                    onChange={(e) => {
+                      const year = e.target.value;
+                      setNetworkSelectedYear(year);
+                      trackEvent("year_changed", { study: "oil_trade_network", year });
+                    }}
                     className="oil-trade-year-slider accent-primary min-h-[44px] w-full min-w-0 sm:w-40 flex-1 sm:flex-none touch-manipulation"
                   />
                   <span className="text-base font-medium tabular-nums min-w-[4ch] shrink-0">

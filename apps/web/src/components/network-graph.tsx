@@ -52,9 +52,10 @@ type NetworkGraphProps = {
   nodes: NetworkNode[];
   edges: NetworkEdge[];
   year?: string;
+  onNodeClick?: (country: string) => void;
 };
 
-export function NetworkGraph({ nodes, edges, year }: NetworkGraphProps) {
+export function NetworkGraph({ nodes, edges, year, onNodeClick }: NetworkGraphProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 800, height: 720 });
 
@@ -184,6 +185,15 @@ export function NetworkGraph({ nodes, edges, year }: NetworkGraphProps) {
 
     chart.setOption(option, { notMerge: true });
 
+    if (onNodeClick) {
+      chart.on("click", (params) => {
+        if (params.componentType === "series" && params.dataType === "node") {
+          const name = params.data && typeof params.data === "object" && "name" in params.data ? params.data.name : null;
+          if (typeof name === "string") onNodeClick(name);
+        }
+      });
+    }
+
     const resizeChart = () => {
       if (chartRef.current) {
         const rect = chartRef.current.getBoundingClientRect();
@@ -196,10 +206,11 @@ export function NetworkGraph({ nodes, edges, year }: NetworkGraphProps) {
     window.addEventListener("resize", resizeChart);
 
     return () => {
+      chart.off("click");
       window.removeEventListener("resize", resizeChart);
       chart.dispose();
     };
-  }, [nodes, edges, containerSize]);
+  }, [nodes, edges, containerSize, onNodeClick]);
 
   if (nodes.length === 0) return null;
 
