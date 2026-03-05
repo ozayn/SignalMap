@@ -1,7 +1,9 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
+import { useTheme } from "next-themes";
 import * as echarts from "echarts";
+import { OIL_TRADE_NODE_COLOR_PALETTE } from "@/components/oil-trade-sankey";
 
 export type NetworkNode = { id: string };
 export type NetworkEdge = { source: string; target: string; value: number };
@@ -53,11 +55,15 @@ type NetworkGraphProps = {
   edges: NetworkEdge[];
   year?: string;
   onNodeClick?: (country: string) => void;
+  /** Stable order for color assignment. Same country = same color as Sankey. */
+  nodeColorOrder?: string[];
 };
 
-export function NetworkGraph({ nodes, edges, year, onNodeClick }: NetworkGraphProps) {
+export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder = [] }: NetworkGraphProps) {
   const chartRef = useRef<HTMLDivElement>(null);
+  const { resolvedTheme } = useTheme();
   const [containerSize, setContainerSize] = useState({ width: 800, height: 720 });
+  const exporterBorderColor = resolvedTheme === "dark" ? "#fff" : "#374151";
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -95,17 +101,37 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick }: NetworkGraphPr
       totalImports[e.target] = (totalImports[e.target] ?? 0) + e.value;
     }
 
+    const colorRank = new Map(nodeColorOrder.map((id, i) => [id, i]));
+    const getColor = (id: string) =>
+      OIL_TRADE_NODE_COLOR_PALETTE[(colorRank.get(id) ?? 9999) % OIL_TRADE_NODE_COLOR_PALETTE.length];
+    const hexToRgba = (hex: string, alpha: number) => {
+      const m = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+      if (!m) return `rgba(59, 130, 246, ${alpha})`;
+      return `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, ${alpha})`;
+    };
+
     const graphNodes = nodes.map((n, i) => {
       const exports = totalExports[n.id] ?? 0;
       const imports = totalImports[n.id] ?? 0;
       const totalTrade = exports + imports;
       const exportRatio = totalTrade > 0 ? exports / totalTrade : 0.5;
 
-      // Color by trade role: exporter = darker blue, importer = lighter blue, balanced = medium
-      let color: string;
-      if (exportRatio >= 0.6) color = "#1e40af"; // mostly exporter
-      else if (exportRatio <= 0.4) color = "#60a5fa"; // mostly importer
-      else color = "#3b82f6"; // balanced
+      const color =
+        nodeColorOrder.length > 0
+          ? getColor(n.id)
+          : exportRatio >= 0.6
+            ? "#1e40af"
+            : exportRatio <= 0.4
+              ? "#60a5fa"
+              : "#3b82f6";
+
+      const isImporter = exportRatio <= 0.4;
+      const itemStyle =
+        nodeColorOrder.length > 0
+          ? isImporter
+            ? { color: hexToRgba(color, 0.5), borderWidth: 0 }
+            : { color, borderColor: exporterBorderColor, borderWidth: 1.5 }
+          : { color };
 
       const [x, y] = getNodePosition(n.id, i, nodes.length, graphLeft, graphTop, graphSize);
       // Nodes on the right edge: place label to the left so it stays visible
@@ -121,7 +147,7 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick }: NetworkGraphPr
         y,
         symbol: "circle",
         symbolSize: nodeSize * nodeSizeScale,
-        itemStyle: { color },
+        itemStyle,
         label: {
           show: showLabel,
           fontSize: 13,
@@ -138,13 +164,19 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick }: NetworkGraphPr
       };
     });
 
+    const linkHexToRgba = (hex: string, alpha: number) => {
+      const m = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+      if (!m) return "rgba(59, 130, 246, 0.45)";
+      return `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, ${alpha})`;
+    };
     const lineWidthScale = isMobile ? 0.7 : 1;
     const graphLinks = edges.map((e) => ({
       source: e.source,
       target: e.target,
       lineStyle: {
         width: (Math.sqrt(e.value) / 4) * 0.8 * lineWidthScale,
-        color: "rgba(59, 130, 246, 0.45)",
+        color:
+          nodeColorOrder.length > 0 ? linkHexToRgba(getColor(e.source), 0.45) : "rgba(59, 130, 246, 0.45)",
         curveness: 0.35,
       },
     }));
@@ -210,7 +242,7 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick }: NetworkGraphPr
       window.removeEventListener("resize", resizeChart);
       chart.dispose();
     };
-  }, [nodes, edges, containerSize, onNodeClick]);
+  }, [nodes, edges, containerSize, onNodeClick, nodeColorOrder, exporterBorderColor]);
 
   if (nodes.length === 0) return null;
 

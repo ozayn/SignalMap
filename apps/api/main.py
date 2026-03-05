@@ -200,6 +200,14 @@ def cron_update_all():
     return update_all_data_sources()
 
 
+@app.post("/api/cron/update-oil-trade")
+def cron_update_oil_trade():
+    """Update oil trade network from UN Comtrade. Idempotent; fetches only missing years.
+    Trigger manually for production: curl -X POST https://your-api.up.railway.app/api/cron/update-oil-trade"""
+    from signalmap.services.daily_updates import update_oil_trade_network
+    return update_oil_trade_network()
+
+
 @app.get("/api/events")
 def get_events(
     study_id: str = "1",
@@ -484,13 +492,14 @@ def _oil_trade_fallback(start_year: int, end_year: int) -> dict:
 def api_oil_trade_network(
     start_year: int = Query(2010, description="Start year"),
     end_year: int = Query(2023, description="End year"),
+    source: str = Query("curated", description="curated or db (full ingested data)"),
 ):
-    """Return bilateral crude oil trade flows (HS 2709) by year. Values in thousand barrels/day."""
+    """Return bilateral crude oil trade flows (HS 2709) by year. source=curated|db."""
     if start_year > end_year:
         start_year, end_year = end_year, start_year
     try:
         from signalmap.services.oil_trade_network import get_oil_trade_network
-        return get_oil_trade_network(start_year=start_year, end_year=end_year)
+        return get_oil_trade_network(start_year=start_year, end_year=end_year, source=source or "curated")
     except Exception as e:
         try:
             return _oil_trade_fallback(start_year, end_year)

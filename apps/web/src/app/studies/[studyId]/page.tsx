@@ -16,6 +16,7 @@ import { InSimpleTerms } from "@/components/in-simple-terms";
 import { EventsTimeline, type TimelineEvent } from "@/components/events-timeline";
 import { FollowerGrowthChart } from "@/components/follower-growth-chart";
 import { NetworkGraph, type NetworkNode, type NetworkEdge } from "@/components/network-graph";
+import { OilTradeSankey } from "@/components/oil-trade-sankey";
 import { getStudyById, getPrevNextStudies } from "@/lib/studies";
 import { fetchJson } from "@/lib/api";
 import { enrichOilPointsWithVolatility } from "@/lib/oil-volatility";
@@ -233,6 +234,8 @@ export default function StudyDetailPage() {
   const [fgShowLogistic, setFgShowLogistic] = useState(true);
   const [networkYearsData, setNetworkYearsData] = useState<Record<string, NetworkEdge[]>>({});
   const [networkSelectedYear, setNetworkSelectedYear] = useState<string>("");
+  const [oilTradeView, setOilTradeView] = useState<"network" | "sankey">("network");
+  const [oilTradeSource, setOilTradeSource] = useState<"curated" | "db">("curated");
   const [fgMetadata, setFgMetadata] = useState<{
     source?: "cache" | "live" | "mixed";
     count?: number;
@@ -360,7 +363,7 @@ export default function StudyDetailPage() {
     return yrs;
   }, [networkYearsData]);
 
-  const { networkNodesForYear, networkEdgesForYear } = useMemo(() => {
+  const { networkNodesForYear, networkEdgesForYear, networkExporterOrder, networkNodeColorOrder } = useMemo(() => {
     const yrs = Object.keys(networkYearsData).sort();
     const year = networkSelectedYear || yrs[yrs.length - 1] || "";
     const edges = year ? (networkYearsData[year] ?? []) : [];
@@ -370,7 +373,29 @@ export default function StudyDetailPage() {
       ids.add(e.target);
     }
     const nodes = [...ids].sort().map((id) => ({ id }));
-    return { networkNodesForYear: nodes, networkEdgesForYear: edges };
+
+    const totalExports: Record<string, number> = {};
+    const totalByCountry: Record<string, number> = {};
+    for (const y of yrs) {
+      for (const e of networkYearsData[y] ?? []) {
+        totalExports[e.source] = (totalExports[e.source] ?? 0) + e.value;
+        totalByCountry[e.source] = (totalByCountry[e.source] ?? 0) + e.value;
+        totalByCountry[e.target] = (totalByCountry[e.target] ?? 0) + e.value;
+      }
+    }
+    const exporterOrder = Object.keys(totalExports).sort(
+      (a, b) => (totalExports[b] ?? 0) - (totalExports[a] ?? 0)
+    );
+    const nodeColorOrder = Object.keys(totalByCountry).sort(
+      (a, b) => (totalByCountry[b] ?? 0) - (totalByCountry[a] ?? 0)
+    );
+
+    return {
+      networkNodesForYear: nodes,
+      networkEdgesForYear: edges,
+      networkExporterOrder: exporterOrder,
+      networkNodeColorOrder: nodeColorOrder,
+    };
   }, [networkYearsData, networkSelectedYear]);
 
   const fxDualTimeRange = useMemo((): [string, string] | null => {
@@ -561,7 +586,9 @@ export default function StudyDetailPage() {
     if (!study || !isOilTradeNetwork) return;
     let mounted = true;
     setLoading(true);
-    fetchJson<{ years: Record<string, NetworkEdge[]> }>("/api/networks/oil-trade")
+    fetchJson<{ years: Record<string, NetworkEdge[]> }>(
+      `/api/networks/oil-trade?start_year=2010&end_year=2023&source=${oilTradeSource}`
+    )
       .then((res) => {
         if (mounted && res.years) {
           setNetworkYearsData(res.years);
@@ -572,7 +599,7 @@ export default function StudyDetailPage() {
       .catch((e) => mounted && setError(e instanceof Error ? e.message : "Network fetch failed"))
       .finally(() => mounted && setLoading(false));
     return () => { mounted = false; };
-  }, [study, isOilTradeNetwork]);
+  }, [study, isOilTradeNetwork, oilTradeSource]);
 
   useEffect(() => {
     let mounted = true;
@@ -2100,13 +2127,77 @@ export default function StudyDetailPage() {
         <CardContent>
           {isOilTradeNetwork ? (
             <>
-              <NetworkGraph
-                key={networkSelectedYear || networkYears[networkYears.length - 1]}
-                nodes={networkNodesForYear}
-                edges={networkEdgesForYear}
-                year={networkSelectedYear}
-                onNodeClick={(country) => trackEvent("network_node_clicked", { country })}
-              />
+              {networkYears.length > 0 && (
+                <div className="mb-3 flex flex-wrap items-center gap-3">
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setOilTradeView("network")}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                        oilTradeView === "network"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      }`}
+                    >
+                      Network
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOilTradeView("sankey")}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                        oilTradeView === "sankey"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      }`}
+                    >
+                      Sankey
+                    </button>
+                  </div>
+                  <span className="text-muted-foreground">|</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setOilTradeSource("curated")}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                        oilTradeSource === "curated"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      }`}
+                    >
+                      Curated
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOilTradeSource("db")}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                        oilTradeSource === "db"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      }`}
+                    >
+                      All data
+                    </button>
+                  </div>
+                </div>
+              )}
+              {oilTradeView === "sankey" ? (
+                <OilTradeSankey
+                  key={networkSelectedYear || networkYears[networkYears.length - 1]}
+                  edges={networkEdgesForYear}
+                  year={networkSelectedYear}
+                  exporterOrder={networkExporterOrder}
+                  nodeColorOrder={networkNodeColorOrder}
+                />
+              ) : (
+                <NetworkGraph
+                  key={networkSelectedYear || networkYears[networkYears.length - 1]}
+                  nodes={networkNodesForYear}
+                  edges={networkEdgesForYear}
+                  year={networkSelectedYear}
+                  onNodeClick={(country) => trackEvent("network_node_clicked", { country })}
+                  nodeColorOrder={networkNodeColorOrder}
+                />
+              )}
               {networkYears.length > 0 && (
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center py-2">
                   <label className="text-sm font-medium text-foreground shrink-0">
@@ -2134,7 +2225,14 @@ export default function StudyDetailPage() {
                 </div>
               )}
               <div className="mt-4 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm">
-                <h4 className="mb-3 font-medium text-foreground">How to read this network</h4>
+                <h4 className="mb-3 font-medium text-foreground">
+                  {oilTradeView === "sankey" ? "How to read this Sankey diagram" : "How to read this network"}
+                </h4>
+                {oilTradeView === "sankey" ? (
+                  <p className="text-muted-foreground">
+                    Flows show crude oil trade from exporters (left) to importers (right). Width is proportional to trade volume (thousand barrels/day). Hover over a flow for details.
+                  </p>
+                ) : (
                 <div className="space-y-3">
                   <div>
                     <p className="mb-1.5 font-medium text-muted-foreground">Node size</p>
@@ -2155,19 +2253,15 @@ export default function StudyDetailPage() {
                   <div>
                     <p className="mb-1.5 font-medium text-muted-foreground">Node color</p>
                     <p className="text-muted-foreground">
-                      Darker nodes represent net exporters. Lighter nodes represent net importers. Intermediate shades indicate more balanced trade.
+                      Each country has a distinct color (consistent across years and with the Sankey view). Bordered nodes are net exporters; faded nodes without a border are net importers.
                     </p>
-                    <div className="mt-1.5 flex items-center gap-4">
+                    <div className="mt-1.5 flex items-center gap-4 flex-wrap">
                       <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span className="inline-block h-4 w-4 rounded-full bg-[#1e40af]" />
+                        <span className="inline-block h-4 w-4 rounded-full bg-[#1e40af] border-2 border-foreground/80" />
                         Exporter
                       </span>
                       <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span className="inline-block h-4 w-4 rounded-full bg-[#3b82f6]" />
-                        Balanced
-                      </span>
-                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span className="inline-block h-4 w-4 rounded-full bg-[#60a5fa]" />
+                        <span className="inline-block h-4 w-4 rounded-full bg-[#dc2626] opacity-50" />
                         Importer
                       </span>
                     </div>
@@ -2194,6 +2288,7 @@ export default function StudyDetailPage() {
                     Trade volume is measured in <strong>thousand barrels per day</strong>.
                   </p>
                 </div>
+                )}
               </div>
               <LearningNote
                 title="How to read this chart"

@@ -70,33 +70,29 @@ def _query_edges_by_year(start_year: int, end_year: int) -> dict[str, list[dict[
 def get_oil_trade_network(
     start_year: int = 2010,
     end_year: int = 2023,
+    source: str = "curated",
 ) -> dict[str, Any]:
     """
     Return oil trade edges grouped by year.
 
-    For each year in [start_year, end_year]:
-      - If oil_trade_edges has data → use database results.
-      - If no data → use curated fallback.
+    source: "curated" = stable curated dataset; "db" = full ingested Comtrade data.
 
     Output: { years: { "2010": [...], "2011": [...], ... } }
-    Each edge: { source, target, value } (value = thousand barrels/day).
+    Each edge: { source, target, value }.
     """
     if start_year > end_year:
         start_year, end_year = end_year, start_year
 
-    db_result = _query_edges_by_year(start_year, end_year)
+    if source == "db":
+        db_result = _query_edges_by_year(start_year, end_year)
+        result = {k: db_result.get(k, []) for k in [str(y) for y in range(start_year, end_year + 1)]}
+        return {"years": result}
 
     result: dict[str, list[dict[str, Any]]] = {}
     for year in range(start_year, end_year + 1):
         key = str(year)
-        if key in db_result and db_result[key]:
-            result[key] = db_result[key]
-        else:
-            curated = get_curated_edges(year)
-            if curated:
-                result[key] = curated
-                logger.debug("oil_trade_network: year %s using curated fallback", year)
-
+        curated = get_curated_edges(year)
+        result[key] = curated or []
     return {"years": result}
 
 

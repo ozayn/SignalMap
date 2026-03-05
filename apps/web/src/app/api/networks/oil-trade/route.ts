@@ -299,11 +299,13 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const startYear = searchParams.get("start_year") ?? "2010";
   const endYear = searchParams.get("end_year") ?? "2023";
+  const source = searchParams.get("source") ?? "curated";
 
   try {
     const url = new URL(`${API_BASE}/api/networks/oil-trade`);
     url.searchParams.set("start_year", startYear);
     url.searchParams.set("end_year", endYear);
+    url.searchParams.set("source", source);
 
     const res = await fetch(url.toString(), {
       headers: { Accept: "application/json" },
