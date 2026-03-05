@@ -6,6 +6,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SuppressDevLogs } from "@/components/suppress-dev-logs";
+import { Analytics } from "@/components/analytics";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -37,10 +38,6 @@ export default function RootLayout({
           <SuppressDevLogs />
           {isProduction && gaId && (
             <>
-              <Script
-                src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
-                strategy="afterInteractive"
-              />
               <Script id="ga-init" strategy="afterInteractive">
                 {`
                   window.dataLayer = window.dataLayer || [];
@@ -49,6 +46,11 @@ export default function RootLayout({
                   gtag('config', '${gaId}');
                 `}
               </Script>
+              <Script
+                src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
+                strategy="afterInteractive"
+              />
+              <Analytics gaId={gaId} />
             </>
           )}
           <header className="border-b border-border bg-background">
