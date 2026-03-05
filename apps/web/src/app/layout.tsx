@@ -19,7 +19,6 @@ export const metadata: Metadata = {
 };
 
 const gaId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || "";
-const isProduction = process.env.NODE_ENV === "production";
 
 const navLinks = [
   { href: "/studies", label: "Studies" },
@@ -36,9 +35,13 @@ export default function RootLayout({
       <body className={`${inter.variable} font-sans antialiased min-h-screen`} suppressHydrationWarning>
         <ThemeProvider>
           <SuppressDevLogs />
-          {isProduction && gaId && (
+          {gaId && (
             <>
-              <Script id="ga-init" strategy="afterInteractive">
+              <Script
+                src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
+                strategy="beforeInteractive"
+              />
+              <Script id="ga-init" strategy="beforeInteractive">
                 {`
                   window.dataLayer = window.dataLayer || [];
                   function gtag(){dataLayer.push(arguments);}
@@ -46,10 +49,6 @@ export default function RootLayout({
                   gtag('config', '${gaId}');
                 `}
               </Script>
-              <Script
-                src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
-                strategy="afterInteractive"
-              />
               <Analytics gaId={gaId} />
             </>
           )}
