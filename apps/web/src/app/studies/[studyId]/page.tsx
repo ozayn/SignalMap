@@ -20,6 +20,7 @@ import { OilTradeSankey } from "@/components/oil-trade-sankey";
 import { getStudyById, getPrevNextStudies } from "@/lib/studies";
 import { fetchJson } from "@/lib/api";
 import { enrichOilPointsWithVolatility } from "@/lib/oil-volatility";
+import { filterForNetwork, filterForSankey } from "@/lib/oil-trade-network-filter";
 import { trackEvent } from "@/lib/analytics";
 
 type OverviewData = {
@@ -397,6 +398,25 @@ export default function StudyDetailPage() {
       networkNodeColorOrder: nodeColorOrder,
     };
   }, [networkYearsData, networkSelectedYear]);
+
+  const { networkDisplayNodes, networkDisplayEdges, sankeyDisplayEdges, isAllDataMode } = useMemo(() => {
+    if (oilTradeSource !== "db") {
+      return {
+        networkDisplayNodes: networkNodesForYear,
+        networkDisplayEdges: networkEdgesForYear,
+        sankeyDisplayEdges: networkEdgesForYear,
+        isAllDataMode: false,
+      };
+    }
+    const { nodes, edges: networkEdges } = filterForNetwork(networkEdgesForYear);
+    const sankeyEdges = filterForSankey(networkEdgesForYear);
+    return {
+      networkDisplayNodes: nodes,
+      networkDisplayEdges: networkEdges,
+      sankeyDisplayEdges: sankeyEdges,
+      isAllDataMode: true,
+    };
+  }, [networkNodesForYear, networkEdgesForYear, oilTradeSource]);
 
   const fxDualTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isFxUsdIrrDual) return null;
@@ -2181,47 +2201,96 @@ export default function StudyDetailPage() {
                 </div>
               )}
               {oilTradeView === "sankey" ? (
-                <OilTradeSankey
-                  key={networkSelectedYear || networkYears[networkYears.length - 1]}
-                  edges={networkEdgesForYear}
-                  year={networkSelectedYear}
-                  exporterOrder={networkExporterOrder}
-                  nodeColorOrder={networkNodeColorOrder}
-                />
+                sankeyDisplayEdges.length > 0 ? (
+                  <OilTradeSankey
+                    key={`${networkSelectedYear || networkYears[networkYears.length - 1]}-${oilTradeSource}`}
+                    edges={sankeyDisplayEdges}
+                    year={networkSelectedYear}
+                    exporterOrder={networkExporterOrder}
+                    nodeColorOrder={networkNodeColorOrder}
+                    isAllDataMode={isAllDataMode}
+                  />
+                ) : (
+                  <div className="flex h-[70vh] min-h-[360px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      No data for {networkSelectedYear || "this year"}. Run{" "}
+                      <code className="rounded bg-muted px-1.5 py-0.5 text-xs">update_oil_trade_network.py --force</code>{" "}
+                      and sync to production if deployed.
+                    </p>
+                  </div>
+                )
               ) : (
+                networkDisplayEdges.length > 0 ? (
                 <NetworkGraph
-                  key={networkSelectedYear || networkYears[networkYears.length - 1]}
-                  nodes={networkNodesForYear}
-                  edges={networkEdgesForYear}
+                  key={`${networkSelectedYear || networkYears[networkYears.length - 1]}-${isAllDataMode}`}
+                  nodes={networkDisplayNodes}
+                  edges={networkDisplayEdges}
                   year={networkSelectedYear}
                   onNodeClick={(country) => trackEvent("network_node_clicked", { country })}
                   nodeColorOrder={networkNodeColorOrder}
+                  isAllDataMode={isAllDataMode}
                 />
+                ) : (
+                  <div className="flex h-[70vh] min-h-[360px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      No data for {networkSelectedYear || "this year"}. Run{" "}
+                      <code className="rounded bg-muted px-1.5 py-0.5 text-xs">update_oil_trade_network.py --force</code>{" "}
+                      and sync to production if deployed.
+                    </p>
+                  </div>
+                )
+              )}
+              {isAllDataMode && (
+                <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-3 w-3 rounded-full bg-[#1e40af]" />
+                    Node size = total trade (exports + imports)
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-0.5 w-6 bg-current opacity-60" />
+                    Edge width = crude oil flow
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2 w-2 rounded-sm bg-[#dc2626]" />
+                    Edge color = exporter
+                  </span>
+                  {networkDisplayEdges.length > 0 && (() => {
+                    const maxEdge = networkDisplayEdges.reduce((a, b) => (a.value > b.value ? a : b));
+                    const looksLikeUsd = maxEdge.value > 1_000_000;
+                    return (
+                      <span className={looksLikeUsd ? "text-amber-600 dark:text-amber-500" : ""} title={looksLikeUsd ? "Values >1M suggest old TradeValue (USD) data. Re-run ingestion with --force." : "Values in thousand bbl/day (physical barrels)"}>
+                        Max flow: {maxEdge.value.toLocaleString()} {maxEdge.source}→{maxEdge.target}
+                      </span>
+                    );
+                  })()}
+                </div>
               )}
               {networkYears.length > 0 && (
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center py-2">
-                  <label className="text-sm font-medium text-foreground shrink-0">
-                    Year:
-                  </label>
-                  <span className="text-sm text-muted-foreground tabular-nums shrink-0">
-                    {networkYears[0]} – {networkYears[networkYears.length - 1]}
-                  </span>
-                  <input
-                    type="range"
-                    min={networkYears[0]}
-                    max={networkYears[networkYears.length - 1]}
-                    step={1}
-                    value={networkSelectedYear || networkYears[networkYears.length - 1]!}
-                    onChange={(e) => {
-                      const year = e.target.value;
-                      setNetworkSelectedYear(year);
-                      trackEvent("year_changed", { study: "oil_trade_network", year });
-                    }}
-                    className="oil-trade-year-slider accent-primary min-h-[44px] w-full min-w-0 sm:w-40 flex-1 sm:flex-none touch-manipulation"
-                  />
-                  <span className="text-base font-medium tabular-nums min-w-[4ch] shrink-0">
-                    {networkSelectedYear || networkYears[networkYears.length - 1]}
-                  </span>
+                <div className="mt-4 flex flex-col gap-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center py-2">
+                    <label className="text-sm font-medium text-foreground shrink-0">
+                      Year:
+                    </label>
+                    <span className="text-sm text-muted-foreground tabular-nums shrink-0">
+                      {networkYears[0]} – {networkYears[networkYears.length - 1]}
+                    </span>
+                    <input
+                      type="range"
+                      min={networkYears[0]}
+                      max={networkYears[networkYears.length - 1]}
+                      step={1}
+                      value={networkSelectedYear || networkYears[networkYears.length - 1]!}
+                      onChange={(e) => {
+                        const year = e.target.value;
+                        setNetworkSelectedYear(year);
+                        trackEvent("year_changed", { study: "oil_trade_network", year });
+                      }}
+                      className="oil-trade-year-slider accent-primary min-h-[44px] w-full min-w-0 sm:w-40 flex-1 sm:flex-none touch-manipulation"
+                    />
+                    <span className="text-base font-medium tabular-nums min-w-[4ch] shrink-0">
+                      {networkSelectedYear || networkYears[networkYears.length - 1]}
+                    </span>
+                  </div>
                 </div>
               )}
               <div className="mt-4 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm">
@@ -2287,6 +2356,11 @@ export default function StudyDetailPage() {
                   <p className="pt-1 text-xs text-muted-foreground">
                     Trade volume is measured in <strong>thousand barrels per day</strong>.
                   </p>
+                  {isAllDataMode && (
+                    <p className="pt-1 text-xs text-muted-foreground">
+                      All data view: top 120 flows shown. Minor countries aggregated into Other exporters/importers.
+                    </p>
+                  )}
                 </div>
                 )}
               </div>

@@ -1,7 +1,10 @@
 """Fetch bilateral crude oil trade flows from UN Comtrade (HS 2709).
 
-Uses reporter/partner from Comtrade API. Converts net weight (kg) to thousand barrels/day.
-1 tonne crude ≈ 7.33 barrels; barrels/day = (netWgt_kg/1000)*7.33/365.
+Uses reporter/partner from Comtrade API. Stores PHYSICAL quantity only (never TradeValue/USD).
+Converts NetWeight (kg) to thousand barrels/day:
+  metric_tons = net_weight_kg / 1000
+  barrels = metric_tons * 7.33
+  value_kbd = barrels / 365 / 1000
 """
 
 import logging
@@ -13,7 +16,35 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-COMTRADE_BASE = os.getenv("COMTRADE_API_BASE", "https://comtrade.un.org/api/get")
+_COUNTRY_CODE_CACHE: dict[int, str] | None = None
+
+
+def _get_country_code_map() -> dict[int, str]:
+    """Fetch Comtrade reporter/partner reference and cache code -> name mapping."""
+    global _COUNTRY_CODE_CACHE
+    if _COUNTRY_CODE_CACHE is not None:
+        return _COUNTRY_CODE_CACHE
+    url = "https://comtradeapi.un.org/files/v1/app/reference/Reporters.json"
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            r = client.get(url)
+            r.raise_for_status()
+            data = r.json()
+        results = data.get("results", [])
+        _COUNTRY_CODE_CACHE = {}
+        for item in results:
+            code = item.get("reporterCode")
+            name = item.get("reporterDesc") or item.get("text")
+            if code is not None and name:
+                _COUNTRY_CODE_CACHE[int(code)] = str(name)
+        return _COUNTRY_CODE_CACHE
+    except Exception as e:
+        logger.warning("comtrade: could not fetch country reference: %s", e)
+        _COUNTRY_CODE_CACHE = {}
+        return {}
+
+# New API (comtradeapi.un.org) - legacy comtrade.un.org/api/get returns HTML
+COMTRADE_BASE = os.getenv("COMTRADE_API_BASE", "https://comtradeapi.un.org/data/v1/get/C/A/HS")
 USER_AGENT = "SignalMap/1.0 (research; +https://github.com/ozayn/SignalMap)"
 HS_CRUDE_OIL = "2709"
 TONNES_TO_BARRELS = 7.33
@@ -82,10 +113,25 @@ def _kg_to_thousand_barrels_per_day(net_kg: float | None) -> float:
     """Convert net weight (kg) to thousand barrels per day. 1 tonne crude ≈ 7.33 bbl."""
     if net_kg is None or net_kg <= 0:
         return 0.0
-    tonnes = net_kg / 1000.0
-    barrels_per_year = tonnes * TONNES_TO_BARRELS
-    barrels_per_day = barrels_per_year / 365.0
+    metric_tons = net_kg / 1000.0
+    barrels = metric_tons * TONNES_TO_BARRELS
+    barrels_per_day = barrels / 365.0
     return round(barrels_per_day / 1000.0, 2)
+
+
+def _extract_net_weight_kg(rec: dict[str, Any]) -> float | None:
+    """
+    Extract net weight in kg from Comtrade record. NEVER use TradeValue or primaryValue (USD).
+    Tries: netWgt, NetWgt, netWgtKg. Skips records that only have value fields.
+    """
+    for key in ("netWgt", "NetWgt", "netWgtKg", "NetWeight"):
+        val = rec.get(key)
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                pass
+    return None
 
 
 def _fetch_comtrade_year_reporter(
@@ -93,34 +139,35 @@ def _fetch_comtrade_year_reporter(
     reporter: int,
     max_records: int = 5000,
 ) -> list[dict[str, Any]]:
-    """Fetch Comtrade exports for one year and one reporter. p=0 = all partners."""
-    key = (os.getenv("COMTRADE_SUBSCRIPTION_KEY") or "").strip()
+    """Fetch Comtrade exports for one year and one reporter. Uses comtradeapi.un.org v1 API."""
+    key = (os.getenv("COMTRADE_API_KEY") or os.getenv("COMTRADE_SUBSCRIPTION_KEY") or "").strip()
+    if not key:
+        raise ValueError("COMTRADE_API_KEY or COMTRADE_SUBSCRIPTION_KEY required")
     params: dict[str, str | int] = {
+        "cmdCode": HS_CRUDE_OIL,
+        "flowCode": "X",
+        "period": year,
         "maxRecords": max_records,
-        "type": "C",
-        "freq": "A",
-        "px": "HS",
-        "ps": year,
-        "r": reporter,
-        "p": "0",
-        "rg": "2",
-        "cc": HS_CRUDE_OIL,
-        "fmt": "json",
+        "reporterCode": reporter,
     }
-    if key:
-        params["subscription-key"] = key
+    headers = {"User-Agent": USER_AGENT, "Ocp-Apim-Subscription-Key": key}
 
-    with httpx.Client(
-        timeout=60.0,
-        headers={"User-Agent": USER_AGENT},
-        follow_redirects=True,
-    ) as client:
-        r = client.get(COMTRADE_BASE, params=params)
-        r.raise_for_status()
-        ct = r.headers.get("content-type", "")
-        if "json" not in ct:
-            raise ValueError(f"Comtrade returned non-JSON: {ct[:50]}")
-        data = r.json()
+    with httpx.Client(timeout=60.0, follow_redirects=True) as client:
+        for attempt in range(4):
+            r = client.get(COMTRADE_BASE, params=params, headers=headers)
+            if r.status_code == 429:
+                delay = (2 ** attempt) * 3
+                logger.warning("comtrade 429 rate limit, retry in %ss", delay)
+                time.sleep(delay)
+                continue
+            r.raise_for_status()
+            ct = r.headers.get("content-type", "")
+            if "json" not in ct:
+                raise ValueError(f"Comtrade returned non-JSON: {ct[:50]}")
+            data = r.json()
+            break
+        else:
+            r.raise_for_status()
     if isinstance(data, dict) and "data" in data:
         return data["data"] or []
     if isinstance(data, list):
@@ -145,23 +192,22 @@ def fetch_comtrade_oil_trade(
         for reporter in MAJOR_EXPORTERS:
             try:
                 raw = _fetch_comtrade_year_reporter(year, reporter)
-                time.sleep(1.1)
+                time.sleep(2.5)
             except Exception as e:
                 logger.warning("comtrade year=%s reporter=%s: %s", year, reporter, e)
                 continue
+            code_map = _get_country_code_map()
             for rec in raw:
-                exporter = _normalize_country(rec.get("reporterDesc"))
-                importer = _normalize_country(rec.get("partnerDesc"))
+                exporter = _normalize_country(
+                    rec.get("reporterDesc") or code_map.get(rec.get("reporterCode") or 0)
+                )
+                importer = _normalize_country(
+                    rec.get("partnerDesc") or code_map.get(rec.get("partnerCode") or 0)
+                )
                 if not exporter or not importer or importer in ("World", ""):
                     continue
-                net_kg = rec.get("netWgt")
+                net_kg = _extract_net_weight_kg(rec)
                 if net_kg is None:
-                    net_kg = rec.get("qty")
-                if net_kg is None:
-                    continue
-                try:
-                    net_kg = float(net_kg)
-                except (TypeError, ValueError):
                     continue
                 value = _kg_to_thousand_barrels_per_day(net_kg)
                 if value <= 0:

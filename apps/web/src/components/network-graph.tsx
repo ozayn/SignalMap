@@ -57,9 +57,15 @@ type NetworkGraphProps = {
   onNodeClick?: (country: string) => void;
   /** Stable order for color assignment. Same country = same color as Sankey. */
   nodeColorOrder?: string[];
+  /** All data mode: force layout, reduced clutter, top labels only. */
+  isAllDataMode?: boolean;
 };
 
-export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder = [] }: NetworkGraphProps) {
+const MIN_NODE_SIZE = 6;
+const MAX_NODE_SIZE = 42;
+const TOP_LABELS_COUNT = 15;
+
+export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder = [], isAllDataMode = false }: NetworkGraphProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
   const [containerSize, setContainerSize] = useState({ width: 800, height: 720 });
@@ -110,11 +116,26 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder =
       return `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, ${alpha})`;
     };
 
+    const totalTrade = (id: string) => (totalExports[id] ?? 0) + (totalImports[id] ?? 0);
+    const tradeValues = nodes.map((n) => totalTrade(n.id)).filter((v) => v > 0);
+    const minT = tradeValues.length > 0 ? Math.min(...tradeValues) : 0;
+    const maxT = tradeValues.length > 0 ? Math.max(...tradeValues) : 1;
+    const scaleSize = (v: number) => {
+      if (maxT <= minT) return (MIN_NODE_SIZE + MAX_NODE_SIZE) / 2;
+      const t = Math.max(0, Math.min(1, (v - minT) / (maxT - minT)));
+      return MIN_NODE_SIZE + t * (MAX_NODE_SIZE - MIN_NODE_SIZE);
+    };
+
+    const sortedByTrade = [...nodes]
+      .map((n) => ({ n, t: totalTrade(n.id) }))
+      .sort((a, b) => b.t - a.t);
+    const topIds = new Set(sortedByTrade.slice(0, TOP_LABELS_COUNT).map((x) => x.n.id));
+
     const graphNodes = nodes.map((n, i) => {
       const exports = totalExports[n.id] ?? 0;
       const imports = totalImports[n.id] ?? 0;
-      const totalTrade = exports + imports;
-      const exportRatio = totalTrade > 0 ? exports / totalTrade : 0.5;
+      const total = exports + imports;
+      const exportRatio = total > 0 ? exports / total : 0.5;
 
       const color =
         nodeColorOrder.length > 0
@@ -133,24 +154,27 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder =
             : { color, borderColor: exporterBorderColor, borderWidth: 1.5 }
           : { color };
 
-      const [x, y] = getNodePosition(n.id, i, nodes.length, graphLeft, graphTop, graphSize);
-      // Nodes on the right edge: place label to the left so it stays visible
+      const nodeSize = isAllDataMode
+        ? scaleSize(total) * nodeSizeScale
+        : (18 + Math.sqrt(total)) * nodeSizeScale;
+
+      const showLabel = isAllDataMode
+        ? topIds.has(n.id)
+        : isMobile
+          ? MAJOR_NODES.has(n.id)
+          : true;
+
       const pos = NODE_POSITIONS[n.id];
       const labelPosition = pos && pos[0] >= 80 ? ("left" as const) : ("right" as const);
 
-      const nodeSize = 18 + Math.sqrt(totalTrade);
-      const showLabel = isMobile ? MAJOR_NODES.has(n.id) : true;
-
-      return {
+      const base: Record<string, unknown> = {
         name: n.id,
-        x,
-        y,
         symbol: "circle",
-        symbolSize: nodeSize * nodeSizeScale,
+        symbolSize: nodeSize,
         itemStyle,
         label: {
           show: showLabel,
-          fontSize: 13,
+          fontSize: isAllDataMode ? 11 : 13,
           fontWeight: 500,
           color: "#374151",
           position: labelPosition,
@@ -162,6 +186,26 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder =
           label: { show: true },
         },
       };
+
+      if (isAllDataMode) {
+        const cx = graphLeft + graphSize / 2;
+        const cy = graphTop + graphSize / 2;
+        const rank = sortedByTrade.findIndex((x) => x.n.id === n.id);
+        const pinCount = Math.min(5, nodes.length);
+        if (rank < pinCount && rank >= 0) {
+          const angle = (rank / pinCount) * 2 * Math.PI - Math.PI / 2;
+          const r = graphSize * 0.15;
+          (base as Record<string, unknown>).x = cx + r * Math.cos(angle);
+          (base as Record<string, unknown>).y = cy + r * Math.sin(angle);
+          (base as Record<string, unknown>).fixed = true;
+        }
+      } else {
+        const [x, y] = getNodePosition(n.id, i, nodes.length, graphLeft, graphTop, graphSize);
+        (base as Record<string, unknown>).x = x;
+        (base as Record<string, unknown>).y = y;
+      }
+
+      return base;
     });
 
     const linkHexToRgba = (hex: string, alpha: number) => {
@@ -170,49 +214,66 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder =
       return `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, ${alpha})`;
     };
     const lineWidthScale = isMobile ? 0.7 : 1;
+    const edgeOpacity = isAllDataMode ? 0.25 : 0.45;
+    const edgeCurveness = isAllDataMode ? 0.18 : 0.35;
     const graphLinks = edges.map((e) => ({
       source: e.source,
       target: e.target,
       lineStyle: {
         width: (Math.sqrt(e.value) / 4) * 0.8 * lineWidthScale,
         color:
-          nodeColorOrder.length > 0 ? linkHexToRgba(getColor(e.source), 0.45) : "rgba(59, 130, 246, 0.45)",
-        curveness: 0.35,
+          nodeColorOrder.length > 0 ? linkHexToRgba(getColor(e.source), edgeOpacity) : `rgba(59, 130, 246, ${edgeOpacity})`,
+        curveness: edgeCurveness,
       },
+      ...(isAllDataMode && {
+        emphasis: { lineStyle: { opacity: 0.9 } },
+      }),
     }));
 
     const graphRight = (width - graphSize) / 2;
     const graphBottom = (height - graphSize) / 2;
 
+    const seriesConfig: Record<string, unknown> = {
+      type: "graph",
+      layout: isAllDataMode ? "force" : "none",
+      roam: true,
+      draggable: true,
+      scaleLimit: { min: 0.5, max: 2.5 },
+      symbol: "circle",
+      left: graphLeft,
+      right: graphRight,
+      top: graphTop,
+      bottom: graphBottom,
+      data: graphNodes,
+      links: graphLinks,
+      edgeSymbol: ["none", "arrow"],
+      edgeSymbolSize: [0, 6],
+      emphasis: {
+        focus: "adjacency",
+      },
+      lineStyle: {
+        curveness: edgeCurveness,
+      },
+      itemStyle: {
+        borderColor: "#fff",
+        borderWidth: 1,
+      },
+    };
+
+    if (isAllDataMode) {
+      (seriesConfig as Record<string, unknown>).force = {
+        repulsion: 1400,
+        gravity: 0.12,
+        edgeLength: [100, 240],
+      };
+      (seriesConfig as Record<string, unknown>).emphasis = {
+        focus: "adjacency",
+        lineStyle: { opacity: 0.9 },
+      };
+    }
+
     const option: echarts.EChartsOption = {
-      series: [
-        {
-          type: "graph",
-          layout: "none",
-          roam: true,
-          draggable: true,
-          scaleLimit: { min: 0.5, max: 2.5 },
-          symbol: "circle",
-          left: graphLeft,
-          right: graphRight,
-          top: graphTop,
-          bottom: graphBottom,
-          data: graphNodes,
-          links: graphLinks,
-          edgeSymbol: ["none", "arrow"],
-          edgeSymbolSize: [0, 6],
-          emphasis: {
-            focus: "adjacency",
-          },
-          lineStyle: {
-            curveness: 0.35,
-          },
-          itemStyle: {
-            borderColor: "#fff",
-            borderWidth: 1,
-          },
-        },
-      ],
+      series: [seriesConfig],
     };
 
     chart.setOption(option, { notMerge: true });
@@ -242,7 +303,7 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder =
       window.removeEventListener("resize", resizeChart);
       chart.dispose();
     };
-  }, [nodes, edges, containerSize, onNodeClick, nodeColorOrder, exporterBorderColor]);
+  }, [nodes, edges, containerSize, onNodeClick, nodeColorOrder, exporterBorderColor, isAllDataMode]);
 
   if (nodes.length === 0) return null;
 

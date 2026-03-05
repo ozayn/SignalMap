@@ -309,7 +309,7 @@ export async function GET(request: NextRequest) {
 
     const res = await fetch(url.toString(), {
       headers: { Accept: "application/json" },
-      next: { revalidate: 3600 },
+      next: { revalidate: source === "db" ? 300 : 3600 },
     });
 
     if (res.ok) {
@@ -317,8 +317,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(data);
     }
 
+    // Only use curated fallback when source=curated. For source=db, return error so All data doesn't silently show curated.
     if (res.status === 404 || !process.env.API_URL) {
-      return NextResponse.json(getCuratedFallback(startYear, endYear));
+      if (source === "curated") {
+        return NextResponse.json(getCuratedFallback(startYear, endYear));
+      }
+      return NextResponse.json(
+        { error: "Backend unavailable. All data requires the API." },
+        { status: 503 }
+      );
     }
 
     let body: { error?: string } = { error: `API returned ${res.status}` };
@@ -331,6 +338,12 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json(body, { status: res.status });
   } catch {
-    return NextResponse.json(getCuratedFallback(startYear, endYear));
+    if (source === "curated") {
+      return NextResponse.json(getCuratedFallback(startYear, endYear));
+    }
+    return NextResponse.json(
+      { error: "Backend unreachable. All data requires the API." },
+      { status: 503 }
+    );
   }
 }

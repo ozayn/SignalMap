@@ -32,6 +32,7 @@ A Python script runs the update logic directly, using the same build as the API.
    - **Link Postgres** to the cron service (or copy `DATABASE_URL`)
    - `FRED_API_KEY` (required for oil)
    - Optional: `YOUTUBE_DAILY_UPDATE_CHANNELS`, `YOUTUBE_API_KEY`
+   - Optional: `COMTRADE_API_KEY` (for oil trade network; see docs/COMTRADE_SETUP.md)
 
 **Troubleshooting Option 2:** If you see `TCP_ABORT_ON_DATA` or connection errors, the cron service may not have Postgres access or env vars. Use Option 3 instead.
 
@@ -55,6 +56,14 @@ Triggers the API via HTTP. No DB connection in the cron service—the API does t
 
 5. **Cron Schedule**
    - `0 7 * * *` (daily at 7:00 UTC)
+
+## Option 4: Weekly Oil Trade Update (HTTP)
+
+For oil trade network only (Comtrade data changes infrequently):
+
+- Create a separate cron service that calls `POST ${CRON_API_URL}/api/cron/update-oil-trade`
+- Schedule: `0 3 * * 0` (Sundays 3:00 UTC)
+- Or use the same daily cron; `update-all` includes oil trade and runs idempotently
 
 ## Cron Expression Examples (UTC)
 

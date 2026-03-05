@@ -140,13 +140,43 @@ def _upsert_edges(rows: list[dict[str, Any]], source: str = "comtrade") -> int:
     return count
 
 
+def _clear_oil_trade_edges() -> int:
+    """Delete all rows from oil_trade_edges. Returns count deleted."""
+    from db import DATABASE_URL, cursor
+    if not DATABASE_URL:
+        return 0
+    try:
+        with cursor() as cur:
+            cur.execute("DELETE FROM oil_trade_edges")
+            return cur.rowcount or 0
+    except Exception as e:
+        logger.exception("oil_trade_edges clear: %s", e)
+        return 0
+
+
+def _delete_year(year: int) -> int:
+    """Delete rows for one year. Returns count deleted."""
+    from db import DATABASE_URL, cursor
+    if not DATABASE_URL:
+        return 0
+    try:
+        with cursor() as cur:
+            cur.execute("DELETE FROM oil_trade_edges WHERE year = %s", (year,))
+            return cur.rowcount or 0
+    except Exception as e:
+        logger.exception("oil_trade_edges delete year %s: %s", year, e)
+        return 0
+
+
 def ingest_missing_years_from_comtrade(
     start_year: int = OIL_TRADE_START_YEAR,
     end_year: int | None = None,
+    force_reingest: bool = False,
 ) -> dict[str, Any]:
     """
     Fetch missing years from UN Comtrade and populate oil_trade_edges.
-    Idempotent: only fetches years that have no data in DB.
+    Uses NetWeight (kg) only - never TradeValue. Converts to thousand barrels/day.
+    Idempotent: only fetches years that have no data in DB, unless force_reingest=True.
     Returns summary of rows upserted per year.
     """
     from datetime import datetime
@@ -155,16 +185,22 @@ def ingest_missing_years_from_comtrade(
     if end_year is None:
         end_year = datetime.now().year
 
-    years_in_db = _get_years_in_db()
-    missing = [y for y in range(start_year, end_year + 1) if y not in years_in_db]
+    if force_reingest:
+        years_in_db = set()
+        years_to_fetch = list(range(start_year, end_year + 1))
+    else:
+        years_in_db = _get_years_in_db()
+        years_to_fetch = [y for y in range(start_year, end_year + 1) if y not in years_in_db]
 
-    if not missing:
+    if not years_to_fetch:
         logger.info("oil_trade_network: all years %s-%s already in DB", start_year, end_year)
         return {"rows_upserted": 0, "years_fetched": [], "years_already_present": list(years_in_db)}
 
     total = 0
-    for year in missing:
+    for year in years_to_fetch:
         try:
+            if force_reingest:
+                _delete_year(year)
             rows = fetch_comtrade_oil_trade(year, year)
             if rows:
                 n = _upsert_edges(rows, source="comtrade")
@@ -175,6 +211,6 @@ def ingest_missing_years_from_comtrade(
 
     return {
         "rows_upserted": total,
-        "years_fetched": missing,
+        "years_fetched": years_to_fetch,
         "years_already_present": list(years_in_db),
     }

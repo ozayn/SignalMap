@@ -32,9 +32,11 @@ type OilTradeSankeyProps = {
   exporterOrder?: string[];
   /** Stable order for color assignment. Same country = same color across years. */
   nodeColorOrder?: string[];
+  /** All data mode: tuned layout, tooltip with share. */
+  isAllDataMode?: boolean;
 };
 
-export function OilTradeSankey({ edges, year, exporterOrder = [], nodeColorOrder = [] }: OilTradeSankeyProps) {
+export function OilTradeSankey({ edges, year, exporterOrder = [], nodeColorOrder = [], isAllDataMode = false }: OilTradeSankeyProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
   const labelColor = resolvedTheme === "dark" ? "#9ca3af" : "#374151";
@@ -94,6 +96,11 @@ export function OilTradeSankey({ edges, year, exporterOrder = [], nodeColorOrder
       return;
     }
 
+    const exporterTotals: Record<string, number> = {};
+    for (const e of dagEdges) {
+      exporterTotals[e.source] = (exporterTotals[e.source] ?? 0) + e.value;
+    }
+
     const option: echarts.EChartsOption = {
       tooltip: {
         trigger: "item",
@@ -104,7 +111,12 @@ export function OilTradeSankey({ edges, year, exporterOrder = [], nodeColorOrder
           const src = p.data?.source ?? "";
           const tgt = p.data?.target ?? "";
           if (src && tgt) {
-            return `<strong>${src}</strong> → <strong>${tgt}</strong><br/>${v.toLocaleString()} thousand bbl/day`;
+            const share = exporterTotals[src]
+              ? ((v / exporterTotals[src]!) * 100).toFixed(1)
+              : "—";
+            return isAllDataMode
+              ? `<strong>Exporter:</strong> ${src}<br/><strong>Importer:</strong> ${tgt}<br/><strong>Flow:</strong> ${v.toLocaleString()} thousand bbl/day<br/><strong>Share of exporter total:</strong> ${share}%`
+              : `<strong>${src}</strong> → <strong>${tgt}</strong><br/>${v.toLocaleString()} thousand bbl/day`;
           }
           return `${v.toLocaleString()} thousand bbl/day`;
         },
@@ -145,12 +157,14 @@ export function OilTradeSankey({ edges, year, exporterOrder = [], nodeColorOrder
           right: "15%",
           top: "5%",
           bottom: "5%",
-          nodeWidth: 20,
-          nodeGap: 8,
-          layoutIterations: 0,
+          nodeWidth: isAllDataMode ? 18 : 20,
+          nodeGap: isAllDataMode ? 12 : 8,
+          nodeAlign: isAllDataMode ? "justify" : undefined,
+          layoutIterations: isAllDataMode ? 32 : 0,
           lineStyle: {
             color: "source",
             curveness: 0.5,
+            opacity: isAllDataMode ? 0.6 : 0.55,
           },
           itemStyle: {
             borderColor: "#fff",
@@ -178,7 +192,7 @@ export function OilTradeSankey({ edges, year, exporterOrder = [], nodeColorOrder
       window.removeEventListener("resize", resize);
       chart.dispose();
     };
-  }, [edges, year, exporterOrder, nodeColorOrder, labelColor]);
+  }, [edges, year, exporterOrder, nodeColorOrder, labelColor, isAllDataMode]);
 
   if (edges.length === 0) return null;
 

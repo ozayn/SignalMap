@@ -196,6 +196,9 @@ def init_tables() -> None:
                     PRIMARY KEY (year, exporter, importer)
                 )
             """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_oil_trade_edges_year ON oil_trade_edges (year)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_oil_trade_edges_exporter ON oil_trade_edges (exporter)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_oil_trade_edges_importer ON oil_trade_edges (importer)")
     except Exception:
         pass  # DB may not be available; job endpoints will return 503
 
