@@ -10,6 +10,9 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 # Bust cache so layer changes when source changes (avoids stale Railway builds)
 RUN echo "build $(date -u +%Y-%m-%dT%H:%MZ)" > /tmp/build_id
+# NEXT_PUBLIC_* must be available at build time (inlined into JS bundle)
+ARG NEXT_PUBLIC_GA_MEASUREMENT_ID
+ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=$NEXT_PUBLIC_GA_MEASUREMENT_ID
 RUN pnpm run build:web
 
 ENV NODE_ENV=production
