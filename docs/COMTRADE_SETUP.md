@@ -19,9 +19,9 @@ Without a key, the Comtrade API has strict rate limits and may return errors. Th
 ## Data Flow
 
 1. **Ingestion** – Cron job calls `update_oil_trade_network` (or `POST /api/cron/update-oil-trade`)
-2. **Source** – `signalmap.sources.comtrade_oil_trade` fetches HS 2709 (crude oil) exports for 2010–2023
+2. **Source** – `signalmap.sources.comtrade_oil_trade` fetches HS 2709 (crude oil) exports for 2010–current year
 3. **Storage** – `oil_trade_edges` table (year, exporter, importer, value, source)
-4. **API** – `GET /api/networks/oil-trade?start_year=2010&end_year=2023`
+4. **API** – `GET /api/networks/oil-trade?start_year=2010&end_year=<current>` (end_year defaults to current year)
 5. **Frontend** – Oil Trade Network study
 
 ## Conversion
@@ -46,7 +46,8 @@ Oil trade data is annual and changes infrequently. Recommended schedule:
 curl -X POST https://your-api.up.railway.app/api/cron/update-oil-trade
 
 # Or via Python (from apps/api)
-cd apps/api && python scripts/update_oil_trade_network.py --start 2010 --end 2023
+cd apps/api && python scripts/update_oil_trade_network.py --start 2010
+# --end defaults to current year; override with --end 2024 if needed
 
 # Force re-ingest (clear DB and refetch; use after fixing value metric)
 python scripts/update_oil_trade_network.py --force

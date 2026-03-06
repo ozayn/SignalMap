@@ -491,10 +491,12 @@ def _oil_trade_fallback(start_year: int, end_year: int) -> dict:
 @app.get("/api/networks/oil-trade")
 def api_oil_trade_network(
     start_year: int = Query(2010, description="Start year"),
-    end_year: int = Query(2023, description="End year"),
+    end_year: int | None = Query(default=None, description="End year (default: current year)"),
     source: str = Query("curated", description="curated or db (full ingested data)"),
 ):
     """Return bilateral crude oil trade flows (HS 2709) by year. source=curated|db."""
+    if end_year is None:
+        end_year = datetime.now().year
     if start_year > end_year:
         start_year, end_year = end_year, start_year
     try:

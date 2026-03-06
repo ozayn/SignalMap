@@ -6,9 +6,14 @@ Run locally with:
   DATABASE_URL=postgresql://localhost/signalmap  (source - local)
   DATABASE_URL_PROD=postgresql://...             (target - production from Railway)
 
-  PYTHONPATH=src python scripts/sync_oil_trade_to_production.py
+  PYTHONPATH=src python scripts/sync_oil_trade_to_production.py [--clear]
+
+  --clear  Delete all rows in production before syncing. Use this when production
+           has stale TradeValue (USD) rows that local doesn't have; otherwise
+           those old rows remain.
 """
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -27,6 +32,10 @@ from psycopg2.extras import RealDictCursor
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Sync oil_trade_edges from local to production")
+    parser.add_argument("--clear", action="store_true", help="Delete all prod rows before sync (removes stale old data)")
+    args = parser.parse_args()
+
     source_url = os.getenv("DATABASE_URL", "").replace("postgres://", "postgresql://", 1)
     prod_url = os.getenv("DATABASE_URL_PROD", "").replace("postgres://", "postgresql://", 1)
 
@@ -84,6 +93,12 @@ def main() -> int:
             cur.execute("CREATE INDEX IF NOT EXISTS idx_oil_trade_edges_exporter ON oil_trade_edges (exporter)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_oil_trade_edges_importer ON oil_trade_edges (importer)")
             conn_dst.commit()
+
+            if args.clear:
+                cur.execute("DELETE FROM oil_trade_edges")
+                deleted = cur.rowcount
+                conn_dst.commit()
+                print(f"Cleared {deleted} old rows from production")
 
             for r in rows:
                 cur.execute(

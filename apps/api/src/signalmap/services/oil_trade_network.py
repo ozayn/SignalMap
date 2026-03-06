@@ -10,6 +10,7 @@ Service logic per year:
 """
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from signalmap.data.oil_trade_curated import get_curated_edges
@@ -69,7 +70,7 @@ def _query_edges_by_year(start_year: int, end_year: int) -> dict[str, list[dict[
 
 def get_oil_trade_network(
     start_year: int = 2010,
-    end_year: int = 2023,
+    end_year: int | None = None,
     source: str = "curated",
 ) -> dict[str, Any]:
     """
@@ -80,6 +81,8 @@ def get_oil_trade_network(
     Output: { years: { "2010": [...], "2011": [...], ... } }
     Each edge: { source, target, value }.
     """
+    if end_year is None:
+        end_year = datetime.now().year
     if start_year > end_year:
         start_year, end_year = end_year, start_year
 

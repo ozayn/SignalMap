@@ -204,7 +204,7 @@ export const STUDIES: StudyMeta[] = [
     id: "oil_trade_network",
     number: 15,
     title: "Oil trade network",
-    timeRange: ["2010", "2023"],
+    timeRange: ["2010", String(new Date().getFullYear())],
     description:
       "Network view of crude oil trade between major exporting and importing countries. Nodes represent countries; edges show directional trade flows (thousand barrels per day).",
     status: "active",

@@ -359,14 +359,37 @@ export default function StudyDetailPage() {
     };
   }, [productionUsPoints, productionSaudiPoints, productionRussiaPoints, productionIranPoints, productionTotalPoints]);
 
+  /** Minimum exporters for a year to be shown (hides incomplete Comtrade data, e.g. 2025 with only 2 countries). */
+  const MIN_EXPORTERS_FOR_YEAR = 5;
+
   const networkYears = useMemo(() => {
-    const yrs = Object.keys(networkYearsData).sort();
+    const yrs = Object.keys(networkYearsData)
+      .filter((y) => {
+        const edges = networkYearsData[y] ?? [];
+        if (edges.length === 0) return false;
+        const exporterCount = new Set(edges.map((e) => e.source)).size;
+        return exporterCount >= MIN_EXPORTERS_FOR_YEAR;
+      })
+      .sort();
     return yrs;
   }, [networkYearsData]);
 
   const { networkNodesForYear, networkEdgesForYear, networkExporterOrder, networkNodeColorOrder } = useMemo(() => {
-    const yrs = Object.keys(networkYearsData).sort();
-    const year = networkSelectedYear || yrs[yrs.length - 1] || "";
+    const yrsWithData = Object.keys(networkYearsData)
+      .filter((y) => {
+        const edges = networkYearsData[y] ?? [];
+        if (edges.length === 0) return false;
+        return new Set(edges.map((e) => e.source)).size >= MIN_EXPORTERS_FOR_YEAR;
+      })
+      .sort();
+    const selectedEdges = networkYearsData[networkSelectedYear ?? ""] ?? [];
+    const selectedHasEnoughExporters =
+      selectedEdges.length > 0 &&
+      new Set(selectedEdges.map((e) => e.source)).size >= MIN_EXPORTERS_FOR_YEAR;
+    const year =
+      networkSelectedYear && selectedHasEnoughExporters
+        ? networkSelectedYear
+        : yrsWithData[yrsWithData.length - 1] || "";
     const edges = year ? (networkYearsData[year] ?? []) : [];
     const ids = new Set<string>();
     for (const e of edges) {
@@ -377,7 +400,7 @@ export default function StudyDetailPage() {
 
     const totalExports: Record<string, number> = {};
     const totalByCountry: Record<string, number> = {};
-    for (const y of yrs) {
+    for (const y of yrsWithData) {
       for (const e of networkYearsData[y] ?? []) {
         totalExports[e.source] = (totalExports[e.source] ?? 0) + e.value;
         totalByCountry[e.source] = (totalByCountry[e.source] ?? 0) + e.value;
@@ -607,13 +630,19 @@ export default function StudyDetailPage() {
     let mounted = true;
     setLoading(true);
     fetchJson<{ years: Record<string, NetworkEdge[]> }>(
-      `/api/networks/oil-trade?start_year=2010&end_year=2023&source=${oilTradeSource}`
+      `/api/networks/oil-trade?start_year=2010&end_year=${study?.timeRange?.[1] ?? new Date().getFullYear()}&source=${oilTradeSource}`
     )
       .then((res) => {
         if (mounted && res.years) {
           setNetworkYearsData(res.years);
-          const yrs = Object.keys(res.years).sort();
-          if (yrs.length > 0) setNetworkSelectedYear(yrs[yrs.length - 1]!);
+          const yrsWithData = Object.keys(res.years)
+            .filter((y) => {
+              const edges = res.years![y] ?? [];
+              if (edges.length === 0) return false;
+              return new Set(edges.map((e: { source: string }) => e.source)).size >= 5;
+            })
+            .sort();
+          if (yrsWithData.length > 0) setNetworkSelectedYear(yrsWithData[yrsWithData.length - 1]!);
         }
       })
       .catch((e) => mounted && setError(e instanceof Error ? e.message : "Network fetch failed"))

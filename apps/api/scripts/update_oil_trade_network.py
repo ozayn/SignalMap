@@ -32,7 +32,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Ingest oil trade data from UN Comtrade")
     parser.add_argument("--force", action="store_true", help="Clear DB and re-fetch all years")
     parser.add_argument("--start", type=int, default=2010, help="Start year")
-    parser.add_argument("--end", type=int, default=2023, help="End year")
+    parser.add_argument("--end", type=int, default=None, help="End year (default: current year)")
     args = parser.parse_args()
 
     if not os.getenv("COMTRADE_API_KEY") and not os.getenv("COMTRADE_SUBSCRIPTION_KEY"):

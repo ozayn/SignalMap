@@ -286,7 +286,7 @@ const CURATED_FALLBACK: Record<string, Edge[]> = {
 
 function getCuratedFallback(startYear: string, endYear: string): { years: Record<string, Edge[]> } {
   const s = parseInt(startYear, 10) || 2010;
-  const e = parseInt(endYear, 10) || 2023;
+  const e = parseInt(endYear, 10) || new Date().getFullYear();
   const years: Record<string, Edge[]> = {};
   for (let y = s; y <= e; y++) {
     const key = String(y);
@@ -298,7 +298,7 @@ function getCuratedFallback(startYear: string, endYear: string): { years: Record
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const startYear = searchParams.get("start_year") ?? "2010";
-  const endYear = searchParams.get("end_year") ?? "2023";
+  const endYear = searchParams.get("end_year") ?? String(new Date().getFullYear());
   const source = searchParams.get("source") ?? "curated";
 
   try {
