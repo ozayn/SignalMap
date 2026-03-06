@@ -93,3 +93,18 @@ For oil trade network only (Comtrade data changes infrequently):
 - **Service must exit**: Cron services must terminate when done. No web servers.
 - **Minimum interval**: Railway requires ≥5 minutes between cron runs.
 - **Option 3** uses a minimal curl image; no Python or DB in the cron service.
+
+## Troubleshooting GitHub Actions Cron
+
+If the workflow fails:
+
+1. **CRON_API_URL not set**: Add it in repo Settings → Secrets and variables → Actions. Value: `https://your-api.up.railway.app` (no trailing slash).
+
+2. **HTTP 502/503**: API may be cold-starting or overloaded. Railway free tier sleeps; first request can timeout. Consider a keep-alive ping or upgrade.
+
+3. **HTTP 500**: Check Railway API logs. Common causes:
+   - `DATABASE_URL` not set or wrong
+   - `FRED_API_KEY` missing (required for oil/fx)
+   - Comtrade rate limit (add `COMTRADE_API_KEY`)
+
+4. **Timeout**: Oil trade (Comtrade) can take 2+ minutes. The workflow uses 300s. If it still times out, run `POST /api/cron/update-oil-trade` separately on a weekly schedule.

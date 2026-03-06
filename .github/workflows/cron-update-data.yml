@@ -11,8 +11,29 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
+      - name: Check CRON_API_URL
+        run: |
+          if [ -z "${{ secrets.CRON_API_URL }}" ]; then
+            echo "::error::CRON_API_URL secret is not set. Add it in repo Settings → Secrets."
+            exit 1
+          fi
+          echo "CRON_API_URL is set"
+
       - name: Trigger cron endpoint
         run: |
-          curl -sf -X POST "${{ secrets.CRON_API_URL }}/api/cron/update-all" || exit 1
+          URL="${{ secrets.CRON_API_URL }}/api/cron/update-all"
+          echo "POST (timeout 300s, Comtrade can be slow)"
+          RESP=$(curl -s -w "\n%{http_code}" --max-time 300 -X POST "$URL")
+          HTTP_CODE=$(echo "$RESP" | tail -n1)
+          BODY=$(echo "$RESP" | sed '$d')
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "Success (HTTP $HTTP_CODE)"
+            echo "$BODY" | head -c 800
+          else
+            echo "::error::Cron failed: HTTP $HTTP_CODE"
+            echo "Response:"
+            echo "$BODY"
+            exit 1
+          fi
         env:
           CRON_API_URL: ${{ secrets.CRON_API_URL }}
