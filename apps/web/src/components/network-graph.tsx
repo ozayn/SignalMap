@@ -11,22 +11,51 @@ export type NetworkEdge = { source: string; target: string; value: number };
 /** Major nodes: always show labels on mobile to reduce clutter. */
 const MAJOR_NODES = new Set(["China", "India", "Russia", "Saudi Arabia", "United States", "EU"]);
 
-/** Fixed positions for stable layout across years. Normalized 0–100, scaled to pixels in use. */
+/** Fixed positions for stable layout across years. Normalized 5–95 to keep nodes inside graph. */
 const NODE_POSITIONS: Record<string, [number, number]> = {
   "Saudi Arabia": [35, 45],
-  Russia: [50, 15],
-  "United States": [85, 40],
-  Iran: [20, 50],
-  Iraq: [25, 75],
-  UAE: [55, 30],
-  China: [50, 85],
-  India: [30, 70],
-  EU: [90, 55],
-  Japan: [85, 75],
-  "South Korea": [80, 25],
-  Singapore: [70, 55],
+  Russia: [50, 18],
+  "United States": [82, 42],
+  USA: [82, 42],
+  Iran: [22, 52],
+  Iraq: [28, 72],
+  UAE: [55, 32],
+  China: [50, 82],
+  India: [32, 68],
+  EU: [85, 55],
+  Japan: [82, 72],
+  "South Korea": [78, 28],
+  "Rep. of Korea": [78, 28],
+  Singapore: [68, 55],
   Turkey: [45, 55],
-  Canada: [75, 20],
+  "Türkiye": [45, 55],
+  Canada: [72, 22],
+  Brazil: [42, 78],
+  Nigeria: [45, 38],
+  Kuwait: [42, 55],
+  Mexico: [28, 48],
+  Norway: [55, 12],
+  Algeria: [42, 52],
+  Libya: [45, 48],
+  Kazakhstan: [58, 28],
+  Angola: [44, 58],
+  Venezuela: [38, 72],
+  Oman: [55, 55],
+  Qatar: [52, 52],
+  Colombia: [32, 72],
+  Ecuador: [30, 75],
+  Malaysia: [70, 68],
+  Indonesia: [72, 62],
+  Australia: [85, 82],
+  Spain: [55, 52],
+  Netherlands: [58, 50],
+  Italy: [52, 50],
+  France: [50, 48],
+  Germany: [56, 45],
+  "United Kingdom": [48, 40],
+  Thailand: [70, 70],
+  "Other exporters": [20, 35],
+  "Other importers": [78, 75],
 };
 
 function getNodePosition(
@@ -57,6 +86,8 @@ type NetworkGraphProps = {
   onNodeClick?: (country: string) => void;
   /** Stable order for color assignment. Same country = same color as Sankey. */
   nodeColorOrder?: string[];
+  /** Stable order for node positions. Same order = same location when switching years. */
+  nodeOrder?: string[];
   /** All data mode: force layout, reduced clutter, top labels only. */
   isAllDataMode?: boolean;
 };
@@ -65,7 +96,7 @@ const MIN_NODE_SIZE = 6;
 const MAX_NODE_SIZE = 42;
 const TOP_LABELS_COUNT = 15;
 
-export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder = [], isAllDataMode = false }: NetworkGraphProps) {
+export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder = [], nodeOrder = [], isAllDataMode = false }: NetworkGraphProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
   const [containerSize, setContainerSize] = useState({ width: 800, height: 720 });
@@ -126,12 +157,24 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder =
       return MIN_NODE_SIZE + t * (MAX_NODE_SIZE - MIN_NODE_SIZE);
     };
 
-    const sortedByTrade = [...nodes]
+    const orderedNodes =
+      nodeOrder.length > 0
+        ? [...nodes].sort((a, b) => {
+            const ra = nodeOrder.indexOf(a.id);
+            const rb = nodeOrder.indexOf(b.id);
+            if (ra >= 0 && rb >= 0) return ra - rb;
+            if (ra >= 0) return -1;
+            if (rb >= 0) return 1;
+            return totalTrade(b.id) - totalTrade(a.id);
+          })
+        : nodes;
+
+    const sortedByTrade = [...orderedNodes]
       .map((n) => ({ n, t: totalTrade(n.id) }))
       .sort((a, b) => b.t - a.t);
     const topIds = new Set(sortedByTrade.slice(0, TOP_LABELS_COUNT).map((x) => x.n.id));
 
-    const graphNodes = nodes.map((n, i) => {
+    const graphNodes = orderedNodes.map((n, i) => {
       const exports = totalExports[n.id] ?? 0;
       const imports = totalImports[n.id] ?? 0;
       const total = exports + imports;
@@ -188,19 +231,23 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder =
       };
 
       if (isAllDataMode) {
-        const cx = graphLeft + graphSize / 2;
-        const cy = graphTop + graphSize / 2;
-        const rank = sortedByTrade.findIndex((x) => x.n.id === n.id);
-        const pinCount = Math.min(5, nodes.length);
-        if (rank < pinCount && rank >= 0) {
-          const angle = (rank / pinCount) * 2 * Math.PI - Math.PI / 2;
-          const r = graphSize * 0.15;
+        const pos = NODE_POSITIONS[n.id];
+        if (pos) {
+          (base as Record<string, unknown>).x = graphLeft + (pos[0] / 100) * graphSize;
+          (base as Record<string, unknown>).y = graphTop + (pos[1] / 100) * graphSize;
+        } else {
+          const cx = graphLeft + graphSize / 2;
+          const cy = graphTop + graphSize / 2;
+          const rank = nodeOrder.length > 0 ? nodeOrder.indexOf(n.id) : sortedByTrade.findIndex((x) => x.n.id === n.id);
+          const idx = rank >= 0 ? rank : i;
+          const total = orderedNodes.length;
+          const angle = (idx / Math.max(total, 1)) * 2 * Math.PI - Math.PI / 2;
+          const r = graphSize * 0.38;
           (base as Record<string, unknown>).x = cx + r * Math.cos(angle);
           (base as Record<string, unknown>).y = cy + r * Math.sin(angle);
-          (base as Record<string, unknown>).fixed = true;
         }
       } else {
-        const [x, y] = getNodePosition(n.id, i, nodes.length, graphLeft, graphTop, graphSize);
+        const [x, y] = getNodePosition(n.id, i, orderedNodes.length, graphLeft, graphTop, graphSize);
         (base as Record<string, unknown>).x = x;
         (base as Record<string, unknown>).y = y;
       }
@@ -235,7 +282,7 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder =
 
     const seriesConfig: Record<string, unknown> = {
       type: "graph",
-      layout: isAllDataMode ? "force" : "none",
+      layout: "none",
       roam: true,
       draggable: true,
       scaleLimit: { min: 0.5, max: 2.5 },
@@ -261,11 +308,6 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder =
     };
 
     if (isAllDataMode) {
-      (seriesConfig as Record<string, unknown>).force = {
-        repulsion: 1400,
-        gravity: 0.12,
-        edgeLength: [100, 240],
-      };
       (seriesConfig as Record<string, unknown>).emphasis = {
         focus: "adjacency",
         lineStyle: { opacity: 0.9 },
@@ -303,7 +345,7 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder =
       window.removeEventListener("resize", resizeChart);
       chart.dispose();
     };
-  }, [nodes, edges, containerSize, onNodeClick, nodeColorOrder, exporterBorderColor, isAllDataMode]);
+  }, [nodes, edges, containerSize, onNodeClick, nodeColorOrder, nodeOrder, exporterBorderColor, isAllDataMode]);
 
   if (nodes.length === 0) return null;
 

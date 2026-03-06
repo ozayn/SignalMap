@@ -21,6 +21,14 @@ import { getStudyById, getPrevNextStudies } from "@/lib/studies";
 import { fetchJson } from "@/lib/api";
 import { enrichOilPointsWithVolatility } from "@/lib/oil-volatility";
 import { filterForNetwork, filterForSankey } from "@/lib/oil-trade-network-filter";
+import {
+  CANONICAL_EXPORTER_ORDER,
+  CANONICAL_IMPORTER_ORDER,
+  CANONICAL_NETWORK_ORDER,
+  EXPORTER_ALIASES,
+  IMPORTER_ALIASES,
+  orderWithCanonical,
+} from "@/lib/oil-trade-regions";
 import { trackEvent } from "@/lib/analytics";
 
 type OverviewData = {
@@ -422,24 +430,76 @@ export default function StudyDetailPage() {
     };
   }, [networkYearsData, networkSelectedYear]);
 
-  const { networkDisplayNodes, networkDisplayEdges, sankeyDisplayEdges, isAllDataMode } = useMemo(() => {
+  const {
+    networkDisplayNodes,
+    networkDisplayEdges,
+    networkNodeOrder,
+    sankeyDisplayEdges,
+    sankeyExporterOrder,
+    sankeyImporterOrder,
+    isAllDataMode,
+  } = useMemo(() => {
     if (oilTradeSource !== "db") {
       return {
         networkDisplayNodes: networkNodesForYear,
         networkDisplayEdges: networkEdgesForYear,
+        networkNodeOrder: undefined as string[] | undefined,
         sankeyDisplayEdges: networkEdgesForYear,
+        sankeyExporterOrder: undefined as string[] | undefined,
+        sankeyImporterOrder: undefined as string[] | undefined,
         isAllDataMode: false,
       };
     }
     const { nodes, edges: networkEdges } = filterForNetwork(networkEdgesForYear);
     const sankeyEdges = filterForSankey(networkEdgesForYear);
+    // Use totals from ALL years so order stays stable when switching years
+    const globalExports: Record<string, number> = {};
+    const globalImports: Record<string, number> = {};
+    for (const year of Object.keys(networkYearsData)) {
+      const yearSankey = filterForSankey(networkYearsData[year] ?? []);
+      const yearNetwork = filterForNetwork(networkYearsData[year] ?? []);
+      for (const e of yearSankey) {
+        globalExports[e.source] = (globalExports[e.source] ?? 0) + e.value;
+        globalImports[e.target] = (globalImports[e.target] ?? 0) + e.value;
+      }
+      for (const e of yearNetwork.edges) {
+        globalExports[e.source] = (globalExports[e.source] ?? 0) + e.value;
+        globalImports[e.target] = (globalImports[e.target] ?? 0) + e.value;
+      }
+    }
+    const globalTrade = (id: string) => (globalExports[id] ?? 0) + (globalImports[id] ?? 0);
+    const net = (id: string) => (globalExports[id] ?? 0) - (globalImports[id] ?? 0);
+    const exporterIds = [...new Set(sankeyEdges.map((e) => e.source))].filter((id) => net(id) > 0);
+    const importerIds = [...new Set(sankeyEdges.map((e) => e.target))].filter((id) => net(id) <= 0);
+    const exporterOrder = orderWithCanonical(
+      exporterIds,
+      CANONICAL_EXPORTER_ORDER,
+      globalExports,
+      EXPORTER_ALIASES
+    );
+    const importerOrder = orderWithCanonical(
+      importerIds,
+      CANONICAL_IMPORTER_ORDER,
+      globalImports,
+      IMPORTER_ALIASES
+    );
+    const nodeIds = nodes.map((n) => n.id);
+    const networkNodeOrder = orderWithCanonical(
+      nodeIds,
+      CANONICAL_NETWORK_ORDER,
+      Object.fromEntries(nodeIds.map((id) => [id, globalTrade(id)])),
+      { ...EXPORTER_ALIASES, ...IMPORTER_ALIASES }
+    );
     return {
       networkDisplayNodes: nodes,
       networkDisplayEdges: networkEdges,
+      networkNodeOrder,
       sankeyDisplayEdges: sankeyEdges,
+      sankeyExporterOrder: exporterOrder,
+      sankeyImporterOrder: importerOrder,
       isAllDataMode: true,
     };
-  }, [networkNodesForYear, networkEdgesForYear, oilTradeSource]);
+  }, [networkNodesForYear, networkEdgesForYear, networkYearsData, oilTradeSource]);
 
   const fxDualTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isFxUsdIrrDual) return null;
@@ -2235,7 +2295,8 @@ export default function StudyDetailPage() {
                     key={`${networkSelectedYear || networkYears[networkYears.length - 1]}-${oilTradeSource}`}
                     edges={sankeyDisplayEdges}
                     year={networkSelectedYear}
-                    exporterOrder={networkExporterOrder}
+                    exporterOrder={isAllDataMode ? sankeyExporterOrder : networkExporterOrder}
+                    importerOrder={isAllDataMode ? sankeyImporterOrder : undefined}
                     nodeColorOrder={networkNodeColorOrder}
                     isAllDataMode={isAllDataMode}
                   />
@@ -2257,6 +2318,7 @@ export default function StudyDetailPage() {
                   year={networkSelectedYear}
                   onNodeClick={(country) => trackEvent("network_node_clicked", { country })}
                   nodeColorOrder={networkNodeColorOrder}
+                  nodeOrder={isAllDataMode ? networkNodeOrder : networkNodeColorOrder}
                   isAllDataMode={isAllDataMode}
                 />
                 ) : (

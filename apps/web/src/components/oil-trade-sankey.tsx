@@ -30,13 +30,15 @@ type OilTradeSankeyProps = {
   year?: string;
   /** Stable order for exporters (left column). From all years, e.g. by total exports. */
   exporterOrder?: string[];
+  /** Stable order for importers (right column). If omitted, importers keep default order. */
+  importerOrder?: string[];
   /** Stable order for color assignment. Same country = same color across years. */
   nodeColorOrder?: string[];
   /** All data mode: tuned layout, tooltip with share. */
   isAllDataMode?: boolean;
 };
 
-export function OilTradeSankey({ edges, year, exporterOrder = [], nodeColorOrder = [], isAllDataMode = false }: OilTradeSankeyProps) {
+export function OilTradeSankey({ edges, year, exporterOrder = [], importerOrder = [], nodeColorOrder = [], isAllDataMode = false }: OilTradeSankeyProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
   const labelColor = resolvedTheme === "dark" ? "#9ca3af" : "#374151";
@@ -65,9 +67,13 @@ export function OilTradeSankey({ edges, year, exporterOrder = [], nodeColorOrder
     const exporters = allIds.filter((id) => net(id) > 0);
     const importers = allIds.filter((id) => net(id) <= 0);
 
-    const orderRank = new Map(exporterOrder.map((id, i) => [id, i]));
-    const byExporterOrder = (a: string, b: string) => (orderRank.get(a) ?? 9999) - (orderRank.get(b) ?? 9999);
+    const exporterRank = new Map(exporterOrder.map((id, i) => [id, i]));
+    const byExporterOrder = (a: string, b: string) => (exporterRank.get(a) ?? 9999) - (exporterRank.get(b) ?? 9999);
     const sortedExporters = exporterOrder.length > 0 ? [...exporters].sort(byExporterOrder) : exporters;
+
+    const importerRank = new Map(importerOrder.map((id, i) => [id, i]));
+    const byImporterOrder = (a: string, b: string) => (importerRank.get(a) ?? 9999) - (importerRank.get(b) ?? 9999);
+    const sortedImporters = importerOrder.length > 0 ? [...importers].sort(byImporterOrder) : importers;
 
     const colorRank = new Map(nodeColorOrder.map((id, i) => [id, i]));
     const getColor = (name: string) =>
@@ -84,7 +90,7 @@ export function OilTradeSankey({ edges, year, exporterOrder = [], nodeColorOrder
         depth: 0,
         ...(nodeColorOrder.length > 0 && { itemStyle: { color: getColor(name) } }),
       })),
-      ...importers.map((name) => ({
+      ...sortedImporters.map((name) => ({
         name,
         depth: 1,
         ...(nodeColorOrder.length > 0 && { itemStyle: { color: hexToRgba(getColor(name), 0.6) } }),
@@ -192,7 +198,7 @@ export function OilTradeSankey({ edges, year, exporterOrder = [], nodeColorOrder
       window.removeEventListener("resize", resize);
       chart.dispose();
     };
-  }, [edges, year, exporterOrder, nodeColorOrder, labelColor, isAllDataMode]);
+  }, [edges, year, exporterOrder, importerOrder, nodeColorOrder, labelColor, isAllDataMode]);
 
   if (edges.length === 0) return null;
 
