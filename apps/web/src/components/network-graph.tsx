@@ -9,14 +9,13 @@ export type NetworkNode = { id: string };
 export type NetworkEdge = { source: string; target: string; value: number };
 
 /** Major nodes: always show labels on mobile to reduce clutter. */
-const MAJOR_NODES = new Set(["China", "India", "Russia", "Saudi Arabia", "United States", "EU"]);
+const MAJOR_NODES = new Set(["China", "India", "Iran", "Russia", "Saudi Arabia", "United States", "EU"]);
 
 /** Fixed positions for stable layout across years. Normalized 5–95 to keep nodes inside graph. */
 const NODE_POSITIONS: Record<string, [number, number]> = {
   "Saudi Arabia": [35, 45],
   Russia: [50, 18],
   "United States": [82, 42],
-  USA: [82, 42],
   Iran: [22, 52],
   Iraq: [28, 72],
   UAE: [55, 32],
@@ -25,7 +24,6 @@ const NODE_POSITIONS: Record<string, [number, number]> = {
   EU: [85, 55],
   Japan: [82, 72],
   "South Korea": [78, 28],
-  "Rep. of Korea": [78, 28],
   Singapore: [68, 55],
   Turkey: [45, 55],
   "Türkiye": [45, 55],

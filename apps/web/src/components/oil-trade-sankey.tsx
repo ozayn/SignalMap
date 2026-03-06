@@ -135,7 +135,7 @@ export function OilTradeSankey({ edges, year, exporterOrder = [], importerOrder 
           style: {
             text: "Exporters",
             fontSize: 12,
-            fontWeight: 500,
+            fontWeight: 700,
             fill: labelColor,
           },
           z: 10,
@@ -147,7 +147,7 @@ export function OilTradeSankey({ edges, year, exporterOrder = [], importerOrder 
           style: {
             text: "Importers",
             fontSize: 12,
-            fontWeight: 500,
+            fontWeight: 700,
             fill: labelColor,
           },
           z: 10,
@@ -178,7 +178,7 @@ export function OilTradeSankey({ edges, year, exporterOrder = [], importerOrder 
           },
           label: {
             fontSize: 11,
-            color: "#374151",
+            color: labelColor,
           },
         },
       ],

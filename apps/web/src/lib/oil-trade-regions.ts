@@ -18,13 +18,13 @@ export const CANONICAL_EXPORTER_ORDER: string[] = [
   "Saudi Arabia",
   "Russia",
   "Iraq",
+  "Iran",
   "Canada",
   "United States",
   "UAE",
   "Kuwait",
   "Nigeria",
   "Brazil",
-  "Iran",
   "Libya",
   "Kazakhstan",
   "Norway",
@@ -54,6 +54,7 @@ export const CANONICAL_IMPORTER_ORDER: string[] = [
   "United States",
   "South Korea",
   "Singapore",
+  "Iran",
   "Thailand",
   "Spain",
   "Netherlands",
@@ -184,6 +185,43 @@ export function orderWithCanonical(
   inCanonical.sort((a, b) => (rank.get(toCanonical(a)) ?? 9999) - (rank.get(toCanonical(b)) ?? 9999));
   notInCanonical.sort((a, b) => (totalByValue[b] ?? 0) - (totalByValue[a] ?? 0));
   return [...inCanonical, ...notInCanonical];
+}
+
+/** Deterministic order for color assignment. Canonical first; rest alphabetically. Same country = same color across Curated/All. */
+export function orderForColors(
+  actualIds: string[],
+  canonicalOrder: string[],
+  aliases?: Record<string, string>
+): string[] {
+  const toCanonical = (id: string) => (aliases && aliases[id]) ?? id;
+  const canonicalSet = new Set(canonicalOrder);
+  const inCanonical = actualIds.filter((id) => canonicalSet.has(toCanonical(id)));
+  const notInCanonical = actualIds.filter((id) => !canonicalSet.has(toCanonical(id)));
+  const rank = new Map(canonicalOrder.map((id, i) => [id, i]));
+  inCanonical.sort((a, b) => (rank.get(toCanonical(a)) ?? 9999) - (rank.get(toCanonical(b)) ?? 9999));
+  notInCanonical.sort((a, b) => a.localeCompare(b));
+  return [...inCanonical, ...notInCanonical];
+}
+
+/** Map API/Comtrade variants to display names for consistent labels across all four plots. */
+const DISPLAY_ALIASES: Record<string, string> = {
+  ...EXPORTER_ALIASES,
+  ...IMPORTER_ALIASES,
+  // Comtrade variants (match backend COUNTRY_NORMALIZE)
+  "Russian Federation": "Russia",
+  "Republic of Korea": "South Korea",
+  "Iran (Islamic Republic of)": "Iran",
+  "United Arab Emirates": "UAE",
+  "European Union": "EU",
+  "Venezuela (Bolivarian Republic of)": "Venezuela",
+  "Viet Nam": "Vietnam",
+  "Chinese Taipei": "Taiwan",
+  "Hong Kong, China": "Hong Kong",
+  Türkiye: "Turkey",
+};
+
+export function toDisplayName(id: string): string {
+  return DISPLAY_ALIASES[id] ?? id;
 }
 
 export { EXPORTER_ALIASES, IMPORTER_ALIASES };

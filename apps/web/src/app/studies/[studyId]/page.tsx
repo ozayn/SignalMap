@@ -27,7 +27,9 @@ import {
   CANONICAL_NETWORK_ORDER,
   EXPORTER_ALIASES,
   IMPORTER_ALIASES,
+  orderForColors,
   orderWithCanonical,
+  toDisplayName,
 } from "@/lib/oil-trade-regions";
 import { trackEvent } from "@/lib/analytics";
 
@@ -418,8 +420,11 @@ export default function StudyDetailPage() {
     const exporterOrder = Object.keys(totalExports).sort(
       (a, b) => (totalExports[b] ?? 0) - (totalExports[a] ?? 0)
     );
-    const nodeColorOrder = Object.keys(totalByCountry).sort(
-      (a, b) => (totalByCountry[b] ?? 0) - (totalByCountry[a] ?? 0)
+    const networkAliases = { ...EXPORTER_ALIASES, ...IMPORTER_ALIASES };
+    const nodeColorOrder = orderForColors(
+      Object.keys(totalByCountry),
+      CANONICAL_NETWORK_ORDER,
+      networkAliases
     );
 
     return {
@@ -694,12 +699,28 @@ export default function StudyDetailPage() {
     )
       .then((res) => {
         if (mounted && res.years) {
-          setNetworkYearsData(res.years);
-          const yrsWithData = Object.keys(res.years)
+          const normalized: Record<string, NetworkEdge[]> = {};
+          for (const [year, edges] of Object.entries(res.years)) {
+            const agg: Record<string, Record<string, number>> = {};
+            for (const e of edges ?? []) {
+              const src = toDisplayName(e.source);
+              const tgt = toDisplayName(e.target);
+              if (!agg[src]) agg[src] = {};
+              agg[src][tgt] = (agg[src][tgt] ?? 0) + e.value;
+            }
+            normalized[year] = [];
+            for (const src of Object.keys(agg)) {
+              for (const tgt of Object.keys(agg[src]!)) {
+                normalized[year].push({ source: src, target: tgt, value: agg[src]![tgt]! });
+              }
+            }
+          }
+          setNetworkYearsData(normalized);
+          const yrsWithData = Object.keys(normalized)
             .filter((y) => {
-              const edges = res.years![y] ?? [];
+              const edges = normalized[y] ?? [];
               if (edges.length === 0) return false;
-              return new Set(edges.map((e: { source: string }) => e.source)).size >= 5;
+              return new Set(edges.map((e) => e.source)).size >= 5;
             })
             .sort();
           if (yrsWithData.length > 0) setNetworkSelectedYear(yrsWithData[yrsWithData.length - 1]!);

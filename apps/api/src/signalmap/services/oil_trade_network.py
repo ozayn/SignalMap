@@ -25,6 +25,18 @@ EU_IMPORTERS = frozenset({
     "Belgium", "Greece", "United Kingdom",
 })
 
+# Normalize Comtrade variants to match curated display names (USA -> United States, etc.)
+DISPLAY_NORMALIZE: dict[str, str] = {
+    "USA": "United States",
+    "United States of America": "United States",
+    "Rep. of Korea": "South Korea",
+    "Republic of Korea": "South Korea",
+}
+
+
+def _normalize_for_display(name: str) -> str:
+    return DISPLAY_NORMALIZE.get(name, name)
+
 
 def _aggregate_importer(name: str) -> str:
     """Aggregate EU member importers to 'EU' for network display."""
@@ -51,8 +63,9 @@ def _query_edges_by_year(start_year: int, end_year: int) -> dict[str, list[dict[
             )
             for row in cur.fetchall() or []:
                 year = str(row["year"])
-                importer = _aggregate_importer(row["importer"])
-                key = (row["exporter"], importer)
+                exporter = _normalize_for_display(row["exporter"])
+                importer = _aggregate_importer(_normalize_for_display(row["importer"]))
+                key = (exporter, importer)
                 if year not in raw:
                     raw[year] = {}
                 raw[year][key] = raw[year].get(key, 0) + float(row["value"])
