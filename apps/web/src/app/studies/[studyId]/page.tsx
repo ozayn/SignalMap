@@ -134,16 +134,19 @@ function computeWindowRange(eventDate: string, windowYears: number): [string, st
   return [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)];
 }
 
-function computeOilKpis(points: { value: number }[]) {
+function computeOilKpis(points: { date?: string; value: number }[]) {
   if (points.length === 0) return null;
   const vals = points.map((p) => p.value);
   const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
   const min = Math.min(...vals);
   const max = Math.max(...vals);
+  const sorted = [...points].sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
+  const latest = sorted[sorted.length - 1]?.value;
   return {
     avg: Math.round(avg).toLocaleString(),
     min: Math.round(min).toLocaleString(),
     max: Math.round(max).toLocaleString(),
+    latest: latest != null ? Math.round(latest).toLocaleString() : null,
   };
 }
 
@@ -1917,6 +1920,11 @@ export default function StudyDetailPage() {
             <CardContent>
               <p className="text-2xl font-medium">
                 {oilKpis.max}
+                {oilKpis.latest != null && (
+                  <span className="ml-2 text-base font-normal text-muted-foreground">
+                    (latest: {oilKpis.latest})
+                  </span>
+                )}
                 <span className="ml-1 text-sm font-normal text-muted-foreground">
                   USD/barrel
                 </span>
