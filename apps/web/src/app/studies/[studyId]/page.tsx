@@ -18,6 +18,7 @@ import { FollowerGrowthChart } from "@/components/follower-growth-chart";
 import { NetworkGraph, type NetworkNode, type NetworkEdge } from "@/components/network-graph";
 import { OilTradeSankey } from "@/components/oil-trade-sankey";
 import LatestValueBanner from "@/components/studies/LatestValueBanner";
+import { MultiSeriesStats } from "@/components/studies/MultiSeriesStats";
 import { getStudyById, getPrevNextStudies } from "@/lib/studies";
 import { fetchJson } from "@/lib/api";
 import { enrichOilPointsWithVolatility } from "@/lib/oil-volatility";
@@ -33,6 +34,7 @@ import {
   toDisplayName,
 } from "@/lib/oil-trade-regions";
 import { trackEvent } from "@/lib/analytics";
+import { formatStatDate } from "@/lib/utils";
 
 type OverviewData = {
   study_id: string;
@@ -143,11 +145,17 @@ function computeOilKpis(points: { date?: string; value: number }[]) {
   const max = Math.max(...vals);
   const sorted = [...points].sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
   const latest = sorted[sorted.length - 1]?.value ?? null;
+  const latestDate = sorted[sorted.length - 1]?.date ?? null;
+  const minPoint = points.find((p) => p.value === min);
+  const maxPoint = points.find((p) => p.value === max);
   return {
     latest,
+    latestDate: latestDate ?? undefined,
     avg: Math.round(avg),
     min: Math.round(min),
+    minDate: minPoint?.date ?? undefined,
     max: Math.round(max),
+    maxDate: maxPoint?.date ?? undefined,
   };
 }
 
@@ -156,12 +164,20 @@ function computeFxKpis(points: { date: string; value: number }[]) {
   const vals = points.map((p) => p.value);
   const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
   const latest = sorted[sorted.length - 1]?.value ?? null;
+  const latestDate = sorted[sorted.length - 1]?.date ?? null;
   const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const minPoint = points.find((p) => p.value === min);
+  const maxPoint = points.find((p) => p.value === max);
   return {
     latest,
+    latestDate,
     avg,
-    min: Math.min(...vals),
-    max: Math.max(...vals),
+    min,
+    max,
+    minDate: minPoint?.date ?? null,
+    maxDate: maxPoint?.date ?? null,
   };
 }
 
@@ -189,6 +205,30 @@ function CompactStatValue({ value, unit, prefix = "" }: { value: number | null; 
       {prefix}
       {displayStr}
     </span>
+  );
+}
+
+/** Renders stat value with optional date below (for Latest, Min, Max). Single-series always shows dates (1 signal ≤ 3). */
+function StatValueWithDate({
+  value,
+  unit,
+  prefix = "",
+  date,
+}: {
+  value: number | null;
+  unit: string;
+  prefix?: string;
+  date?: string | null;
+}) {
+  return (
+    <div>
+      <p className="text-2xl font-semibold text-foreground">
+        <CompactStatValue value={value} unit={unit} prefix={prefix} />
+      </p>
+      {date && (
+        <p className="text-xs text-muted-foreground mt-0.5">{formatStatDate(date)}</p>
+      )}
+    </div>
   );
 }
 
@@ -1794,6 +1834,28 @@ export default function StudyDetailPage() {
               </div>
             </CardHeader>
             <CardContent>
+              <MultiSeriesStats
+                series={[
+                  { label: "Official (proxy)", unit: "toman/USD", points: fxDualOfficialPoints },
+                  { label: "Open market", unit: "toman/USD", points: fxDualOpenPoints },
+                  ...(showFxSpread
+                    ? [
+                        {
+                          label: "Spread",
+                          unit: "%",
+                          points: fxDualOfficialPoints
+                            .map((p) => {
+                              const openPt = fxDualOpenPoints.find((o) => o.date === p.date);
+                              if (!openPt || p.value === 0) return null;
+                              return { date: p.date, value: ((openPt.value - p.value) / p.value) * 100 };
+                            })
+                            .filter((q): q is { date: string; value: number } => q != null),
+                        },
+                      ]
+                    : []),
+                ]}
+                timeRange={fxDualTimeRange ?? undefined}
+              />
               <TimelineChart
                 data={[]}
                 valueKey="value"
@@ -1932,9 +1994,12 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-foreground">
-                  <CompactStatValue value={oilKpis.latest} unit="USD/barrel" prefix="$" />
-                </p>
+                <StatValueWithDate
+                  value={oilKpis.latest}
+                  unit="USD/barrel"
+                  prefix="$"
+                  date={oilKpis.latestDate}
+                />
               </CardContent>
             </Card>
             <Card className="border-border">
@@ -1956,9 +2021,12 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-foreground">
-                  <CompactStatValue value={oilKpis.min} unit="USD/barrel" prefix="$" />
-                </p>
+                <StatValueWithDate
+                  value={oilKpis.min}
+                  unit="USD/barrel"
+                  prefix="$"
+                  date={oilKpis.minDate}
+                />
               </CardContent>
             </Card>
             <Card className="border-border">
@@ -1968,9 +2036,12 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-foreground">
-                  <CompactStatValue value={oilKpis.max} unit="USD/barrel" prefix="$" />
-                </p>
+                <StatValueWithDate
+                  value={oilKpis.max}
+                  unit="USD/barrel"
+                  prefix="$"
+                  date={oilKpis.maxDate}
+                />
               </CardContent>
             </Card>
           </div>
@@ -1988,9 +2059,12 @@ export default function StudyDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-semibold text-foreground">
-                <CompactStatValue value={realOilKpis.latest} unit="USD/bbl (2015)" prefix="$" />
-              </p>
+              <StatValueWithDate
+                value={realOilKpis.latest}
+                unit="USD/bbl (2015)"
+                prefix="$"
+                date={realOilKpis.latestDate}
+              />
             </CardContent>
           </Card>
           <Card className="border-border">
@@ -2012,9 +2086,12 @@ export default function StudyDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-semibold text-foreground">
-                <CompactStatValue value={realOilKpis.min} unit="USD/bbl (2015)" prefix="$" />
-              </p>
+              <StatValueWithDate
+                value={realOilKpis.min}
+                unit="USD/bbl (2015)"
+                prefix="$"
+                date={realOilKpis.minDate}
+              />
             </CardContent>
           </Card>
           <Card className="border-border">
@@ -2024,9 +2101,12 @@ export default function StudyDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-semibold text-foreground">
-                <CompactStatValue value={realOilKpis.max} unit="USD/bbl (2015)" prefix="$" />
-              </p>
+              <StatValueWithDate
+                value={realOilKpis.max}
+                unit="USD/bbl (2015)"
+                prefix="$"
+                date={realOilKpis.maxDate}
+              />
             </CardContent>
           </Card>
           </div>
@@ -2044,9 +2124,11 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-foreground">
-                  <CompactStatValue value={pppIranKpis.latest} unit="toman/bbl (PPP)" />
-                </p>
+                <StatValueWithDate
+                  value={pppIranKpis.latest}
+                  unit="toman/bbl (PPP)"
+                  date={pppIranKpis.latestDate}
+                />
               </CardContent>
             </Card>
             <Card className="border-border">
@@ -2068,9 +2150,11 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-foreground">
-                  <CompactStatValue value={pppIranKpis.min} unit="toman/bbl (PPP)" />
-                </p>
+                <StatValueWithDate
+                  value={pppIranKpis.min}
+                  unit="toman/bbl (PPP)"
+                  date={pppIranKpis.minDate}
+                />
               </CardContent>
             </Card>
             <Card className="border-border">
@@ -2080,9 +2164,11 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-foreground">
-                  <CompactStatValue value={pppIranKpis.max} unit="toman/bbl (PPP)" />
-                </p>
+                <StatValueWithDate
+                  value={pppIranKpis.max}
+                  unit="toman/bbl (PPP)"
+                  date={pppIranKpis.maxDate}
+                />
               </CardContent>
             </Card>
           </div>
@@ -2112,9 +2198,11 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-foreground">
-                  <CompactStatValue value={pppIranKpis.min} unit="toman/bbl (PPP)" />
-                </p>
+                <StatValueWithDate
+                  value={pppIranKpis.min}
+                  unit="toman/bbl (PPP)"
+                  date={pppIranKpis.minDate}
+                />
               </CardContent>
             </Card>
             <Card className="border-border">
@@ -2124,9 +2212,11 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-foreground">
-                  <CompactStatValue value={pppIranKpis.max} unit="toman/bbl (PPP)" />
-                </p>
+                <StatValueWithDate
+                  value={pppIranKpis.max}
+                  unit="toman/bbl (PPP)"
+                  date={pppIranKpis.maxDate}
+                />
               </CardContent>
             </Card>
           </div>
@@ -2144,9 +2234,11 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-foreground">
-                  <CompactStatValue value={fxKpis.latest} unit="toman/USD" />
-                </p>
+                <StatValueWithDate
+                  value={fxKpis.latest}
+                  unit="toman/USD"
+                  date={fxKpis.latestDate}
+                />
               </CardContent>
             </Card>
             <Card className="border-border">
@@ -2168,9 +2260,11 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-foreground">
-                  <CompactStatValue value={fxKpis.min} unit="toman/USD" />
-                </p>
+                <StatValueWithDate
+                  value={fxKpis.min}
+                  unit="toman/USD"
+                  date={fxKpis.minDate}
+                />
               </CardContent>
             </Card>
             <Card className="border-border">
@@ -2180,9 +2274,11 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-foreground">
-                  <CompactStatValue value={fxKpis.max} unit="toman/USD" />
-                </p>
+                <StatValueWithDate
+                  value={fxKpis.max}
+                  unit="toman/USD"
+                  date={fxKpis.maxDate}
+                />
               </CardContent>
             </Card>
           </div>
@@ -2915,6 +3011,17 @@ export default function StudyDetailPage() {
             </>
           ) : isOilExportCapacity ? (
             <>
+              <MultiSeriesStats
+                series={[
+                  { label: "Oil price", unit: "USD/bbl", points: exportCapacityOilPoints },
+                  {
+                    label: "Export capacity proxy",
+                    unit: exportCapacityBaseYear ? `Index (base=${exportCapacityBaseYear})` : "Index",
+                    points: exportCapacityProxyPoints,
+                  },
+                ]}
+                timeRange={exportCapacityTimeRange ?? undefined}
+              />
               <TimelineChart
                 data={[]}
                 valueKey="value"
@@ -3035,6 +3142,24 @@ export default function StudyDetailPage() {
           ) : isOilProductionMajorExporters ? (
             <>
               {typeof window !== "undefined" && console.debug("[Study14] Chart render events:", events.length, events.map((e) => ({ id: e.id, date: e.date ?? e.date_start, layer: e.layer })))}
+              <MultiSeriesStats
+                series={[
+                  { label: "United States", unit: "million bbl/day", points: extendedProductionUsPoints },
+                  { label: "Saudi Arabia", unit: "million bbl/day", points: extendedProductionSaudiPoints },
+                  { label: "Russia", unit: "million bbl/day", points: extendedProductionRussiaPoints },
+                  { label: "Iran", unit: "million bbl/day", points: extendedProductionIranPoints },
+                  ...(extendedProductionTotalPoints.length > 0
+                    ? [
+                        {
+                          label: "Total (US + Saudi + Russia + Iran)",
+                          unit: "million bbl/day",
+                          points: extendedProductionTotalPoints,
+                        },
+                      ]
+                    : []),
+                ]}
+                timeRange={productionTimeRange ?? undefined}
+              />
               <TimelineChart
                 data={[]}
                 valueKey="value"
@@ -3136,6 +3261,26 @@ export default function StudyDetailPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
+                  <MultiSeriesStats
+                    series={[
+                      { label: "Nominal minimum wage", unit: "k tomans/month", points: wageNominalKTomans },
+                      {
+                        label: "Real minimum wage",
+                        unit: `k tomans/month (${wageBaseYear ?? ""} prices)`,
+                        points: wageRealKTomans,
+                      },
+                      ...(showWageIndex
+                        ? [
+                            {
+                              label: "Real wage index",
+                              unit: "Index (base=100)",
+                              points: wageIndexPoints,
+                            },
+                          ]
+                        : []),
+                    ]}
+                    timeRange={wageTimeRange ?? undefined}
+                  />
                   <TimelineChart
                     data={[]}
                     valueKey="value"
@@ -3347,6 +3492,13 @@ export default function StudyDetailPage() {
                   Show shocks
                 </label>
               )}
+              <MultiSeriesStats
+                series={[
+                  { label: "Gold price", unit: "USD/oz", points: goldPoints },
+                  { label: "Oil price", unit: "USD/bbl", points: oilPointsWithVolatility },
+                ]}
+                timeRange={oilTimeRange ?? undefined}
+              />
               <TimelineChart
                 data={[]}
                 valueKey="value"
@@ -3360,6 +3512,7 @@ export default function StudyDetailPage() {
                 showOilShocks={showShocks}
                 timeRange={oilTimeRange ?? study.timeRange}
                 mutedBands
+                yAxisLog
               />
               {showShocks && oilShockDates.length > 0 && (
                 <div className="flex items-center gap-2 mt-2 text-sm text-gray-600">
@@ -3375,8 +3528,9 @@ export default function StudyDetailPage() {
                   {
                     heading: "What this means",
                     bullets: [
-                      "Gold price (USD/oz) on the left axis; oil price (USD/bbl) on the right axis.",
+                      "Gold price (USD/oz) on the left axis (log scale); oil price (USD/bbl) on the right axis (linear).",
                       "Dual axes because the two series have different scales.",
+                      "Log scale for gold makes early decades (1900–1970) visible instead of appearing flat.",
                       "Gold and oil are used as separate macroeconomic stress indicators.",
                       "Long-range view supports comparison across periods.",
                     ],
@@ -3384,7 +3538,8 @@ export default function StudyDetailPage() {
                   {
                     heading: "Reading guidance",
                     bullets: [
-                      "Left y-axis: gold (USD/oz). Right y-axis: oil (USD/bbl). Scale differs; do not compare numerically.",
+                      "Left y-axis: gold (USD/oz, log scale). Right y-axis: oil (USD/bbl, linear). Scale differs; do not compare numerically.",
+                      "Gold uses a log scale so early decades (1900–1970) are visible; oil stays linear.",
                       "Resolution: gold is annual; oil is annual pre-1987, daily from 1987.",
                     ],
                   },
@@ -3572,24 +3727,42 @@ export default function StudyDetailPage() {
                 </label>
               )}
               {showGold ? (
-                <TimelineChart
-                  data={[]}
-                  valueKey="value"
-                  label="Brent oil"
-                  events={events}
-                  anchorEventId={anchorEventId || undefined}
-                  multiSeries={[
-                    { key: "oil", label: "Brent oil", yAxisIndex: 0, unit: "USD/barrel", points: oilPointsWithVolatility },
-                    { key: "fx", label: "USD→Toman", yAxisIndex: 1, unit: "toman/USD", points: fxPoints },
-                    { key: "gold", label: "Gold price", yAxisIndex: 2, unit: "USD/oz", points: goldPoints },
-                  ]}
+                <>
+                  <MultiSeriesStats
+                    series={[
+                      { label: "Brent oil", unit: "USD/barrel", points: oilPointsWithVolatility },
+                      { label: "USD→Toman", unit: "toman/USD", points: fxPoints },
+                      { label: "Gold price", unit: "USD/oz", points: goldPoints },
+                    ]}
+                    timeRange={dualTimeRange ?? undefined}
+                  />
+                  <TimelineChart
+                    data={[]}
+                    valueKey="value"
+                    label="Brent oil"
+                    events={events}
+                    anchorEventId={anchorEventId || undefined}
+                    multiSeries={[
+                      { key: "oil", label: "Brent oil", yAxisIndex: 0, unit: "USD/barrel", points: oilPointsWithVolatility },
+                      { key: "fx", label: "USD→Toman", yAxisIndex: 1, unit: "toman/USD", points: fxPoints },
+                      { key: "gold", label: "Gold price", yAxisIndex: 2, unit: "USD/oz", points: goldPoints },
+                    ]}
                   oilShockDates={oilShockDates}
                   showOilShocks={showShocks}
                   timeRange={dualTimeRange ?? study.timeRange}
                 />
+                </>
               ) : (
-                <TimelineChart
-                  data={oilPointsWithVolatility}
+                <>
+                  <MultiSeriesStats
+                    series={[
+                      { label: "Brent oil", unit: "USD/barrel", points: oilPointsWithVolatility },
+                      { label: "USD→Toman", unit: "toman/USD", points: fxPoints },
+                    ]}
+                    timeRange={dualTimeRange ?? undefined}
+                  />
+                  <TimelineChart
+                    data={oilPointsWithVolatility}
                   valueKey="value"
                   label="Brent oil"
                   unit="USD/barrel"
@@ -3605,6 +3778,7 @@ export default function StudyDetailPage() {
                   showOilShocks={showShocks}
                   timeRange={dualTimeRange ?? study.timeRange}
                 />
+                </>
               )}
               {showShocks && oilShockDates.length > 0 && (
                 <div className="flex items-center gap-2 mt-2 text-sm text-gray-600">

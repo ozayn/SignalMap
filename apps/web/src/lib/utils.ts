@@ -17,6 +17,17 @@ export function cssColor(varName: string, fallback: string) {
   return raw ? raw : fallback;
 }
 
+/** Format date for stat cards. Daily: "Mar 2, 2026". Monthly/annual: "Mar 2026". */
+export function formatStatDate(dateStr: string): string {
+  const parts = dateStr.split("-");
+  const includeDay = parts.length >= 3 && /^\d{1,2}/.test(parts[2] ?? "");
+  return new Date(dateStr).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    ...(includeDay ? { day: "numeric" as const } : {}),
+  });
+}
+
 export function withAlphaHsl(hslColor: string, alpha: number): string {
   if (!hslColor.startsWith("hsl(")) return hslColor;
   // Parse hsl(h s% l%) or hsl(h, s%, l%) and output hsla(h, s%, l%, alpha) for Canvas API

@@ -9,6 +9,8 @@ type LatestValueBannerProps = {
   inline?: boolean;
 };
 
+import { formatStatDate } from "@/lib/utils";
+
 export default function LatestValueBanner({ label, value, unit, date, valuePrefix = "", inline = false }: LatestValueBannerProps) {
   if (value === null || value === undefined) return null;
   if (typeof value === "number" && !Number.isFinite(value)) return null;
@@ -19,10 +21,16 @@ export default function LatestValueBanner({ label, value, unit, date, valuePrefi
       : String(value);
 
   return (
-    <div className={`text-right text-sm text-muted-foreground shrink-0 whitespace-nowrap ${inline ? "" : "mb-2"}`}>
-      Latest {label}: <strong>{valuePrefix}{displayValue}</strong>
-      {unit ? ` ${unit}` : ""}
-      {date ? ` (${date})` : ""}
+    <div className={`text-right text-sm text-muted-foreground shrink-0 ${inline ? "" : "mb-2"} ${date ? "" : "whitespace-nowrap"}`}>
+      <div>
+        Latest {label}: <strong>{valuePrefix}{displayValue}</strong>
+        {unit ? ` ${unit}` : ""}
+      </div>
+      {date && (
+        <div className="text-xs text-muted-foreground mt-0.5">
+          {formatStatDate(date)}
+        </div>
+      )}
     </div>
   );
 }

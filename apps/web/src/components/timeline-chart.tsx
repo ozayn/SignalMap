@@ -350,6 +350,15 @@ export function TimelineChart({
 
     const minDate = dates[0];
     const maxDate = dates[dates.length - 1];
+    const firstYearNum = parseInt((minDate ?? "").slice(0, 4), 10);
+    const lastYearNum = parseInt((maxDate ?? "").slice(0, 4), 10);
+    const spanYears = lastYearNum - firstYearNum;
+    const useTimeAxis = spanYears > 40;
+    const dateMin = minDate ? Date.parse(minDate) : 0;
+    const dateMax = maxDate ? Date.parse(maxDate) : 0;
+
+    const toTimeData = (vals: (number | null)[]) =>
+      dates.map((d, i) => [Date.parse(d), vals[i] ?? null] as [number, number | null]);
 
     const valueFn =
       mutedBands || useYearlyMultiSeries || (hasMultiSeries && useUnionDates) || (hasMultiSeries && timeRange)
@@ -380,9 +389,11 @@ export function TimelineChart({
                     ? valueFn(data, dateStr)
                     : nearestOil(dateStr);
               if (yVal == null || typeof yVal !== "number") return null;
-              return { coord: [dateStr, yVal] as [string, number] };
+              return {
+                coord: (useTimeAxis ? [Date.parse(dateStr), yVal] : [dateStr, yVal]) as [number, number] | [string, number],
+              };
             })
-            .filter((x): x is { coord: [string, number] } => x != null)
+            .filter((x): x is { coord: [number, number] | [string, number] } => x != null)
         : [];
 
     const latestPointData =
@@ -406,7 +417,11 @@ export function TimelineChart({
             if (lastIdx < 0) return null;
             const dateStr = dates[lastIdx]!;
             const val = vals[lastIdx] as number;
-            return { coord: [dateStr, val] as [string, number], dateStr, val };
+            return {
+              coord: (useTimeAxis ? [Date.parse(dateStr), val] : [dateStr, val]) as [number, number] | [string, number],
+              dateStr,
+              val,
+            };
           })()
         : null;
 
@@ -510,7 +525,13 @@ export function TimelineChart({
           if (!first) return "";
           const idx = first.dataIndex;
           const axisValue = first.axisValue;
-          const dateStr = dates[idx] ?? (typeof axisValue === "string" ? axisValue : "") ?? "";
+          const dateStr =
+            dates[idx] ??
+            (typeof axisValue === "number"
+              ? new Date(axisValue).toISOString().slice(0, 10)
+              : typeof axisValue === "string"
+                ? axisValue
+                : "");
           const hoverTime = dateStr ? new Date(dateStr).getTime() : 0;
           const dayMs = 86400000;
           const rangeBand = rangeBandData.find((r) => dateStr >= r.xStart && dateStr <= r.xEnd);
@@ -643,57 +664,67 @@ export function TimelineChart({
         top: "10%",
         containLabel: true,
       },
-      xAxis: {
-        type: "category",
-        data: dates,
-        boundaryGap: false,
-        axisLine: { lineStyle: { color: borderColor } },
-        axisLabel: (() => {
-          const n = dates.length;
-          const firstYearNum = parseInt((dates[0] ?? "").slice(0, 4), 10);
-          const lastYearNum = parseInt((dates[dates.length - 1] ?? "").slice(0, 4), 10);
-          const spanYears = lastYearNum - firstYearNum;
-          const maxLabels = useSparseMultiSeriesDates ? 50 : 12;
-          // MultiSeries + timeRange: label by time so axis is linear in time (e.g. 2012, 2014, 2016…)
-          const useTimeLinearLabels =
-            hasMultiSeries && !!timeRange && n > 12 && spanYears > 0;
-          const tickYears: number[] = useTimeLinearLabels
-            ? (() => {
-                const want = Math.min(10, Math.max(5, spanYears));
-                const step = Math.max(1, Math.round(spanYears / want));
-                const out: number[] = [];
-                for (let y = firstYearNum; y <= lastYearNum; y += step) out.push(y);
-                if (out[out.length - 1] !== lastYearNum) out.push(lastYearNum);
-                return out;
-              })()
-            : [];
-          const interval = useTimeLinearLabels
-            ? 0
-            : n <= maxLabels
-              ? 0
-              : Math.max(1, Math.floor(n / maxLabels));
-          return {
-            color: mutedFg,
-            fontSize: 11,
-            rotate: xLabelRotate,
-            interval,
-            formatter: (value: string, index: number) => {
-              if (useTimeLinearLabels) {
-                const year = value.slice(0, 4);
-                const prevYear = (dates[index - 1] ?? "").slice(0, 4);
-                if (index > 0 && prevYear === year) return "";
-                if (!tickYears.includes(parseInt(year, 10))) return "";
-                return year;
-              }
-              const n2 = dates.length;
-              if (n2 > 365) return value.slice(0, 4);
-              if (n2 <= 100 || useSparseMultiSeriesDates) return value.slice(0, 4);
-              if (n2 > 60) return value.slice(0, 7);
-              return value;
+      xAxis: useTimeAxis
+        ? {
+            type: "time",
+            min: dateMin,
+            max: dateMax,
+            axisLine: { lineStyle: { color: borderColor } },
+            axisLabel: {
+              formatter: (value: number) => new Date(value).getFullYear().toString(),
+              color: mutedFg,
+              fontSize: 11,
             },
-          };
-        })(),
-      },
+          }
+        : (() => {
+            const n = dates.length;
+            const maxLabels = useSparseMultiSeriesDates ? 50 : 12;
+            const useTimeLinearLabels =
+              hasMultiSeries && !!timeRange && n > 12 && spanYears > 0;
+            const timeLinearTickYears: number[] = useTimeLinearLabels
+              ? (() => {
+                  const want = Math.min(10, Math.max(5, spanYears));
+                  const step = Math.max(1, Math.round(spanYears / want));
+                  const out: number[] = [];
+                  for (let y = firstYearNum; y <= lastYearNum; y += step) out.push(y);
+                  if (out[out.length - 1] !== lastYearNum) out.push(lastYearNum);
+                  return out;
+                })()
+              : [];
+            const interval =
+              useTimeLinearLabels
+                ? 0
+                : n <= maxLabels
+                  ? 0
+                  : Math.max(1, Math.floor(n / maxLabels));
+            return {
+              type: "category",
+              data: dates,
+              boundaryGap: false,
+              axisLine: { lineStyle: { color: borderColor } },
+              axisLabel: {
+                color: mutedFg,
+                fontSize: 11,
+                rotate: xLabelRotate,
+                interval,
+                formatter: (value: string, index: number) => {
+                  const yearStr = value.slice(0, 4);
+                  const yearNum = parseInt(yearStr, 10);
+                  if (useTimeLinearLabels) {
+                    const prevYear = (dates[index - 1] ?? "").slice(0, 4);
+                    if (index > 0 && prevYear === yearStr) return "";
+                    if (!timeLinearTickYears.includes(yearNum)) return "";
+                    return yearStr;
+                  }
+                  const n2 = dates.length;
+                  if (n2 > 365) return yearStr;
+                  if (n2 <= 100 || useSparseMultiSeriesDates) return yearStr;
+                  if (n2 > 60) return value.slice(0, 7);
+                  return value;
+                },
+              },
+            };
+          })(),
       yAxis: hasMultiSeries && multiSeries
         ? (() => {
             const byIndex = new Map<number, ChartSeries[]>();
@@ -709,6 +740,7 @@ export function TimelineChart({
               const first = seriesOnAxis[0]!;
               const isLeft = yAxisIndex === 0;
               const isRight = yAxisIndex >= 1;
+              const useLog = yAxisLog && isLeft;
               const rightOffset = hasMultipleRight && yAxisIndex === 2 ? 90 : 0;
               const shortName =
                 first.unit?.includes("toman")
@@ -716,16 +748,19 @@ export function TimelineChart({
                     ? "toman/USD (k)"
                     : `${first.label} (k)`
                   : first.unit === "USD/oz"
-                    ? "Gold (USD/oz)"
+                    ? useLog
+                      ? "Gold (USD/oz, log scale)"
+                      : "Gold (USD/oz)"
                     : first.unit && first.label.includes(`(${first.unit})`)
                       ? first.label
                       : first.unit
                         ? `${first.label} (${first.unit})`
                         : first.label;
               const nameWithSuffix = yAxisNameSuffix ? `${shortName} ${yAxisNameSuffix}` : shortName;
-              const useLog = yAxisLog && isLeft;
+              const isGoldLogAxis = useLog && first.unit === "USD/oz";
               return {
                 type: (useLog ? "log" : "value") as "value" | "log",
+                ...(isGoldLogAxis && { min: 10, max: 3000 }),
                 position: (isLeft ? "left" : "right") as "left" | "right",
                 offset: isRight ? rightOffset : 0,
                 name: nameWithSuffix,
@@ -812,7 +847,7 @@ export function TimelineChart({
               {
                 name: "events",
                 type: "line" as const,
-                data: dates.map(() => null),
+                data: useTimeAxis ? toTimeData(dates.map(() => null)) : dates.map(() => null),
                 symbol: "none",
                 emphasis: { focus: "none" as const },
                 markLine:
@@ -934,7 +969,7 @@ export function TimelineChart({
                   name: s.label,
                   type: "line" as const,
                   yAxisIndex: s.yAxisIndex,
-                  data: multiSeriesValues[i] ?? [],
+                  data: useTimeAxis ? toTimeData(multiSeriesValues[i] ?? []) : (multiSeriesValues[i] ?? []),
                   smooth: false,
                   connectNulls: true,
                   step: (isGold ? "start" : false) as "start" | false,
@@ -964,7 +999,7 @@ export function TimelineChart({
               {
                 name: label,
                 type: "line" as const,
-                data: values,
+                data: useTimeAxis ? toTimeData(values) : values,
                 smooth: true,
                 symbol: "circle",
                 symbolSize: 4,
@@ -1050,7 +1085,7 @@ export function TimelineChart({
                 name: "events",
                 type: "line" as const,
                 yAxisIndex: hasOil ? 1 : 0,
-                data: dates.map(() => null),
+                data: useTimeAxis ? toTimeData(dates.map(() => null)) : dates.map(() => null),
                 symbol: "none",
                 emphasis: { focus: "none" as const },
                 markLine:
@@ -1120,7 +1155,7 @@ export function TimelineChart({
                 name: secondSeries?.label ?? "Brent oil",
                 type: "line" as const,
                 yAxisIndex: 1,
-                data: oilValuesForChart,
+                data: useTimeAxis ? toTimeData(oilValuesForChart) : oilValuesForChart,
                 smooth: true,
                 connectNulls: true,
                 symbol: "circle",
@@ -1198,7 +1233,7 @@ export function TimelineChart({
                 name: comparatorSeries.label,
                 type: "line" as const,
                 yAxisIndex: 1,
-                data: comparatorValuesForChart,
+                data: useTimeAxis ? toTimeData(comparatorValuesForChart) : comparatorValuesForChart,
                 smooth: true,
                 connectNulls: true,
                 symbol: "diamond",
