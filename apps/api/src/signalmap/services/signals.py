@@ -14,6 +14,7 @@ from signalmap.data.iran_wage_cpi import (
 )
 from signalmap.data.oil_annual import BRENT_DAILY_START, OIL_ANNUAL_EIA
 from signalmap.sources.bonbast_usd_toman import fetch_usd_toman_series
+from signalmap.sources.brent_market_price import fetch_brent_market_price
 from signalmap.sources.fred_brent import fetch_brent_from_fred
 from signalmap.sources.fred_cpi import fetch_cpi_series
 from signalmap.sources.world_bank_ppp import fetch_iran_ppp_series, fetch_turkey_ppp_series
@@ -143,6 +144,34 @@ def get_brent_series(start: str, end: str) -> dict:
     }
     cache_set(ck, result, CACHE_TTL)
     return result
+
+
+BRENT_MARKET_CACHE_KEY = "brent_market_current"
+BRENT_MARKET_CACHE_TTL = 3600  # 1 hour
+
+
+def get_current_brent_price() -> dict | None:
+    """
+    Return latest Brent crude market price. Uses in-memory TTL cache (1 hour).
+    Returns {"price": float, "unit": "USD/barrel", "source": "market", "updated": str} or None on error.
+    """
+    cached = cache_get(BRENT_MARKET_CACHE_KEY)
+    if cached is not None:
+        return cached
+
+    try:
+        data = fetch_brent_market_price()
+        ts = data["timestamp"]
+        result = {
+            "price": data["price"],
+            "unit": "USD/barrel",
+            "source": "market",
+            "updated": ts.isoformat(),
+        }
+        cache_set(BRENT_MARKET_CACHE_KEY, result, BRENT_MARKET_CACHE_TTL)
+        return result
+    except Exception:
+        return None
 
 
 def _sample_to_monthly(points: list[dict]) -> list[dict]:

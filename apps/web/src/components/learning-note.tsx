@@ -27,11 +27,11 @@ export function LearningNote({
         <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {title}
         </p>
-        <div className="grid gap-4 md:grid-cols-2 min-w-0">
+        <div className="flex flex-col gap-6 min-w-0">
           {sections.map((section) => (
-            <div key={section.heading} className="space-y-1.5 min-w-0 break-words">
-              <p className="text-sm font-medium text-foreground/90">{section.heading}</p>
-              <ul className="list-inside list-disc space-y-0.5 text-sm text-muted-foreground break-words">
+            <div key={section.heading} className="space-y-2 min-w-0 break-words">
+              <p className="mt-3 text-sm font-medium text-muted-foreground">{section.heading}</p>
+              <ul className="list-inside list-disc space-y-1 text-sm text-muted-foreground break-words">
                 {section.bullets.map((bullet, i) => (
                   <li key={i}>{bullet}</li>
                 ))}

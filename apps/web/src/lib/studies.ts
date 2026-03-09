@@ -36,6 +36,8 @@ export type StudyMeta = {
   comparatorCountry?: "Turkey";
   /** Observational bullets for "What this chart shows (in this dataset)". 3–6 short bullets, no causality. */
   observations?: string[];
+  /** Unit label for stat cards; shown once above cards when all share the same unit. */
+  unitLabel?: string;
 };
 
 export const STUDIES: StudyMeta[] = [
@@ -60,6 +62,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "oil_brent" },
     concepts: ["nominal_price", "oil_benchmark", "event_overlay", "oil_price_shocks"],
+    unitLabel: "USD per barrel",
   },
   {
     id: "usd-toman",
@@ -71,6 +74,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "fx_usd_toman" },
     concepts: ["fx_rate", "event_overlay"],
+    unitLabel: "toman per USD",
   },
   {
     id: "oil-and-fx",
@@ -106,6 +110,7 @@ export const STUDIES: StudyMeta[] = [
     primarySignal: { kind: "real_oil" },
     eventLayers: ["world_core", "world_1900"],
     concepts: ["real_price", "cpi", "real_oil_price", "derived_series", "event_overlay"],
+    unitLabel: "constant 2015 USD per barrel",
   },
   {
     id: "iran_oil_ppp",
@@ -118,6 +123,7 @@ export const STUDIES: StudyMeta[] = [
     primarySignal: { kind: "oil_ppp_iran" },
     eventLayers: ["iran_core", "world_core"],
     concepts: ["ppp", "ppp_oil_burden", "log_scale", "structural_break", "derived_series", "event_overlay"],
+    unitLabel: "PPP-adjusted toman per barrel",
   },
   {
     id: "iran_oil_ppp_turkey",
@@ -131,6 +137,7 @@ export const STUDIES: StudyMeta[] = [
     eventLayers: [],
     concepts: ["ppp", "ppp_oil_burden", "log_scale", "structural_break", "derived_series"],
     comparatorCountry: "Turkey",
+    unitLabel: "PPP-adjusted toman per barrel",
   },
   {
     id: "iran_oil_export_capacity",

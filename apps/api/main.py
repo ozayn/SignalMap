@@ -156,6 +156,16 @@ def api_version():
     return {"version": "jobs-v1", "has_jobs": True}
 
 
+@app.get("/api/market/brent-current")
+def api_market_brent_current():
+    """Return latest Brent crude market price (FMP). Cached 1 hour."""
+    from signalmap.services.signals import get_current_brent_price
+    result = get_current_brent_price()
+    if result is None:
+        raise HTTPException(status_code=503, detail="Market price unavailable")
+    return result
+
+
 @app.get("/api/meta/last-update")
 def api_meta_last_update():
     """Return when the cron update last ran. UTC ISO string."""

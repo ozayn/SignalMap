@@ -81,6 +81,8 @@ type TimelineChartProps = {
   extendedDates?: string[];
   /** Last official data year for extension tooltip (e.g. "2025"). */
   lastOfficialDateForExtension?: string;
+  /** When true, show a circular marker at the latest data point (e.g. Brent study). */
+  highlightLatestPoint?: boolean;
 };
 
 function findEventIndex(dates: string[], eventDate: string): number | null {
@@ -166,6 +168,7 @@ export function TimelineChart({
   gridRight: gridRightOverride,
   extendedDates = [],
   lastOfficialDateForExtension,
+  highlightLatestPoint = false,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
@@ -381,6 +384,31 @@ export function TimelineChart({
             })
             .filter((x): x is { coord: [string, number] } => x != null)
         : [];
+
+    const latestPointData =
+      highlightLatestPoint && hasOil
+        ? (() => {
+            const vals = hasMultiSeries && multiSeries
+              ? (() => {
+                  const oilIdx = multiSeries.findIndex((s) => s.key === "oil");
+                  if (oilIdx < 0) return null;
+                  return multiSeriesValues?.[oilIdx] ?? null;
+                })()
+              : oilValuesForChart;
+            if (!vals || vals.length === 0) return null;
+            let lastIdx = -1;
+            for (let i = vals.length - 1; i >= 0; i--) {
+              if (vals[i] != null && typeof vals[i] === "number") {
+                lastIdx = i;
+                break;
+              }
+            }
+            if (lastIdx < 0) return null;
+            const dateStr = dates[lastIdx]!;
+            const val = vals[lastIdx] as number;
+            return { coord: [dateStr, val] as [string, number], dateStr, val };
+          })()
+        : null;
 
     const pointEvents = events.filter((e) => e.date != null);
     const rangeEvents = events.filter((e) => e.date_start != null && e.date_end != null);
@@ -1110,12 +1138,30 @@ export function TimelineChart({
                   itemStyle: { color: comparatorSeries && comparatorValuesForChart ? color : oilColor },
                 },
                 markPoint:
-                  showOilShocks && shockMarkPointData.length > 0 && !hasData
+                  (showOilShocks && shockMarkPointData.length > 0) || (highlightLatestPoint && latestPointData)
                     ? {
                         symbol: "circle",
                         symbolSize: 5,
                         itemStyle: { color: "rgba(180, 30, 30, 0.6)", borderWidth: 0, shadowBlur: 0 },
-                        data: shockMarkPointData.map((d) => ({ name: "shock", coord: d.coord })),
+                        data: [
+                          ...(showOilShocks && shockMarkPointData.length > 0
+                            ? shockMarkPointData.map((d) => ({ name: "shock", coord: d.coord }))
+                            : []),
+                          ...(highlightLatestPoint && latestPointData
+                            ? [
+                                {
+                                  name: "latest",
+                                  coord: latestPointData.coord,
+                                  symbolSize: 4,
+                                  itemStyle: {
+                                    color: comparatorSeries && comparatorValuesForChart ? color : oilColor,
+                                    borderColor: "#fff",
+                                    borderWidth: 1,
+                                  },
+                                },
+                              ]
+                            : []),
+                        ],
                       }
                     : undefined,
                 markLine:

@@ -17,6 +17,7 @@ import { EventsTimeline, type TimelineEvent } from "@/components/events-timeline
 import { FollowerGrowthChart } from "@/components/follower-growth-chart";
 import { NetworkGraph, type NetworkNode, type NetworkEdge } from "@/components/network-graph";
 import { OilTradeSankey } from "@/components/oil-trade-sankey";
+import LatestValueBanner from "@/components/studies/LatestValueBanner";
 import { getStudyById, getPrevNextStudies } from "@/lib/studies";
 import { fetchJson } from "@/lib/api";
 import { enrichOilPointsWithVolatility } from "@/lib/oil-volatility";
@@ -141,24 +142,54 @@ function computeOilKpis(points: { date?: string; value: number }[]) {
   const min = Math.min(...vals);
   const max = Math.max(...vals);
   const sorted = [...points].sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
-  const latest = sorted[sorted.length - 1]?.value;
+  const latest = sorted[sorted.length - 1]?.value ?? null;
   return {
-    avg: Math.round(avg).toLocaleString(),
-    min: Math.round(min).toLocaleString(),
-    max: Math.round(max).toLocaleString(),
-    latest: latest != null ? Math.round(latest).toLocaleString() : null,
+    latest,
+    avg: Math.round(avg),
+    min: Math.round(min),
+    max: Math.round(max),
   };
 }
 
 function computeFxKpis(points: { date: string; value: number }[]) {
   if (points.length === 0) return null;
   const vals = points.map((p) => p.value);
-  const latest = points[points.length - 1]?.value;
+  const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
+  const latest = sorted[sorted.length - 1]?.value ?? null;
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
   return {
-    latest: latest != null ? latest.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—",
-    min: Math.min(...vals).toLocaleString(undefined, { maximumFractionDigits: 0 }),
-    max: Math.max(...vals).toLocaleString(undefined, { maximumFractionDigits: 0 }),
+    latest,
+    avg,
+    min: Math.min(...vals),
+    max: Math.max(...vals),
   };
+}
+
+function formatCompactNumber(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000)
+    return (value / 1_000_000_000).toFixed(2).replace(/\.?0+$/, "") + "B";
+  if (abs >= 1_000_000)
+    return (value / 1_000_000).toFixed(2).replace(/\.?0+$/, "") + "M";
+  if (abs >= 10_000)
+    return Math.round(value / 1000) + "k";
+  if (abs >= 1_000)
+    return (value / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+/** Renders a stat value with compact formatting (k, M, B) for large numbers; exact value in tooltip. */
+function CompactStatValue({ value, unit, prefix = "" }: { value: number | null; unit: string; prefix?: string }) {
+  if (value === null || value === undefined) return <>—</>;
+  const exactStr = value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const displayStr = formatCompactNumber(value);
+  const title = unit ? `${exactStr} ${unit}` : exactStr;
+  return (
+    <span title={title}>
+      {prefix}
+      {displayStr}
+    </span>
+  );
 }
 
 function getLatestDate(arrays: { date: string }[][]): Date | null {
@@ -255,7 +286,6 @@ export default function StudyDetailPage() {
     count?: number;
     last_cached_at?: string | null;
   } | null>(null);
-
   useEffect(() => {
     if (studyId) {
       trackEvent("study_viewed", { study_id: studyId });
@@ -624,6 +654,16 @@ export default function StudyDetailPage() {
     () => enrichOilPointsWithVolatility(oilPoints),
     [oilPoints]
   );
+  const latestBrentObservation = useMemo(() => {
+    if (!isOilBrent || oilPoints.length === 0) return null;
+    const sorted = [...oilPoints].sort((a, b) => a.date.localeCompare(b.date));
+    return sorted[sorted.length - 1] ?? null;
+  }, [isOilBrent, oilPoints]);
+  const latestFxObservation = useMemo(() => {
+    if (!isFxUsdToman || fxPoints.length === 0) return null;
+    const sorted = [...fxPoints].sort((a, b) => a.date.localeCompare(b.date));
+    return sorted[sorted.length - 1] ?? null;
+  }, [isFxUsdToman, fxPoints]);
   const oilShockDates = useMemo(
     () => oilPointsWithVolatility.filter((p) => p.is_shock).map((p) => p.date),
     [oilPointsWithVolatility]
@@ -1880,201 +1920,272 @@ export default function StudyDetailPage() {
           </Card>
         </>
       ) : (isOilBrent || isOilGlobalLong) && oilKpis ? (
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Card className="border-border">
-            <CardHeader className="pb-1">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Avg price
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-medium">
-                {oilKpis.avg}
-                <span className="ml-1 text-sm font-normal text-muted-foreground">
-                  USD/barrel
-                </span>
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border-border">
-            <CardHeader className="pb-1">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Min
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-medium">
-                {oilKpis.min}
-                <span className="ml-1 text-sm font-normal text-muted-foreground">
-                  USD/barrel
-                </span>
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border-border">
-            <CardHeader className="pb-1">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Max
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-medium">
-                {oilKpis.max}
-                {oilKpis.latest != null && (
-                  <span className="ml-2 text-base font-normal text-muted-foreground">
-                    (latest: {oilKpis.latest})
-                  </span>
-                )}
-                <span className="ml-1 text-sm font-normal text-muted-foreground">
-                  USD/barrel
-                </span>
-              </p>
-            </CardContent>
-          </Card>
+        <div>
+          {study?.unitLabel && (
+            <p className="text-xs text-muted-foreground mb-2">Unit: {study.unitLabel}</p>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  Latest
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  <CompactStatValue value={oilKpis.latest} unit="USD/barrel" prefix="$" />
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  Avg
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  <CompactStatValue value={oilKpis.avg} unit="USD/barrel" prefix="$" />
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  Min
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  <CompactStatValue value={oilKpis.min} unit="USD/barrel" prefix="$" />
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  Max
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  <CompactStatValue value={oilKpis.max} unit="USD/barrel" prefix="$" />
+                </p>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       ) : isRealOil && realOilKpis ? (
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div>
+          {study?.unitLabel && (
+            <p className="text-xs text-muted-foreground mb-2">Unit: {study.unitLabel}</p>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card className="border-border">
             <CardHeader className="pb-1">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Avg price
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-medium">
-                {realOilKpis.avg}
-                <span className="ml-1 text-sm font-normal text-muted-foreground">
-                  USD/bbl (2015)
-                </span>
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border-border">
-            <CardHeader className="pb-1">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Min
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-medium">
-                {realOilKpis.min}
-                <span className="ml-1 text-sm font-normal text-muted-foreground">
-                  USD/bbl (2015)
-                </span>
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border-border">
-            <CardHeader className="pb-1">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Max
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-medium">
-                {realOilKpis.max}
-                <span className="ml-1 text-sm font-normal text-muted-foreground">
-                  USD/bbl (2015)
-                </span>
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      ) : isOilPppIran && pppIranKpis && !hasTurkeyComparator ? (
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Card className="border-border">
-            <CardHeader className="pb-1">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Avg
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-medium">
-                {pppIranKpis.avg}
-                <span className="ml-1 text-sm font-normal text-muted-foreground">
-                  toman/bbl (PPP)
-                </span>
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border-border">
-            <CardHeader className="pb-1">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Min
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-medium">
-                {pppIranKpis.min}
-                <span className="ml-1 text-sm font-normal text-muted-foreground">
-                  toman/bbl (PPP)
-                </span>
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border-border">
-            <CardHeader className="pb-1">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Max
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-medium">
-                {pppIranKpis.max}
-                <span className="ml-1 text-sm font-normal text-muted-foreground">
-                  toman/bbl (PPP)
-                </span>
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      ) : isFxUsdToman && fxKpis ? (
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Card className="border-border">
-            <CardHeader className="pb-1">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+              <CardTitle className="text-sm font-normal text-muted-foreground">
                 Latest
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-medium">
-                {fxKpis.latest}
-                <span className="ml-1 text-sm font-normal text-muted-foreground">
-                  toman/USD
-                </span>
+              <p className="text-2xl font-semibold text-foreground">
+                <CompactStatValue value={realOilKpis.latest} unit="USD/bbl (2015)" prefix="$" />
               </p>
             </CardContent>
           </Card>
           <Card className="border-border">
             <CardHeader className="pb-1">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+              <CardTitle className="text-sm font-normal text-muted-foreground">
+                Avg
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-semibold text-foreground">
+                <CompactStatValue value={realOilKpis.avg} unit="USD/bbl (2015)" prefix="$" />
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-border">
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-normal text-muted-foreground">
                 Min
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-medium">
-                {fxKpis.min}
-                <span className="ml-1 text-sm font-normal text-muted-foreground">
-                  toman/USD
-                </span>
+              <p className="text-2xl font-semibold text-foreground">
+                <CompactStatValue value={realOilKpis.min} unit="USD/bbl (2015)" prefix="$" />
               </p>
             </CardContent>
           </Card>
           <Card className="border-border">
             <CardHeader className="pb-1">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+              <CardTitle className="text-sm font-normal text-muted-foreground">
                 Max
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-medium">
-                {fxKpis.max}
-                <span className="ml-1 text-sm font-normal text-muted-foreground">
-                  toman/USD
-                </span>
+              <p className="text-2xl font-semibold text-foreground">
+                <CompactStatValue value={realOilKpis.max} unit="USD/bbl (2015)" prefix="$" />
               </p>
             </CardContent>
           </Card>
+          </div>
+        </div>
+      ) : isOilPppIran && pppIranKpis && !hasTurkeyComparator ? (
+        <div>
+          {study?.unitLabel && (
+            <p className="text-xs text-muted-foreground mb-2">Unit: {study.unitLabel}</p>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  Latest
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  <CompactStatValue value={pppIranKpis.latest} unit="toman/bbl (PPP)" />
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  Avg
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  <CompactStatValue value={pppIranKpis.avg} unit="toman/bbl (PPP)" />
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  Min
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  <CompactStatValue value={pppIranKpis.min} unit="toman/bbl (PPP)" />
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  Max
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  <CompactStatValue value={pppIranKpis.max} unit="toman/bbl (PPP)" />
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      ) : isOilPppIran && pppIranKpis && hasTurkeyComparator ? (
+        <div>
+          {study?.unitLabel && (
+            <p className="text-xs text-muted-foreground mb-2">Unit: {study.unitLabel}</p>
+          )}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  Avg (Iran)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  <CompactStatValue value={pppIranKpis.avg} unit="toman/bbl (PPP)" />
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  Min
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  <CompactStatValue value={pppIranKpis.min} unit="toman/bbl (PPP)" />
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  Max
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  <CompactStatValue value={pppIranKpis.max} unit="toman/bbl (PPP)" />
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      ) : isFxUsdToman && fxKpis ? (
+        <div>
+          {study?.unitLabel && (
+            <p className="text-xs text-muted-foreground mb-2">Unit: {study.unitLabel}</p>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  Latest
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  <CompactStatValue value={fxKpis.latest} unit="toman/USD" />
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  Avg
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  <CompactStatValue value={fxKpis.avg} unit="toman/USD" />
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  Min
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  <CompactStatValue value={fxKpis.min} unit="toman/USD" />
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  Max
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  <CompactStatValue value={fxKpis.max} unit="toman/USD" />
+                </p>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       ) : data?.kpis && data.kpis.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-3">
@@ -2105,31 +2216,53 @@ export default function StudyDetailPage() {
       {!isEventsTimeline && !isFollowerGrowthDynamics && !isFxUsdIrrDual && !isWageCpiReal && (
       <Card className="border-border overflow-hidden">
         <CardHeader>
-          <CardTitle className="text-base font-medium">
-            {isOilTradeNetwork
-              ? "Network"
-              : isGoldAndOil
-              ? "Gold and oil prices"
-              : isOilGlobalLong
-              ? "Oil price"
-              : isOilBrent
-              ? "Brent oil price"
-              : isRealOil
-              ? "Real oil price"
-              : hasTurkeyComparator
-              ? "Iran and Turkey: PPP oil burden"
-              : isOilPppIran
-              ? "Oil price burden (PPP)"
-              : isOilExportCapacity
-              ? "Oil price and export capacity proxy"
-              : isFxUsdToman
-                ? "USD→Toman (open market)"
-                : isOilAndFx
-                  ? "Oil and USD/Toman"
-                  : data?.timeline?.length
-                    ? "Sentiment over time"
-                    : "Timeline"}
-          </CardTitle>
+          <div className="flex items-center justify-between gap-4 mb-2">
+            <CardTitle className="text-base font-medium shrink-0">
+              {isOilTradeNetwork
+                ? "Network"
+                : isGoldAndOil
+                ? "Gold and oil prices"
+                : isOilGlobalLong
+                ? "Oil price"
+                : isOilBrent
+                ? "Brent oil price"
+                : isRealOil
+                ? "Real oil price (constant 2015 USD per barrel)"
+                : hasTurkeyComparator
+                ? "Iran and Turkey: PPP oil burden"
+                : isOilPppIran
+                ? "Oil price burden (PPP)"
+                : isOilExportCapacity
+                ? "Oil price and export capacity proxy"
+                : isFxUsdToman
+                  ? "USD→Toman (open market)"
+                  : isOilAndFx
+                    ? "Oil and USD/Toman"
+                    : data?.timeline?.length
+                      ? "Sentiment over time"
+                      : "Timeline"}
+            </CardTitle>
+            {(isOilAndFx && latestBrentObservation && (
+              <LatestValueBanner
+                label="Brent price"
+                value={latestBrentObservation.value}
+                unit="USD/barrel"
+                date={latestBrentObservation.date}
+                valuePrefix="$"
+                inline
+              />
+            )) ||
+            (isGoldAndOil && latestBrentObservation && (
+              <LatestValueBanner
+                label="Brent price"
+                value={latestBrentObservation.value}
+                unit="USD/barrel"
+                date={latestBrentObservation.date}
+                valuePrefix="$"
+                inline
+              />
+            ))}
+          </div>
           <p className="text-sm text-muted-foreground">
             {isOilTradeNetwork
               ? "Oil trade flows between major exporters and importers. Nodes are countries/regions; edge width reflects trade volume (thousand barrels/day). Drag nodes, zoom, pan."
@@ -3139,16 +3272,11 @@ export default function StudyDetailPage() {
               <LearningNote
                 sections={[
                   {
-                    heading: "What this measures",
+                    heading: "What this means",
                     bullets: [
                       "Oil price in constant 2015 US dollars.",
                       "Nominal price divided by US CPI and scaled to 2015 purchasing power.",
-                    ],
-                  },
-                  {
-                    heading: "Purpose",
-                    bullets: [
-                      "Real prices are used for long-term comparison across decades.",
+                      "Real prices support long-term comparison across decades.",
                       "Inflation adjustment removes nominal currency effects.",
                     ],
                   },
@@ -3245,15 +3373,10 @@ export default function StudyDetailPage() {
               <LearningNote
                 sections={[
                   {
-                    heading: "What this measures",
+                    heading: "What this means",
                     bullets: [
                       "Gold price (USD/oz) on the left axis; oil price (USD/bbl) on the right axis.",
                       "Dual axes because the two series have different scales.",
-                    ],
-                  },
-                  {
-                    heading: "Purpose",
-                    bullets: [
                       "Gold and oil are used as separate macroeconomic stress indicators.",
                       "Long-range view supports comparison across periods.",
                     ],
@@ -3347,6 +3470,7 @@ export default function StudyDetailPage() {
                 showOilShocks={showShocks}
                 timeRange={oilTimeRange ?? study.timeRange}
                 mutedBands={isOilGlobalLong}
+                highlightLatestPoint
               />
               {showShocks && oilShockDates.length > 0 && (
                 <div className="flex items-center gap-2 mt-2 text-sm text-gray-600">
@@ -3372,15 +3496,10 @@ export default function StudyDetailPage() {
               <LearningNote
                   sections={[
                     {
-                    heading: "What this measures",
-                    bullets: [
-                      "Brent crude oil is a benchmark oil type traded on world markets, often used as a reference for global oil prices. This chart shows its spot price.",
-                      "Brent is traded in USD and reflects international market conditions.",
-                      ],
-                    },
-                    {
-                      heading: "Purpose",
+                      heading: "What this means",
                       bullets: [
+                        "Brent crude oil is a benchmark oil type traded on world markets, often used as a reference for global oil prices.",
+                        "This chart shows its spot price in USD, reflecting international market conditions.",
                         "Nominal oil is used as a context signal for energy and commodity markets.",
                         "Daily resolution supports event-anchored analysis.",
                       ],
@@ -3564,6 +3683,7 @@ export default function StudyDetailPage() {
                   yAxisIndex: 1,
                 }}
                 timeRange={fxTimeRange ?? study.timeRange}
+                highlightLatestPoint
               />
               {fxSource && (
                 <SourceInfo
