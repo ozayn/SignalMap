@@ -1,19 +1,48 @@
-import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getStudyById } from "@/lib/studies";
+import type { StudyMeta } from "@/lib/studies";
+import { StudyCard } from "@/components/study-card";
 
-const SECTIONS: { title: string; description: string; studyIds: string[]; startHere?: string }[] = [
+/** Map primarySignal.kind to display tags for the Signals row. */
+function getSignalTags(study: StudyMeta): string[] {
+  const tags: string[] = [];
+  const kind = study.primarySignal.kind;
+  if (
+    kind === "oil_brent" ||
+    kind === "oil_and_fx" ||
+    kind === "gold_and_oil" ||
+    kind === "real_oil" ||
+    kind === "oil_ppp_iran" ||
+    kind === "oil_export_capacity" ||
+    kind === "oil_production_major_exporters" ||
+    kind === "oil_trade_network" ||
+    kind === "oil_geopolitical_reaction"
+  ) {
+    tags.push("Oil");
+  }
+  if (kind === "fx_usd_toman" || kind === "oil_and_fx" || kind === "fx_usd_irr_dual") {
+    tags.push("FX");
+  }
+  if (kind === "gold_and_oil") tags.push("Gold");
+  if (kind === "events_timeline") tags.push("Events");
+  if (kind === "follower_growth_dynamics") tags.push("Growth");
+  if (kind === "wage_cpi_real") tags.push("Wage");
+  if (kind === "oil_trade_network") tags.push("Trade");
+  if (study.eventLayers && study.eventLayers.length > 0 && !tags.includes("Events")) {
+    tags.push("Events");
+  }
+  return [...new Set(tags)];
+}
+
+const SECTIONS: { title: string; description: string; studyIds: string[] }[] = [
   {
     title: "Foundations (signals)",
     description: "Core price and exchange-rate series that anchor later analysis.",
     studyIds: ["iran", "usd-toman", "oil-and-fx"],
-    startHere: "iran",
   },
   {
     title: "Context (timelines)",
     description: "Reference timelines for events and long-range price context.",
     studyIds: ["events_timeline", "global_oil_1900", "oil_geopolitical_reaction"],
-    startHere: "events_timeline",
   },
   {
     title: "Burden & adjustment (methods)",
@@ -34,69 +63,39 @@ const SECTIONS: { title: string; description: string; studyIds: string[]; startH
 
 export default function StudiesPage() {
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-12 space-y-10">
-      <div>
-        <h1 className="text-2xl font-medium tracking-tight text-foreground">
+    <div className="container mx-auto max-w-4xl px-4 py-12">
+      <header className="mb-8">
+        <h1 className="text-[28px] font-semibold tracking-[-0.01em] text-[#111827] dark:text-[#e5e7eb]">
           Studies
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-[14px] text-[#6b7280] dark:text-[#9ca3af]">
           Longitudinal research on emotion, language, and interaction in public discourse.
         </p>
-      </div>
+      </header>
 
-      <div className="space-y-10">
-        {SECTIONS.map((section) => {
+      <div>
+        {SECTIONS.map((section, sectionIndex) => {
           const studies = section.studyIds
             .map((id) => getStudyById(id))
             .filter((s): s is NonNullable<typeof s> => s != null && s.visible !== false);
           if (studies.length === 0) return null;
           return (
-            <section key={section.title} className="space-y-4">
-              <div>
-                <h2 className="text-sm font-medium text-foreground">
+            <section key={section.title} className={sectionIndex === 0 ? "" : "mt-12"}>
+              <div className={`${sectionIndex === 0 ? "mt-9 " : ""}border-b border-[#f1f5f9] dark:border-[#1f2937] pb-1.5 mb-3.5`}>
+                <h2 className="text-[18px] font-semibold text-[#111827] dark:text-[#e5e7eb]">
                   {section.title}
                 </h2>
-                <p className="mt-0.5 text-xs text-muted-foreground">
+                <p className="mt-0.5 text-xs text-[#6b7280] dark:text-[#9ca3af]">
                   {section.description}
                 </p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[22px]">
                 {studies.map((study) => (
-                  <Card key={study.id} className="border-border">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="text-xs font-medium text-muted-foreground">
-                              Study {study.number}
-                            </p>
-                            {section.startHere === study.id && (
-                              <span className="text-[10px] uppercase tracking-wide text-muted-foreground/80 border border-border rounded px-1.5 py-0.5">
-                                Start here
-                              </span>
-                            )}
-                          </div>
-                          <CardTitle className="text-lg font-medium mt-0.5">
-                            {study.title}
-                          </CardTitle>
-                        </div>
-                        <Link
-                          href={`/studies/${study.id}`}
-                          className="text-sm text-muted-foreground hover:text-foreground border border-border hover:border-muted-foreground/30 rounded-md px-3 py-1.5 shrink-0 transition"
-                        >
-                          View
-                        </Link>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {study.timeRange[0]} — {study.timeRange[1]}
-                      </p>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <p className="text-sm text-muted-foreground">
-                        {study.description}
-                      </p>
-                    </CardContent>
-                  </Card>
+                  <StudyCard
+                    key={study.id}
+                    study={study}
+                    signalTags={getSignalTags(study)}
+                  />
                 ))}
               </div>
             </section>
