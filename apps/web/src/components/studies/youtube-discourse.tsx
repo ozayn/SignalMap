@@ -1230,11 +1230,58 @@ export function YoutubeDiscourseMaps({
     clusterAssignments: clusterAssignmentsTfidf,
     clusterStats: clusterStatsTfidf,
   };
+
+  const hdbscanFallback = useMemo(() => {
+    const pts = pointsHdbscan ?? pointsTfidf ?? pointsUmap ?? [];
+    if (pts.length < 2 || !discourseComments) return null;
+    const hasValidClusters =
+      (clusterAssignmentsHdbscan?.length ?? 0) >= pts.length &&
+      (clusterAssignmentsHdbscan?.some((c) => c >= 0) ?? false);
+    if (hasValidClusters && (clusterLabelsHdbscan?.length ?? 0) > 0) return null;
+    try {
+      const coords = pts.map((p, i) => {
+        const { x, y } = getPointCoords(p);
+        const idx = Array.isArray(p) ? p[2] : i;
+        return { x, y, idx };
+      });
+      const assignments = kMeansClusters(coords, 4);
+      const labels: Array<{ x: number; y: number; label: string; cluster_id: number }> = [];
+      for (let c = 0; c < 4; c++) {
+        const members = coords.filter((_, i) => assignments[i] === c);
+        if (members.length === 0) continue;
+        const cx = members.reduce((s, m) => s + m.x, 0) / members.length;
+        const cy = members.reduce((s, m) => s + m.y, 0) / members.length;
+        const comments = members
+          .map((m) => m.idx)
+          .filter((i) => i >= 0 && i < discourseComments.length)
+          .map((i) => discourseComments[i])
+          .filter((c): c is string => typeof c === "string");
+        labels.push({ x: cx, y: cy, label: cleanLabel(computeClusterLabel(comments)), cluster_id: c });
+      }
+      return { labels, assignments };
+    } catch {
+      return null;
+    }
+  }, [pointsHdbscan, pointsTfidf, pointsUmap, discourseComments, clusterLabelsHdbscan, clusterAssignmentsHdbscan]);
+
+  const hdbscanPts = pointsHdbscan ?? pointsTfidf ?? pointsUmap ?? [];
+  const hdbscanLabels = (clusterLabelsHdbscan?.length ?? 0) > 0 ? clusterLabelsHdbscan : (hdbscanFallback?.labels ?? tfidf.clusterLabels);
+  const hdbscanAssignments =
+    (clusterAssignmentsHdbscan?.length ?? 0) >= hdbscanPts.length && (clusterAssignmentsHdbscan?.some((c) => c >= 0) ?? false)
+      ? clusterAssignmentsHdbscan
+      : (hdbscanFallback?.assignments ?? tfidf.clusterAssignments);
+  const hdbscanStatsResolved =
+    (clusterStatsHdbscan?.clusters ?? 0) > 0
+      ? clusterStatsHdbscan
+      : hdbscanFallback
+        ? { clusters: hdbscanFallback.labels.length, noise_count: 0, total: (pointsHdbscan ?? pointsTfidf ?? pointsUmap ?? []).length }
+        : clusterStatsHdbscan;
+
   const hdbscan: ModelVariant = {
     points: pointsHdbscan ?? pointsUmap ?? [],
-    clusterLabels: clusterLabelsHdbscan,
-    clusterAssignments: clusterAssignmentsHdbscan,
-    clusterStats: clusterStatsHdbscan,
+    clusterLabels: hdbscanLabels,
+    clusterAssignments: hdbscanAssignments,
+    clusterStats: hdbscanStatsResolved,
   };
 
   const minilmFallback = useMemo(() => {
@@ -1266,23 +1313,27 @@ export function YoutubeDiscourseMaps({
     }
   }, [pointsMinilm, discourseComments, clusterLabelsMinilm]);
 
+  const minilmLabels = (clusterLabelsMinilm?.length ?? 0) > 0 ? clusterLabelsMinilm : minilmFallback?.labels ?? [];
+  const minilmAssignments =
+    (clusterAssignmentsMinilm?.length ?? 0) >= (pointsMinilm ?? []).length && (clusterAssignmentsMinilm?.some((c) => c >= 0) ?? false)
+      ? clusterAssignmentsMinilm
+      : (minilmFallback?.assignments ?? []);
+  const minilmStatsResolved =
+    (clusterStatsMinilm?.clusters ?? 0) > 0
+      ? clusterStatsMinilm
+      : minilmFallback
+        ? { clusters: minilmFallback.labels.length, noise_count: 0, total: (pointsMinilm ?? []).length }
+        : clusterStatsMinilm;
+
   const minilm: ModelVariant = {
     points: pointsMinilm ?? [],
-    clusterLabels: clusterLabelsMinilm ?? minilmFallback?.labels ?? [],
-    clusterAssignments: clusterAssignmentsMinilm ?? minilmFallback?.assignments ?? [],
-    clusterStats:
-      clusterStatsMinilm ??
-      (minilmFallback
-        ? { clusters: minilmFallback.labels.length, noise_count: 0, total: (pointsMinilm ?? []).length }
-        : undefined),
+    clusterLabels: minilmLabels,
+    clusterAssignments: minilmAssignments,
+    clusterStats: minilmStatsResolved,
   };
 
   const tfidfStats = getEffectiveStats(tfidf);
-  const hdbscanStats = getEffectiveStats({
-    ...hdbscan,
-    clusterLabels: hdbscan.clusterLabels ?? tfidf.clusterLabels,
-    clusterAssignments: hdbscan.clusterAssignments ?? tfidf.clusterAssignments,
-  });
+  const hdbscanStats = getEffectiveStats(hdbscan);
   const minilmStats = getEffectiveStats(minilm);
 
   const makeOnPointClick = (
@@ -1318,27 +1369,52 @@ export function YoutubeDiscourseMaps({
         />
       )}
     <div className="space-y-6">
-      {/* Row 1: PCA projection (when available) */}
-      {(pointsPca?.length ?? 0) > 0 && (
-        <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            PCA projection of comment vectors.
-          </p>
-          <div style={{ marginTop: 12 }}>
-            <DiscourseScatter
-              points={pointsPca}
-              discourseComments={discourseComments}
-              title="PCA projection of comment vectors"
-              w={CHART_WIDTH_GRID}
-              h={CHART_HEIGHT_PCA_UMAP}
-              xLabel="Principal component 1"
-              yLabel="Principal component 2"
-            />
+      {/* Row 1: PCA | Semantic clustering */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {(pointsPca?.length ?? 0) > 0 && (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              PCA projection of comment vectors.
+            </p>
+            <div style={{ marginTop: 12 }}>
+              <DiscourseScatter
+                points={pointsPca}
+                discourseComments={discourseComments}
+                title="PCA projection of comment vectors"
+                w={CHART_WIDTH_GRID}
+                h={CHART_HEIGHT_PCA_UMAP}
+                xLabel="Principal component 1"
+                yLabel="Principal component 2"
+              />
+            </div>
           </div>
-        </div>
-      )}
+        )}
+        {minilm.points.length > 0 && (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Semantic clustering. Multilingual sentence embeddings + UMAP + HDBSCAN.
+            </p>
+            {minilmStats && <ClusterStatsLine stats={minilmStats} />}
+            <div style={{ marginTop: 12 }}>
+              <DiscourseScatter
+                points={minilm.points}
+                discourseComments={discourseComments}
+                clusterLabels={minilm.clusterLabels}
+                clusterAssignments={minilm.clusterAssignments}
+                onPointClick={makeOnPointClick(minilm)}
+                title="Semantic clustering"
+                w={CHART_WIDTH_GRID}
+                h={CHART_HEIGHT_PCA_UMAP}
+                xLabel="UMAP dimension 1"
+                yLabel="UMAP dimension 2"
+                colorPalette={PALETTE_MINILM}
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
-      {/* Row 2: Model comparisons — TF-IDF + KMeans | TF-IDF + HDBSCAN */}
+      {/* Row 2: TF-IDF + KMeans | TF-IDF + HDBSCAN */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {tfidf.points.length > 0 && (
           <div className="space-y-3">
@@ -1373,13 +1449,9 @@ export function YoutubeDiscourseMaps({
               <DiscourseScatter
                 points={hdbscan.points}
                 discourseComments={discourseComments}
-                clusterLabels={hdbscan.clusterLabels ?? tfidf.clusterLabels}
-                clusterAssignments={hdbscan.clusterAssignments ?? tfidf.clusterAssignments}
-                onPointClick={makeOnPointClick({
-                  ...hdbscan,
-                  clusterLabels: hdbscan.clusterLabels ?? tfidf.clusterLabels,
-                  clusterAssignments: hdbscan.clusterAssignments ?? tfidf.clusterAssignments,
-                })}
+                clusterLabels={hdbscan.clusterLabels}
+                clusterAssignments={hdbscan.clusterAssignments}
+                onPointClick={makeOnPointClick(hdbscan)}
                 title="TF-IDF + UMAP + HDBSCAN"
                 w={CHART_WIDTH_GRID}
                 h={CHART_HEIGHT_PCA_UMAP}
@@ -1391,31 +1463,6 @@ export function YoutubeDiscourseMaps({
           </div>
         )}
       </div>
-
-      {/* Row 2: MiniLM + HDBSCAN */}
-      {minilm.points.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Semantic clustering. Multilingual sentence embeddings + UMAP + HDBSCAN.
-          </p>
-          {minilmStats && <ClusterStatsLine stats={minilmStats} />}
-          <div style={{ marginTop: 12 }}>
-            <DiscourseScatter
-              points={minilm.points}
-              discourseComments={discourseComments}
-              clusterLabels={minilm.clusterLabels}
-              clusterAssignments={minilm.clusterAssignments}
-              onPointClick={makeOnPointClick(minilm)}
-              title="Semantic clustering"
-              w={CHART_WIDTH_GRID}
-              h={CHART_HEIGHT_PCA_UMAP}
-              xLabel="UMAP dimension 1"
-              yLabel="UMAP dimension 2"
-              colorPalette={PALETTE_MINILM}
-            />
-          </div>
-        </div>
-      )}
 
     </div>
     </div>
