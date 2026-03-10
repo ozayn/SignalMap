@@ -3,5 +3,9 @@
   "build": {
     "builder": "DOCKERFILE",
     "dockerfilePath": "Dockerfile.web"
+  },
+  "deploy": {
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 60
   }
 }
