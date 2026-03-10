@@ -5,10 +5,8 @@ import re
 from pathlib import Path
 from collections import Counter
 from textblob import TextBlob
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.decomposition import PCA
-from sklearn.cluster import KMeans
-import umap
+
+# Lazy imports for sklearn/umap to speed up API startup (healthcheck passes faster)
 
 
 def load_cached_snapshot(channel_id: str) -> dict | None:
@@ -141,11 +139,19 @@ PHRASE_STOPWORDS.update({
     "دمت گرم علی",
 })
 
+PRAISE_WORDS = {
+    "دمت", "گرم", "خسته", "نباشید",
+    "thank", "thanks", "great",
+    "well", "done", "ali", "jan",
+    "مرسی", "تشکر",
+}
+
 ALL_STOPWORDS = (
     STOPWORDS
     .union(PERSIAN_STOPWORDS)
     .union(CUSTOM_STOPWORDS)
     .union(CHANNEL_STOPWORDS)
+    .union(PRAISE_WORDS)
 )
 
 VERB_SUFFIXES = [
@@ -245,12 +251,13 @@ def _dedupe_phrase(phrase: str) -> str:
 
 
 def _phrase_stopword_ratio(phrase: str) -> float:
-    """Return fraction of tokens that are stopwords. >0.5 means reject."""
+    """Return fraction of tokens that are stopwords or praise words. >0.5 means reject."""
     tokens = phrase.split()
     if not tokens:
         return 0.0
-    stop_count = sum(1 for t in tokens if t.lower() in ALL_STOPWORDS)
-    return stop_count / len(tokens)
+    bad = ALL_STOPWORDS | PRAISE_WORDS
+    bad_count = sum(1 for t in tokens if t.lower() in bad)
+    return bad_count / len(tokens)
 
 
 def classify_comment_topics(tokens: list[str]) -> set[str]:
@@ -315,6 +322,7 @@ def compute_cluster_labels_from_umap(
     if not points_umap or len(points_umap) < 2 or not comments:
         return []
     try:
+        from sklearn.cluster import KMeans
         coords = []
         for p in points_umap:
             xy = _point_to_xy(p)
@@ -422,6 +430,10 @@ def analyze_comments(comments):
     to_map = clean_comments[:MAX_DISCOURSE] if len(clean_comments) > MAX_DISCOURSE else clean_comments
     if len(to_map) >= 2:
         try:
+            from sklearn.feature_extraction.text import TfidfVectorizer
+            from sklearn.decomposition import PCA
+            from sklearn.cluster import KMeans
+            import umap
             vectorizer = TfidfVectorizer(
                 max_features=200,
                 token_pattern=r"(?u)\b[\u0600-\u06FF]+\b"
