@@ -269,22 +269,42 @@ def _normalize_phrase_for_match(phrase: str) -> str:
     return normalize_persian(phrase).lower().strip()
 
 
+# Arabic/Persian combining diacritics (fatha, kasra, damma, shadda, etc.)
+_DIACRITICS_RE = re.compile(r"[\u064B-\u0652\u0670\u06D6-\u06ED]+")
+
+
+def _normalize_title_for_phrases(title: str) -> str:
+    """Normalize a video title before extracting phrases. Handles Persian character
+    variants (ي→ی, ك→ک), diacritics, half-space (ZWNJ→space), and whitespace.
+    Example: 'جنگهاي صليبي' and 'جنگ‌های صلیبی' both normalize to comparable form."""
+    text = normalize_persian(title)
+    text = _DIACRITICS_RE.sub("", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip().lower()
+
+
 def extract_title_phrases(comments: list) -> frozenset[str]:
     """Extract bigrams and trigrams from video titles. Used to filter title phrases from
     discourse analysis (e.g. cluster labels, PMI, word cloud) without removing individual words.
     Example: title 'جنگ صلیبی چیست' -> {'جنگ صلیبی', 'صلیبی چیست', 'جنگ صلیبی چیست'}.
-    Normalizes half-spaces (ZWNJ) so 'جنگ‌صلیبی' matches 'جنگ صلیبی'."""
+    Normalizes titles before extraction so variants (جنگ‌های/جنگ های/جنگهاي صليبي) match."""
     phrases: set[str] = set()
-    seen_titles: set[str] = set()
+    seen_normalized: set[str] = set()
     for c in comments:
         if not isinstance(c, dict):
             continue
         title = c.get("video_title") or c.get("title") or ""
-        if not title or not isinstance(title, str) or title in seen_titles:
+        if not title or not isinstance(title, str):
             continue
-        seen_titles.add(title)
-        text = normalize_persian(title).lower()
-        tokens = [t for t in text.split() if len(t) >= 2 and not any(c.isdigit() for c in t)]
+        normalized_title = _normalize_title_for_phrases(title)
+        if not normalized_title or normalized_title in seen_normalized:
+            continue
+        seen_normalized.add(normalized_title)
+        tokens = [
+            t
+            for t in normalized_title.split()
+            if len(t) >= 2 and not any(ch.isdigit() for ch in t)
+        ]
         if len(tokens) >= 2:
             for bg in generate_bigrams(tokens):
                 phrases.add(_normalize_phrase_for_match(bg))
@@ -538,13 +558,14 @@ def _compute_tfidf_embeddings(to_map: list[str]):
 
 
 def _run_umap(embeddings, random_state: int = 42):
-    """Step 3: Run UMAP with fixed seed. Returns 2D coords or None. Uses lock to avoid Numba concurrent access."""
+    """Step 3: Run UMAP with fixed seed. Returns 2D coords or None. Uses lock to avoid Numba concurrent access.
+    Deterministic: same embedding for identical inputs."""
     import umap
     with _umap_lock:
         reducer = umap.UMAP(
-            n_components=2,
             n_neighbors=15,
-            min_dist=0.3,
+            min_dist=0.1,
+            n_components=2,
             metric="cosine",
             random_state=random_state,
         )
@@ -604,6 +625,20 @@ def _compute_minilm_embeddings(to_map: list, comments: list):
         return None
 
 
+def _make_labels_unique(labels: list[dict]) -> list[dict]:
+    """Ensure cluster labels are unique. If duplicate, append numeric suffix: تدی, تدی 2, تدی 3."""
+    label_counts: dict[str, int] = {}
+    result = []
+    for item in labels:
+        label = item.get("label", "(cluster)")
+        count = label_counts.get(label, 0)
+        label_counts[label] = count + 1
+        if count > 0:
+            label = f"{label} {count + 1}"
+        result.append({**item, "label": label})
+    return result
+
+
 def _cluster_labels_from_coords(
     coords: list,
     cluster_ids: list,
@@ -612,7 +647,8 @@ def _cluster_labels_from_coords(
     title_phrase_stopwords: frozenset[str] | None = None,
 ) -> tuple[list[dict], dict, list[int]]:
     """Build cluster labels from coords and cluster assignments. Handles HDBSCAN (-1 = noise).
-    Returns (labels, stats, cluster_assignments) where stats has clusters, noise_count, total."""
+    Returns (labels, stats, cluster_assignments) where stats has clusters, noise_count, total.
+    Labels are unique; duplicates get numeric suffix (e.g. تدی 2, تدی 3)."""
     clusters: dict[int, list[int]] = {}
     noise_count = 0
     for i, cid in enumerate(cluster_ids):
@@ -638,6 +674,7 @@ def _cluster_labels_from_coords(
         x = float(sum(coords[i][0] for i in indices) / len(indices))
         y = float(sum(coords[i][1] for i in indices) / len(indices))
         result.append({"x": round(x, 2), "y": round(y, 2), "label": label, "cluster_id": int(cid)})
+    result = _make_labels_unique(result)
     stats = {"clusters": len(result), "noise_count": noise_count, "total": total}
     cluster_assignments = [int(cid) for cid in cluster_ids]
     return result, stats, cluster_assignments
@@ -732,7 +769,7 @@ def compute_cluster_labels_from_umap(
             x = float(sum(xs) / len(xs))
             y = float(sum(ys) / len(ys))
             cluster_labels.append({"x": round(x, 2), "y": round(y, 2), "label": label})
-        return cluster_labels
+        return _make_labels_unique(cluster_labels)
     except Exception:
         return []
 
