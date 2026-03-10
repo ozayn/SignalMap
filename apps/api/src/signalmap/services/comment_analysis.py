@@ -163,6 +163,7 @@ CUSTOM_STOPWORDS.update({
     "انجام", "ادامه", "یاد", "میکنن",
     "عزیز", "عده", "داشتم",
     "گرم", "برامون", "گفتی", "داری",
+    "منفعل",  # passive — often in fragments like "منفعل منفعت"
 })
 CUSTOM_STOPWORDS.update([
     "میکنم",
