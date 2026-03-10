@@ -483,6 +483,7 @@ export function TimelineChart({
 
     const option: echarts.EChartsOption = {
       animation: false,
+      backgroundColor: "transparent",
       emphasis: { focus: "none" as const },
       ...(comparatorSeries && comparatorValuesForChart && hasOil
         ? {
@@ -1306,5 +1307,5 @@ export function TimelineChart({
     };
   }, []);
 
-  return <div ref={chartRef} className={`${chartHeight} w-full min-w-0`} />;
+  return <div ref={chartRef} className={`chart-area ${chartHeight} w-full min-w-0`} />;
 }

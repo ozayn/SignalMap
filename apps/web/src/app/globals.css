@@ -55,7 +55,11 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    background: #f8fafc;
+  }
+  .dark body {
+    background: hsl(var(--background));
   }
 }
 
@@ -85,4 +89,284 @@
     width: 20%;
     margin-left: 0;
   }
+}
+
+/* Studies page: responsive layout */
+.studies-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+.studies-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+
+.study-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 120px;
+  height: auto;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 18px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.dark .study-card {
+  background: #111827;
+  border-color: #1f2937;
+}
+
+.study-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+.dark .study-card:hover {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+
+.section-block {
+  margin-top: 42px;
+}
+
+@media (max-width: 640px) {
+  .studies-container {
+    padding: 1rem;
+  }
+
+  .study-card {
+    padding: 1rem;
+  }
+}
+
+/* Navbar - fixed height to prevent layout shift */
+.navbar-header {
+  height: 56px;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.dark .navbar-header {
+  background: hsl(var(--background));
+  border-bottom-color: #1f2937;
+}
+
+.navbar-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.navbar-logo {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #111827;
+  transition: color 0.15s;
+}
+
+.dark .navbar-logo {
+  color: #e5e7eb;
+}
+
+.navbar-logo:hover {
+  color: #374151;
+}
+
+.dark .navbar-logo:hover {
+  color: #9ca3af;
+}
+
+.navbar-link {
+  font-size: 14px;
+  color: #6b7280;
+  margin-left: 20px;
+  transition: color 0.15s;
+}
+
+.navbar-link:hover {
+  color: #111827;
+}
+
+.dark .navbar-link {
+  color: #9ca3af;
+}
+
+.dark .navbar-link:hover {
+  color: #e5e7eb;
+}
+
+.navbar-link-active {
+  color: #111827 !important;
+  font-weight: 500;
+}
+
+.dark .navbar-link-active {
+  color: #e5e7eb !important;
+}
+
+.navbar-link-subtle {
+  opacity: 0.9;
+}
+
+.theme-toggle-btn {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+  background: transparent;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.theme-toggle-btn:hover {
+  background: #f3f4f6;
+}
+
+.dark .theme-toggle-btn {
+  border-color: #374151;
+  color: #e5e7eb;
+}
+
+.dark .theme-toggle-btn:hover {
+  background: #1f2937;
+}
+
+/* Page content spacing below navbar */
+.main-content {
+  margin-top: 28px;
+}
+
+/* Study page */
+.study-page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+.study-header {
+  margin-bottom: 24px;
+}
+
+.study-header-number {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #9ca3af;
+  margin-bottom: 6px;
+}
+
+.dark .study-header-number {
+  color: #9ca3af;
+}
+
+.study-header-title {
+  font-size: clamp(20px, 2vw, 26px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
+}
+
+.study-header-meta {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.dark .study-header-meta {
+  color: #9ca3af;
+}
+
+.study-section-spacing {
+  margin-top: 24px;
+}
+
+/* Metric cards (stat cards on study pages) */
+.metric-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.dark .metric-card {
+  border-color: #1f2937;
+  background: #111827;
+}
+
+.metric-value {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.metric-label {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.dark .metric-label {
+  color: #9ca3af;
+}
+
+.metric-cards-grid {
+  display: grid;
+  gap: 16px;
+}
+
+/* Chart container - clean white card */
+.chart-container {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 22px;
+  margin-top: 20px;
+}
+
+.dark .chart-container {
+  border-color: #1f2937;
+  background: #111827;
+}
+
+.chart-area {
+  background: transparent;
+}
+
+/* Study panels (HOW TO READ, CONCEPTS, SOURCES, IN SIMPLE TERMS) */
+.study-panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 18px;
+  margin-top: 16px;
+  background: white;
+}
+
+.dark .study-panel {
+  border-color: #1f2937;
+  background: #111827;
+}
+
+.study-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #374151;
+  margin-bottom: 12px;
+}
+
+.dark .study-panel-title {
+  color: #e5e7eb;
 }

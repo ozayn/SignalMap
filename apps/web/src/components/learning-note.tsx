@@ -1,5 +1,3 @@
-import { Card, CardContent } from "@/components/ui/card";
-
 export type LearningNoteSection = {
   heading: string;
   bullets: string[];
@@ -22,11 +20,10 @@ export function LearningNote({
   links = [],
 }: LearningNoteProps) {
   return (
-    <Card className="mt-3 border-border bg-muted/30 overflow-hidden">
-      <CardContent className="p-4">
-        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {title}
-        </p>
+    <div className="study-panel">
+      <p className="study-panel-title">
+        {title}
+      </p>
         <div className="flex flex-col gap-6 min-w-0">
           {sections.map((section) => (
             <div key={section.heading} className="space-y-2 min-w-0 break-words">
@@ -56,7 +53,6 @@ export function LearningNote({
             ))}
           </p>
         )}
-      </CardContent>
-    </Card>
+    </div>
   );
 }

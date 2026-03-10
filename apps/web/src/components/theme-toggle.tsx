@@ -8,19 +8,27 @@ export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  if (!mounted) return null;
-
   const current = theme === "system" ? resolvedTheme : theme;
   const next = current === "dark" ? "light" : "dark";
+
+  if (!mounted) {
+    return (
+      <span
+        className="theme-toggle-btn inline-block opacity-0"
+        style={{ minWidth: 36, minHeight: 28 }}
+        aria-hidden
+      />
+    );
+  }
 
   return (
     <button
       type="button"
       onClick={() => setTheme(next)}
-      className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-accent hover:text-accent-foreground transition"
-      aria-label="Toggle theme"
+      className="theme-toggle-btn"
+      aria-label={current === "dark" ? "Switch to light mode" : "Switch to dark mode"}
     >
-      {current === "dark" ? "Light" : "Dark"}
+      {current === "dark" ? "☀" : "☾"}
     </button>
   );
 }

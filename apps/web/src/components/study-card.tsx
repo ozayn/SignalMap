@@ -11,16 +11,25 @@ export function StudyCard({ study, signalTags }: StudyCardProps) {
     <Link
       href={`/studies/${study.id}`}
       tabIndex={0}
-      className="block bg-white dark:bg-[#111827] border border-[#e5e7eb] dark:border-[#1f2937] rounded-[10px] p-[18px] cursor-pointer transition-all duration-[0.18s] ease-out hover:shadow-[0_6px_18px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_6px_18px_rgba(0,0,0,0.25)] hover:-translate-y-0.5"
+      className="study-card"
     >
       <div>
-        <p className="text-[11px] uppercase tracking-wide text-[#9ca3af] dark:text-[#9ca3af] mb-1.5">
+        <p
+          className="uppercase tracking-wide text-[#9ca3af] dark:text-[#9ca3af] mb-1.5"
+          style={{ fontSize: "clamp(10px, 1vw, 11px)" }}
+        >
           Study {study.number}
         </p>
-        <h3 className="text-[15px] font-semibold text-[#111827] dark:text-[#e5e7eb] leading-[1.35]">
+        <h3
+          className="font-semibold text-[#111827] dark:text-[#e5e7eb] leading-[1.35]"
+          style={{ fontSize: "clamp(14px, 1.4vw, 16px)" }}
+        >
           {study.title}
         </h3>
-        <p className="text-[13px] text-[#6b7280] dark:text-[#9ca3af] mt-1.5 line-clamp-3">
+        <p
+          className="text-[#6b7280] dark:text-[#9ca3af] mt-1.5 line-clamp-3"
+          style={{ fontSize: "clamp(12px, 1.2vw, 14px)" }}
+        >
           {study.description}
         </p>
       </div>
@@ -29,7 +38,8 @@ export function StudyCard({ study, signalTags }: StudyCardProps) {
           {signalTags.map((tag) => (
             <span
               key={tag}
-              className="text-[11px] bg-[#f3f4f6] dark:bg-[#1f2937] rounded-md px-1.5 py-0.5 text-[#4b5563] dark:text-[#9ca3af] mr-1 last:mr-0"
+              className="bg-[#f3f4f6] dark:bg-[#1f2937] rounded-md px-1.5 py-0.5 text-[#4b5563] dark:text-[#9ca3af] mr-1 last:mr-0"
+              style={{ fontSize: "clamp(10px, 1vw, 11px)" }}
             >
               {tag}
             </span>

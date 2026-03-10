@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
 import { getConcepts, type ConceptKey } from "@/lib/concepts";
 
 type ConceptsUsedProps = {
@@ -14,14 +13,14 @@ export function ConceptsUsed({ conceptKeys }: ConceptsUsedProps) {
   if (concepts.length === 0) return null;
 
   return (
-    <Card className="mt-3 border-border bg-muted/30 overflow-hidden">
+    <div className="study-panel">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between p-4 text-left"
+        className="flex w-full items-center justify-between text-left -m-[2px]"
         aria-expanded={open}
       >
-        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="study-panel-title mb-0">
           Concepts used in this study
         </span>
         <span
@@ -32,7 +31,7 @@ export function ConceptsUsed({ conceptKeys }: ConceptsUsedProps) {
         </span>
       </button>
       {open && (
-        <CardContent className="border-t border-border pt-4">
+        <div className="border-t border-[#e5e7eb] dark:border-[#1f2937] pt-4 mt-3">
           <ul className="space-y-3 break-words min-w-0">
             {concepts.map((c) => (
               <li key={c.title} className="text-sm text-muted-foreground space-y-1">
@@ -63,8 +62,8 @@ export function ConceptsUsed({ conceptKeys }: ConceptsUsedProps) {
               </li>
             ))}
           </ul>
-        </CardContent>
+        </div>
       )}
-    </Card>
+    </div>
   );
 }

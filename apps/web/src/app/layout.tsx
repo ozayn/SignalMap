@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import Link from "next/link";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { Navbar } from "@/components/navbar";
 import { SuppressDevLogs } from "@/components/suppress-dev-logs";
 import { Analytics } from "@/components/analytics";
 
@@ -18,13 +17,6 @@ export const metadata: Metadata = {
 };
 
 const gaId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || "";
-
-const navLinks = [
-  { href: "/studies", label: "Studies" },
-  { href: "/explore", label: "Explore" },
-  { href: "/methods", label: "Methods" },
-  { href: "/learning", label: "Learning", subtle: true },
-];
 
 export default function RootLayout({
   children,
@@ -52,31 +44,8 @@ export default function RootLayout({
         <ThemeProvider>
           <SuppressDevLogs />
           {gaId && <Analytics gaId={gaId} />}
-          <header className="border-b border-border bg-background">
-            <nav className="container mx-auto max-w-4xl px-4 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-8">
-                <Link
-                  href="/"
-                  className="font-medium text-foreground hover:text-muted-foreground transition"
-                >
-                  SignalMap
-                </Link>
-                <div className="flex items-center gap-1">
-                  {navLinks.map(({ href, label, subtle }) => (
-                    <Link
-                      key={href}
-                      href={href}
-                      className={`text-muted-foreground hover:text-foreground border border-transparent hover:border-border rounded-md px-3 py-1.5 transition ${subtle ? "text-xs opacity-80" : "text-sm"}`}
-                    >
-                      {label}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-              <ThemeToggle />
-            </nav>
-          </header>
-          <main>{children}</main>
+          <Navbar />
+          <main className="main-content">{children}</main>
         </ThemeProvider>
       </body>
     </html>

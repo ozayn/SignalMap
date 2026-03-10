@@ -244,11 +244,11 @@ function StatValueWithDate({
 }) {
   return (
     <div>
-      <p className="text-2xl font-semibold text-foreground">
+      <p className="metric-value text-foreground">
         <CompactStatValue value={value} unit={unit} prefix={prefix} />
       </p>
       {date && (
-        <p className="text-xs text-muted-foreground mt-0.5">{formatStatDate(date)}</p>
+        <p className="metric-label mt-0.5">{formatStatDate(date)}</p>
       )}
     </div>
   );
@@ -1371,7 +1371,7 @@ export default function StudyDetailPage() {
 
   if (!study) {
     return (
-      <div className="container mx-auto max-w-4xl px-4 py-12 space-y-4">
+      <div className="study-page-container py-12 space-y-4">
         <p className="text-muted-foreground">Study not found.</p>
         <Link
           href="/studies"
@@ -1414,7 +1414,7 @@ export default function StudyDetailPage() {
                         : false;
   if (loading && (isOverviewStub ? !data : isSingleSignalStudy && !singleSignalReady)) {
     return (
-      <div className="container mx-auto max-w-4xl px-4 py-12 animate-pulse space-y-8">
+      <div className="study-page-container py-12 animate-pulse space-y-8">
         <div className="h-8 w-48 rounded bg-muted" />
         <div className="grid gap-4 sm:grid-cols-3">
           {[1, 2, 3].map((i) => (
@@ -1428,7 +1428,7 @@ export default function StudyDetailPage() {
 
   if (showError) {
     return (
-      <div className="container mx-auto max-w-4xl py-12 space-y-4">
+      <div className="study-page-container py-12 space-y-4">
         <p className="text-muted-foreground">{error || "No data available"}</p>
         <Link
           href="/studies"
@@ -1582,8 +1582,8 @@ export default function StudyDetailPage() {
   const { prev: prevStudy, next: nextStudy } = getPrevNextStudies(study?.id ?? studyId);
 
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-12 space-y-10 min-w-0">
-      <header className="space-y-1">
+    <div className="study-page-container py-12 space-y-6 min-w-0">
+      <header className="study-header">
         <div className="flex items-center gap-4 flex-wrap">
           <Link
             href="/studies"
@@ -1592,17 +1592,14 @@ export default function StudyDetailPage() {
             ← Studies
           </Link>
         </div>
+        <p className="study-header-number">Study {study.number}</p>
         <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-medium tracking-tight text-foreground">
-              Study {study.number}
-            </h1>
-          </div>
+          <h1 className="study-header-title text-foreground">{study.title}</h1>
           <div className="flex items-center gap-3 text-sm">
             {prevStudy ? (
               <Link
                 href={`/studies/${prevStudy.id}`}
-                className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                className="study-header-meta hover:text-foreground inline-flex items-center gap-1"
                 title={`Study ${prevStudy.number}: ${prevStudy.title}`}
               >
                 <span aria-hidden>←</span>
@@ -1610,12 +1607,12 @@ export default function StudyDetailPage() {
               </Link>
             ) : null}
             {prevStudy && nextStudy ? (
-              <span className="text-muted-foreground/50">|</span>
+              <span className="study-header-meta opacity-50">|</span>
             ) : null}
             {nextStudy ? (
               <Link
                 href={`/studies/${nextStudy.id}`}
-                className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                className="study-header-meta hover:text-foreground inline-flex items-center gap-1"
                 title={`Study ${nextStudy.number}: ${nextStudy.title}`}
               >
                 <span>Next</span>
@@ -1624,20 +1621,19 @@ export default function StudyDetailPage() {
             ) : null}
           </div>
         </div>
-        <p className="text-lg text-muted-foreground">{study.title}</p>
         {study.subtitle ? (
-          <p className="text-sm text-muted-foreground">{study.subtitle}</p>
+          <p className="study-header-meta mb-1">{study.subtitle}</p>
         ) : null}
-        <p className="text-sm text-muted-foreground">
+        <p className="study-header-meta">
           {displayTimeRange ? `${displayTimeRange[0]} — ${displayTimeRange[1]}` : "No data loaded"}
         </p>
         {latestDataDate && (
-          <p className="text-sm text-muted-foreground">
+          <p className="study-header-meta">
             Data last available: {isOilTradeNetwork ? latestDataDate.getFullYear() : formatDate(latestDataDate)}
           </p>
         )}
         {lastUpdated && (
-          <p className="text-sm text-muted-foreground">
+          <p className="study-header-meta">
             Last updated: {new Date(lastUpdated).toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
           </p>
         )}
@@ -2104,10 +2100,10 @@ export default function StudyDetailPage() {
           {study?.unitLabel && (
             <p className="text-xs text-muted-foreground mb-2">Unit: {study.unitLabel}</p>
           )}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card className="border-border">
+          <div className="metric-cards-grid grid sm:grid-cols-2 lg:grid-cols-4">
+            <Card className="metric-card border-border">
               <CardHeader className="pb-1">
-                <CardTitle className="text-sm font-normal text-muted-foreground">
+                <CardTitle className="metric-label font-normal">
                   Current Brent price
                 </CardTitle>
               </CardHeader>
@@ -2120,14 +2116,14 @@ export default function StudyDetailPage() {
                 />
               </CardContent>
             </Card>
-            <Card className="border-border">
+            <Card className="metric-card border-border">
               <CardHeader className="pb-1">
-                <CardTitle className="text-sm font-normal text-muted-foreground">
+                <CardTitle className="metric-label font-normal">
                   1-day change
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-foreground">
+                <p className="metric-value text-foreground">
                   {geopoliticalStats.change1d != null ? (
                     <span className={geopoliticalStats.change1d >= 0 ? "text-green-600" : "text-red-600"}>
                       {geopoliticalStats.change1d >= 0 ? "+" : ""}
@@ -2137,17 +2133,17 @@ export default function StudyDetailPage() {
                     "—"
                   )}
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">as of {formatStatDate(geopoliticalStats.latestDate)}</p>
+                <p className="metric-label mt-0.5">as of {formatStatDate(geopoliticalStats.latestDate)}</p>
               </CardContent>
             </Card>
-            <Card className="border-border">
+            <Card className="metric-card border-border">
               <CardHeader className="pb-1">
-                <CardTitle className="text-sm font-normal text-muted-foreground">
+                <CardTitle className="metric-label font-normal">
                   7-day change
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-foreground">
+                <p className="metric-value text-foreground">
                   {geopoliticalStats.change7d != null ? (
                     <span className={geopoliticalStats.change7d >= 0 ? "text-green-600" : "text-red-600"}>
                       {geopoliticalStats.change7d >= 0 ? "+" : ""}
@@ -2157,20 +2153,20 @@ export default function StudyDetailPage() {
                     "—"
                   )}
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">as of {formatStatDate(geopoliticalStats.latestDate)}</p>
+                <p className="metric-label mt-0.5">as of {formatStatDate(geopoliticalStats.latestDate)}</p>
               </CardContent>
             </Card>
-            <Card className="border-border">
+            <Card className="metric-card border-border">
               <CardHeader className="pb-1">
-                <CardTitle className="text-sm font-normal text-muted-foreground">
+                <CardTitle className="metric-label font-normal">
                   30-day volatility
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-foreground">
+                <p className="metric-value text-foreground">
                   {geopoliticalStats.vol30 != null ? `${geopoliticalStats.vol30.toFixed(2)}%` : "—"}
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">as of {formatStatDate(geopoliticalStats.latestDate)}</p>
+                <p className="metric-label mt-0.5">as of {formatStatDate(geopoliticalStats.latestDate)}</p>
               </CardContent>
             </Card>
           </div>
@@ -2190,7 +2186,7 @@ export default function StudyDetailPage() {
             ))}
           </div>
           {geopoliticalChartData.timeRange && geopoliticalChartData.points.length > 0 && (
-            <div className="mt-4">
+            <div className="chart-container">
               <TimelineChart
                 data={geopoliticalChartData.points}
                 valueKey="value"
@@ -3926,55 +3922,57 @@ export default function StudyDetailPage() {
             </>
           ) : isOilBrent || isOilGlobalLong ? (
             <>
-              {oilShockDates.length > 0 && (
-                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer mb-2">
-                  <input
-                    type="checkbox"
-                    checked={showShocks}
-                    onChange={(e) => setShowShocks(e.target.checked)}
-                  />
-                  Show shocks
-                </label>
-              )}
-              <TimelineChart
-                data={[]}
-                valueKey="value"
-                label={isOilGlobalLong ? "Oil price" : "Brent oil"}
-                events={events}
-                anchorEventId={anchorEventId || undefined}
-                secondSeries={{
-                  label: isOilGlobalLong ? "Oil price" : "Brent oil",
-                  unit: "USD/barrel",
-                  points: oilPointsWithVolatility,
-                  yAxisIndex: 1,
-                }}
-                oilShockDates={oilShockDates}
-                showOilShocks={showShocks}
-                timeRange={oilTimeRange ?? study.timeRange}
-                mutedBands={isOilGlobalLong}
-                highlightLatestPoint
-              />
-              {showShocks && oilShockDates.length > 0 && (
-                <div className="flex items-center gap-2 mt-2 text-sm text-gray-600">
-                  <span
-                    className="shrink-0 rounded-full"
-                    style={{ width: 8, height: 8, background: "rgba(180, 30, 30, 0.6)" }}
-                  />
-                  Oil price shock (&gt;2× recent volatility)
-                </div>
-              )}
-              {dailyReturnPoints.length > 0 && (
+              <div className="chart-container">
+                {oilShockDates.length > 0 && (
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer mb-2">
+                    <input
+                      type="checkbox"
+                      checked={showShocks}
+                      onChange={(e) => setShowShocks(e.target.checked)}
+                    />
+                    Show shocks
+                  </label>
+                )}
                 <TimelineChart
-                  data={dailyReturnPoints as { date: string; value: number }[]}
+                  data={[]}
                   valueKey="value"
-                  label="Daily return"
-                  unit="%"
+                  label={isOilGlobalLong ? "Oil price" : "Brent oil"}
+                  events={events}
+                  anchorEventId={anchorEventId || undefined}
+                  secondSeries={{
+                    label: isOilGlobalLong ? "Oil price" : "Brent oil",
+                    unit: "USD/barrel",
+                    points: oilPointsWithVolatility,
+                    yAxisIndex: 1,
+                  }}
+                  oilShockDates={oilShockDates}
+                  showOilShocks={showShocks}
                   timeRange={oilTimeRange ?? study.timeRange}
-                  chartHeight="h-48"
-                  referenceLine={{ value: 0, label: "0%" }}
-                  gridRight="12%"
+                  mutedBands={isOilGlobalLong}
+                  highlightLatestPoint
                 />
-              )}
+                {showShocks && oilShockDates.length > 0 && (
+                  <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
+                    <span
+                      className="shrink-0 rounded-full"
+                      style={{ width: 8, height: 8, background: "rgba(180, 30, 30, 0.6)" }}
+                    />
+                    Oil price shock (&gt;2× recent volatility)
+                  </div>
+                )}
+                {dailyReturnPoints.length > 0 && (
+                  <TimelineChart
+                    data={dailyReturnPoints as { date: string; value: number }[]}
+                    valueKey="value"
+                    label="Daily return"
+                    unit="%"
+                    timeRange={oilTimeRange ?? study.timeRange}
+                    chartHeight="h-48"
+                    referenceLine={{ value: 0, label: "0%" }}
+                    gridRight="12%"
+                  />
+                )}
+              </div>
               <LearningNote
                   sections={[
                     {

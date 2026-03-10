@@ -63,12 +63,18 @@ const SECTIONS: { title: string; description: string; studyIds: string[] }[] = [
 
 export default function StudiesPage() {
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-12">
+    <div className="studies-container py-12">
       <header className="mb-8">
-        <h1 className="text-[28px] font-semibold tracking-[-0.01em] text-[#111827] dark:text-[#e5e7eb]">
+        <h1
+          className="font-semibold tracking-[-0.01em] text-[#111827] dark:text-[#e5e7eb]"
+          style={{ fontSize: "clamp(22px, 2.5vw, 30px)" }}
+        >
           Studies
         </h1>
-        <p className="mt-1 text-[14px] text-[#6b7280] dark:text-[#9ca3af]">
+        <p
+          className="mt-1 text-[#6b7280] dark:text-[#9ca3af]"
+          style={{ fontSize: "clamp(12px, 1.2vw, 14px)" }}
+        >
           Longitudinal research on emotion, language, and interaction in public discourse.
         </p>
       </header>
@@ -80,16 +86,24 @@ export default function StudiesPage() {
             .filter((s): s is NonNullable<typeof s> => s != null && s.visible !== false);
           if (studies.length === 0) return null;
           return (
-            <section key={section.title} className={sectionIndex === 0 ? "" : "mt-12"}>
-              <div className={`${sectionIndex === 0 ? "mt-9 " : ""}border-b border-[#f1f5f9] dark:border-[#1f2937] pb-1.5 mb-3.5`}>
-                <h2 className="text-[18px] font-semibold text-[#111827] dark:text-[#e5e7eb]">
+            <section key={section.title} className={sectionIndex === 0 ? "" : "section-block"}>
+              <div
+                className={`${sectionIndex === 0 ? "mt-9 " : ""}border-b border-[#f1f5f9] dark:border-[#1f2937] pb-1.5 mb-3.5`}
+              >
+                <h2
+                  className="font-semibold text-[#111827] dark:text-[#e5e7eb]"
+                  style={{ fontSize: "clamp(16px, 1.8vw, 18px)" }}
+                >
                   {section.title}
                 </h2>
-                <p className="mt-0.5 text-xs text-[#6b7280] dark:text-[#9ca3af]">
+                <p
+                  className="mt-0.5 text-[#6b7280] dark:text-[#9ca3af]"
+                  style={{ fontSize: "clamp(12px, 1.2vw, 14px)" }}
+                >
                   {section.description}
                 </p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[22px]">
+              <div className="studies-grid">
                 {studies.map((study) => (
                   <StudyCard
                     key={study.id}

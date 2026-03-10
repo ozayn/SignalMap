@@ -1,5 +1,3 @@
-import { Card, CardContent } from "@/components/ui/card";
-
 export type SourceInfoItem = {
   label: string;
   sourceName: string;
@@ -22,11 +20,10 @@ export function SourceInfo({
   note,
 }: SourceInfoProps) {
   return (
-    <Card className="mt-3 border-border bg-muted/30 overflow-hidden">
-      <CardContent className="p-4">
-        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {title}
-        </p>
+    <div className="study-panel">
+      <p className="study-panel-title">
+        {title}
+      </p>
         <div className="grid gap-4 sm:grid-cols-2 min-w-0">
           {items.map((item) => (
             <div key={item.label} className="space-y-0.5 min-w-0 break-words">
@@ -59,10 +56,9 @@ export function SourceInfo({
             </div>
           ))}
         </div>
-        {note && (
-          <p className="mt-3 text-xs text-muted-foreground/80 break-words">{note}</p>
-        )}
-      </CardContent>
-    </Card>
+      {note && (
+        <p className="mt-3 text-xs text-muted-foreground/80 break-words">{note}</p>
+      )}
+    </div>
   );
 }
