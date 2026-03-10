@@ -22,9 +22,12 @@ export async function GET(request: NextRequest) {
     if (videosLimit != null) params.set("videos_limit", videosLimit);
     const commentsPerVideo = searchParams.get("comments_per_video");
     if (commentsPerVideo != null) params.set("comments_per_video", commentsPerVideo);
+    const refresh = searchParams.get("refresh");
+    if (refresh === "1" || refresh === "true") params.set("refresh", "1");
 
     const res = await fetch(`${API_BASE}/api/youtube/channel/comment-analysis?${params}`, {
       headers: { Accept: "application/json" },
+      cache: "no-store",
       next: { revalidate: 0 },
     });
     const data = await res.json().catch(() => ({}));

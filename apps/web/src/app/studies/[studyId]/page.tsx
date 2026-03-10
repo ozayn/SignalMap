@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -968,59 +968,69 @@ export default function StudyDetailPage() {
     }
   }, [study, isEventsTimeline, isFollowerGrowthDynamics, isYoutubeCommentAnalysis]);
 
+  const fetchYoutubeAnalysis = useCallback(
+    async (forceRefresh: boolean) => {
+      setAnalysisLoading(true);
+      setAnalysisError(null);
+      setAnalysisData(null);
+      const url = `/api/youtube/channel/comment-analysis?channel_id=UChWB95_-n9rUc3H9srsn9bQ&_=${Date.now()}${forceRefresh ? "&refresh=1" : ""}`;
+      try {
+        const res = await fetchJson<{
+          channel_id: string;
+          channel_name?: string | null;
+          channel_owner?: string | null;
+          channel_title?: string | null;
+          videos_analyzed: number;
+          videos?: Array<{ title: string; published_at: string; video_id: string }>;
+          comments_analyzed?: number;
+          total_comments: number;
+          time_range?: { start?: string; end?: string };
+          time_period_start?: string | null;
+          time_period_end?: string | null;
+          language?: string | null;
+          avg_sentiment: number;
+          top_words: [string, number][];
+          discourse_comments?: string[];
+          points_pca?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
+          points_umap?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
+          points_tfidf?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
+          points_hdbscan?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
+          points_minilm?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
+          cluster_labels?: Array<{ x: number; y: number; label: string }>;
+          cluster_labels_tfidf?: Array<{ x: number; y: number; label: string }>;
+          cluster_labels_hdbscan?: Array<{ x: number; y: number; label: string }>;
+          cluster_labels_minilm?: Array<{ x: number; y: number; label: string }>;
+          cluster_stats_tfidf?: { clusters: number; noise_count: number; total: number };
+          cluster_stats_hdbscan?: { clusters: number; noise_count: number; total: number };
+          cluster_stats_minilm?: { clusters: number; noise_count: number; total: number };
+          cluster_assignments_tfidf?: number[];
+          cluster_assignments_hdbscan?: number[];
+          cluster_assignments_minilm?: number[];
+          clusters_summary_tfidf?: Array<{ label: string; size: number; percent: number }>;
+          clusters_summary_hdbscan?: Array<{ label: string; size: number; percent: number }>;
+          clusters_summary_minilm?: Array<{ label: string; size: number; percent: number }>;
+          comments: Array<Record<string, unknown>>;
+        }>(url);
+        setAnalysisData(res);
+      } catch (e) {
+        setAnalysisError(e instanceof Error ? e.message : "Fetch failed");
+      } finally {
+        setAnalysisLoading(false);
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     if (!study || !isYoutubeCommentAnalysis) return;
     let mounted = true;
-    setAnalysisLoading(true);
-    setAnalysisError(null);
-    setAnalysisData(null);
-    fetchJson<{
-      channel_id: string;
-      channel_name?: string | null;
-      channel_owner?: string | null;
-      channel_title?: string | null;
-      videos_analyzed: number;
-      videos?: Array<{ title: string; published_at: string; video_id: string }>;
-      comments_analyzed?: number;
-      total_comments: number;
-      time_range?: { start?: string; end?: string };
-      time_period_start?: string | null;
-      time_period_end?: string | null;
-      language?: string | null;
-      avg_sentiment: number;
-      top_words: [string, number][];
-      discourse_comments?: string[];
-      points_pca?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
-      points_umap?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
-      points_tfidf?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
-      points_hdbscan?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
-      points_minilm?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
-      cluster_labels?: Array<{ x: number; y: number; label: string }>;
-      cluster_labels_tfidf?: Array<{ x: number; y: number; label: string }>;
-      cluster_labels_hdbscan?: Array<{ x: number; y: number; label: string }>;
-      cluster_labels_minilm?: Array<{ x: number; y: number; label: string }>;
-      cluster_stats_tfidf?: { clusters: number; noise_count: number; total: number };
-      cluster_stats_hdbscan?: { clusters: number; noise_count: number; total: number };
-      cluster_stats_minilm?: { clusters: number; noise_count: number; total: number };
-      cluster_assignments_tfidf?: number[];
-      cluster_assignments_hdbscan?: number[];
-      cluster_assignments_minilm?: number[];
-      clusters_summary_tfidf?: Array<{ label: string; size: number; percent: number }>;
-      clusters_summary_hdbscan?: Array<{ label: string; size: number; percent: number }>;
-      clusters_summary_minilm?: Array<{ label: string; size: number; percent: number }>;
-      comments: Array<Record<string, unknown>>;
-    }>("/api/youtube/channel/comment-analysis?channel_id=UChWB95_-n9rUc3H9srsn9bQ")
-      .then((res) => {
-        if (mounted) setAnalysisData(res);
-      })
-      .catch((e) => {
-        if (mounted) setAnalysisError(e instanceof Error ? e.message : "Fetch failed");
-      })
-      .finally(() => {
-        if (mounted) setAnalysisLoading(false);
-      });
-    return () => { mounted = false; };
-  }, [study, isYoutubeCommentAnalysis]);
+    fetchYoutubeAnalysis(false).finally(() => {
+      if (!mounted) return;
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [study, isYoutubeCommentAnalysis, fetchYoutubeAnalysis]);
 
   useEffect(() => {
     if (!study || !isOilTradeNetwork) return;
@@ -1942,7 +1952,29 @@ export default function StudyDetailPage() {
       ) : isYoutubeCommentAnalysis && analysisData ? (
         <>
         <div className="study-panel">
-          <p className="study-panel-title">Dataset</p>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <p className="study-panel-title m-0">Dataset</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => fetchYoutubeAnalysis(false)}
+                disabled={analysisLoading}
+                className="text-xs px-2 py-1 rounded border border-border hover:bg-muted transition-colors disabled:opacity-50"
+                title="Recompute cluster labels from cached comments (no API quota)"
+              >
+                {analysisLoading ? "Loading…" : "Recompute labels"}
+              </button>
+              <button
+                type="button"
+                onClick={() => fetchYoutubeAnalysis(true)}
+                disabled={analysisLoading}
+                className="text-xs px-2 py-1 rounded border border-border hover:bg-muted transition-colors disabled:opacity-50"
+                title="Fetch fresh comments from YouTube (uses API quota)"
+              >
+                Refresh from YouTube
+              </button>
+            </div>
+          </div>
           <dl className="grid gap-1.5 text-sm text-muted-foreground [&_dt]:font-medium [&_dt]:text-foreground/90 [&_dt]:inline [&_dt]:after:content-[':'] [&_dt]:after:mr-1 [&_dd]:inline">
             <div>
               <dt>Channel</dt>

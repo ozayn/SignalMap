@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -8,6 +9,8 @@ from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
+
+log = logging.getLogger(__name__)
 
 # Allow signalmap package imports (apps/api/src/signalmap)
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
@@ -1275,13 +1278,21 @@ def youtube_channel_refresh_analysis(body: RefreshAnalysisBody):
 def _recompute_from_cached_dataset(cache_dict: dict, cid: str) -> dict | None:
     """
     Load comments from cache and recompute embeddings and clustering.
-    Does NOT modify the cache. Returns full analysis result or None.
+    Does NOT use cached cluster labels. Always recomputes labels from comments.
     """
+    # Strip cluster labels from cache so we never accidentally use them
+    for key in (
+        "cluster_labels", "cluster_labels_tfidf", "cluster_labels_hdbscan", "cluster_labels_minilm",
+        "clusters_summary_tfidf", "clusters_summary_hdbscan", "clusters_summary_minilm",
+    ):
+        cache_dict.pop(key, None)
+
     dataset = load_cached_dataset(cache_dict)
     if not dataset or not dataset.get("comments"):
         return None
     comments = dataset["comments"]
     videos = dataset.get("videos", [])
+    log.info("Recomputing cluster labels from cached comments (channel=%s, n=%d)", cid, len(comments))
     analysis = analyze_comments(comments)
     return {
         "channel_id": cid,
@@ -1332,6 +1343,7 @@ def youtube_channel_comment_analysis(
     identifier: Optional[str] = Query(None, description="Handle, URL, or channel ID (resolved to channel_id)"),
     videos_limit: int = Query(5, ge=1, le=50, description="Max videos to analyze"),
     comments_per_video: int = Query(30, ge=1, le=100, description="Max comments per video"),
+    refresh: bool = Query(False, description="If true, delete cache and fetch fresh from YouTube (uses API quota)"),
 ):
     """Collect comments from recent videos of a YouTube channel and run analysis. Uses cached comments when available; embeddings and clustering are always recomputed."""
     try:
@@ -1341,6 +1353,11 @@ def youtube_channel_comment_analysis(
             cid = resolve_channel_id(identifier.strip())
         else:
             raise HTTPException(status_code=422, detail="Either channel_id or identifier is required.")
+
+        # If refresh=1: delete cache and run fresh from YouTube (uses quota)
+        if refresh:
+            delete_youtube_comment_analysis(cid)
+            return _run_youtube_comment_analysis(cid, videos_limit, comments_per_video)
 
         # Try DB cache: load comments, recompute embeddings (do not use cached points)
         cache = get_cached_youtube_comment_analysis(cid)

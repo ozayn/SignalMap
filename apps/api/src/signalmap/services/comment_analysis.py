@@ -2,6 +2,7 @@
 import json
 import logging
 import math
+import os
 import re
 import threading
 from pathlib import Path
@@ -9,6 +10,9 @@ from pathlib import Path
 import numpy as np
 
 log = logging.getLogger(__name__)
+
+# Set DEBUG_CLUSTER_LABELS=1 to force DEBUG_LABEL for all clusters (verify pipeline recomputes)
+DEBUG_CLUSTER_LABELS = os.environ.get("DEBUG_CLUSTER_LABELS") == "1"
 from collections import Counter
 from textblob import TextBlob
 
@@ -32,7 +36,8 @@ def load_cached_dataset(cache_dict: dict) -> dict | None:
     """
     Extract comments and video metadata from a cache snapshot.
     Used to reuse cached data while recomputing embeddings and clustering.
-    Does NOT modify the cache. Returns None if no comments.
+    Returns ONLY comments and videos. Never returns cluster_labels or other
+    derived fields—those must always be recomputed.
     """
     comments = cache_dict.get("comments")
     if not comments or not isinstance(comments, list):
@@ -545,6 +550,8 @@ def compute_cluster_label(
     """TF-IDF centroid labeling: top tokens from cluster centroid, filtered.
     Produces topic labels (تاریخ ایران, دین اسلام) instead of sentence fragments.
     Fallback: 'تحسین' if tokens are mostly praise words."""
+    if DEBUG_CLUSTER_LABELS:
+        return "DEBUG_LABEL"
     texts_for_praise = raw_texts_for_praise if raw_texts_for_praise is not None else comment_texts
     if _is_praise_cluster(texts_for_praise):
         return "praise / appreciation"
@@ -638,6 +645,8 @@ def compute_cluster_label_semantic(
 ) -> str:
     """Label cluster by semantic similarity: phrase embedding vs cluster centroid.
     Falls back to 'discussion' if no good phrase."""
+    if DEBUG_CLUSTER_LABELS:
+        return "DEBUG_LABEL"
     if raw_texts_for_praise and _is_praise_cluster(raw_texts_for_praise):
         return "praise / appreciation"
 
@@ -1148,6 +1157,9 @@ def analyze_comments(comments):
     clusters_summary_tfidf = _clusters_summary(cluster_labels_tfidf, cluster_assignments_tfidf)
     clusters_summary_hdbscan = _clusters_summary(cluster_labels_hdbscan, cluster_assignments_hdbscan)
     clusters_summary_minilm = _clusters_summary(cluster_labels_minilm, cluster_assignments_minilm)
+
+    labels = [c.get("label", "") for c in cluster_labels_tfidf]
+    print("[cluster_labels]", json.dumps(labels, ensure_ascii=False))
 
     return {
         "avg_sentiment": avg_sentiment,

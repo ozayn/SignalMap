@@ -10,7 +10,9 @@
     "build:web": "pnpm --filter web build",
     "start:web": "pnpm --filter web start",
     "clean": "rm -rf apps/web/.next apps/web/node_modules/.cache node_modules/.cache",
-    "dev:fresh": "pnpm run clean && (lsof -ti:3000 -ti:8000 2>/dev/null | xargs kill -9 2>/dev/null || true) && pnpm dev"
+    "dev:fresh": "pnpm run clean && (lsof -ti:3000 -ti:8000 2>/dev/null | xargs kill -9 2>/dev/null || true) && pnpm dev",
+    "restart:api": "lsof -ti:8000 | xargs kill -TERM 2>/dev/null; sleep 3; pnpm --filter api dev",
+    "restart": "lsof -ti:3000 -ti:8000 2>/dev/null | xargs kill -TERM 2>/dev/null; sleep 3; pnpm dev"
   },
   "engines": {
     "node": ">=18"
