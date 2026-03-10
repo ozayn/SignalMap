@@ -3,14 +3,20 @@ YouTube Data API v3 connector for channel-level stats.
 Calls channels.list; supports lookup by channel_id (preferred) or handle.
 """
 
+import logging
 import os
 from typing import Any, Optional
 
 import httpx
 
+logger = logging.getLogger(__name__)
+
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 CHANNELS_URL = "https://www.googleapis.com/youtube/v3/channels"
 TIMEOUT = 15.0
+
+# Debug: confirm key is detected at module load (do not print the key)
+logger.info("YouTube API key loaded: %s", bool((YOUTUBE_API_KEY or "").strip()))
 
 
 def _require_key() -> str:
@@ -112,3 +118,36 @@ def fetch_channel(
         "video_count": _int(statistics.get("videoCount")),
         "raw": item,
     }
+
+
+def test_youtube_api(handle: str = "googledevelopers") -> dict[str, Any]:
+    """
+    Minimal test: call YouTube Data API channels.list for a known handle.
+    Returns statistics or error details for debugging.
+    """
+    api_key_detected = bool((YOUTUBE_API_KEY or "").strip())
+    result: dict[str, Any] = {
+        "api_key_detected": api_key_detected,
+        "channel": handle,
+        "subscribers": None,
+        "views": None,
+        "videos": None,
+        "error": None,
+    }
+    if not api_key_detected:
+        result["error"] = "YOUTUBE_API_KEY is not set"
+        return result
+
+    try:
+        data = fetch_channel(handle=handle)
+        result["subscribers"] = data.get("subscriber_count")
+        result["views"] = data.get("view_count")
+        result["videos"] = data.get("video_count")
+    except ValueError as e:
+        result["error"] = str(e)
+    except RuntimeError as e:
+        result["error"] = str(e)
+    except Exception as e:
+        result["error"] = f"{type(e).__name__}: {e}"
+
+    return result
