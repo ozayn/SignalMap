@@ -36,7 +36,13 @@ export type ConceptKey =
   | "supply_shocks"
   | "trade_networks"
   | "energy_geopolitics"
-  | "export_dependencies";
+  | "export_dependencies"
+  | "tf_idf"
+  | "dimensionality_reduction"
+  | "pca"
+  | "umap"
+  | "topic_grouping"
+  | "stopwords";
 
 export type ConceptLink = {
   label: string;
@@ -330,6 +336,51 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
       "The extent to which countries rely on specific export partners or markets. High dependency on few buyers or sellers can create vulnerability or leverage.",
     inSimpleTerms:
       "How much a country depends on selling to or buying from certain partners. More dependence can mean more risk.",
+  },
+  tf_idf: {
+    title: "TF-IDF",
+    description:
+      "Term frequency–inverse document frequency: a numerical statistic that reflects how important a word is to a document in a collection. Words that appear often in one document but rarely elsewhere get higher weights.",
+    links: [
+      { label: "TF-IDF (Wikipedia)", href: "https://en.wikipedia.org/wiki/Tf%E2%80%93idf" },
+    ],
+  },
+  dimensionality_reduction: {
+    title: "Dimensionality reduction",
+    description:
+      "Techniques that reduce the number of features (dimensions) in data while preserving structure. Used to visualize high-dimensional data (e.g. text vectors) in 2D or 3D.",
+    links: [
+      { label: "Dimensionality reduction (Wikipedia)", href: "https://en.wikipedia.org/wiki/Dimensionality_reduction" },
+    ],
+  },
+  pca: {
+    title: "PCA",
+    description:
+      "Principal component analysis: a linear method that finds directions of maximum variance in data. Preserves global structure; good for capturing overall spread.",
+    links: [
+      { label: "Principal component analysis (Wikipedia)", href: "https://en.wikipedia.org/wiki/Principal_component_analysis" },
+    ],
+  },
+  umap: {
+    title: "UMAP",
+    description:
+      "Uniform Manifold Approximation and Projection: a non-linear method that preserves local neighborhood structure. Emphasizes clusters and local relationships.",
+    links: [
+      { label: "UMAP (Wikipedia)", href: "https://en.wikipedia.org/wiki/Nonlinear_dimensionality_reduction#UMAP" },
+    ],
+  },
+  topic_grouping: {
+    title: "Topic grouping",
+    description:
+      "Assigning comments to thematic categories based on keyword presence. Each topic has a set of keywords; comments containing those keywords are counted toward that topic.",
+  },
+  stopwords: {
+    title: "Stopwords",
+    description:
+      "Common words (e.g. 'the', 'and', 'is') that are filtered out before analysis because they add little discriminative value and can obscure meaningful patterns.",
+    links: [
+      { label: "Stop words (Wikipedia)", href: "https://en.wikipedia.org/wiki/Stop_word" },
+    ],
   },
 };
 
