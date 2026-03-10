@@ -122,10 +122,23 @@ const WINDOW_OPTIONS = [
   { value: 5, label: "±5 years" },
 ] as const;
 
+const WINDOW_OPTIONS_FX = [
+  { value: 7, label: "±1 week" },
+  { value: 30, label: "±1 month" },
+  { value: 365, label: "±1 year" },
+] as const;
+
 const WINDOW_OPTIONS_LONG_RANGE = [
   { value: 2, label: "±2 years" },
   { value: 5, label: "±5 years" },
   { value: 10, label: "±10 years" },
+] as const;
+
+const GEOPOLITICAL_WINDOW_OPTIONS = [
+  { value: 1, label: "1 day" },
+  { value: 7, label: "7 days" },
+  { value: 30, label: "30 days" },
+  { value: 90, label: "90 days" },
 ] as const;
 
 function computeWindowRange(eventDate: string, windowYears: number): [string, string] {
@@ -134,6 +147,15 @@ function computeWindowRange(eventDate: string, windowYears: number): [string, st
   start.setFullYear(start.getFullYear() - windowYears);
   const end = new Date(d);
   end.setFullYear(end.getFullYear() + windowYears);
+  return [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)];
+}
+
+function computeWindowRangeDays(eventDate: string, windowDays: number): [string, string] {
+  const d = new Date(eventDate);
+  const start = new Date(d);
+  start.setDate(start.getDate() - windowDays);
+  const end = new Date(d);
+  end.setDate(end.getDate() + windowDays);
   return [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)];
 }
 
@@ -256,6 +278,7 @@ export default function StudyDetailPage() {
   const [events, setEvents] = useState<EventsData["events"]>([]);
   const [anchorEventId, setAnchorEventId] = useState<string>("");
   const [windowYears, setWindowYears] = useState<number>(2);
+  const [geopoliticalWindowDays, setGeopoliticalWindowDays] = useState<number>(30);
   const [showOil, setShowOil] = useState(false);
   const [showGold, setShowGold] = useState(false);
   const [showIranEvents, setShowIranEvents] = useState(true);
@@ -263,6 +286,10 @@ export default function StudyDetailPage() {
   const [showSanctionsEvents, setShowSanctionsEvents] = useState(true);
   const [showPresidentialTerms, setShowPresidentialTerms] = useState(false);
   const [showOpecEvents, setShowOpecEvents] = useState(true);
+  const [showGeopoliticalWorldCore, setShowGeopoliticalWorldCore] = useState(true);
+  const [showGeopoliticalWorld1900, setShowGeopoliticalWorld1900] = useState(true);
+  const [showGeopoliticalSanctions, setShowGeopoliticalSanctions] = useState(true);
+  const [showGeopoliticalOpec, setShowGeopoliticalOpec] = useState(true);
   const [pppYAxisLog, setPppYAxisLog] = useState(true);
   const [showSanctionsPeriods, setShowSanctionsPeriods] = useState(false);
   const [showShocks, setShowShocks] = useState(true);
@@ -348,24 +375,40 @@ export default function StudyDetailPage() {
   const isFxUsdIrrDual = study?.primarySignal.kind === "fx_usd_irr_dual";
   const isWageCpiReal = study?.primarySignal.kind === "wage_cpi_real";
   const isOilTradeNetwork = study?.primarySignal.kind === "oil_trade_network";
+  const isOilGeopoliticalReaction = study?.primarySignal.kind === "oil_geopolitical_reaction";
 
-  const windowOptions = isGoldAndOil ? WINDOW_OPTIONS_LONG_RANGE : WINDOW_OPTIONS;
-  const effectiveWindowYears = useMemo(
+  const useShortWindowOptions = isOilBrent || isFxUsdToman || isOilAndFx || isRealOil;
+  const windowOptions = useShortWindowOptions
+    ? WINDOW_OPTIONS_FX
+    : isGoldAndOil
+      ? WINDOW_OPTIONS_LONG_RANGE
+      : WINDOW_OPTIONS;
+  const effectiveWindowValue = useMemo(
     () => (windowOptions.some((o) => o.value === windowYears) ? windowYears : windowOptions[0].value),
-    [isGoldAndOil, windowYears]
+    [windowOptions, windowYears]
   );
+  const effectiveWindowYears = useShortWindowOptions ? 1 : effectiveWindowValue;
 
   const oilTimeRange = useMemo((): [string, string] | null => {
-    if (!study || !(isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity)) return null;
+    if (!study || !(isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilGeopoliticalReaction)) return null;
+    if (isOilGeopoliticalReaction) {
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - 90);
+      return [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)];
+    }
     if (anchorEventId) {
       const ev = events.find((e) => e.id === anchorEventId);
       if (ev) {
         const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
-        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowYears);
+        if (anchorDate)
+          return useShortWindowOptions
+            ? computeWindowRangeDays(anchorDate, effectiveWindowValue)
+            : computeWindowRange(anchorDate, effectiveWindowYears);
       }
     }
     return study.timeRange;
-  }, [study, isOilBrent, isOilGlobalLong, isGoldAndOil, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, anchorEventId, events, effectiveWindowYears]);
+  }, [study, isOilBrent, isOilGlobalLong, isGoldAndOil, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, anchorEventId, events, effectiveWindowYears, useShortWindowOptions, effectiveWindowValue]);
 
   const exportCapacityTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isOilExportCapacity) return null;
@@ -374,10 +417,29 @@ export default function StudyDetailPage() {
 
   const productionTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isOilProductionMajorExporters) return null;
+    if (anchorEventId) {
+      const ev = events.find((e) => e.id === anchorEventId);
+      if (ev) {
+        const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
+        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowYears);
+      }
+    }
     const [start, end] = study.timeRange;
     const resolvedEnd = end === "today" ? new Date().toISOString().slice(0, 10) : end;
     return [start, resolvedEnd];
-  }, [study, isOilProductionMajorExporters]);
+  }, [study, isOilProductionMajorExporters, anchorEventId, events, effectiveWindowYears]);
+
+  /** Study 14: filter events client-side by toggles for instant updates (no API round-trip). */
+  const study14FilteredEvents = useMemo(() => {
+    if (!isOilProductionMajorExporters) return events;
+    return events.filter((e) => {
+      const layer = e.layer;
+      if (layer === "iran_core") return showIranEvents;
+      if (layer === "sanctions") return showSanctionsEvents;
+      if (layer === "opec_decisions") return showOpecEvents;
+      return true;
+    });
+  }, [isOilProductionMajorExporters, events, showIranEvents, showSanctionsEvents, showOpecEvents]);
 
   /** Extend annual production series to current year for display; synthetic points flagged for tooltip. */
   const {
@@ -602,11 +664,11 @@ export default function StudyDetailPage() {
       const ev = events.find((e) => e.id === anchorEventId);
       if (ev) {
         const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
-        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowYears);
+        if (anchorDate) return computeWindowRangeDays(anchorDate, effectiveWindowValue);
       }
     }
     return study.timeRange;
-  }, [study, isFxUsdToman, isOilAndFx, anchorEventId, events, effectiveWindowYears]);
+  }, [study, isFxUsdToman, isOilAndFx, anchorEventId, events, effectiveWindowValue]);
 
   const dualTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isOilAndFx) return null;
@@ -614,11 +676,11 @@ export default function StudyDetailPage() {
       const ev = events.find((e) => e.id === anchorEventId);
       if (ev) {
         const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
-        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowYears);
+        if (anchorDate) return computeWindowRangeDays(anchorDate, effectiveWindowValue);
       }
     }
     return study.timeRange;
-  }, [study, isOilAndFx, anchorEventId, events, effectiveWindowYears]);
+  }, [study, isOilAndFx, anchorEventId, events, effectiveWindowValue]);
 
   const pppEarlierPeriodMedian = useMemo(() => {
     if (!isOilPppIran || pppIranPoints.length === 0) return undefined;
@@ -708,6 +770,56 @@ export default function StudyDetailPage() {
     () => oilPointsWithVolatility.filter((p) => p.is_shock).map((p) => p.date),
     [oilPointsWithVolatility]
   );
+
+  const geopoliticalStats = useMemo(() => {
+    if (!isOilGeopoliticalReaction || oilPointsWithVolatility.length === 0) return null;
+    const sorted = [...oilPointsWithVolatility].sort((a, b) => a.date.localeCompare(b.date));
+    const latest = sorted[sorted.length - 1];
+    if (!latest) return null;
+    const byDate = new Map(sorted.map((p) => [p.date, p]));
+    const change1d = latest.daily_return ?? null;
+    const sevenDaysAgo = (() => {
+      const d = new Date(latest.date);
+      d.setDate(d.getDate() - 7);
+      return d.toISOString().slice(0, 10);
+    })();
+    const price7dAgo = byDate.get(sevenDaysAgo)?.value ?? null;
+    const current = latest.value;
+    const change7d = price7dAgo != null ? ((current - price7dAgo) / price7dAgo) * 100 : null;
+    const last30 = sorted.slice(-31);
+    const returns = last30
+      .map((p, i) => (i > 0 ? (p.value - last30[i - 1]!.value) / last30[i - 1]!.value : null))
+      .filter((r): r is number => r != null);
+    const mean = returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
+    const variance =
+      returns.length >= 2
+        ? returns.reduce((s, r) => s + (r - mean) ** 2, 0) / (returns.length - 1)
+        : 0;
+    const vol30 = variance > 0 ? Math.sqrt(variance) * 100 : null;
+    return {
+      current,
+      change1d,
+      change7d,
+      vol30,
+      latestDate: latest.date,
+    };
+  }, [isOilGeopoliticalReaction, oilPointsWithVolatility]);
+
+  const geopoliticalChartData = useMemo(() => {
+    if (!isOilGeopoliticalReaction || oilPoints.length === 0)
+      return { timeRange: null as [string, string] | null, points: [] as Array<{ date: string; value: number }> };
+    const sorted = [...oilPoints].sort((a, b) => a.date.localeCompare(b.date));
+    const endDate = sorted[sorted.length - 1]?.date;
+    if (!endDate) return { timeRange: null, points: [] };
+    const start = new Date(endDate);
+    start.setDate(start.getDate() - geopoliticalWindowDays);
+    const startStr = start.toISOString().slice(0, 10);
+    const filtered = sorted.filter((p) => p.date >= startStr && p.date <= endDate);
+    return {
+      timeRange: [startStr, endDate] as [string, string],
+      points: filtered,
+    };
+  }, [isOilGeopoliticalReaction, oilPoints, geopoliticalWindowDays]);
   const dailyReturnPoints = useMemo(() => {
     const byDate = new Map(oilPointsWithVolatility.map((p) => [p.date, p.daily_return]));
     const dates = [...new Set(oilPointsWithVolatility.map((p) => p.date))].sort();
@@ -721,20 +833,28 @@ export default function StudyDetailPage() {
     if (!study) return;
     let mounted = true;
     const params = new URLSearchParams({
-      study_id: isFxUsdToman || isOilAndFx ? "iran" : studyId,
+      study_id: isOilGeopoliticalReaction
+        ? "oil_major_exporters"
+        : isFxUsdToman || isOilAndFx
+          ? "iran"
+          : studyId,
     });
-    const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isWageCpiReal || isEventsTimeline;
+    const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isWageCpiReal || isEventsTimeline || isOilGeopoliticalReaction;
     if (hasEventLayers && !isEventsTimeline) {
       let layers: string[];
-      if (((isOilGlobalLong || isGoldAndOil || isRealOil || isOilExportCapacity || isOilProductionMajorExporters) && study.eventLayers?.length) || (hasTurkeyComparator && study.eventLayers !== undefined)) {
-        if (isOilExportCapacity) {
+      if (((isOilGlobalLong || isGoldAndOil || isRealOil || isOilExportCapacity || isOilProductionMajorExporters || isOilGeopoliticalReaction) && study.eventLayers?.length) || (hasTurkeyComparator && study.eventLayers !== undefined)) {
+        if (isOilGeopoliticalReaction) {
+          layers = [
+            ...(showGeopoliticalWorldCore ? ["world_core"] : []),
+            ...(showGeopoliticalWorld1900 ? ["world_1900"] : []),
+            ...(showGeopoliticalSanctions ? ["sanctions"] : []),
+            ...(showGeopoliticalOpec ? ["opec_decisions"] : []),
+          ];
+        } else if (isOilExportCapacity) {
           layers = showSanctionsPeriods ? ["sanctions"] : [];
         } else if (isOilProductionMajorExporters) {
-          layers = [
-            ...(showIranEvents ? ["iran_core"] : []),
-            ...(showSanctionsEvents ? ["sanctions"] : []),
-            ...(showOpecEvents ? ["opec_decisions"] : []),
-          ];
+          // Study 14: always fetch all layers; filter client-side for instant toggle updates
+          layers = ["iran_core", "sanctions", "opec_decisions"];
         } else {
           layers = study.eventLayers ?? [];
         }
@@ -754,18 +874,14 @@ export default function StudyDetailPage() {
     fetchJson<EventsData>(`/api/events?${params}`)
       .then((res) => {
         if (mounted) {
-          const evs = res.events ?? [];
-          if (isOilProductionMajorExporters) {
-            console.debug("[Study14] Event fetch layers:", params.get("layers"), "events returned:", evs.length, evs);
-          }
-          setEvents(evs);
+          setEvents(res.events ?? []);
         }
       })
       .catch(() => {});
     return () => {
       mounted = false;
     };
-  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, isOilProductionMajorExporters, isWageCpiReal, hasTurkeyComparator, isEventsTimeline, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms, showSanctionsPeriods, showOpecEvents]);
+  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, isOilProductionMajorExporters, isOilGeopoliticalReaction, isWageCpiReal, hasTurkeyComparator, isEventsTimeline, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms, showSanctionsPeriods, showOpecEvents, showGeopoliticalWorldCore, showGeopoliticalWorld1900, showGeopoliticalSanctions, showGeopoliticalOpec]);
 
   useEffect(() => {
     if (study && (isEventsTimeline || isFollowerGrowthDynamics)) {
@@ -843,8 +959,8 @@ export default function StudyDetailPage() {
   }, [studyId, study, isOverviewStub, anchorEventId, effectiveWindowYears, data]);
 
   useEffect(() => {
-    if (!oilTimeRange || !(isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isRealOil || isOilPppIran)) {
-      if (isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isRealOil || isOilPppIran) {
+    if (!oilTimeRange || !(isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isRealOil || isOilPppIran || isOilGeopoliticalReaction)) {
+      if (isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isRealOil || isOilPppIran || isOilGeopoliticalReaction) {
         setOilPoints([]);
         setOilSource(null);
         setOilSourceAnnual(null);
@@ -946,7 +1062,7 @@ export default function StudyDetailPage() {
       return () => { mounted = false; };
     }
     const [start, end] = oilTimeRange;
-    const url = isOilGlobalLong
+    const url = isOilGlobalLong && !isOilGeopoliticalReaction
       ? `/api/signals/oil/global-long?start=${start}&end=${end}`
       : `/api/signals/oil/brent?start=${start}&end=${end}`;
     let mounted = true;
@@ -973,7 +1089,7 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [oilTimeRange, isOilBrent, isOilGlobalLong, isGoldAndOil, isOilAndFx, isRealOil, isOilPppIran]);
+  }, [oilTimeRange, isOilBrent, isOilGlobalLong, isGoldAndOil, isOilAndFx, isRealOil, isOilPppIran, isOilGeopoliticalReaction]);
 
   useEffect(() => {
     if (!oilTimeRange || !isOilPppIran || !hasTurkeyComparator) {
@@ -1269,7 +1385,7 @@ export default function StudyDetailPage() {
 
   const showError = error || (isOverviewStub && !data);
 
-  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isFxUsdIrrDual || isWageCpiReal || isOilTradeNetwork;
+  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isFxUsdIrrDual || isWageCpiReal || isOilTradeNetwork || isOilGeopoliticalReaction;
   const singleSignalReady =
     isGoldAndOil
       ? goldPoints.length > 0 && oilPoints.length > 0
@@ -1293,7 +1409,9 @@ export default function StudyDetailPage() {
                     ? wageNominalPoints.length > 0 && wageCpiPoints.length > 0
                     : isOilTradeNetwork
                       ? networkNodesForYear.length > 0
-                      : false;
+                      : isOilGeopoliticalReaction
+                        ? oilPoints.length > 0
+                        : false;
   if (loading && (isOverviewStub ? !data : isSingleSignalStudy && !singleSignalReady)) {
     return (
       <div className="container mx-auto max-w-4xl px-4 py-12 animate-pulse space-y-8">
@@ -1333,7 +1451,7 @@ export default function StudyDetailPage() {
 
     const allDates: string[] = [];
     if ((isFxUsdToman || isOilAndFx) && fxPoints.length > 0) allDates.push(...collect(fxPoints));
-    if ((isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx) && oilPoints.length > 0) allDates.push(...collect(oilPoints));
+    if ((isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isOilGeopoliticalReaction) && oilPoints.length > 0) allDates.push(...collect(oilPoints));
     if (isGoldAndOil && goldPoints.length > 0) allDates.push(...collect(goldPoints));
     if (isRealOil && realOilPoints.length > 0) allDates.push(...collect(realOilPoints));
     if (isOilPppIran && pppIranPoints.length > 0) allDates.push(...collect(pppIranPoints));
@@ -1401,7 +1519,7 @@ export default function StudyDetailPage() {
         if (oilPoints.length > 0) arrays.push(oilPoints);
       }
       if ((isFxUsdToman || isOilAndFx) && fxPoints.length > 0) arrays.push(fxPoints);
-      if ((isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx) && oilPoints.length > 0) arrays.push(oilPoints);
+      if ((isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isOilGeopoliticalReaction) && oilPoints.length > 0) arrays.push(oilPoints);
       if (isGoldAndOil && goldPoints.length > 0) arrays.push(goldPoints);
       if (isRealOil && realOilPoints.length > 0) arrays.push(realOilPoints);
       if (isOilPppIran && pppIranPoints.length > 0) arrays.push(pppIranPoints);
@@ -1548,7 +1666,7 @@ export default function StudyDetailPage() {
                 <option value="">Full timeline</option>
                 {events
                   .filter((e): e is Event & { category: string } => !!e.category)
-                  .sort((a, b) => (a.date_start ?? a.date ?? "").localeCompare(b.date_start ?? b.date ?? ""))
+                  .sort((a, b) => (b.date_start ?? b.date ?? "").localeCompare(a.date_start ?? a.date ?? ""))
                   .map((ev) => (
                     <option key={ev.id} value={ev.id}>
                       {ev.title} ({ev.date_start ?? ev.date ?? ""})
@@ -1981,6 +2099,159 @@ export default function StudyDetailPage() {
             </CardContent>
           </Card>
         </>
+      ) : isOilGeopoliticalReaction && geopoliticalStats ? (
+        <div>
+          {study?.unitLabel && (
+            <p className="text-xs text-muted-foreground mb-2">Unit: {study.unitLabel}</p>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  Current Brent price
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <StatValueWithDate
+                  value={geopoliticalStats.current}
+                  unit="USD/barrel"
+                  prefix="$"
+                  date={geopoliticalStats.latestDate}
+                />
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  1-day change
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  {geopoliticalStats.change1d != null ? (
+                    <span className={geopoliticalStats.change1d >= 0 ? "text-green-600" : "text-red-600"}>
+                      {geopoliticalStats.change1d >= 0 ? "+" : ""}
+                      {geopoliticalStats.change1d.toFixed(2)}%
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">as of {formatStatDate(geopoliticalStats.latestDate)}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  7-day change
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  {geopoliticalStats.change7d != null ? (
+                    <span className={geopoliticalStats.change7d >= 0 ? "text-green-600" : "text-red-600"}>
+                      {geopoliticalStats.change7d >= 0 ? "+" : ""}
+                      {geopoliticalStats.change7d.toFixed(2)}%
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">as of {formatStatDate(geopoliticalStats.latestDate)}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm font-normal text-muted-foreground">
+                  30-day volatility
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold text-foreground">
+                  {geopoliticalStats.vol30 != null ? `${geopoliticalStats.vol30.toFixed(2)}%` : "—"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">as of {formatStatDate(geopoliticalStats.latestDate)}</p>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <span className="text-sm text-muted-foreground">Chart window:</span>
+            {GEOPOLITICAL_WINDOW_OPTIONS.map((opt) => (
+              <label key={opt.value} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="geopolitical-window"
+                  checked={geopoliticalWindowDays === opt.value}
+                  onChange={() => setGeopoliticalWindowDays(opt.value)}
+                  className="rounded border-border"
+                />
+                {opt.label}
+              </label>
+            ))}
+          </div>
+          {geopoliticalChartData.timeRange && geopoliticalChartData.points.length > 0 && (
+            <div className="mt-4">
+              <TimelineChart
+                data={geopoliticalChartData.points}
+                valueKey="value"
+                label="Brent oil"
+                unit="USD/barrel"
+                events={events}
+                timeRange={geopoliticalChartData.timeRange}
+                oilShockDates={oilShockDates}
+                showOilShocks
+                chartHeight="h-64"
+                forceTimeAxis
+              />
+            </div>
+          )}
+          <LearningNote
+            title="How to read this chart"
+            sections={[
+              {
+                heading: "What this shows",
+                bullets: [
+                  "Brent crude oil price (USD/barrel) over recent windows: 1, 7, 30, or 90 days.",
+                  "Event markers: military escalation, sanctions announcements, OPEC decisions, and major geopolitical shocks.",
+                  "Stat cards: current price, 1-day and 7-day percentage change, and 30-day volatility.",
+                ],
+              },
+              {
+                heading: "Volatility",
+                bullets: [
+                  "Volatility measures how much and how quickly prices move. Higher volatility means larger, less predictable swings.",
+                  "30-day volatility here is the standard deviation of daily percentage returns over the last 30 trading days. It tells you how much the price typically fluctuates from one day to the next.",
+                  "Volatile periods often coincide with geopolitical shocks or uncertainty. Red dots on the chart mark days when the move exceeded twice the recent average volatility.",
+                ],
+              },
+              {
+                heading: "Purpose",
+                bullets: [
+                  "Monitor short-term oil market reactions during periods of geopolitical stress.",
+                  "Unlike the long-term Brent study, this focuses on high-resolution recent data.",
+                ],
+              },
+            ]}
+            links={[
+              { label: "Volatility (Investopedia)", href: "https://www.investopedia.com/terms/v/volatility.asp" },
+            ]}
+          />
+          {oilSource && (
+            <SourceInfo
+              items={[
+                {
+                  label: "Brent oil",
+                  sourceName: oilSource.name,
+                  sourceUrl: oilSource.url,
+                  sourceDetail: oilSource.publisher,
+                  unitLabel: "USD/barrel",
+                  unitNote: "Daily Brent spot (FRED DCOILBRENTEU)",
+                },
+              ]}
+              note="Brent crude is a benchmark oil type traded on world markets."
+            />
+          )}
+        </div>
       ) : (isOilBrent || isOilGlobalLong) && oilKpis ? (
         <div>
           {study?.unitLabel && (
@@ -2316,6 +2587,8 @@ export default function StudyDetailPage() {
             <CardTitle className="text-base font-medium shrink-0">
               {isOilTradeNetwork
                 ? "Network"
+                : isOilGeopoliticalReaction
+                ? "Brent oil (short-term)"
                 : isGoldAndOil
                 ? "Gold and oil prices"
                 : isOilGlobalLong
@@ -2338,7 +2611,17 @@ export default function StudyDetailPage() {
                       ? "Sentiment over time"
                       : "Timeline"}
             </CardTitle>
-            {(isOilAndFx && latestBrentObservation && (
+            {(isOilGeopoliticalReaction && geopoliticalStats && (
+              <LatestValueBanner
+                label="Brent price"
+                value={geopoliticalStats.current}
+                unit="USD/barrel"
+                date={geopoliticalStats.latestDate}
+                valuePrefix="$"
+                inline
+              />
+            )) ||
+            (isOilAndFx && latestBrentObservation && (
               <LatestValueBanner
                 label="Brent price"
                 value={latestBrentObservation.value}
@@ -2362,6 +2645,8 @@ export default function StudyDetailPage() {
           <p className="text-sm text-muted-foreground">
             {isOilTradeNetwork
               ? "Oil trade flows between major exporters and importers. Nodes are countries/regions; edge width reflects trade volume (thousand barrels/day). Drag nodes, zoom, pan."
+              : isOilGeopoliticalReaction
+              ? "Recent Brent price with event markers for military escalation, sanctions, OPEC decisions, and major geopolitical shocks."
               : isGoldAndOil
               ? "Gold (left axis) and oil (right axis) on shared timeline. World event range overlays."
               : isOilGlobalLong
@@ -2385,7 +2670,7 @@ export default function StudyDetailPage() {
                     : "Event markers and optional external signals"}
           </p>
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            {!hasTurkeyComparator && !isOilExportCapacity && !isOilTradeNetwork && (
+            {!hasTurkeyComparator && !isOilExportCapacity && !isOilTradeNetwork && !isOilGeopoliticalReaction && (
               <>
                 <select
                   value={anchorEventId}
@@ -2393,7 +2678,9 @@ export default function StudyDetailPage() {
                   className="text-xs text-muted-foreground bg-transparent border border-border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-ring"
                 >
                   <option value="">None (full timeline)</option>
-                  {events.map((ev) => (
+                  {[...events]
+                    .sort((a, b) => (b.date ?? b.date_start ?? b.date_end ?? "").localeCompare(a.date ?? a.date_start ?? a.date_end ?? ""))
+                    .map((ev) => (
                     <option key={ev.id} value={ev.id}>
                       {ev.title}{" "}
                       ({ev.date ?? (ev.date_start && ev.date_end ? `${ev.date_start}–${ev.date_end}` : ev.date_start ?? ev.date_end ?? "")})
@@ -2401,7 +2688,7 @@ export default function StudyDetailPage() {
                   ))}
                 </select>
                 <select
-                  value={effectiveWindowYears}
+                  value={effectiveWindowValue}
                   onChange={(e) => setWindowYears(Number(e.target.value))}
                   disabled={!anchorEventId}
                   className="text-xs text-muted-foreground bg-transparent border border-border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
@@ -2486,6 +2773,46 @@ export default function StudyDetailPage() {
                     className="rounded border-border"
                   />
                   Show OPEC decisions
+                </label>
+              </>
+            )}
+            {isOilGeopoliticalReaction && (
+              <>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showGeopoliticalWorldCore}
+                    onChange={(e) => setShowGeopoliticalWorldCore(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  World (core)
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showGeopoliticalWorld1900}
+                    onChange={(e) => setShowGeopoliticalWorld1900(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  World (1900+)
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showGeopoliticalSanctions}
+                    onChange={(e) => setShowGeopoliticalSanctions(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  Sanctions
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showGeopoliticalOpec}
+                    onChange={(e) => setShowGeopoliticalOpec(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  OPEC decisions
                 </label>
               </>
             )}
@@ -3141,7 +3468,6 @@ export default function StudyDetailPage() {
             </>
           ) : isOilProductionMajorExporters ? (
             <>
-              {typeof window !== "undefined" && console.debug("[Study14] Chart render events:", events.length, events.map((e) => ({ id: e.id, date: e.date ?? e.date_start, layer: e.layer })))}
               <MultiSeriesStats
                 series={[
                   { label: "United States", unit: "million bbl/day", points: extendedProductionUsPoints },
@@ -3164,7 +3490,8 @@ export default function StudyDetailPage() {
                 data={[]}
                 valueKey="value"
                 label="Oil production"
-                events={events}
+                events={study14FilteredEvents}
+                anchorEventId={anchorEventId || undefined}
                 multiSeries={[
                   { key: "us", label: "United States", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionUsPoints },
                   { key: "saudi", label: "Saudi Arabia", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionSaudiPoints },

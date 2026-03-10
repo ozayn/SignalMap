@@ -83,6 +83,8 @@ type TimelineChartProps = {
   lastOfficialDateForExtension?: string;
   /** When true, show a circular marker at the latest data point (e.g. Brent study). */
   highlightLatestPoint?: boolean;
+  /** When true, use time axis instead of category axis (for short-term high-resolution charts). */
+  forceTimeAxis?: boolean;
 };
 
 function findEventIndex(dates: string[], eventDate: string): number | null {
@@ -169,6 +171,7 @@ export function TimelineChart({
   extendedDates = [],
   lastOfficialDateForExtension,
   highlightLatestPoint = false,
+  forceTimeAxis = false,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
@@ -353,9 +356,11 @@ export function TimelineChart({
     const firstYearNum = parseInt((minDate ?? "").slice(0, 4), 10);
     const lastYearNum = parseInt((maxDate ?? "").slice(0, 4), 10);
     const spanYears = lastYearNum - firstYearNum;
-    const useTimeAxis = spanYears > 40;
     const dateMin = minDate ? Date.parse(minDate) : 0;
     const dateMax = maxDate ? Date.parse(maxDate) : 0;
+    const spanDays = dateMax && dateMin ? (dateMax - dateMin) / 86400000 : 0;
+    const useTimeAxis =
+      forceTimeAxis || spanYears > 40 || (spanDays > 0 && spanDays < 400);
 
     const toTimeData = (vals: (number | null)[]) =>
       dates.map((d, i) => [Date.parse(d), vals[i] ?? null] as [number, number | null]);
@@ -665,17 +670,32 @@ export function TimelineChart({
         containLabel: true,
       },
       xAxis: useTimeAxis
-        ? {
-            type: "time",
-            min: dateMin,
-            max: dateMax,
-            axisLine: { lineStyle: { color: borderColor } },
-            axisLabel: {
-              formatter: (value: number) => new Date(value).getFullYear().toString(),
-              color: mutedFg,
-              fontSize: 11,
-            },
-          }
+        ? (() => {
+            const spanDays = dateMax && dateMin ? (dateMax - dateMin) / 86400000 : 0;
+            const isShortSpan = spanDays < 400;
+            const dayMs = 86400000;
+            const minIntervalMs = isShortSpan
+              ? Math.max(dayMs, Math.ceil(spanDays / 6) * dayMs)
+              : undefined;
+            return {
+              type: "time",
+              min: dateMin,
+              max: dateMax,
+              minInterval: minIntervalMs,
+              axisLine: { lineStyle: { color: borderColor } },
+              axisLabel: {
+                formatter: (value: number) =>
+                  isShortSpan
+                    ? new Date(value).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : new Date(value).getFullYear().toString(),
+                color: mutedFg,
+                fontSize: 11,
+              },
+            };
+          })()
         : (() => {
             const n = dates.length;
             const maxLabels = useSparseMultiSeriesDates ? 50 : 12;

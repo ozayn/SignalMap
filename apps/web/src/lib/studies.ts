@@ -13,7 +13,8 @@ export type PrimarySignal =
   | { kind: "follower_growth_dynamics" }
   | { kind: "fx_usd_irr_dual" }
   | { kind: "wage_cpi_real" }
-  | { kind: "oil_trade_network" };
+  | { kind: "oil_trade_network" }
+  | { kind: "oil_geopolitical_reaction" };
 
 import type { ConceptKey } from "./concepts";
 
@@ -206,6 +207,22 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "fx_usd_irr_dual" },
     concepts: ["multiple_exchange_rates", "official_exchange_rate", "fx_rate", "capital_controls", "price_controls", "measurement_vs_reality", "fx_spread", "derived_series"],
+  },
+  {
+    id: "oil_geopolitical_reaction",
+    number: 16,
+    title: "Oil market reaction to geopolitical tensions",
+    timeRange: [
+      new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10),
+      new Date().toISOString().slice(0, 10),
+    ],
+    description:
+      "Monitor recent oil price changes during periods of geopolitical stress. High-resolution Brent data with event markers for military escalation, sanctions, OPEC decisions, and major shocks.",
+    status: "active",
+    primarySignal: { kind: "oil_geopolitical_reaction" },
+    eventLayers: ["world_core", "world_1900", "sanctions", "opec_decisions"],
+    concepts: ["nominal_price", "oil_benchmark", "event_overlay", "oil_price_shocks"],
+    unitLabel: "USD per barrel",
   },
   {
     id: "oil_trade_network",

@@ -1,5 +1,7 @@
 """In-code event layers for studies. Each event has id, title, date, type, description, confidence, sources."""
 
+from datetime import date
+
 EVENTS_SANCTIONS: list[dict] = [
     {
         "id": "sn-001",
@@ -111,7 +113,7 @@ EVENTS_SANCTIONS: list[dict] = [
     },
 ]
 
-EVENTS_WORLD_1900: list[dict] = [
+EVENTS_WORLD_1900_BASE: list[dict] = [
     {
         "id": "g1900-ww1",
         "title": "World War I",
@@ -213,30 +215,30 @@ EVENTS_WORLD_1900: list[dict] = [
     },
 ]
 
-EVENTS_WORLD_RANGE: list[dict] = [
-    {
-        "id": "ukraine_invasion_initial",
-        "title": "Russia invades Ukraine (initial phase)",
-        "date_start": "2022-02-24",
-        "date_end": "2022-03-15",
+
+def _us_israel_iran_2026_event(event_id: str = "us_israel_iran_strikes_2026") -> dict:
+    """Returns the U.S.–Israel strikes on Iran event with date_end=today (ongoing conflict)."""
+    return {
+        "id": event_id,
+        "title": "U.S.–Israel strikes on Iran",
+        "date_start": "2026-02-28",
+        "date_end": date.today().isoformat(),
         "type": "military",
         "scope": "world",
         "confidence": "high",
-        "description": "Initial 3-week phase of Russia's full-scale invasion of Ukraine.",
-        "sources": ["https://www.reuters.com/world/europe/ukraine-crisis"],
-    },
-    {
-        "id": "iran_israel_12_day_war_2025",
-        "title": "Israel–Iran direct military confrontation",
-        "date_start": "2025-06-13",
-        "date_end": "2025-06-24",
-        "type": "military",
-        "scope": "world",
-        "confidence": "high",
-        "description": "A 12-day period of direct military escalation involving missile and drone strikes.",
-        "sources": ["BBC", "Reuters", "Al Jazeera"],
-    },
-]
+        "description": "Coordinated U.S. and Israeli military operations against Iranian nuclear facilities and IRGC infrastructure; oil market impact.",
+        "sources": ["https://www.britannica.com/event/2026-Iran-Conflict"],
+    }
+
+
+def get_events_world_range() -> list[dict]:
+    return [_us_israel_iran_2026_event("us_israel_iran_strikes_2026")]
+
+
+def get_events_world_1900() -> list[dict]:
+    """Returns world_1900 events with U.S.–Israel Iran strikes having date_end=today."""
+    return EVENTS_WORLD_1900_BASE + [_us_israel_iran_2026_event("g1900-us-israel-iran-2026")]
+
 
 EVENTS_WORLD_CORE: list[dict] = [
     {

@@ -4,6 +4,14 @@ Event loading for study context. Layers: iran_core, world_core, world_1900, sanc
 
 from datetime import date
 
+def _get_iran_conflict_2026():
+    """U.S.–Israel strikes on Iran (Feb 2026) — date_end=today since conflict is ongoing."""
+    from signalmap.data.event_layers import _us_israel_iran_2026_event
+    ev = _us_israel_iran_2026_event("us_israel_iran_strikes_2026")
+    ev["scope"] = "iran"
+    ev["layer"] = "iran_core"
+    return [ev]
+
 # Iran presidential terms 1990→present (RANGE events)
 # Sources: Wikipedia List of presidents of Iran
 IRAN_PRESIDENTS = [
@@ -100,10 +108,7 @@ IRAN_CORE_PRE_2021 = [
 
 def _get_iran_core() -> list[dict]:
     from signalmap.data.events_iran_loader import load_events_iran_json
-    return IRAN_CORE_PRE_2021 + load_events_iran_json()
-
-
-IRAN_CORE = _get_iran_core()
+    return IRAN_CORE_PRE_2021 + load_events_iran_json() + _get_iran_conflict_2026()
 
 # Sanctions events (point events → vertical lines)
 # Sources: USIP, State Dept
@@ -131,22 +136,25 @@ SANCTIONS_OIL_EXPORTS_RANGE = [
 SANCTIONS = SANCTIONS_POINT + SANCTIONS_OIL_EXPORTS_RANGE
 
 def _get_world_core():
-    from signalmap.data.event_layers import EVENTS_WORLD_CORE
-    return EVENTS_WORLD_CORE
+    from signalmap.data.event_layers import EVENTS_WORLD_CORE, get_events_world_range
+    return EVENTS_WORLD_CORE + get_events_world_range()
 
 def _get_world_1900():
-    from signalmap.data.event_layers import EVENTS_WORLD_1900
-    return EVENTS_WORLD_1900
+    from signalmap.data.event_layers import get_events_world_1900
+    return get_events_world_1900()
 
 def _get_opec_decisions():
     from signalmap.data.event_layers import EVENTS_OPEC_DECISIONS
     return EVENTS_OPEC_DECISIONS
 
+def _get_iran_core_events():
+    return _get_iran_core()
+
 _LAYER_REGISTRY = {
     "iran_presidents": IRAN_PRESIDENTS,
-    "iran_core": IRAN_CORE,
-    "world_core": _get_world_core(),
-    "world_1900": _get_world_1900(),
+    "iran_core": _get_iran_core_events,
+    "world_core": _get_world_core,
+    "world_1900": _get_world_1900,
     "sanctions": SANCTIONS,
     "opec_decisions": _get_opec_decisions(),
 }
@@ -155,8 +163,8 @@ _LAYER_REGISTRY = {
 def load_events(study_id: str) -> list[dict]:
     """Load default events for a study. Returns empty when no default layer is configured."""
     if study_id == "events_timeline":
-        from signalmap.data.events_timeline import EVENTS_TIMELINE_ALL
-        return EVENTS_TIMELINE_ALL
+        from signalmap.data.events_timeline import get_events_timeline_all
+        return get_events_timeline_all()
     return []
 
 
@@ -168,6 +176,8 @@ def get_events_by_layers(study_id: str, layer_list: list[str]) -> list[dict]:
         if layer == "none":
             continue
         events = _LAYER_REGISTRY.get(layer, [])
+        if callable(events):
+            events = events()
         for ev in events:
             if ev.get("id") and ev["id"] not in seen:
                 seen.add(ev["id"])

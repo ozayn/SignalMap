@@ -4,6 +4,8 @@ Event IDs are reusable for overlays in other studies.
 Iran domestic 2021+: from events_iran.json (canonical).
 """
 
+from datetime import date
+
 EVENTS_CATEGORIES = [
     "iran_domestic",
     "iran_external",
@@ -46,7 +48,7 @@ EVENTS_IRAN_EXTERNAL: list[dict] = [
     {"id": "iran-2024-israel-strike", "title": "Iran–Israel escalation", "category": "iran_external", "date_start": "2024-04-13", "date_end": None, "description": "Iran launches direct strikes on Israel; EU expands sanctions."},
 ]
 
-EVENTS_GLOBAL_GEOPOLITICS: list[dict] = [
+EVENTS_GLOBAL_GEOPOLITICS_BASE: list[dict] = [
     {"id": "g1900-ww1", "title": "World War I", "category": "global_geopolitics", "date_start": "1914-07-28", "date_end": "1918-11-11", "description": "Global conflict; major powers engaged across Europe and beyond."},
     {"id": "g1900-depression", "title": "Great Depression", "category": "global_geopolitics", "date_start": "1929-10-29", "date_end": "1939-09-01", "description": "Severe global economic downturn following the 1929 stock market crash."},
     {"id": "g1900-ww2", "title": "World War II", "category": "global_geopolitics", "date_start": "1939-09-01", "date_end": "1945-09-02", "description": "Global conflict; European and Pacific theaters."},
@@ -56,6 +58,14 @@ EVENTS_GLOBAL_GEOPOLITICS: list[dict] = [
     {"id": "g1900-ukraine", "title": "Russia–Ukraine war", "category": "global_geopolitics", "date_start": "2022-02-24", "date_end": None, "description": "Russia's full-scale invasion of Ukraine; energy market disruption."},
     {"id": "iran_israel_12_day_war_2025", "title": "Israel–Iran direct military confrontation", "category": "global_geopolitics", "date_start": "2025-06-13", "date_end": "2025-06-24", "description": "Period of direct military escalation involving missile and drone strikes."},
 ]
+
+
+def _get_events_global_geopolitics() -> list[dict]:
+    """Returns global geopolitics events with U.S.–Israel Iran strikes having date_end=today."""
+    from signalmap.data.event_layers import _us_israel_iran_2026_event
+    ev = _us_israel_iran_2026_event("us_israel_iran_strikes_2026")
+    ev["category"] = "global_geopolitics"
+    return EVENTS_GLOBAL_GEOPOLITICS_BASE + [ev]
 
 EVENTS_ENERGY_MARKETS: list[dict] = [
     {"id": "g1900-oil-embargo-73", "title": "1973–74 oil embargo", "category": "energy_markets", "date_start": "1973-10-17", "date_end": "1974-03-18", "description": "OPEC oil embargo following the Yom Kippur War; first major oil shock."},
@@ -69,9 +79,11 @@ EVENTS_ENERGY_MARKETS: list[dict] = [
     {"id": "wl-009", "title": "OPEC+ extends production cuts", "category": "energy_markets", "date_start": "2024-06-02", "date_end": None, "description": "OPEC+ extends deep production cuts into 2025."},
 ]
 
-EVENTS_TIMELINE_ALL: list[dict] = (
-    EVENTS_IRAN_DOMESTIC
-    + EVENTS_IRAN_EXTERNAL
-    + EVENTS_GLOBAL_GEOPOLITICS
-    + EVENTS_ENERGY_MARKETS
-)
+def get_events_timeline_all() -> list[dict]:
+    """Returns all timeline events; U.S.–Israel Iran strikes has date_end=today."""
+    return (
+        EVENTS_IRAN_DOMESTIC
+        + EVENTS_IRAN_EXTERNAL
+        + _get_events_global_geopolitics()
+        + EVENTS_ENERGY_MARKETS
+    )

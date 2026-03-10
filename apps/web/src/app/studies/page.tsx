@@ -12,7 +12,7 @@ const SECTIONS: { title: string; description: string; studyIds: string[]; startH
   {
     title: "Context (timelines)",
     description: "Reference timelines for events and long-range price context.",
-    studyIds: ["events_timeline", "global_oil_1900"],
+    studyIds: ["events_timeline", "global_oil_1900", "oil_geopolitical_reaction"],
     startHere: "events_timeline",
   },
   {
