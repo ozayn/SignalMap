@@ -348,6 +348,21 @@ export default function StudyDetailPage() {
   const [networkSelectedYear, setNetworkSelectedYear] = useState<string>("");
   const [oilTradeView, setOilTradeView] = useState<"network" | "sankey">("network");
   const [oilTradeSource, setOilTradeSource] = useState<"curated" | "db">("curated");
+  const [exporterCuratedData, setExporterCuratedData] = useState<{
+    saudi: { date: string; value: number }[];
+    russia: { date: string; value: number }[];
+    us: { date: string; value: number }[];
+    iran: { date: string; value: number }[];
+  } | null>(null);
+  const [exporterDbData, setExporterDbData] = useState<{
+    saudi: { date: string; value: number }[];
+    russia: { date: string; value: number }[];
+    us: { date: string; value: number }[];
+    iran: { date: string; value: number }[];
+  } | null>(null);
+  const [exporterYMin, setExporterYMin] = useState<number | undefined>(undefined);
+  const [exporterYMax, setExporterYMax] = useState<number | undefined>(undefined);
+  const [exporterSource, setExporterSource] = useState<"curated" | "db">("db");
   const [fgMetadata, setFgMetadata] = useState<{
     source?: "cache" | "live" | "mixed";
     count?: number;
@@ -375,6 +390,7 @@ export default function StudyDetailPage() {
   const isFxUsdIrrDual = study?.primarySignal.kind === "fx_usd_irr_dual";
   const isWageCpiReal = study?.primarySignal.kind === "wage_cpi_real";
   const isOilTradeNetwork = study?.primarySignal.kind === "oil_trade_network";
+  const isOilExporterTimeseries = study?.primarySignal.kind === "oil_exporter_timeseries";
   const isOilGeopoliticalReaction = study?.primarySignal.kind === "oil_geopolitical_reaction";
 
   const useShortWindowOptions = isOilBrent || isFxUsdToman || isOilAndFx || isRealOil;
@@ -428,6 +444,27 @@ export default function StudyDetailPage() {
     const resolvedEnd = end === "today" ? new Date().toISOString().slice(0, 10) : end;
     return [start, resolvedEnd];
   }, [study, isOilProductionMajorExporters, anchorEventId, events, effectiveWindowYears]);
+
+  const exporterTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isOilExporterTimeseries) return null;
+    const [start, end] = study.timeRange;
+    const resolvedEnd = end === "today" ? String(new Date().getFullYear()) : end;
+    return [start, resolvedEnd];
+  }, [study, isOilExporterTimeseries]);
+
+  /** Study 17: x-axis from (min data year - 1) to (max data year + 1), no empty leading/trailing years. */
+  const exporterChartTimeRange = useMemo((): [string, string] | null => {
+    if (!exporterTimeRange || !isOilExporterTimeseries) return null;
+    const allPoints = [
+      ...(exporterCuratedData ? [...exporterCuratedData.saudi, ...exporterCuratedData.russia, ...exporterCuratedData.us, ...exporterCuratedData.iran] : []),
+      ...(exporterDbData ? [...exporterDbData.saudi, ...exporterDbData.russia, ...exporterDbData.us, ...exporterDbData.iran] : []),
+    ];
+    if (allPoints.length === 0) return exporterTimeRange;
+    const years = allPoints.map((p) => parseInt(p.date.slice(0, 4), 10));
+    const minYear = Math.min(...years);
+    const maxYear = Math.max(...years);
+    return [String(minYear - 1), String(maxYear + 1)];
+  }, [exporterTimeRange, isOilExporterTimeseries, exporterCuratedData, exporterDbData]);
 
   /** Study 14: filter events client-side by toggles for instant updates (no API round-trip). */
   const study14FilteredEvents = useMemo(() => {
@@ -931,6 +968,94 @@ export default function StudyDetailPage() {
   }, [study, isOilTradeNetwork, oilTradeSource]);
 
   useEffect(() => {
+    if (!exporterTimeRange || !isOilExporterTimeseries) {
+      if (isOilExporterTimeseries) {
+        setExporterCuratedData(null);
+        setExporterDbData(null);
+        setExporterYMin(undefined);
+        setExporterYMax(undefined);
+      }
+      return;
+    }
+    const [startYear, endYear] = exporterTimeRange;
+    const start = startYear.slice(0, 4);
+    const end = endYear.length >= 4 ? endYear.slice(0, 4) : String(new Date().getFullYear());
+    const parseEdgesToPoints = (years: Record<string, { source: string; target: string; value: number }[]>) => {
+      const saudi: { date: string; value: number }[] = [];
+      const russia: { date: string; value: number }[] = [];
+      const us: { date: string; value: number }[] = [];
+      const iran: { date: string; value: number }[] = [];
+      for (const [year, edges] of Object.entries(years)) {
+        const bySource: Record<string, number> = {};
+        for (const e of edges ?? []) {
+          const src = toDisplayName(e.source);
+          bySource[src] = (bySource[src] ?? 0) + e.value;
+        }
+        const date = `${year}-01-01`;
+        if (bySource["Saudi Arabia"] != null) saudi.push({ date, value: bySource["Saudi Arabia"] });
+        if (bySource["Russia"] != null) russia.push({ date, value: bySource["Russia"] });
+        if (bySource["United States"] != null) us.push({ date, value: bySource["United States"] });
+        if (bySource["Iran"] != null) iran.push({ date, value: bySource["Iran"] });
+      }
+      for (const arr of [saudi, russia, us, iran]) arr.sort((a, b) => a.date.localeCompare(b.date));
+      return { saudi, russia, us, iran };
+    };
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+    Promise.all([
+      fetchJson<{ years: Record<string, { source: string; target: string; value: number }[]> }>(
+        `/api/networks/oil-trade?start_year=${start}&end_year=${end}&source=curated`
+      ),
+      fetchJson<{ years: Record<string, { source: string; target: string; value: number }[]> }>(
+        `/api/networks/oil-trade?start_year=${start}&end_year=${end}&source=db`
+      ).catch(() => ({ years: {} as Record<string, { source: string; target: string; value: number }[]> })),
+    ])
+      .then(([curatedRes, dbRes]) => {
+        if (!mounted) return;
+        const curated = curatedRes.years ? parseEdgesToPoints(curatedRes.years) : null;
+        const db = dbRes.years && Object.keys(dbRes.years).length > 0 ? parseEdgesToPoints(dbRes.years) : null;
+        setExporterCuratedData(curated);
+        setExporterDbData(db);
+        const allPoints = [
+          ...(curated ? [...curated.saudi, ...curated.russia, ...curated.us, ...curated.iran] : []),
+          ...(db ? [...db.saudi, ...db.russia, ...db.us, ...db.iran] : []),
+        ];
+        if (allPoints.length > 0) {
+          const vals = allPoints.map((p) => p.value);
+          setExporterYMin(0);
+          setExporterYMax(Math.ceil(Math.max(...vals) * 1.05));
+        } else {
+          setExporterYMin(undefined);
+          setExporterYMax(undefined);
+        }
+      })
+      .catch((e) => {
+        if (mounted) {
+          setExporterCuratedData(null);
+          setExporterDbData(null);
+          setExporterYMin(undefined);
+          setExporterYMax(undefined);
+          setError(e instanceof Error ? e.message : "Export data fetch failed");
+        }
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => { mounted = false; };
+  }, [exporterTimeRange, isOilExporterTimeseries]);
+
+  const { exporterSaudiPoints, exporterRussiaPoints, exporterUsPoints, exporterIranPoints } = useMemo(() => {
+    const empty = { exporterSaudiPoints: [], exporterRussiaPoints: [], exporterUsPoints: [], exporterIranPoints: [] };
+    const data = exporterSource === "db" && exporterDbData ? exporterDbData : exporterCuratedData;
+    if (!data) return empty;
+    return {
+      exporterSaudiPoints: data.saudi,
+      exporterRussiaPoints: data.russia,
+      exporterUsPoints: data.us,
+      exporterIranPoints: data.iran,
+    };
+  }, [exporterSource, exporterCuratedData, exporterDbData]);
+
+  useEffect(() => {
     let mounted = true;
     fetchJson<{ last_updated: string | null }>("/api/meta/last-update")
       .then((res) => mounted && res.last_updated && setLastUpdated(res.last_updated))
@@ -1385,7 +1510,7 @@ export default function StudyDetailPage() {
 
   const showError = error || (isOverviewStub && !data);
 
-  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isFxUsdIrrDual || isWageCpiReal || isOilTradeNetwork || isOilGeopoliticalReaction;
+  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isFxUsdIrrDual || isWageCpiReal || isOilTradeNetwork || isOilExporterTimeseries || isOilGeopoliticalReaction;
   const singleSignalReady =
     isGoldAndOil
       ? goldPoints.length > 0 && oilPoints.length > 0
@@ -1409,9 +1534,11 @@ export default function StudyDetailPage() {
                     ? wageNominalPoints.length > 0 && wageCpiPoints.length > 0
                     : isOilTradeNetwork
                       ? networkNodesForYear.length > 0
-                      : isOilGeopoliticalReaction
-                        ? oilPoints.length > 0
-                        : false;
+                      : isOilExporterTimeseries
+                        ? exporterSaudiPoints.length > 0 || exporterRussiaPoints.length > 0 || exporterUsPoints.length > 0 || exporterIranPoints.length > 0
+                        : isOilGeopoliticalReaction
+                          ? oilPoints.length > 0
+                          : false;
   if (loading && (isOverviewStub ? !data : isSingleSignalStudy && !singleSignalReady)) {
     return (
       <div className="study-page-container py-12 animate-pulse space-y-8">
@@ -1466,6 +1593,12 @@ export default function StudyDetailPage() {
       if (productionRussiaPoints.length > 0) allDates.push(...collect(productionRussiaPoints));
       if (productionIranPoints.length > 0) allDates.push(...collect(productionIranPoints));
     }
+    if (isOilExporterTimeseries) {
+      if (exporterSaudiPoints.length > 0) allDates.push(...collect(exporterSaudiPoints));
+      if (exporterRussiaPoints.length > 0) allDates.push(...collect(exporterRussiaPoints));
+      if (exporterUsPoints.length > 0) allDates.push(...collect(exporterUsPoints));
+      if (exporterIranPoints.length > 0) allDates.push(...collect(exporterIranPoints));
+    }
     if (isFollowerGrowthDynamics && fgData) {
       const list = fgData.snapshots ?? fgData.results ?? [];
       const dates = list
@@ -1498,7 +1631,7 @@ export default function StudyDetailPage() {
       return [networkYears[0]!, networkYears[networkYears.length - 1]!] as [string, string];
     }
     const requestedRange =
-      oilTimeRange ?? fxTimeRange ?? dualTimeRange ?? exportCapacityTimeRange ?? productionTimeRange ?? fxDualTimeRange ?? wageTimeRange ?? study.timeRange;
+      oilTimeRange ?? fxTimeRange ?? dualTimeRange ?? exportCapacityTimeRange ?? productionTimeRange ?? exporterTimeRange ?? fxDualTimeRange ?? wageTimeRange ?? study.timeRange;
     if (allDates.length === 0) return null;
     const sorted = [...allDates].sort();
     const dataMin = sorted[0]!;
@@ -1575,6 +1708,12 @@ export default function StudyDetailPage() {
       if (isOilTradeNetwork && networkYears.length > 0) {
         arrays.push(networkYears.map((y) => ({ date: `${y}-01-01` })));
       }
+      if (isOilExporterTimeseries) {
+        if (exporterSaudiPoints.length > 0) arrays.push(exporterSaudiPoints);
+        if (exporterRussiaPoints.length > 0) arrays.push(exporterRussiaPoints);
+        if (exporterUsPoints.length > 0) arrays.push(exporterUsPoints);
+        if (exporterIranPoints.length > 0) arrays.push(exporterIranPoints);
+      }
       return arrays;
     })()
   );
@@ -1629,7 +1768,7 @@ export default function StudyDetailPage() {
         </p>
         {latestDataDate && (
           <p className="study-header-meta">
-            Data last available: {isOilTradeNetwork ? latestDataDate.getFullYear() : formatDate(latestDataDate)}
+            Data last available: {(isOilTradeNetwork || isOilExporterTimeseries) ? latestDataDate.getFullYear() : formatDate(latestDataDate)}
           </p>
         )}
         {lastUpdated && (
@@ -2583,6 +2722,8 @@ export default function StudyDetailPage() {
             <CardTitle className="text-base font-medium shrink-0">
               {isOilTradeNetwork
                 ? "Network"
+                : isOilExporterTimeseries
+                ? "Crude oil exports"
                 : isOilGeopoliticalReaction
                 ? "Brent oil (short-term)"
                 : isWageCpiReal
@@ -2643,6 +2784,8 @@ export default function StudyDetailPage() {
           <p className="text-sm text-muted-foreground">
             {isOilTradeNetwork
               ? "Oil trade flows between major exporters and importers. Nodes are countries/regions; edge width reflects trade volume (thousand barrels/day). Drag nodes, zoom, pan."
+              : isOilExporterTimeseries
+              ? "Annual crude oil exports for Saudi Arabia, Russia, United States, and Iran. Derived from bilateral trade flows (UN Comtrade HS 2709)."
               : isOilGeopoliticalReaction
               ? "Recent Brent price with event markers for military escalation, sanctions, OPEC decisions, and major geopolitical shocks."
               : isGoldAndOil
@@ -2668,7 +2811,7 @@ export default function StudyDetailPage() {
                     : "Event markers and optional external signals"}
           </p>
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            {!hasTurkeyComparator && !isOilExportCapacity && !isOilTradeNetwork && !isOilGeopoliticalReaction && (
+            {!hasTurkeyComparator && !isOilExportCapacity && !isOilTradeNetwork && !isOilExporterTimeseries && !isOilGeopoliticalReaction && (
               <>
                 <select
                   value={anchorEventId}
@@ -3102,6 +3245,120 @@ export default function StudyDetailPage() {
                 </p>
                 <p>
                   Moving the year slider reveals how these trade routes change over time.
+                </p>
+              </InSimpleTerms>
+            </>
+          ) : isOilExporterTimeseries ? (
+            <>
+              <div className="mb-3 flex flex-wrap items-center gap-3">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExporterSource("curated")}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                      exporterSource === "curated"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    Curated
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExporterSource("db")}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                      exporterSource === "db"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    All data
+                  </button>
+                </div>
+              </div>
+              <MultiSeriesStats
+                series={[
+                  { label: "Saudi Arabia", unit: "thousand bbl/day", points: exporterSaudiPoints },
+                  { label: "Russia", unit: "thousand bbl/day", points: exporterRussiaPoints },
+                  { label: "United States", unit: "thousand bbl/day", points: exporterUsPoints },
+                  { label: "Iran", unit: "thousand bbl/day", points: exporterIranPoints },
+                ]}
+                timeRange={exporterTimeRange ?? undefined}
+              />
+              <TimelineChart
+                data={[]}
+                valueKey="value"
+                label="Crude oil exports"
+                events={[]}
+                multiSeries={[
+                  { key: "saudi", label: "Saudi Arabia", yAxisIndex: 0, unit: "thousand bbl/day", points: exporterSaudiPoints },
+                  { key: "russia", label: "Russia", yAxisIndex: 0, unit: "thousand bbl/day", points: exporterRussiaPoints },
+                  { key: "us", label: "United States", yAxisIndex: 0, unit: "thousand bbl/day", points: exporterUsPoints },
+                  { key: "iran", label: "Iran", yAxisIndex: 0, unit: "thousand bbl/day", points: exporterIranPoints },
+                ]}
+                timeRange={exporterChartTimeRange ?? exporterTimeRange ?? study.timeRange}
+                forceTimeRangeAxis
+                yAxisMin={exporterYMin}
+                yAxisMax={exporterYMax}
+              />
+              <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
+                <span>Source: UN Comtrade (HS 2709 crude oil trade)</span>
+                <span>Unit: thousand barrels/day</span>
+              </div>
+              <LearningNote
+                sections={[
+                  {
+                    heading: "How to read this chart",
+                    bullets: [
+                      "Four lines show annual crude oil export volumes for Saudi Arabia, Russia, United States, and Iran.",
+                      "Exports are derived by summing bilateral trade flows (exporter → importer) from UN Comtrade.",
+                      "Y-axis: thousand barrels per day. All series share the same scale.",
+                      "Annual data: one point per year.",
+                    ],
+                  },
+                  {
+                    heading: "What this measures",
+                    bullets: [
+                      "Crude oil trade flows (HS 2709) reported to UN Comtrade.",
+                      "Export totals = sum of all outbound flows from each country.",
+                    ],
+                  },
+                  {
+                    heading: "Purpose",
+                    bullets: [
+                      "Compare export levels across major crude oil exporters over time.",
+                      "Observe shifts from sanctions (e.g. Iran), market reorientation (e.g. Russia post-2022), and shale-driven US export growth.",
+                    ],
+                  },
+                  {
+                    heading: "Pitfalls",
+                    bullets: [
+                      "Annual data; does not show within-year volatility.",
+                      "Curated fallback used when backend unavailable; coverage may differ from live Comtrade.",
+                    ],
+                  },
+                ]}
+              />
+              {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
+              <SourceInfo
+                items={[
+                  {
+                    label: "Crude oil trade",
+                    sourceName: "UN Comtrade",
+                    sourceUrl: "https://comtrade.un.org/",
+                    sourceDetail: "HS 2709 crude petroleum. Curated fallback when Comtrade unavailable.",
+                    unitLabel: "thousand barrels/day",
+                    unitNote: "Bilateral trade flows summed by exporter.",
+                  },
+                ]}
+              />
+              <InSimpleTerms>
+                <p>
+                  This chart shows how much crude oil each of four major exporters sells abroad each year.
+                  Exports are computed from reported bilateral trade flows, so they reflect what countries actually ship, not production.
+                </p>
+                <p>
+                  Sanctions, conflicts, and market shifts can change where oil flows. Russia&apos;s pivot away from Europe after 2022 and US shale-driven export growth are visible in the data.
                 </p>
               </InSimpleTerms>
             </>

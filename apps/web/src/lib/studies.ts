@@ -14,6 +14,7 @@ export type PrimarySignal =
   | { kind: "fx_usd_irr_dual" }
   | { kind: "wage_cpi_real" }
   | { kind: "oil_trade_network" }
+  | { kind: "oil_exporter_timeseries" }
   | { kind: "oil_geopolitical_reaction" };
 
 import type { ConceptKey } from "./concepts";
@@ -234,6 +235,18 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "oil_trade_network" },
     concepts: ["trade_networks", "energy_geopolitics", "export_dependencies"],
+  },
+  {
+    id: "oil_exporter_timeseries",
+    number: 17,
+    title: "Major crude oil exporters: trade flows",
+    timeRange: ["2000", "today"],
+    description:
+      "Annual crude oil export volumes for Saudi Arabia, Russia, United States, and Iran. Derived from bilateral trade flows (UN Comtrade HS 2709).",
+    status: "active",
+    primarySignal: { kind: "oil_exporter_timeseries" },
+    concepts: ["trade_networks", "energy_geopolitics", "export_dependencies"],
+    unitLabel: "thousand barrels/day",
   },
   {
     id: "iran_real_wage_cpi",

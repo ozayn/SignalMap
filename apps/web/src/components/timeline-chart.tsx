@@ -85,6 +85,12 @@ type TimelineChartProps = {
   highlightLatestPoint?: boolean;
   /** When true, use time axis instead of category axis (for short-term high-resolution charts). */
   forceTimeAxis?: boolean;
+  /** When true, x-axis ticks come from timeRange only (not from data). Use when switching data sources should not change axis. */
+  forceTimeRangeAxis?: boolean;
+  /** Fixed y-axis min (for consistent scale when switching data sources). */
+  yAxisMin?: number;
+  /** Fixed y-axis max (for consistent scale when switching data sources). */
+  yAxisMax?: number;
 };
 
 function findEventIndex(dates: string[], eventDate: string): number | null {
@@ -172,6 +178,9 @@ export function TimelineChart({
   lastOfficialDateForExtension,
   highlightLatestPoint = false,
   forceTimeAxis = false,
+  forceTimeRangeAxis = false,
+  yAxisMin,
+  yAxisMax,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
@@ -253,7 +262,7 @@ export function TimelineChart({
       !!timeRange?.[0] &&
       !!timeRange?.[1];
     const useYearlyMultiSeries =
-      hasMultiSeries && timeRange && useSparseMultiSeriesDates;
+      hasMultiSeries && timeRange && useSparseMultiSeriesDates && !forceTimeRangeAxis;
     const yearlyDates =
       useYearlyMultiSeries && timeRange
         ? (() => {
@@ -261,7 +270,12 @@ export function TimelineChart({
             return years.map((y) => `${y}-07-01`);
           })()
         : [];
-    let dates = hasData
+    const useForceTimeRangeDates = forceTimeRangeAxis && hasMultiSeries && timeRange && timeRange[0] && timeRange[1];
+    const rangeStart = timeRange && timeRange[0].length === 4 ? `${timeRange[0]}-01-01` : timeRange?.[0] ?? "";
+    const rangeEnd = timeRange && timeRange[1].length === 4 ? `${timeRange[1]}-12-31` : timeRange?.[1] ?? "";
+    let dates = useForceTimeRangeDates
+      ? sparseDatesFromRange(rangeStart, rangeEnd, 12)
+      : hasData
       ? data.map((d) => d.date)
       : useYearlyMultiSeries
         ? yearlyDates
@@ -763,6 +777,7 @@ export function TimelineChart({
               const isRight = yAxisIndex >= 1;
               const useLog = yAxisLog && isLeft;
               const rightOffset = hasMultipleRight && yAxisIndex === 2 ? 90 : 0;
+              const allSameUnit = seriesOnAxis.length > 1 && seriesOnAxis.every((s) => s.unit === first.unit);
               const shortName =
                 first.unit?.includes("toman")
                   ? seriesOnAxis.length > 1
@@ -772,16 +787,24 @@ export function TimelineChart({
                     ? useLog
                       ? "Gold (USD/oz, log scale)"
                       : "Gold (USD/oz)"
-                    : first.unit && first.label.includes(`(${first.unit})`)
-                      ? first.label
-                      : first.unit
-                        ? `${first.label} (${first.unit})`
-                        : first.label;
+                    : allSameUnit && first.unit
+                      ? first.unit
+                      : first.unit && first.label.includes(`(${first.unit})`)
+                        ? first.label
+                        : first.unit
+                          ? `${first.label} (${first.unit})`
+                          : first.label;
               const nameWithSuffix = yAxisNameSuffix ? `${shortName} ${yAxisNameSuffix}` : shortName;
               const isGoldLogAxis = useLog && first.unit === "USD/oz";
+              const fixedRange =
+                yAxisMin != null && yAxisMax != null && isLeft
+                  ? { min: yAxisMin, max: yAxisMax }
+                  : isGoldLogAxis
+                    ? { min: 10, max: 3000 }
+                    : {};
               return {
                 type: (useLog ? "log" : "value") as "value" | "log",
-                ...(isGoldLogAxis && { min: 10, max: 3000 }),
+                ...fixedRange,
                 position: (isLeft ? "left" : "right") as "left" | "right",
                 offset: isRight ? rightOffset : 0,
                 name: nameWithSuffix,
@@ -1291,7 +1314,7 @@ export function TimelineChart({
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
     };
-  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods, oilShockDates, showOilShocks, gridRightOverride, xLabelRotate, extendedDates, lastOfficialDateForExtension]);
+  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods, oilShockDates, showOilShocks, gridRightOverride, xLabelRotate, extendedDates, lastOfficialDateForExtension, forceTimeRangeAxis, yAxisMin, yAxisMax]);
 
   useEffect(() => {
     return () => {

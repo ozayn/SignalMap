@@ -15,6 +15,7 @@ function getSignalTags(study: StudyMeta): string[] {
     kind === "oil_export_capacity" ||
     kind === "oil_production_major_exporters" ||
     kind === "oil_trade_network" ||
+    kind === "oil_exporter_timeseries" ||
     kind === "oil_geopolitical_reaction"
   ) {
     tags.push("Oil");
@@ -26,7 +27,7 @@ function getSignalTags(study: StudyMeta): string[] {
   if (kind === "events_timeline") tags.push("Events");
   if (kind === "follower_growth_dynamics") tags.push("Growth");
   if (kind === "wage_cpi_real") tags.push("Wage");
-  if (kind === "oil_trade_network") tags.push("Trade");
+  if (kind === "oil_trade_network" || kind === "oil_exporter_timeseries") tags.push("Trade");
   if (study.eventLayers && study.eventLayers.length > 0 && !tags.includes("Events")) {
     tags.push("Events");
   }
@@ -57,7 +58,7 @@ const SECTIONS: { title: string; description: string; studyIds: string[] }[] = [
   {
     title: "Audience dynamics (growth & networks)",
     description: "Follower growth, simple growth models, and network prototypes.",
-    studyIds: ["follower_growth_dynamics", "oil_trade_network"],
+    studyIds: ["follower_growth_dynamics", "oil_trade_network", "oil_exporter_timeseries"],
   },
 ];
 
