@@ -269,7 +269,7 @@ CONVERSATIONAL_WORDS = {
 # Conversational/verb tokens to filter in TF-IDF centroid labeling (produce themes, not fragments)
 LABEL_TOKEN_FILTER = {
     "آره", "باید", "نباید", "به", "نظرم", "گفتند", "مگه",
-    "کردند", "میکند", "میکنم", "میکنی",
+    "کردند", "میکند", "میکنم", "میکنی", "داشتنی",
 }
 
 # Praise tokens: if top tokens are mostly these, use "تحسین"
@@ -637,6 +637,7 @@ def compute_cluster_label(
 
     # Prefer real bigrams from cluster texts over arbitrary token pairs
     top_tokens_set = {_normalize_phrase_for_match(t) for t in top_tokens}
+    label_filter_set = {t.lower() for t in LABEL_TOKEN_FILTER}
     bigram_counts: Counter[str] = Counter()
     for text in texts:
         tokens = tokenize(text)
@@ -645,7 +646,9 @@ def compute_cluster_label(
             if len(parts) != 2:
                 continue
             w1, w2 = _normalize_phrase_for_match(parts[0]), _normalize_phrase_for_match(parts[1])
-            if w1 in top_tokens_set and w2 in top_tokens_set:
+            if w1 in label_filter_set or w2 in label_filter_set:
+                continue
+            if w1 in top_tokens_set or w2 in top_tokens_set:
                 bigram_key = _normalize_phrase_for_match(bg)
                 bigram_counts[bigram_key] += 1
 
