@@ -8,21 +8,21 @@ const navLinks = [
   { href: "/studies", label: "Studies" },
   { href: "/explore", label: "Explore" },
   { href: "/methods", label: "Methods" },
-  { href: "/learning", label: "Learning", subtle: true },
+  { href: "/learning", label: "Learning" },
 ];
 
 export function Navbar() {
   const pathname = usePathname();
 
   return (
-    <header className="navbar-header">
-      <nav className="navbar-inner">
-        <div className="flex items-center">
-          <Link href="/" className="navbar-logo">
+    <header className="site-header">
+      <div className="nav-container">
+        <div className="nav-left">
+          <Link href="/" className="logo">
             SignalMap
           </Link>
-          <div className="flex items-center ml-5">
-            {navLinks.map(({ href, label, subtle }) => {
+          <nav className="nav-links">
+            {navLinks.map(({ href, label }) => {
               const isActive =
                 href === "/"
                   ? pathname === "/"
@@ -31,16 +31,18 @@ export function Navbar() {
                 <Link
                   key={href}
                   href={href}
-                  className={`navbar-link ${isActive ? "navbar-link-active" : ""} ${subtle ? "navbar-link-subtle" : ""}`}
+                  className={isActive ? "nav-link-active" : ""}
                 >
                   {label}
                 </Link>
               );
             })}
-          </div>
+          </nav>
         </div>
-        <ThemeToggle />
-      </nav>
+        <div className="nav-right">
+          <ThemeToggle />
+        </div>
+      </div>
     </header>
   );
 }

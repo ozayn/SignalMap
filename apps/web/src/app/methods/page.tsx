@@ -1,6 +1,6 @@
 export default function MethodsPage() {
   return (
-    <div className="container mx-auto max-w-3xl px-4 py-12 space-y-12">
+    <div className="page-container space-y-12">
       <div>
         <h1 className="text-2xl font-medium tracking-tight text-foreground">
           Methods

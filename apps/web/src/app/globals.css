@@ -56,11 +56,129 @@
   }
   body {
     @apply text-foreground;
-    background: #f8fafc;
+    background: #f9fafb;
   }
   .dark body {
     background: hsl(var(--background));
   }
+}
+
+/* Homepage hero */
+.home-hero {
+  max-width: 720px;
+  margin: 0 auto 80px auto;
+  text-align: center;
+}
+
+.page-container .home-hero {
+  margin-top: 80px;
+}
+
+.home-hero h1 {
+  font-size: 44px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 18px;
+}
+
+.hero-subtitle {
+  font-size: 18px;
+  color: #6b7280;
+  margin-bottom: 28px;
+}
+
+.hero-description {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #6b7280;
+  margin-bottom: 36px;
+}
+
+.hero-button {
+  display: inline-block;
+  padding: 10px 18px;
+  border-radius: 8px;
+  background: #111827;
+  color: white;
+  font-size: 14px;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.hero-button:hover {
+  background: #374151;
+}
+
+
+/* Learning page - aligned with nav */
+.learning-container {
+  max-width: 1100px;
+  margin: 80px auto;
+  padding: 0 20px;
+}
+
+.learning-content {
+  max-width: 720px;
+}
+
+.learning-container h1 {
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 10px;
+}
+
+.learning-container h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin-top: 40px;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.learning-container p {
+  font-size: 15px;
+  line-height: 1.65;
+  color: #4b5563;
+  margin-bottom: 12px;
+}
+
+.learning-item {
+  margin-bottom: 30px;
+}
+
+.learning-item strong {
+  display: block;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.learning-container a {
+  color: #2563eb;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.learning-container a:hover {
+  text-decoration: underline;
+}
+
+.learning-container .video-link {
+  display: block;
+  font-size: 14px;
+  color: #374151;
+  margin-top: 4px;
+}
+
+.learning-container .video-link::before {
+  content: "▶ ";
+  color: #6b7280;
+}
+
+.learning-container hr {
+  margin: 40px 0;
 }
 
 /* Oil trade year slider: larger thumb for touch */
@@ -91,11 +209,11 @@
   }
 }
 
-/* Studies page: responsive layout */
+/* Studies page: responsive layout - aligned with nav */
 .studies-container {
-  max-width: 1200px;
+  max-width: 1100px;
   margin: 0 auto;
-  padding: 0 1.25rem;
+  padding: 0 20px;
 }
 
 .studies-grid {
@@ -146,82 +264,95 @@
   }
 }
 
-/* Navbar - fixed height to prevent layout shift */
-.navbar-header {
+/* Navbar / site header */
+.site-header {
   height: 56px;
-  min-height: 56px;
-  display: flex;
-  align-items: center;
-  background: white;
   border-bottom: 1px solid #e5e7eb;
-  flex-shrink: 0;
+  background: white;
 }
 
-.dark .navbar-header {
+.dark .site-header {
   background: hsl(var(--background));
   border-bottom-color: #1f2937;
 }
 
-.navbar-inner {
-  max-width: 1200px;
+.nav-container {
+  max-width: 1100px;
   margin: 0 auto;
   padding: 0 20px;
-  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  height: 100%;
 }
 
-.navbar-logo {
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: #111827;
-  transition: color 0.15s;
+.nav-left {
+  display: flex;
+  align-items: center;
+  gap: 28px;
 }
 
-.dark .navbar-logo {
-  color: #e5e7eb;
+.nav-links {
+  display: flex;
+  gap: 20px;
 }
 
-.navbar-logo:hover {
-  color: #374151;
-}
-
-.dark .navbar-logo:hover {
-  color: #9ca3af;
-}
-
-.navbar-link {
+.nav-links a {
   font-size: 14px;
   color: #6b7280;
-  margin-left: 20px;
-  transition: color 0.15s;
+  text-decoration: none;
 }
 
-.navbar-link:hover {
+.nav-links a:hover {
   color: #111827;
 }
 
-.dark .navbar-link {
-  color: #9ca3af;
+.logo {
+  font-weight: 600;
+  font-size: 16px;
+  color: #111827;
+  text-decoration: none;
 }
 
-.dark .navbar-link:hover {
-  color: #e5e7eb;
+.nav-right {
+  display: flex;
+  align-items: center;
 }
 
-.navbar-link-active {
+.nav-link-active {
   color: #111827 !important;
   font-weight: 500;
 }
 
-.dark .navbar-link-active {
+.dark .nav-links a {
+  color: #9ca3af;
+}
+
+.dark .nav-links a:hover {
+  color: #e5e7eb;
+}
+
+.dark .nav-link-active {
   color: #e5e7eb !important;
 }
 
-.navbar-link-subtle {
-  opacity: 0.9;
+.dark .logo {
+  color: #e5e7eb;
+}
+
+.dark .logo:hover {
+  color: #9ca3af;
+}
+
+.logo:hover {
+  color: #374151;
+}
+
+/* Page content container - aligned with nav */
+.page-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 20px;
 }
 
 .theme-toggle-btn {
@@ -253,11 +384,11 @@
   margin-top: 28px;
 }
 
-/* Study page */
+/* Study page - aligned with nav */
 .study-page-container {
-  max-width: 1200px;
+  max-width: 1100px;
   margin: 0 auto;
-  padding: 0 1.25rem;
+  padding: 0 20px;
 }
 
 .study-header {

@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function ExplorePage() {
   return (
-    <div className="container mx-auto max-w-3xl px-4 py-12 space-y-8">
+    <div className="page-container space-y-8">
       <div>
         <h1 className="text-2xl font-medium tracking-tight text-foreground">
           Explore

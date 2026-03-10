@@ -197,22 +197,21 @@ const CONCEPTS: Record<string, Concept[]> = {
 
 function ConceptEntry({ concept }: { concept: Concept }) {
   return (
-    <div className="space-y-1">
-      <h3 className="text-sm font-medium text-foreground">{concept.title}</h3>
-      <p className="text-sm text-muted-foreground leading-relaxed">{concept.description}</p>
+    <div className="learning-item">
+      <strong>{concept.title}</strong>
+      <p>{concept.description}</p>
       {concept.learnMore && concept.learnMore.length > 0 && (
         <div className="pt-1 space-y-1">
           {concept.learnMore.map((link) => (
-            <p key={link.url}>
-              <a
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
-              >
-                {link.type === "video" ? `▶ Video: ${link.label}` : `Learn more: ${link.label}`}
-              </a>
-            </p>
+            <a
+              key={link.url}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={link.type === "video" ? "video-link" : undefined}
+            >
+              {link.type === "video" ? link.label : `Learn more: ${link.label}`}
+            </a>
           ))}
         </div>
       )}
@@ -222,28 +221,22 @@ function ConceptEntry({ concept }: { concept: Concept }) {
 
 export default function LearningPage() {
   return (
-    <div className="container mx-auto max-w-3xl px-4 py-12 space-y-12">
-      <div>
-        <h1 className="text-2xl font-medium tracking-tight text-foreground">
-          Learning resources
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Concepts and explanations used throughout SignalMap.
-        </p>
-      </div>
+    <div className="learning-container">
+      <div className="learning-content">
+        <h1>Learning resources</h1>
+        <p>Concepts and explanations used throughout SignalMap.</p>
 
-      {Object.entries(CONCEPTS).map(([sectionTitle, concepts]) => (
-        <section key={sectionTitle} className="space-y-6">
-          <h2 className="text-lg font-medium text-foreground border-b border-border pb-2">
-            {sectionTitle}
-          </h2>
-          <div className="space-y-6">
-            {concepts.map((concept) => (
-              <ConceptEntry key={concept.title} concept={concept} />
-            ))}
-          </div>
-        </section>
-      ))}
+        {Object.entries(CONCEPTS).map(([sectionTitle, concepts]) => (
+          <section key={sectionTitle}>
+            <h2>{sectionTitle}</h2>
+            <div>
+              {concepts.map((concept) => (
+                <ConceptEntry key={concept.title} concept={concept} />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
     </div>
   );
 }
