@@ -1,5 +1,6 @@
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -27,9 +28,23 @@ from connectors.wayback_instagram import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from signalmap.connectors.wayback_youtube import get_youtube_archival_metrics
+from signalmap.connectors.youtube import fetch_channel, test_youtube_api
+from signalmap.services.comment_analysis import (
+    analyze_comments,
+    compute_cluster_labels_from_umap,
+    load_cached_snapshot,
+)
+from signalmap.sources.youtube_comments import get_channel_videos, get_video_comments
+from signalmap.utils.youtube_resolver import resolve_channel_id
 from signalmap.connectors.wayback_twitter import get_twitter_archival_metrics
 
-from db import cursor, init_tables
+from db import (
+    cursor,
+    delete_youtube_comment_analysis,
+    get_cached_youtube_comment_analysis,
+    init_tables,
+    save_youtube_comment_analysis,
+)
 from jobs import (
     cache_first_instagram,
     cache_first_twitter,
@@ -1009,6 +1024,282 @@ def _youtube_channel_cache_response(cache_rows: list, handle: Optional[str], cha
         "snapshots": snapshots,
         "meta": {"cache_rows": len(cache_rows), "api_calls": 0, "notes": []},
     }
+
+
+@app.get("/api/youtube/debug")
+def youtube_debug(handle: str = Query("googledevelopers", description="Channel handle to test")):
+    """
+    Debug: verify YouTube API key and call channels.list.
+    Returns api_key_detected, channel stats, or error message.
+    """
+    return test_youtube_api(handle=handle)
+
+
+@app.get("/api/youtube/resolve")
+def youtube_resolve(identifier: str = Query(..., description="Handle, URL, or channel ID")):
+    """Resolve a YouTube identifier to canonical channel ID."""
+    try:
+        cid = resolve_channel_id(identifier)
+        return {"identifier": identifier, "channel_id": cid}
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.get("/api/youtube/channel/videos")
+def youtube_channel_videos(
+    identifier: Optional[str] = Query(
+        None,
+        description="Handle, URL, or channel ID (resolved to channel_id)",
+    ),
+    channel_id: Optional[str] = Query(
+        None,
+        description="YouTube channel ID (use if already known; overrides identifier)",
+    ),
+    max_results: int = Query(10, ge=1, le=50, description="Max videos to return"),
+):
+    """Fetch recent videos from a YouTube channel."""
+    try:
+        if channel_id and channel_id.strip():
+            cid = channel_id.strip()
+        elif identifier and identifier.strip():
+            cid = resolve_channel_id(identifier.strip())
+        else:
+            cid = resolve_channel_id("UCQwB6D0tO3oN7RZc7cVh5XQ")
+        videos = get_channel_videos(cid, max_results)
+        return {
+            "channel_id": cid,
+            "videos_found": len(videos),
+            "videos": videos,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/api/youtube/video/comments")
+def youtube_video_comments(
+    video_id: str = Query(..., description="YouTube video ID"),
+    max_results: int = Query(50, ge=1, le=100, description="Max comments to return"),
+):
+    """Fetch top-level comments for a YouTube video."""
+    try:
+        comments = get_video_comments(video_id, max_results)
+        return {
+            "video_id": video_id,
+            "comments_found": len(comments),
+            "comments": comments,
+        }
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/api/youtube/channel/comments")
+def youtube_channel_comments(
+    channel_id: Optional[str] = Query(None, description="YouTube channel ID"),
+    identifier: Optional[str] = Query(None, description="Handle, URL, or channel ID (resolved to channel_id)"),
+    videos_limit: int = Query(10, ge=1, le=50, description="Max videos to analyze"),
+    comments_per_video: int = Query(50, ge=1, le=100, description="Max comments per video"),
+):
+    """Collect comments from the most recent videos of a channel."""
+    try:
+        if channel_id and channel_id.strip():
+            cid = channel_id.strip()
+        elif identifier and identifier.strip():
+            cid = resolve_channel_id(identifier.strip())
+        else:
+            raise HTTPException(status_code=422, detail="Either channel_id or identifier is required.")
+
+        videos = get_channel_videos(cid, max_results=videos_limit)
+
+        all_comments = []
+        for v in videos:
+            video_id = v["video_id"]
+            try:
+                comments = get_video_comments(video_id, comments_per_video)
+            except RuntimeError:
+                continue
+            for c in comments:
+                c["video_title"] = v["title"]
+                c["video_published_at"] = v["published_at"]
+            all_comments.extend(comments)
+
+        return {
+            "channel_id": cid,
+            "videos_analyzed": len(videos),
+            "total_comments": len(all_comments),
+            "comments": all_comments,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+def _run_youtube_comment_analysis(
+    cid: str,
+    videos_limit: int = 5,
+    comments_per_video: int = 30,
+) -> dict:
+    """Fetch comments, run analysis, save to cache, return result. Does not check cache."""
+    videos = get_channel_videos(cid, max_results=videos_limit)
+
+    def fetch_for_video(v):
+        try:
+            comments = get_video_comments(v["video_id"], comments_per_video)
+            for c in comments:
+                c["video_title"] = v["title"]
+            return comments
+        except RuntimeError:
+            return []
+
+    all_comments = []
+    with ThreadPoolExecutor(max_workers=min(8, len(videos))) as ex:
+        for result in ex.map(fetch_for_video, videos):
+            all_comments.extend(result)
+
+    analysis = analyze_comments(all_comments)
+
+    channel_name = ""
+    channel_owner = ""
+    try:
+        ch_data = fetch_channel(channel_id=cid)
+        snippet = (ch_data.get("raw") or {}).get("snippet") or {}
+        full_title = (snippet.get("title") or "").strip()
+        if "(" in full_title and ")" in full_title:
+            paren = full_title.rfind("(")
+            channel_name = full_title[:paren].strip()
+            channel_owner = full_title[paren + 1 : full_title.rfind(")")].strip()
+        else:
+            channel_name = full_title
+    except Exception:
+        pass
+
+    time_range_start = None
+    time_range_end = None
+    if videos:
+        dates = []
+        for v in videos:
+            pt = v.get("published_at")
+            if pt and isinstance(pt, str):
+                try:
+                    dt = datetime.fromisoformat(pt.replace("Z", "+00:00"))
+                    dates.append(dt)
+                except Exception:
+                    pass
+        if dates:
+            time_range_start = min(dates).strftime("%b %d %Y")
+            time_range_end = max(dates).strftime("%b %d %Y")
+
+    videos_list = [
+        {"title": v.get("title", ""), "published_at": v.get("published_at", ""), "video_id": v.get("video_id", "")}
+        for v in videos
+    ]
+
+    result = {
+        "channel_id": cid,
+        "channel_name": channel_name or None,
+        "channel_owner": channel_owner or None,
+        "channel_title": channel_name or None,
+        "videos_analyzed": len(videos),
+        "videos": videos_list,
+        "comments_analyzed": len(all_comments),
+        "total_comments": len(all_comments),
+        "time_range": {"start": time_range_start, "end": time_range_end},
+        "time_period_start": time_range_start,
+        "time_period_end": time_range_end,
+        "language": "Persian",
+        "avg_sentiment": analysis["avg_sentiment"],
+        "top_words": analysis["top_words"],
+        "topics": analysis["topics"],
+        "trigrams": analysis.get("trigrams", []),
+        "bigrams_pmi": analysis.get("bigrams_pmi", []),
+        "trigrams_pmi": analysis.get("trigrams_pmi", []),
+        "discourse_comments": analysis.get("discourse_comments", []),
+        "points_pca": analysis["points_pca"],
+        "points_umap": analysis["points_umap"],
+        "cluster_labels": analysis.get("cluster_labels", []),
+        "comments": analysis["comments"],
+    }
+
+    save_youtube_comment_analysis(
+        channel_id=cid,
+        analysis=result,
+        videos_analyzed=len(videos),
+        comments_analyzed=len(all_comments),
+    )
+
+    result["computed_at"] = datetime.now(timezone.utc).isoformat()
+    return result
+
+
+class RefreshAnalysisBody(BaseModel):
+    channel_id: str
+
+
+@app.post("/api/youtube/channel/refresh-analysis")
+def youtube_channel_refresh_analysis(body: RefreshAnalysisBody):
+    """Delete cached analysis, run fresh analysis, store and return new result."""
+    try:
+        cid = (body.channel_id or "").strip()
+        if not cid:
+            raise HTTPException(status_code=422, detail="channel_id is required.")
+
+        delete_youtube_comment_analysis(cid)
+        result = _run_youtube_comment_analysis(cid, videos_limit=5, comments_per_video=30)
+        return result
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/api/youtube/channel/comment-analysis")
+def youtube_channel_comment_analysis(
+    channel_id: Optional[str] = Query(None, description="YouTube channel ID"),
+    identifier: Optional[str] = Query(None, description="Handle, URL, or channel ID (resolved to channel_id)"),
+    videos_limit: int = Query(5, ge=1, le=50, description="Max videos to analyze"),
+    comments_per_video: int = Query(30, ge=1, le=100, description="Max comments per video"),
+):
+    """Collect comments from recent videos of a YouTube channel and run analysis. Uses 24h cache when available."""
+    try:
+        if channel_id and channel_id.strip():
+            cid = channel_id.strip()
+        elif identifier and identifier.strip():
+            cid = resolve_channel_id(identifier.strip())
+        else:
+            raise HTTPException(status_code=422, detail="Either channel_id or identifier is required.")
+
+        cache = get_cached_youtube_comment_analysis(cid)
+        if cache:
+            out = dict(cache["analysis_json"])
+            out["videos_analyzed"] = cache["videos_analyzed"]
+            out["comments_analyzed"] = cache["comments_analyzed"]
+            out["computed_at"] = cache["computed_at"]
+            # Backfill cluster_labels if missing (e.g. cache from before labels were added)
+            if not out.get("cluster_labels") and out.get("points_umap") and out.get("comments"):
+                out["cluster_labels"] = compute_cluster_labels_from_umap(
+                    out["points_umap"],
+                    out["comments"],
+                )
+            return out
+
+        snapshot = load_cached_snapshot(cid)
+        if snapshot:
+            if not snapshot.get("cluster_labels") and snapshot.get("points_umap") and snapshot.get("comments"):
+                snapshot["cluster_labels"] = compute_cluster_labels_from_umap(
+                    snapshot["points_umap"],
+                    snapshot["comments"],
+                )
+            return snapshot
+
+        return _run_youtube_comment_analysis(cid, videos_limit, comments_per_video)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 @app.get("/api/youtube/channel/cache-first")

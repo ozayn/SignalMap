@@ -15,7 +15,8 @@ export type PrimarySignal =
   | { kind: "wage_cpi_real" }
   | { kind: "oil_trade_network" }
   | { kind: "oil_exporter_timeseries" }
-  | { kind: "oil_geopolitical_reaction" };
+  | { kind: "oil_geopolitical_reaction" }
+  | { kind: "youtube_comment_analysis" };
 
 import type { ConceptKey } from "./concepts";
 
@@ -247,6 +248,16 @@ export const STUDIES: StudyMeta[] = [
     primarySignal: { kind: "oil_exporter_timeseries" },
     concepts: ["trade_networks", "energy_geopolitics", "export_dependencies"],
     unitLabel: "thousand barrels/day",
+  },
+  {
+    id: "youtube_discourse",
+    number: 18,
+    title: "YouTube discourse signals",
+    timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
+    description: "Audience sentiment and discourse topics from YouTube comments.",
+    status: "active",
+    primarySignal: { kind: "youtube_comment_analysis" },
+    concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
   },
   {
     id: "iran_real_wage_cpi",

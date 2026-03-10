@@ -3,9 +3,11 @@ Postgres connection and schema for Wayback caching and jobs.
 Tables created idempotently on startup when DATABASE_URL is set.
 """
 
+import json
 import os
 from contextlib import contextmanager
-from typing import Generator
+from datetime import datetime, timedelta, timezone
+from typing import Any, Generator
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -199,6 +201,15 @@ def init_tables() -> None:
             cur.execute("CREATE INDEX IF NOT EXISTS idx_oil_trade_edges_year ON oil_trade_edges (year)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_oil_trade_edges_exporter ON oil_trade_edges (exporter)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_oil_trade_edges_importer ON oil_trade_edges (importer)")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS youtube_comment_analysis (
+                    channel_id TEXT PRIMARY KEY,
+                    analysis_json JSONB NOT NULL,
+                    videos_analyzed INT NOT NULL,
+                    comments_analyzed INT NOT NULL,
+                    computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
     except Exception:
         pass  # DB may not be available; job endpoints will return 503
 
@@ -239,3 +250,81 @@ def get_data_update(key: str) -> str | None:
             return None
     except Exception:
         return None
+
+
+def get_cached_youtube_comment_analysis(channel_id: str, max_age_hours: int = 24) -> dict | None:
+    """
+    Return cached analysis for channel if computed within max_age_hours.
+    Returns dict with analysis_json, videos_analyzed, comments_analyzed, computed_at, or None.
+    """
+    if not DATABASE_URL:
+        return None
+    try:
+        with cursor() as cur:
+            cur.execute(
+                """
+                SELECT analysis_json, videos_analyzed, comments_analyzed, computed_at
+                FROM youtube_comment_analysis
+                WHERE channel_id = %s
+                """,
+                (channel_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            computed_at = row["computed_at"]
+            if computed_at.tzinfo is None:
+                computed_at = computed_at.replace(tzinfo=timezone.utc)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+            if computed_at < cutoff:
+                return None
+            return {
+                "analysis_json": row["analysis_json"],
+                "videos_analyzed": row["videos_analyzed"],
+                "comments_analyzed": row["comments_analyzed"],
+                "computed_at": computed_at.isoformat() if hasattr(computed_at, "isoformat") else str(computed_at),
+            }
+    except Exception:
+        return None
+
+
+def delete_youtube_comment_analysis(channel_id: str) -> None:
+    """Delete cached analysis for channel."""
+    if not DATABASE_URL:
+        return
+    try:
+        with cursor() as cur:
+            cur.execute(
+                "DELETE FROM youtube_comment_analysis WHERE channel_id = %s",
+                (channel_id,),
+            )
+    except Exception:
+        pass
+
+
+def save_youtube_comment_analysis(
+    channel_id: str,
+    analysis: dict[str, Any],
+    videos_analyzed: int,
+    comments_analyzed: int,
+) -> None:
+    """Upsert cached analysis for channel."""
+    if not DATABASE_URL:
+        return
+    try:
+        with cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO youtube_comment_analysis (channel_id, analysis_json, videos_analyzed, comments_analyzed, computed_at)
+                VALUES (%s, %s::jsonb, %s, %s, NOW())
+                ON CONFLICT (channel_id)
+                DO UPDATE SET
+                    analysis_json = EXCLUDED.analysis_json,
+                    videos_analyzed = EXCLUDED.videos_analyzed,
+                    comments_analyzed = EXCLUDED.comments_analyzed,
+                    computed_at = EXCLUDED.computed_at
+                """,
+                (channel_id, json.dumps(analysis), videos_analyzed, comments_analyzed),
+            )
+    except Exception:
+        pass

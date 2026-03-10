@@ -19,6 +19,7 @@ import { NetworkGraph, type NetworkNode, type NetworkEdge } from "@/components/n
 import { OilTradeSankey } from "@/components/oil-trade-sankey";
 import LatestValueBanner from "@/components/studies/LatestValueBanner";
 import { MultiSeriesStats } from "@/components/studies/MultiSeriesStats";
+import { YoutubeDiscourseMaps } from "@/components/studies/youtube-discourse";
 import { getStudyById, getPrevNextStudies } from "@/lib/studies";
 import { fetchJson } from "@/lib/api";
 import { enrichOilPointsWithVolatility } from "@/lib/oil-volatility";
@@ -368,6 +369,31 @@ export default function StudyDetailPage() {
     count?: number;
     last_cached_at?: string | null;
   } | null>(null);
+  const [analysisData, setAnalysisData] = useState<{
+    channel_id: string;
+    channel_name?: string | null;
+    channel_owner?: string | null;
+    channel_title?: string | null;
+    videos_analyzed: number;
+    comments_analyzed?: number;
+    computed_at?: string | null;
+    videos?: Array<{ title: string; published_at: string; video_id: string }>;
+    total_comments: number;
+    time_range?: { start?: string; end?: string };
+    time_period_start?: string | null;
+    time_period_end?: string | null;
+    language?: string | null;
+    avg_sentiment: number;
+    top_words: [string, number][];
+    topics?: [string, number][];
+    discourse_comments?: string[];
+    points_pca?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
+    points_umap?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
+    cluster_labels?: Array<{ x: number; y: number; label: string }>;
+    comments: Array<Record<string, unknown>>;
+  } | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   useEffect(() => {
     if (studyId) {
       trackEvent("study_viewed", { study_id: studyId });
@@ -392,6 +418,7 @@ export default function StudyDetailPage() {
   const isOilTradeNetwork = study?.primarySignal.kind === "oil_trade_network";
   const isOilExporterTimeseries = study?.primarySignal.kind === "oil_exporter_timeseries";
   const isOilGeopoliticalReaction = study?.primarySignal.kind === "oil_geopolitical_reaction";
+  const isYoutubeCommentAnalysis = study?.primarySignal.kind === "youtube_comment_analysis";
 
   const useShortWindowOptions = isOilBrent || isFxUsdToman || isOilAndFx || isRealOil;
   const windowOptions = useShortWindowOptions
@@ -921,10 +948,49 @@ export default function StudyDetailPage() {
   }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, isOilProductionMajorExporters, isOilGeopoliticalReaction, isWageCpiReal, hasTurkeyComparator, isEventsTimeline, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms, showSanctionsPeriods, showOpecEvents, showGeopoliticalWorldCore, showGeopoliticalWorld1900, showGeopoliticalSanctions, showGeopoliticalOpec]);
 
   useEffect(() => {
-    if (study && (isEventsTimeline || isFollowerGrowthDynamics)) {
+    if (study && (isEventsTimeline || isFollowerGrowthDynamics || isYoutubeCommentAnalysis)) {
       setLoading(false);
     }
-  }, [study, isEventsTimeline, isFollowerGrowthDynamics]);
+  }, [study, isEventsTimeline, isFollowerGrowthDynamics, isYoutubeCommentAnalysis]);
+
+  useEffect(() => {
+    if (!study || !isYoutubeCommentAnalysis) return;
+    let mounted = true;
+    setAnalysisLoading(true);
+    setAnalysisError(null);
+    setAnalysisData(null);
+    fetchJson<{
+      channel_id: string;
+      channel_name?: string | null;
+      channel_owner?: string | null;
+      channel_title?: string | null;
+      videos_analyzed: number;
+      videos?: Array<{ title: string; published_at: string; video_id: string }>;
+      comments_analyzed?: number;
+      total_comments: number;
+      time_range?: { start?: string; end?: string };
+      time_period_start?: string | null;
+      time_period_end?: string | null;
+      language?: string | null;
+      avg_sentiment: number;
+      top_words: [string, number][];
+      discourse_comments?: string[];
+      points_pca?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
+      points_umap?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
+      cluster_labels?: Array<{ x: number; y: number; label: string }>;
+      comments: Array<Record<string, unknown>>;
+    }>("/api/youtube/channel/comment-analysis?channel_id=UChWB95_-n9rUc3H9srsn9bQ")
+      .then((res) => {
+        if (mounted) setAnalysisData(res);
+      })
+      .catch((e) => {
+        if (mounted) setAnalysisError(e instanceof Error ? e.message : "Fetch failed");
+      })
+      .finally(() => {
+        if (mounted) setAnalysisLoading(false);
+      });
+    return () => { mounted = false; };
+  }, [study, isYoutubeCommentAnalysis]);
 
   useEffect(() => {
     if (!study || !isOilTradeNetwork) return;
@@ -1508,7 +1574,7 @@ export default function StudyDetailPage() {
     );
   }
 
-  const showError = error || (isOverviewStub && !data);
+  const showError = error || (isOverviewStub && !data) || (isYoutubeCommentAnalysis && analysisError);
 
   const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isFxUsdIrrDual || isWageCpiReal || isOilTradeNetwork || isOilExporterTimeseries || isOilGeopoliticalReaction;
   const singleSignalReady =
@@ -1539,7 +1605,7 @@ export default function StudyDetailPage() {
                         : isOilGeopoliticalReaction
                           ? oilPoints.length > 0
                           : false;
-  if (loading && (isOverviewStub ? !data : isSingleSignalStudy && !singleSignalReady)) {
+  if (loading && (isOverviewStub ? !data : isSingleSignalStudy && !singleSignalReady) || (isYoutubeCommentAnalysis && analysisLoading)) {
     return (
       <div className="study-page-container py-12 animate-pulse space-y-8">
         <div className="h-8 w-48 rounded bg-muted" />
@@ -1556,7 +1622,7 @@ export default function StudyDetailPage() {
   if (showError) {
     return (
       <div className="study-page-container py-12 space-y-4">
-        <p className="text-muted-foreground">{error || "No data available"}</p>
+        <p className="text-muted-foreground">{(isYoutubeCommentAnalysis && analysisError) || error || "No data available"}</p>
         <Link
           href="/studies"
           className="text-sm text-muted-foreground hover:text-foreground border border-border rounded-md px-3 py-1.5 inline-block"
@@ -1840,6 +1906,226 @@ export default function StudyDetailPage() {
           <p>
             This timeline provides chronological context for political, economic, and geopolitical events.
             Use it as a reference when interpreting charts—events are anchors for understanding, not explanations of cause and effect.
+          </p>
+        </InSimpleTerms>
+        </>
+      ) : isYoutubeCommentAnalysis && analysisData ? (
+        <>
+        <div className="study-panel">
+          <p className="study-panel-title">Dataset</p>
+          <dl className="grid gap-1.5 text-sm text-muted-foreground [&_dt]:font-medium [&_dt]:text-foreground/90 [&_dt]:inline [&_dt]:after:content-[':'] [&_dt]:after:mr-1 [&_dd]:inline">
+            <div>
+              <dt>Channel</dt>
+              <dd>
+                {analysisData.channel_owner
+                  ? `${analysisData.channel_name ?? "BPlus Podcast"} (${analysisData.channel_owner})`
+                  : (analysisData.channel_name ?? analysisData.channel_title ?? "BPlus Podcast (Ali Bandari)")}
+              </dd>
+            </div>
+            <div><dt>Videos analyzed</dt><dd>{analysisData.videos_analyzed ?? 0}</dd></div>
+            <div><dt>Comments analyzed</dt><dd>{analysisData.comments_analyzed ?? analysisData.total_comments ?? 0}</dd></div>
+            {analysisData.computed_at && (
+              <div>
+                <dt>Computed at</dt>
+                <dd>
+                  {(() => {
+                    try {
+                      const d = new Date(analysisData.computed_at.replace("Z", "+00:00"));
+                      return d.toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                        timeZoneName: "short",
+                      });
+                    } catch {
+                      return analysisData.computed_at;
+                    }
+                  })()}
+                </dd>
+              </div>
+            )}
+            <div>
+              <dt>Time period</dt>
+              <dd>
+                {analysisData.time_range?.start && analysisData.time_range?.end
+                  ? `${analysisData.time_range.start} – ${analysisData.time_range.end}`
+                  : analysisData.time_period_start && analysisData.time_period_end
+                    ? `${analysisData.time_period_start} – ${analysisData.time_period_end}`
+                    : "—"}
+              </dd>
+            </div>
+            <div><dt>Language</dt><dd>{analysisData.language ?? "Persian"}</dd></div>
+          </dl>
+        </div>
+        {analysisData.videos && analysisData.videos.length > 0 && (
+          <div className="study-panel">
+            <p className="study-panel-title">Videos analyzed</p>
+            <ul className="space-y-1.5 text-sm text-muted-foreground">
+              {(analysisData.videos.slice(0, 10)).map((v, i) => {
+                const dateStr = v.published_at
+                  ? (() => {
+                      try {
+                        const d = new Date(v.published_at.replace("Z", "+00:00"));
+                        return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                      } catch {
+                        return "";
+                      }
+                    })()
+                  : "";
+                return (
+                  <li key={v.video_id || i} className="flex flex-wrap gap-x-2 gap-y-0.5 items-baseline">
+                    <span dir="rtl" className="min-w-0 flex-1">{v.title || "(no title)"}</span>
+                    {dateStr && <span className="text-xs shrink-0">— {dateStr}</span>}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+        <Card className="border-border min-w-0 overflow-visible">
+          <CardHeader>
+            <CardTitle className="text-base font-medium">Channel analyzed</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground font-medium">
+              {analysisData.channel_owner
+                ? `${analysisData.channel_name ?? "BPlus Podcast"} (${analysisData.channel_owner})`
+                : (analysisData.channel_name ?? analysisData.channel_title ?? "BPlus Podcast (Ali Bandari)")}
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Persian-language educational podcast covering history, culture, and political topics. The comments analyzed below reflect discussion among viewers of this channel.
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-border min-w-0 overflow-visible">
+          <CardHeader>
+            <CardTitle className="text-base font-medium">YouTube discourse signals</CardTitle>
+            <p className="text-sm text-muted-foreground">{study.description}</p>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <section>
+              <h3 className="text-sm font-medium mb-2">Average sentiment</h3>
+              <p className="text-muted-foreground">
+                Sentiment score: {(analysisData.avg_sentiment ?? 0).toFixed(2)}
+              </p>
+            </section>
+            <section>
+              <h3 className="text-sm font-medium mb-2">Top words</h3>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "12px",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  padding: "24px",
+                  lineHeight: "1.8",
+                  direction: "rtl",
+                }}
+              >
+                {(() => {
+                  const raw = analysisData?.top_words ?? [];
+                  const words = raw
+                    .filter((w): w is [string, number] =>
+                      w != null &&
+                      Array.isArray(w) &&
+                      w.length >= 2 &&
+                      typeof w[0] === "string" &&
+                      typeof w[1] === "number"
+                    )
+                    .map(([word, value]) => ({ word: String(word), value: Number(value) }));
+                  return words.map(({ word, value }) => (
+                    <span
+                      key={`${word}-${value}`}
+                      style={{
+                        fontSize: `${Math.min(48, 12 + value * 0.6)}px`,
+                        fontWeight: 500,
+                        opacity: 0.9,
+                        whiteSpace: "nowrap",
+                      }}
+                      title={`${word}: ${value}`}
+                    >
+                      {word}
+                    </span>
+                  ));
+                })()}
+              </div>
+            </section>
+            <section>
+              <h3 className="text-sm font-medium mb-2">Comments analyzed</h3>
+              <p className="text-muted-foreground">
+                {analysisData.comments_analyzed ?? analysisData.total_comments ?? 0} comments
+              </p>
+            </section>
+            {((analysisData.points_pca?.length ?? 0) > 0 || (analysisData.points_umap?.length ?? 0) > 0) && (
+              <section>
+                <h3 className="text-sm font-medium mb-3">Discourse maps</h3>
+                <YoutubeDiscourseMaps
+                  pointsPca={analysisData.points_pca ?? []}
+                  pointsUmap={analysisData.points_umap ?? []}
+                  discourseComments={analysisData.discourse_comments}
+                  clusterLabels={analysisData.cluster_labels}
+                />
+              </section>
+            )}
+            {analysisData.topics && analysisData.topics.length > 0 && (
+              <section>
+                <h3 className="text-sm font-medium mb-2">Topics</h3>
+                <div className="flex flex-wrap gap-2">
+                  {analysisData.topics.map(([topic, count]) => (
+                    <span
+                      key={topic}
+                      className="text-xs rounded-full bg-muted px-2.5 py-1"
+                      title={`${count} comments`}
+                    >
+                      {topic.replace(/_/g, " ")}: {count}
+                    </span>
+                  ))}
+                </div>
+              </section>
+            )}
+          </CardContent>
+        </Card>
+        <LearningNote
+          title="How to read this study"
+          sections={[
+            {
+              heading: "Visual elements",
+              bullets: [
+                "Word cloud: Shows the most frequent non-stopwords appearing in analyzed YouTube comments.",
+                "Topics: Counts of comments containing keywords associated with thematic groups such as geopolitics, history, or religion.",
+                "Discourse maps: Each point represents one comment. Points close together use similar vocabulary. Two projection methods are shown: PCA (linear) and UMAP (nonlinear clustering).",
+              ],
+            },
+            {
+              heading: "What this measures",
+              bullets: [
+                "Comments collected via YouTube Data API.",
+                "Persian text normalization.",
+                "Stopword filtering.",
+                "TF-IDF vectorization.",
+                "Dimensionality reduction (PCA and UMAP).",
+              ],
+            },
+          ]}
+        />
+        {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
+        <SourceInfo
+          items={[
+            {
+              label: "Comments",
+              sourceName: "YouTube Data API",
+              sourceUrl: "https://developers.google.com/youtube/v3",
+              sourceDetail: "commentThreads endpoint",
+            },
+          ]}
+          note="Comments from recent videos of the channel. Persian text normalized; TF-IDF and dimensionality reduction applied for discourse maps."
+        />
+        <InSimpleTerms>
+          <p>
+            This study analyzes what viewers say in YouTube comments. The word cloud shows the most common words; the discourse maps group comments by similar vocabulary. PCA and UMAP are two ways to project high-dimensional text into 2D for visualization.
           </p>
         </InSimpleTerms>
         </>
@@ -2715,7 +3001,7 @@ export default function StudyDetailPage() {
         </div>
       ) : null}
 
-      {!isEventsTimeline && !isFollowerGrowthDynamics && !isFxUsdIrrDual && (
+      {!isEventsTimeline && !isFollowerGrowthDynamics && !isFxUsdIrrDual && !isYoutubeCommentAnalysis && (
       <Card className="chart-card border-border overflow-hidden">
         <CardHeader>
           <div className="flex items-center justify-between gap-4 mb-2">
@@ -3234,7 +3520,7 @@ export default function StudyDetailPage() {
                     unitLabel: "Thousand barrels per day",
                   },
                 ]}
-                note="Unit: thousand barrels per day. Values converted from net weight (kg) using 1 tonne ≈ 7.33 barrels."
+                note="Unit: thousand barrels per day. Values converted from net weight (kg) using 1 tonne ≈ 7.33 barrels. Note: Trade data is derived from UN Comtrade (HS 2709). Reporting coverage varies across countries and years. Missing values reflect unavailable reporting rather than zero exports."
               />
               <InSimpleTerms>
                 <p>
@@ -3351,6 +3637,7 @@ export default function StudyDetailPage() {
                     unitNote: "Bilateral trade flows summed by exporter.",
                   },
                 ]}
+                note="Note: Trade data is derived from UN Comtrade (HS 2709). Reporting coverage varies across countries and years. Missing values reflect unavailable reporting rather than zero exports."
               />
               <InSimpleTerms>
                 <p>
