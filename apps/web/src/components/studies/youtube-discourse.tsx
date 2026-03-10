@@ -1378,7 +1378,7 @@ export function YoutubeDiscourseMaps({
             </p>
             <div style={{ marginTop: 12 }}>
               <DiscourseScatter
-                points={pointsPca}
+                points={pointsPca ?? []}
                 discourseComments={discourseComments}
                 title="PCA projection of comment vectors"
                 w={CHART_WIDTH_GRID}
