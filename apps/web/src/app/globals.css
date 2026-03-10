@@ -54,13 +54,23 @@
   * {
     @apply border-border;
   }
+  html,
   body {
     @apply text-foreground;
-    background: #f9fafb;
+    background: #fcfcfc;
   }
   .dark body {
     background: hsl(var(--background));
   }
+}
+
+/* Ensure cards stay white on light background */
+.card,
+.chart-container,
+.study-card,
+.chart-card {
+  background: white !important;
+  border: 1px solid #e5e7eb;
 }
 
 /* Homepage hero */
@@ -353,6 +363,51 @@
   max-width: 1100px;
   margin: 0 auto;
   padding: 40px 20px;
+}
+
+.page-container h1 {
+  font-size: 32px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.page-subtitle {
+  font-size: 15px;
+  color: #6b7280;
+  margin-bottom: 30px;
+}
+
+.page-container h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin-top: 36px;
+  margin-bottom: 12px;
+}
+
+.page-container h2:first-of-type {
+  margin-top: 0;
+}
+
+.page-container p {
+  font-size: 15px;
+  line-height: 1.65;
+  color: #4b5563;
+  margin-bottom: 14px;
+  max-width: 720px;
+}
+
+.page-container section {
+  margin-bottom: 28px;
+}
+
+.dark .page-container h1,
+.dark .page-container h2 {
+  color: #e5e7eb;
+}
+
+.dark .page-subtitle,
+.dark .page-container p {
+  color: #9ca3af;
 }
 
 .theme-toggle-btn {

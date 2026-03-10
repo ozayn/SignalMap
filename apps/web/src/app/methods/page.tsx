@@ -1,20 +1,14 @@
 export default function MethodsPage() {
   return (
-    <div className="page-container space-y-12">
-      <div>
-        <h1 className="text-2xl font-medium tracking-tight text-foreground">
-          Methods
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Exploratory-first methodology for longitudinal discourse analysis.
-        </p>
-      </div>
+    <div className="page-container">
+      <h1>Methods</h1>
+      <p className="page-subtitle">
+        Exploratory-first methodology for longitudinal discourse analysis.
+      </p>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-medium text-foreground">
-          Exploratory-first approach
-        </h2>
-        <p className="text-sm text-muted-foreground leading-relaxed">
+      <section>
+        <h2>Exploratory-first approach</h2>
+        <p>
           SignalMap privileges discovery over hypothesis testing. The platform
           is designed to surface patterns, anomalies, and temporal shifts in
           public discourse before formal hypotheses are formulated. Analyses
@@ -23,11 +17,9 @@ export default function MethodsPage() {
         </p>
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-medium text-foreground">
-          Time-window anchoring
-        </h2>
-        <p className="text-sm text-muted-foreground leading-relaxed">
+      <section>
+        <h2>Time-window anchoring</h2>
+        <p>
           All analyses are anchored to explicit time windows. Data are
           aggregated within defined intervals (e.g., days, weeks, or months)
           to produce longitudinal signals. Time boundaries are fixed at
@@ -36,11 +28,9 @@ export default function MethodsPage() {
         </p>
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-medium text-foreground">
-          Signals
-        </h2>
-        <p className="text-sm text-muted-foreground leading-relaxed">
+      <section>
+        <h2>Signals</h2>
+        <p>
           In SignalMap, a signal is a time-varying measurement derived from
           observable data. Examples include subscriber counts (from archival
           sources or platform APIs), follower counts, sentiment scores, and
@@ -51,7 +41,7 @@ export default function MethodsPage() {
           granularities, and archival coverage is uneven across time and
           source.
         </p>
-        <p className="text-sm text-muted-foreground leading-relaxed">
+        <p>
           Confidence and missing data are treated as first-class concerns.
           When extraction is uncertain or data are absent, values are omitted
           rather than imputed. Missing values are expected and do not imply
@@ -60,7 +50,7 @@ export default function MethodsPage() {
           not absolute values. The emphasis is on conditional change and
           comparative patterns rather than point estimates.
         </p>
-        <p className="text-sm text-muted-foreground leading-relaxed">
+        <p>
           Where relevant, exogenous macroeconomic signals (e.g., Brent crude oil price from FRED—Brent is a benchmark oil type traded on world markets) are used to contextualize discourse patterns.
           These signals are treated as external context, not as dependent
           variables, and are sourced from the Federal Reserve Economic Data
@@ -68,11 +58,9 @@ export default function MethodsPage() {
         </p>
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-medium text-foreground">
-          Aggregation-only analysis
-        </h2>
-        <p className="text-sm text-muted-foreground leading-relaxed">
+      <section>
+        <h2>Aggregation-only analysis</h2>
+        <p>
           Individual-level profiling is explicitly avoided. All metrics are
           computed at aggregate levels (e.g., per time window, per topic,
           per hashtag cluster). No attempt is made to attribute sentiment,
@@ -82,11 +70,9 @@ export default function MethodsPage() {
         </p>
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-medium text-foreground">
-          Multilingual text handling
-        </h2>
-        <p className="text-sm text-muted-foreground leading-relaxed">
+      <section>
+        <h2>Multilingual text handling</h2>
+        <p>
           Text is processed in a language-agnostic manner where possible.
           Sentiment and topic models are applied with awareness of
           multilingual contexts. No assumption is made that a single
@@ -96,11 +82,9 @@ export default function MethodsPage() {
         </p>
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-medium text-foreground">
-          Archival and contextual signals
-        </h2>
-        <p className="text-sm text-muted-foreground leading-relaxed">
+      <section>
+        <h2>Archival and contextual signals</h2>
+        <p>
           Where available, archival sources (e.g., web archives, historical
           snapshots) are used to contextualize temporal patterns. These
           sources provide supplementary signals about the state of
@@ -110,11 +94,9 @@ export default function MethodsPage() {
         </p>
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-medium text-foreground">
-          Limitations and uncertainty
-        </h2>
-        <p className="text-sm text-muted-foreground leading-relaxed">
+      <section>
+        <h2>Limitations and uncertainty</h2>
+        <p>
           Findings are preliminary and subject to revision. Sampling
           bias, platform-specific artifacts, and model limitations may
           affect results. No claim is made to external validity or
