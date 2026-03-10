@@ -327,7 +327,7 @@
   gap: 16px;
 }
 
-/* Chart container - clean white card */
+/* Chart container - clean white card, no gray wrapper */
 .chart-container {
   background: white;
   border: 1px solid #e5e7eb;
@@ -343,6 +343,15 @@
 
 .chart-area {
   background: transparent;
+}
+
+/* Cards that wrap charts - ensure white, no gray wrapper */
+.chart-card {
+  background: white !important;
+}
+
+.dark .chart-card {
+  background: #111827 !important;
 }
 
 /* Study panels (HOW TO READ, CONCEPTS, SOURCES, IN SIMPLE TERMS) */

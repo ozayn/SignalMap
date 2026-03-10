@@ -2576,8 +2576,8 @@ export default function StudyDetailPage() {
         </div>
       ) : null}
 
-      {!isEventsTimeline && !isFollowerGrowthDynamics && !isFxUsdIrrDual && !isWageCpiReal && (
-      <Card className="border-border overflow-hidden">
+      {!isEventsTimeline && !isFollowerGrowthDynamics && !isFxUsdIrrDual && (
+      <Card className="chart-card border-border overflow-hidden">
         <CardHeader>
           <div className="flex items-center justify-between gap-4 mb-2">
             <CardTitle className="text-base font-medium shrink-0">
@@ -2585,6 +2585,8 @@ export default function StudyDetailPage() {
                 ? "Network"
                 : isOilGeopoliticalReaction
                 ? "Brent oil (short-term)"
+                : isWageCpiReal
+                ? "Real minimum wage (CPI-adjusted)"
                 : isGoldAndOil
                 ? "Gold and oil prices"
                 : isOilGlobalLong
@@ -3565,7 +3567,7 @@ export default function StudyDetailPage() {
             </>
           ) : isWageCpiReal ? (
             <>
-              <Card>
+              <Card className="chart-card border-border">
                 <CardHeader>
                   <CardTitle className="text-base">Real minimum wage (CPI-adjusted)</CardTitle>
                   <p className="text-sm text-muted-foreground">
