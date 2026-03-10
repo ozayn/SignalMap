@@ -156,6 +156,8 @@ CUSTOM_STOPWORDS.update({
     "جناب", "دارید", "مرسی", "خودت", "چطور",
     "دارم", "دارن", "میگن", "امیدوارم",
     "اینه", "جان",
+    "وغیره",  # etc. — conversational filler
+    "نظرم",  # my opinion — conversational, not meaningful for word cloud
 })
 CUSTOM_STOPWORDS.update({
     "انجام", "ادامه", "یاد", "میکنن",
@@ -213,6 +215,10 @@ PHRASE_STOPWORDS.update({
     "these nativitiy scene",
     "these nativity scene",
 })
+PHRASE_STOPWORDS.update({
+    "وغیره",  # etc. / and so on — conversational filler, not a meaningful topic
+    "و غیره",
+})
 
 PRAISE_WORDS = {
     "دمت", "گرم", "خسته", "نباشید",
@@ -239,10 +245,11 @@ VERB_STOPWORDS = {
     "کردند", "کرد", "کردم", "کردی",
     "داشتند", "داشت", "دارند",
     "میگن", "میگه", "میکنه", "میکنن",
+    "بود", "bood",  # was — fragments like "jalebi bood"
 }
 
 # Verb endings that make a token unsuitable as label
-LABEL_VERB_SUFFIXES = ("ند", "یم", "ید")
+LABEL_VERB_SUFFIXES = ("ند", "یم", "ید", "دارن", "دارند", "کنن", "کنند")
 
 # Conversational markers: reject phrases starting with these (sentence fragments)
 CONVERSATIONAL_WORDS = {
@@ -495,9 +502,17 @@ PRAISE_CLUSTER_KEYWORDS = [
     "دمت",
     "خسته نباشید",
     "مثل همیشه عالی",
+    "سپاس فراوان",
+    "سپاس",
 ]
 
 PRAISE_CLUSTER_THRESHOLD = 0.4
+
+# Labels that are synonyms for "praise / appreciation" — normalize to canonical form
+PRAISE_LABEL_SYNONYMS = frozenset({
+    "سپاس فراوان", "سپاس", "مرسی", "تشکر", "تحسین",
+    "thank", "thanks", "great", "well done",
+})
 
 
 def is_praise_comment(text: str) -> bool:
@@ -610,13 +625,67 @@ def compute_cluster_label(
     top2 = filtered[:2]
     if not top2:
         return "(cluster)"
-    label = " ".join(top2)
-    return _dedupe_phrase(label)[:40]
+    label = _dedupe_phrase(" ".join(top2))[:40]
+    if not _is_valid_label_for_display(label):
+        return "(cluster)"
+    if _normalize_phrase_for_match(label) in PRAISE_LABEL_SYNONYMS:
+        return "praise / appreciation"
+    return label
+
+
+# Greeting words that often start sentence fragments (درود امروز...)
+_GREETING_STARTERS = frozenset({"درود"})
+# Modal verbs in a phrase often indicate incomplete sentence (ایران هرگز نباید...)
+_FRAGMENT_MODALS = frozenset({"باید", "نباید", "هرگز نباید", "هرگز باید"})
+
+
+def _looks_like_sentence_fragment(phrase: str) -> bool:
+    """Reject phrases that look like incomplete sentences, not coherent topics."""
+    if not phrase:
+        return False
+    norm = _normalize_phrase_for_match(phrase)
+    tokens = norm.split()
+    if not tokens:
+        return False
+    # Reject if starts with greeting (درود امروز اسپان, etc.)
+    if tokens[0] in _GREETING_STARTERS:
+        return True
+    # Reject if contains modal fragment (ایران هرگز نباید, etc.)
+    for m in _FRAGMENT_MODALS:
+        if m in norm:
+            return True
+    return False
+
+
+def _is_valid_label_for_display(phrase: str) -> bool:
+    """Reject labels that are too short, stopwords, truncated/malformed, or sentence fragments."""
+    if not phrase:
+        return False
+    if _looks_like_sentence_fragment(phrase):
+        return False
+    has_persian = any("\u0600" <= c <= "\u06FF" for c in phrase)
+    # Persian: allow 3+ chars (meaningful short words like دین, شاه). ASCII: require 4+ to filter truncated words like "ppreciat"
+    min_len = 3 if has_persian else 4
+    if len(phrase) < min_len:
+        return False
+    # Reject single-token labels that are stopwords (e.g. "به")
+    tokens = phrase.split()
+    if len(tokens) == 1 and phrase.lower().strip() in (PERSIAN_STOPWORDS | STOPWORDS | CUSTOM_STOPWORDS):
+        return False
+    # Reject mostly-ASCII labels that are too short (truncated English like "ppreciat")
+    letters = [c for c in phrase if c.isalpha()]
+    if letters:
+        ascii_ratio = sum(1 for c in letters if ord(c) < 128) / len(letters)
+        if ascii_ratio >= 0.8 and len(phrase) < 8:
+            return False
+    return True
 
 
 def _accept_phrase_for_label(phrase: str, title_stop: frozenset[str], stop_list: list) -> bool:
     """Shared phrase acceptance for semantic and TF-IDF labeling."""
     if not phrase or phrase in PHRASE_STOPWORDS or phrase in CHANNEL_STOPWORDS:
+        return False
+    if _looks_like_sentence_fragment(phrase):
         return False
     if _is_verb_like_phrase(phrase):
         return False
@@ -642,6 +711,7 @@ def compute_cluster_label_semantic(
     embeddings: np.ndarray,
     raw_texts_for_praise: list[str] | None = None,
     title_phrase_stopwords: frozenset[str] | None = None,
+    used_labels: frozenset[str] | None = None,
 ) -> str:
     """Label cluster by semantic similarity: phrase embedding vs cluster centroid.
     Falls back to 'discussion' if no good phrase."""
@@ -669,21 +739,33 @@ def compute_cluster_label_semantic(
     centroid_norm = centroid / (np.linalg.norm(centroid) + 1e-9)
 
     # 2. Extract candidate phrases (unigrams, bigrams, trigrams)
+    # Use normalized form as key so variants (e.g. "تاریخ ایران" vs "تاریخ  ایران") merge
     phrase_counts: Counter[str] = Counter()
+    norm_to_display: dict[str, str] = {}  # normalized -> best display form (first seen)
     for text in texts:
         tokens = tokenize(text)
         for t in tokens:
             if len(t) >= 3 and not any(c.isdigit() for c in t) and t.lower() not in stop_list and not _is_verb_like_phrase(t):
-                phrase_counts[t] += 1
+                norm = _normalize_phrase_for_match(t)
+                phrase_counts[norm] += 1
+                if norm not in norm_to_display:
+                    norm_to_display[norm] = t
         for bg in generate_bigrams(tokens):
             if _accept_phrase_for_label(bg, title_stop, stop_list):
-                phrase_counts[bg] += 1
+                norm = _normalize_phrase_for_match(bg)
+                phrase_counts[norm] += 1
+                if norm not in norm_to_display:
+                    norm_to_display[norm] = bg
         for tg in generate_trigrams(tokens):
             if _accept_phrase_for_label(tg, title_stop, stop_list):
-                phrase_counts[tg] += 1
+                norm = _normalize_phrase_for_match(tg)
+                phrase_counts[norm] += 1
+                if norm not in norm_to_display:
+                    norm_to_display[norm] = tg
 
     # 3. Prefer bigrams, then trigrams only if no suitable bigram (noun-like labels)
-    candidates = [p for p, _ in phrase_counts.most_common(80)]
+    # Use normalized form for candidates; display form comes from norm_to_display
+    candidates = [norm_to_display.get(p, p) for p, _ in phrase_counts.most_common(80)]
     if not candidates:
         return "discussion"
 
@@ -692,6 +774,8 @@ def compute_cluster_label_semantic(
     except Exception:
         return "discussion"
 
+    used = used_labels or frozenset()
+
     def best_in_tier(expected_ngram_len: int, min_sim: float = 0.1) -> tuple[str | None, float]:
         best_p, best_s = None, -1.0
         for i, phrase in enumerate(candidates):
@@ -699,6 +783,10 @@ def compute_cluster_label_semantic(
                 continue
             if i >= len(phrase_embeddings):
                 break
+            if phrase in used or _normalize_phrase_for_match(phrase) in {_normalize_phrase_for_match(u) for u in used}:
+                continue
+            if not _is_valid_label_for_display(phrase):
+                continue
             sim = float(np.dot(centroid_norm, phrase_embeddings[i]))
             if sim > best_s and sim >= min_sim:
                 best_s = sim
@@ -708,7 +796,10 @@ def compute_cluster_label_semantic(
     for n in [2, 3, 1]:  # bigrams first, then trigrams, then unigrams
         best_phrase, best_sim = best_in_tier(n)
         if best_phrase and best_sim > 0.1:
-            return _dedupe_phrase(best_phrase)[:40]
+            label = _dedupe_phrase(best_phrase)[:40]
+            if _normalize_phrase_for_match(label) in PRAISE_LABEL_SYNONYMS:
+                return "praise / appreciation"
+            return label
     return "discussion"
 
 
@@ -750,7 +841,7 @@ def _cluster_kmeans(
 ) -> tuple[list[dict], dict, list[int]]:
     """Step 4: KMeans clustering for TF-IDF pipeline. Returns (labels, stats, cluster_assignments)."""
     from sklearn.cluster import KMeans
-    kmeans = KMeans(n_clusters=4, random_state=0)
+    kmeans = KMeans(n_clusters=3, random_state=0)
     cluster_ids = kmeans.fit_predict(coords)
     labels, stats, assignments = _cluster_labels_from_coords(
         coords, cluster_ids, comments, to_map,
@@ -761,7 +852,7 @@ def _cluster_kmeans(
 
 
 def _cluster_hdbscan(
-    coords, comments: list, to_map: list, min_cluster_size: int = 8, title_phrase_stopwords: frozenset[str] | None = None,
+    coords, comments: list, to_map: list, min_cluster_size: int = 12, title_phrase_stopwords: frozenset[str] | None = None,
     embeddings: np.ndarray | None = None,
 ) -> tuple[list[dict], dict, list[int]]:
     """Step 4: HDBSCAN clustering. Returns (labels, stats, cluster_assignments)."""
@@ -819,6 +910,63 @@ def _compute_minilm_embeddings(to_map: list, comments: list):
         return None
 
 
+def _collapse_substring_labels(labels: list[dict]) -> list[dict]:
+    """When one label is a substring of another, prefer the shorter (e.g. 'expression' over 'expression with added two').
+    Do not collapse to stopwords (e.g. keep 'به نظر' rather than collapsing to 'به')."""
+    stopwords = PERSIAN_STOPWORDS | STOPWORDS | CUSTOM_STOPWORDS
+    label_strs = [item.get("label", "(cluster)") for item in labels]
+    result = []
+    for item in labels:
+        label = item.get("label", "(cluster)")
+        # Among labels that are substrings of this one, pick the longest (most specific) that is shorter than self
+        # Exclude stopwords so we don't collapse "به نظر" → "به"
+        candidates = [
+            o for o in label_strs
+            if o and o != label and o in label and len(o) < len(label)
+            and _normalize_phrase_for_match(o) not in {_normalize_phrase_for_match(s) for s in stopwords}
+        ]
+        best = max(candidates, key=len) if candidates else label
+        result.append({**item, "label": best})
+    return result
+
+
+def _unify_cluster_ids_by_label(labels: list[dict], cluster_assignments: list[int]) -> tuple[list[dict], list[int]]:
+    """Merge clusters with the same label so they share one color. Returns (labels, assignments)."""
+    if not labels:
+        return labels, cluster_assignments
+    # Build canonical cluster_id per label (use min id so we merge into the "first" cluster)
+    label_to_canonical: dict[str, int] = {}
+    for item in labels:
+        cid = item.get("cluster_id", -1)
+        if cid < 0:
+            continue
+        norm = _normalize_phrase_for_match(item.get("label", ""))
+        if norm not in label_to_canonical or cid < label_to_canonical[norm]:
+            label_to_canonical[norm] = cid
+    # Map old cluster_id -> new (canonical) cluster_id
+    old_to_new: dict[int, int] = {}
+    for item in labels:
+        old_cid = item.get("cluster_id", -1)
+        if old_cid >= 0:
+            norm = _normalize_phrase_for_match(item.get("label", ""))
+            old_to_new[old_cid] = label_to_canonical.get(norm, old_cid)
+    # Update assignments
+    new_assignments = [old_to_new.get(a, a) if a >= 0 else a for a in cluster_assignments]
+    # Keep one label per canonical cluster_id (deduplicate)
+    seen_cid: set[int] = set()
+    unified_labels: list[dict] = []
+    for item in labels:
+        old_cid = item.get("cluster_id", -1)
+        if old_cid < 0:
+            continue
+        norm = _normalize_phrase_for_match(item.get("label", ""))
+        new_cid = label_to_canonical.get(norm, old_cid)
+        if new_cid not in seen_cid:
+            seen_cid.add(new_cid)
+            unified_labels.append({**item, "cluster_id": new_cid})
+    return unified_labels, new_assignments
+
+
 def _make_labels_unique(labels: list[dict]) -> list[dict]:
     """Ensure cluster labels are unique. If duplicate, append numeric suffix: تدی, تدی 2, تدی 3."""
     label_counts: dict[str, int] = {}
@@ -857,6 +1005,7 @@ def _cluster_labels_from_coords(
     total = len(cluster_ids)
     result = []
     use_semantic = embeddings is not None and len(embeddings) >= len(to_map)
+    used_labels: set[str] = set()
     for cid, indices in sorted(clusters.items()):
         if not indices:
             continue
@@ -869,7 +1018,10 @@ def _cluster_labels_from_coords(
                 embeddings=embeddings,
                 raw_texts_for_praise=raw_texts,
                 title_phrase_stopwords=title_phrase_stopwords,
+                used_labels=frozenset(used_labels),
             )
+            if label and label != "discussion":
+                used_labels.add(_normalize_phrase_for_match(label))
         else:
             label = compute_cluster_label(
                 cluster_texts,
@@ -880,9 +1032,11 @@ def _cluster_labels_from_coords(
         x = float(sum(coords[i][0] for i in indices) / len(indices))
         y = float(sum(coords[i][1] for i in indices) / len(indices))
         result.append({"x": round(x, 2), "y": round(y, 2), "label": label, "cluster_id": int(cid)})
+    result = _collapse_substring_labels(result)
+    cluster_assignments = [int(cid) for cid in cluster_ids]
+    result, cluster_assignments = _unify_cluster_ids_by_label(result, cluster_assignments)
     result = _make_labels_unique(result)
     stats = {"clusters": len(result), "noise_count": noise_count, "total": total}
-    cluster_assignments = [int(cid) for cid in cluster_ids]
     return result, stats, cluster_assignments
 
 
@@ -976,6 +1130,7 @@ def compute_cluster_labels_from_umap(
                     pass
 
         cluster_labels = []
+        used_labels: set[str] = set()
         for cid in range(k):
             indices = clusters[cid]
             if not indices:
@@ -989,7 +1144,10 @@ def compute_cluster_labels_from_umap(
                     embeddings=embeddings,
                     raw_texts_for_praise=raw_texts,
                     title_phrase_stopwords=title_phrase_stopwords,
+                    used_labels=frozenset(used_labels),
                 )
+                if label and label != "discussion":
+                    used_labels.add(_normalize_phrase_for_match(label))
             else:
                 all_texts = [c.get("comment_text", "") for c in comments]
                 label = compute_cluster_label(
@@ -1144,7 +1302,7 @@ def analyze_comments(comments):
                         y = round(float(umap_minilm[i][1]), 2)
                         points_minilm.append([x, y, i])
                     cluster_labels_minilm, cluster_stats_minilm, cluster_assignments_minilm = _cluster_hdbscan(
-                        umap_minilm, comments, to_map, min_cluster_size=5, title_phrase_stopwords=title_phrase_stopwords,
+                        umap_minilm, comments, to_map, min_cluster_size=18, title_phrase_stopwords=title_phrase_stopwords,
                         embeddings=minilm_embeddings,
                     )
         except Exception as e:
