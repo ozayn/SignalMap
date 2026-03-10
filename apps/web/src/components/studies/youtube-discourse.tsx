@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export type DiscoursePoint = { x: number; y: number; text: string } | [number, number, number];
 
@@ -37,9 +37,25 @@ function DiscourseScatter({
   const scaleX = (v: number) => pad + ((v - minX) / rangeX) * (w - 2 * pad);
   const scaleY = (v: number) => h - pad - ((v - minY) / rangeY) * (h - 2 * pad);
 
+  const gridLines = useMemo(() => {
+    const lines: React.ReactNode[] = [];
+    const nX = 5;
+    const nY = 5;
+    for (let i = 1; i < nX; i++) {
+      const x = pad + (i / nX) * (w - 2 * pad);
+      lines.push(<line key={`v${i}`} x1={x} y1={pad} x2={x} y2={h - pad} stroke="#f0f0f0" strokeWidth={1} />);
+    }
+    for (let j = 1; j < nY; j++) {
+      const y = pad + (j / nY) * (h - 2 * pad);
+      lines.push(<line key={`h${j}`} x1={pad} y1={y} x2={w - pad} y2={y} stroke="#f0f0f0" strokeWidth={1} />);
+    }
+    return lines;
+  }, [w, h, pad]);
+
   return (
     <div className="relative overflow-hidden bg-white rounded-lg border border-border text-muted-foreground" style={{ width: w, height: h }}>
       <svg width={w} height={h} className="absolute inset-0">
+        <g>{gridLines}</g>
         {points.map((p, i) => {
           const { x, y } = getPointCoords(p);
           return (
@@ -47,9 +63,10 @@ function DiscourseScatter({
               key={i}
               cx={scaleX(x)}
               cy={scaleY(y)}
-              r={hovered === i ? 6 : 3}
-              style={{ opacity: 0.7 }}
-              className="fill-primary/60 hover:fill-primary cursor-pointer transition-all duration-150"
+              r={hovered === i ? 6 : POINT_RADIUS}
+              fill={POINT_COLOR}
+              style={{ opacity: hovered === i ? 1 : POINT_OPACITY }}
+              className="cursor-pointer transition-all duration-150"
             />
           );
         })}
@@ -153,8 +170,218 @@ function DiscourseScatterTooltip({
   );
 }
 
-const CHART_WIDTH = 400;
-const CHART_HEIGHT = 300;
+const CHART_HEIGHT_PCA_UMAP = 360;
+const CHART_HEIGHT_DENSITY = 420;
+const CHART_WIDTH_GRID = 400;
+const CHART_WIDTH_FULL = 848;
+
+const POINT_RADIUS = 2.5;
+const POINT_OPACITY = 0.55;
+const POINT_COLOR = "#111";
+const DENSITY_POINT_RADIUS = 3;
+
+function useContainerWidth(maxWidth = CHART_WIDTH_FULL) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(maxWidth);
+  useEffect(() => {
+    if (!ref.current) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (typeof w === "number" && w > 0) setWidth(Math.min(w, maxWidth));
+    });
+    ro.observe(ref.current);
+    return () => ro.disconnect();
+  }, [maxWidth]);
+  return { ref, width };
+}
+
+function computeDensity(
+  points: Array<{ x: number; y: number }>,
+  radius: number
+): number[] {
+  return points.map((p, i) => {
+    let count = 0;
+    for (let j = 0; j < points.length; j++) {
+      const dx = p.x - points[j]!.x;
+      const dy = p.y - points[j]!.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < radius) count++;
+    }
+    return count;
+  });
+}
+
+function DensityUmapScatter({
+  points,
+  discourseComments,
+  clusterLabels,
+  w,
+  h,
+}: {
+  points: DiscoursePoint[];
+  discourseComments?: string[];
+  clusterLabels?: Array<{ x: number; y: number; label: string }>;
+  w: number;
+  h: number;
+}) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const pad = 24;
+  if (points.length === 0) return null;
+  const coords = points.map((p, i) => {
+    const { x, y } = getPointCoords(p);
+    const idx = Array.isArray(p) ? p[2] : undefined;
+    return { x, y, idx: idx ?? i };
+  });
+  const xs = coords.map((c) => c.x);
+  const ys = coords.map((c) => c.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const rangeX = maxX - minX || 1;
+  const rangeY = maxY - minY || 1;
+  const scaleX = (v: number) => pad + ((v - minX) / rangeX) * (w - 2 * pad);
+  const scaleY = (v: number) => h - pad - ((v - minY) / rangeY) * (h - 2 * pad);
+
+  const pointsKey = coords.map((c) => `${c.x},${c.y}`).join("|");
+  const radius = Math.max(rangeX, rangeY) * 0.03;
+  const densities = useMemo(() => computeDensity(coords, radius), [pointsKey, radius]);
+  const minD = Math.min(...densities);
+  const maxD = Math.max(...densities);
+  const rangeD = maxD - minD || 1;
+  const densityNorm = densities.map((d) => (d - minD) / rangeD);
+  const opacities = densityNorm.map((n) => 0.2 + n * 0.7);
+
+  const gridLines = useMemo(() => {
+    const lines: React.ReactNode[] = [];
+    const nX = 5;
+    const nY = 5;
+    for (let i = 1; i < nX; i++) {
+      const x = pad + (i / nX) * (w - 2 * pad);
+      lines.push(<line key={`v${i}`} x1={x} y1={pad} x2={x} y2={h - pad} stroke="#f0f0f0" strokeWidth={1} />);
+    }
+    for (let j = 1; j < nY; j++) {
+      const y = pad + (j / nY) * (h - 2 * pad);
+      lines.push(<line key={`h${j}`} x1={pad} y1={y} x2={w - pad} y2={y} stroke="#f0f0f0" strokeWidth={1} />);
+    }
+    return lines;
+  }, [w, h, pad]);
+
+  const useApiLabels = clusterLabels && clusterLabels.length > 0;
+  const { clusters, labels, topClusterLabels } = useMemo(() => {
+    if (useApiLabels && clusterLabels) {
+      const radius = Math.max(rangeX, rangeY) * 0.1;
+      const withSize = clusterLabels.map((cl) => {
+        const count = coords.filter((c) => {
+          const dx = c.x - cl.x;
+          const dy = c.y - cl.y;
+          return Math.sqrt(dx * dx + dy * dy) < radius;
+        }).length;
+        return { ...cl, count };
+      });
+      const sorted = [...withSize].sort((a, b) => b.count - a.count).slice(0, 4);
+      return { clusters: [] as number[], labels: [] as string[], topClusterLabels: sorted };
+    }
+    try {
+      const pts = coords.map((c) => ({ x: c.x, y: c.y, idx: c.idx }));
+      const assignments = kMeansClusters(pts, 4);
+      const commentsRef = discourseComments ?? [];
+      const clusterData: Array<{ cx: number; cy: number; label: string; size: number }> = [];
+      for (let c = 0; c < 4; c++) {
+        const members = coords.filter((_, i) => assignments[i] === c);
+        if (members.length === 0) continue;
+        const cx = members.reduce((s, m) => s + m.x, 0) / members.length;
+        const cy = members.reduce((s, m) => s + m.y, 0) / members.length;
+        const indices = members.map((m) => m.idx);
+        const comments = indices
+          .filter((i) => i >= 0 && i < commentsRef.length)
+          .map((i) => commentsRef[i])
+          .filter((c): c is string => typeof c === "string");
+        clusterData.push({ cx, cy, label: cleanLabel(computeClusterLabel(comments)), size: members.length });
+      }
+      const sorted = [...clusterData].sort((a, b) => b.size - a.size).slice(0, 4);
+      return { clusters: assignments, labels: [] as string[], topClusterLabels: sorted };
+    } catch {
+      return { clusters: [] as number[], labels: [] as string[], topClusterLabels: [] };
+    }
+  }, [pointsKey, useApiLabels, discourseComments, clusterLabels, rangeX, rangeY]);
+
+  return (
+    <div className="relative overflow-hidden bg-white rounded-lg border border-border text-muted-foreground" style={{ width: w, height: h }}>
+      <svg width={w} height={h} className="absolute inset-0">
+        <defs>
+          <filter id="densityLabelShadow">
+            <feDropShadow dx={0} dy={1} stdDeviation={1.5} floodColor="rgba(0,0,0,0.15)" />
+          </filter>
+        </defs>
+        <g>{gridLines}</g>
+        {points.map((p, i) => {
+          const { x, y } = getPointCoords(p);
+          return (
+            <circle
+              key={i}
+              cx={scaleX(x)}
+              cy={scaleY(y)}
+              r={hovered === i ? 6 : DENSITY_POINT_RADIUS}
+              fill={POINT_COLOR}
+              style={{ opacity: hovered === i ? 1 : opacities[i] ?? 0.2 }}
+              className="cursor-pointer transition-all duration-150"
+            />
+          );
+        })}
+        {topClusterLabels.map((cl, i) => {
+          const cx = "cx" in cl ? (cl as { cx: number; cy: number; label: string }).cx : (cl as { x: number; y: number; label: string }).x;
+          const cy = "cy" in cl ? (cl as { cx: number; cy: number; label: string }).cy : (cl as { x: number; y: number; label: string }).y;
+          const label = cl.label;
+          const padX = 6;
+          const padY = 3;
+          const textWidth = Math.max(40, label.length * 7);
+          const boxW = textWidth + padX * 2;
+          const boxH = 16 + padY * 2;
+          return (
+            <g key={i} transform={`translate(${scaleX(cx)},${scaleY(cy) - 8})`}>
+              <rect
+                x={-boxW / 2}
+                y={-boxH / 2}
+                width={boxW}
+                height={boxH}
+                rx={6}
+                fill="rgba(255,255,255,0.92)"
+                filter="url(#densityLabelShadow)"
+              />
+              <text
+                textAnchor="middle"
+                dominantBaseline="middle"
+                style={{ fontSize: 12, fontWeight: 600, fill: "#333" }}
+              >
+                {label}
+              </text>
+            </g>
+          );
+        })}
+        <text x={w / 2} y={h - 6} textAnchor="middle" fill="currentColor" style={{ fontSize: 10 }}>
+          UMAP dimension 1
+        </text>
+        <text x={14} y={h / 2} textAnchor="middle" fill="currentColor" style={{ fontSize: 10 }} transform={`rotate(-90, 14, ${h / 2})`}>
+          UMAP dimension 2
+        </text>
+      </svg>
+      <DiscourseScatterTooltip
+        points={points}
+        discourseComments={discourseComments}
+        w={w}
+        h={h}
+        scaleX={scaleX}
+        scaleY={scaleY}
+        hovered={hovered}
+        setHovered={setHovered}
+        pos={pos}
+        setPos={setPos}
+      />
+    </div>
+  );
+}
 
 // Lightweight k-means (k=4) on 2D points
 function kMeansClusters(
@@ -493,15 +720,15 @@ function UmapDensityContours({
               cx={scaleX(x)}
               cy={scaleY(y)}
               r={hovered === i ? 6 : 3}
-              style={{ opacity: 0.7 }}
+              style={{ opacity: 0.6 }}
               className="fill-primary/60 hover:fill-primary cursor-pointer transition-all duration-150"
             />
           );
         })}
-        {/* 3. Cluster labels */}
+        {/* 3. Cluster labels (offset above centroid, render above points) */}
         {useApiLabels
           ? (clusterLabels ?? []).map((cl, i) => (
-              <g key={i} transform={`translate(${scaleX(cl.x)},${scaleY(cl.y)})`}>
+              <g key={i} transform={`translate(${scaleX(cl.x)},${scaleY(cl.y) - 8})`}>
                 <rect
                   x={-60}
                   y={-8}
@@ -531,7 +758,7 @@ function UmapDensityContours({
               const cx = members.reduce((s, m) => s + m.x, 0) / members.length;
               const cy = members.reduce((s, m) => s + m.y, 0) / members.length;
               return (
-                <g key={c} transform={`translate(${scaleX(cx)},${scaleY(cy)})`}>
+                <g key={c} transform={`translate(${scaleX(cx)},${scaleY(cy) - 8})`}>
                   <rect
                     x={-60}
                     y={-8}
@@ -592,62 +819,65 @@ export function YoutubeDiscourseMaps({
 }) {
   const hasPca = pointsPca.length > 0;
   const hasUmap = pointsUmap.length > 0;
+  const { ref: densityRef, width: densityWidth } = useContainerWidth();
 
   if (!hasPca && !hasUmap) return null;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {hasPca && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium">Discourse map (TF-IDF + PCA)</h3>
-          <p className="text-xs text-muted-foreground">
-            Each point represents one comment. Points closer together share similar vocabulary.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            <span className="font-medium text-foreground/80">Axes:</span> X — Principal component 1 (largest variance direction). Y — Principal component 2.
-          </p>
-          <DiscourseScatter
-            points={pointsPca}
-            discourseComments={discourseComments}
-            w={CHART_WIDTH}
-            h={CHART_HEIGHT}
-            xLabel="Principal component 1"
-            yLabel="Principal component 2"
-          />
-        </div>
-      )}
+    <div className="space-y-6">
+      {/* Row 1: PCA | UMAP side-by-side */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {hasPca && (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              PCA projection of comment vectors.
+            </p>
+            <div style={{ marginTop: 12 }}>
+              <DiscourseScatter
+                points={pointsPca}
+                discourseComments={discourseComments}
+                w={CHART_WIDTH_GRID}
+                h={CHART_HEIGHT_PCA_UMAP}
+                xLabel="Principal component 1"
+                yLabel="Principal component 2"
+              />
+            </div>
+          </div>
+        )}
+        {hasUmap && (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              UMAP embedding preserving local semantic similarity.
+            </p>
+            <div style={{ marginTop: 12 }}>
+              <DiscourseScatter
+                points={pointsUmap}
+                discourseComments={discourseComments}
+                w={CHART_WIDTH_GRID}
+                h={CHART_HEIGHT_PCA_UMAP}
+                xLabel="UMAP dimension 1"
+                yLabel="UMAP dimension 2"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Row 2: Density UMAP full width */}
       {hasUmap && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium">Discourse map (TF-IDF + UMAP)</h3>
+        <div ref={densityRef} className="space-y-3 w-full">
           <p className="text-xs text-muted-foreground">
-            UMAP preserves local similarity between comments.
+            Density UMAP highlights regions where many comments use similar language.
           </p>
-          <p className="text-xs text-muted-foreground">
-            <span className="font-medium text-foreground/80">Axes:</span> X — UMAP dimension 1. Y — UMAP dimension 2. Note: UMAP axes are abstract coordinates rather than interpretable variables.
-          </p>
-          <DiscourseScatter
-            points={pointsUmap}
-            discourseComments={discourseComments}
-            w={CHART_WIDTH}
-            h={CHART_HEIGHT}
-            xLabel="UMAP dimension 1"
-            yLabel="UMAP dimension 2"
-          />
-        </div>
-      )}
-      {hasUmap && (
-        <div className="space-y-2 md:col-span-2">
-          <h3 className="text-sm font-medium">UMAP with density contours</h3>
-          <p className="text-xs text-muted-foreground">
-            Density contours highlight regions of similar comments. Cluster labels show the most frequent phrase in each k-means cluster (k=4).
-          </p>
-          <UmapDensityContours
-            points={pointsUmap}
-            discourseComments={discourseComments}
-            clusterLabels={clusterLabels}
-            w={CHART_WIDTH}
-            h={CHART_HEIGHT}
-          />
+          <div style={{ marginTop: 12 }}>
+            <DensityUmapScatter
+              points={pointsUmap}
+              discourseComments={discourseComments}
+              clusterLabels={clusterLabels}
+              w={densityWidth}
+              h={CHART_HEIGHT_DENSITY}
+            />
+          </div>
         </div>
       )}
     </div>

@@ -2004,7 +2004,7 @@ export default function StudyDetailPage() {
             <CardTitle className="text-base font-medium">YouTube discourse signals</CardTitle>
             <p className="text-sm text-muted-foreground">{study.description}</p>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-8">
             <section>
               <h3 className="text-sm font-medium mb-2">Average sentiment</h3>
               <p className="text-muted-foreground">
@@ -2061,7 +2061,10 @@ export default function StudyDetailPage() {
             </section>
             {((analysisData.points_pca?.length ?? 0) > 0 || (analysisData.points_umap?.length ?? 0) > 0) && (
               <section>
-                <h3 className="text-sm font-medium mb-3">Discourse maps</h3>
+                <h3 className="text-sm font-medium mb-2">Discourse structure</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Each point represents a comment. Proximity indicates similar language.
+                </p>
                 <YoutubeDiscourseMaps
                   pointsPca={analysisData.points_pca ?? []}
                   pointsUmap={analysisData.points_umap ?? []}
@@ -2077,10 +2080,16 @@ export default function StudyDetailPage() {
                   {analysisData.topics.map(([topic, count]) => (
                     <span
                       key={topic}
-                      className="text-xs rounded-full bg-muted px-2.5 py-1"
+                      className="text-xs"
+                      style={{
+                        background: "#f5f5f5",
+                        borderRadius: 8,
+                        padding: "4px 8px",
+                        fontSize: 12,
+                      }}
                       title={`${count} comments`}
                     >
-                      {topic.replace(/_/g, " ")}: {count}
+                      {topic.replace(/_/g, " ")} {count}
                     </span>
                   ))}
                 </div>
