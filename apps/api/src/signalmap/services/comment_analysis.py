@@ -902,19 +902,32 @@ def _cluster_hdbscan(
     return labels, stats, assignments
 
 
-def _compute_pca_points(X_dense, to_map: list, comments: list) -> list:
-    """PCA projection of embeddings (linear dimensionality reduction). Computed before UMAP."""
+def _compute_pca_points(
+    X_dense, to_map: list, comments: list,
+    title_phrase_stopwords: frozenset[str] | None = None,
+) -> tuple[list, list[dict], dict, list[int]]:
+    """PCA projection of embeddings (linear dimensionality reduction). Computed before UMAP.
+    Returns (points, cluster_labels, cluster_stats, cluster_assignments) using same labeling as TF-IDF."""
     from sklearn.decomposition import PCA
+    from sklearn.cluster import KMeans
     pca = PCA(n_components=2, random_state=42)
     coords_pca = pca.fit_transform(X_dense)
-    return [
-        {
-            "x": round(float(coords_pca[i][0]), 2),
-            "y": round(float(coords_pca[i][1]), 2),
-            "text": comments[i].get("comment_text", "") or to_map[i] or "",
-        }
+    points = [
+        [
+            round(float(coords_pca[i][0]), 2),
+            round(float(coords_pca[i][1]), 2),
+            i,
+        ]
         for i in range(len(to_map))
     ]
+    kmeans = KMeans(n_clusters=min(4, len(points)), random_state=0)
+    cluster_ids = kmeans.fit_predict(coords_pca)
+    cluster_labels_pca, cluster_stats_pca, cluster_assignments_pca = _cluster_labels_from_coords(
+        coords_pca, cluster_ids, comments, to_map,
+        title_phrase_stopwords=title_phrase_stopwords,
+        embeddings=None,
+    )
+    return points, cluster_labels_pca, cluster_stats_pca, cluster_assignments_pca
 
 
 _MINILM_MODEL = None
@@ -1276,6 +1289,9 @@ def analyze_comments(comments):
 
     discourse_comments = []
     points_pca = []
+    cluster_labels_pca: list[dict] = []
+    cluster_assignments_pca: list[int] = []
+    cluster_stats_pca: dict = {}
     points_tfidf = []
     points_minilm = []
     cluster_labels_tfidf: list[dict] = []
@@ -1301,9 +1317,14 @@ def analyze_comments(comments):
 
             # PCA (legacy) — compute early so it's not lost if UMAP/clustering fails
             try:
-                points_pca = _compute_pca_points(tfidf_embeddings, to_map, comments)
+                points_pca, cluster_labels_pca, cluster_stats_pca, cluster_assignments_pca = _compute_pca_points(
+                    tfidf_embeddings, to_map, comments, title_phrase_stopwords=title_phrase_stopwords,
+                )
             except Exception:
                 points_pca = []
+                cluster_labels_pca = []
+                cluster_assignments_pca = []
+                cluster_stats_pca = {}
 
             # Step 3: Run UMAP for each embedding (random_state=42)
             umap_tfidf = _run_umap(tfidf_embeddings)
@@ -1349,6 +1370,7 @@ def analyze_comments(comments):
     points_umap = points_tfidf
     cluster_labels = cluster_labels_tfidf
 
+    clusters_summary_pca = _clusters_summary(cluster_labels_pca, cluster_assignments_pca)
     clusters_summary_tfidf = _clusters_summary(cluster_labels_tfidf, cluster_assignments_tfidf)
     clusters_summary_hdbscan = _clusters_summary(cluster_labels_hdbscan, cluster_assignments_hdbscan)
     clusters_summary_minilm = _clusters_summary(cluster_labels_minilm, cluster_assignments_minilm)
@@ -1365,6 +1387,10 @@ def analyze_comments(comments):
         "trigrams_pmi": trigrams_pmi,
         "discourse_comments": discourse_comments,
         "points_pca": points_pca,
+        "cluster_labels_pca": cluster_labels_pca,
+        "cluster_assignments_pca": cluster_assignments_pca,
+        "cluster_stats_pca": cluster_stats_pca,
+        "clusters_summary_pca": clusters_summary_pca,
         "points_umap": points_umap,
         "points_tfidf": points_tfidf,
         "points_hdbscan": points_tfidf,  # same coords as TF-IDF

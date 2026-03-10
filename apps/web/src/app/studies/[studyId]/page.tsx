@@ -997,15 +997,19 @@ export default function StudyDetailPage() {
           points_hdbscan?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
           points_minilm?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
           cluster_labels?: Array<{ x: number; y: number; label: string }>;
+          cluster_labels_pca?: Array<{ x: number; y: number; label: string }>;
           cluster_labels_tfidf?: Array<{ x: number; y: number; label: string }>;
           cluster_labels_hdbscan?: Array<{ x: number; y: number; label: string }>;
           cluster_labels_minilm?: Array<{ x: number; y: number; label: string }>;
+          cluster_stats_pca?: { clusters: number; noise_count: number; total: number };
           cluster_stats_tfidf?: { clusters: number; noise_count: number; total: number };
           cluster_stats_hdbscan?: { clusters: number; noise_count: number; total: number };
           cluster_stats_minilm?: { clusters: number; noise_count: number; total: number };
+          cluster_assignments_pca?: number[];
           cluster_assignments_tfidf?: number[];
           cluster_assignments_hdbscan?: number[];
           cluster_assignments_minilm?: number[];
+          clusters_summary_pca?: Array<{ label: string; size: number; percent: number }>;
           clusters_summary_tfidf?: Array<{ label: string; size: number; percent: number }>;
           clusters_summary_hdbscan?: Array<{ label: string; size: number; percent: number }>;
           clusters_summary_minilm?: Array<{ label: string; size: number; percent: number }>;
@@ -2138,15 +2142,19 @@ export default function StudyDetailPage() {
                   pointsMinilm={analysisData.points_minilm ?? []}
                   discourseComments={analysisData.discourse_comments}
                   clusterLabels={analysisData.cluster_labels}
+                  clusterLabelsPca={analysisData.cluster_labels_pca}
                   clusterLabelsTfidf={analysisData.cluster_labels_tfidf ?? analysisData.cluster_labels}
                   clusterLabelsHdbscan={analysisData.cluster_labels_hdbscan}
                   clusterLabelsMinilm={analysisData.cluster_labels_minilm}
+                  clusterStatsPca={analysisData.cluster_stats_pca}
                   clusterStatsTfidf={analysisData.cluster_stats_tfidf}
                   clusterStatsHdbscan={analysisData.cluster_stats_hdbscan}
                   clusterStatsMinilm={analysisData.cluster_stats_minilm}
+                  clusterAssignmentsPca={analysisData.cluster_assignments_pca}
                   clusterAssignmentsTfidf={analysisData.cluster_assignments_tfidf}
                   clusterAssignmentsHdbscan={analysisData.cluster_assignments_hdbscan}
                   clusterAssignmentsMinilm={analysisData.cluster_assignments_minilm}
+                  clustersSummaryPca={analysisData.clusters_summary_pca}
                   clustersSummaryHdbscan={analysisData.clusters_summary_hdbscan}
                   clustersSummaryTfidf={analysisData.clusters_summary_tfidf}
                   clustersSummaryMinilm={analysisData.clusters_summary_minilm}

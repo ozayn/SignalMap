@@ -1461,15 +1461,19 @@ export function YoutubeDiscourseMaps({
   pointsMinilm,
   discourseComments,
   clusterLabels,
+  clusterLabelsPca,
   clusterLabelsTfidf,
   clusterLabelsHdbscan,
   clusterLabelsMinilm,
+  clusterStatsPca,
   clusterStatsTfidf,
   clusterStatsHdbscan,
   clusterStatsMinilm,
+  clusterAssignmentsPca,
   clusterAssignmentsTfidf,
   clusterAssignmentsHdbscan,
   clusterAssignmentsMinilm,
+  clustersSummaryPca,
   clustersSummaryHdbscan,
   clustersSummaryTfidf,
   clustersSummaryMinilm,
@@ -1481,15 +1485,19 @@ export function YoutubeDiscourseMaps({
   pointsMinilm?: DiscoursePoint[];
   discourseComments?: string[];
   clusterLabels?: Array<{ x: number; y: number; label: string; cluster_id?: number }>;
+  clusterLabelsPca?: Array<{ x: number; y: number; label: string; cluster_id?: number }>;
   clusterLabelsTfidf?: Array<{ x: number; y: number; label: string; cluster_id?: number }>;
   clusterLabelsHdbscan?: Array<{ x: number; y: number; label: string; cluster_id?: number }>;
   clusterLabelsMinilm?: Array<{ x: number; y: number; label: string; cluster_id?: number }>;
+  clusterStatsPca?: ClusterStats;
   clusterStatsTfidf?: ClusterStats;
   clusterStatsHdbscan?: ClusterStats;
   clusterStatsMinilm?: ClusterStats;
+  clusterAssignmentsPca?: number[];
   clusterAssignmentsTfidf?: number[];
   clusterAssignmentsHdbscan?: number[];
   clusterAssignmentsMinilm?: number[];
+  clustersSummaryPca?: ClusterSummaryItem[];
   clustersSummaryHdbscan?: ClusterSummaryItem[];
   clustersSummaryTfidf?: ClusterSummaryItem[];
   clustersSummaryMinilm?: ClusterSummaryItem[];
@@ -1498,6 +1506,13 @@ export function YoutubeDiscourseMaps({
     label: string;
     comments: string[];
   } | null>(null);
+
+  const pca: ModelVariant = {
+    points: pointsPca ?? [],
+    clusterLabels: clusterLabelsPca,
+    clusterAssignments: clusterAssignmentsPca,
+    clusterStats: clusterStatsPca,
+  };
 
   const tfidf: ModelVariant = {
     points: pointsTfidf ?? pointsUmap ?? [],
@@ -1651,15 +1666,20 @@ export function YoutubeDiscourseMaps({
             <p className="text-xs text-muted-foreground">
               PCA projection of comment vectors.
             </p>
+            {clusterStatsPca && <ClusterStatsLine stats={clusterStatsPca} />}
             <div style={{ marginTop: 12 }}>
               <DiscourseScatter
                 points={pointsPca ?? []}
                 discourseComments={discourseComments}
+                clusterLabels={pca.clusterLabels}
+                clusterAssignments={pca.clusterAssignments}
+                onPointClick={makeOnPointClick(pca)}
                 title="PCA projection of comment vectors"
                 w={CHART_WIDTH_GRID}
                 h={CHART_HEIGHT_PCA_UMAP}
                 xLabel="Principal component 1"
                 yLabel="Principal component 2"
+                colorPalette={PALETTE_KMEANS}
               />
             </div>
           </div>
