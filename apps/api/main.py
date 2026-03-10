@@ -32,6 +32,7 @@ from signalmap.connectors.youtube import fetch_channel, test_youtube_api
 from signalmap.services.comment_analysis import (
     analyze_comments,
     compute_cluster_labels_from_umap,
+    load_cached_dataset,
     load_cached_snapshot,
 )
 from signalmap.sources.youtube_comments import get_channel_videos, get_video_comments
@@ -1218,7 +1219,19 @@ def _run_youtube_comment_analysis(
         "discourse_comments": analysis.get("discourse_comments", []),
         "points_pca": analysis["points_pca"],
         "points_umap": analysis["points_umap"],
+        "points_tfidf": analysis.get("points_tfidf", analysis.get("points_umap", [])),
+        "points_hdbscan": analysis.get("points_hdbscan", analysis.get("points_umap", [])),
+        "points_minilm": analysis.get("points_minilm", []),
         "cluster_labels": analysis.get("cluster_labels", []),
+        "cluster_labels_tfidf": analysis.get("cluster_labels_tfidf", analysis.get("cluster_labels", [])),
+        "cluster_labels_hdbscan": analysis.get("cluster_labels_hdbscan", []),
+        "cluster_labels_minilm": analysis.get("cluster_labels_minilm", []),
+        "cluster_assignments_tfidf": analysis.get("cluster_assignments_tfidf", []),
+        "cluster_assignments_hdbscan": analysis.get("cluster_assignments_hdbscan", []),
+        "cluster_assignments_minilm": analysis.get("cluster_assignments_minilm", []),
+        "cluster_stats_tfidf": analysis.get("cluster_stats_tfidf", {}),
+        "cluster_stats_hdbscan": analysis.get("cluster_stats_hdbscan", {}),
+        "cluster_stats_minilm": analysis.get("cluster_stats_minilm", {}),
         "comments": analysis["comments"],
     }
 
@@ -1256,6 +1269,57 @@ def youtube_channel_refresh_analysis(body: RefreshAnalysisBody):
         raise HTTPException(status_code=502, detail=str(e))
 
 
+def _recompute_from_cached_dataset(cache_dict: dict, cid: str) -> dict | None:
+    """
+    Load comments from cache and recompute embeddings and clustering.
+    Does NOT modify the cache. Returns full analysis result or None.
+    """
+    dataset = load_cached_dataset(cache_dict)
+    if not dataset or not dataset.get("comments"):
+        return None
+    comments = dataset["comments"]
+    videos = dataset.get("videos", [])
+    analysis = analyze_comments(comments)
+    return {
+        "channel_id": cid,
+        "channel_name": cache_dict.get("channel_name"),
+        "channel_owner": cache_dict.get("channel_owner"),
+        "channel_title": cache_dict.get("channel_title"),
+        "videos_analyzed": cache_dict.get("videos_analyzed", len(videos)),
+        "videos": cache_dict.get("videos", videos),
+        "comments_analyzed": len(comments),
+        "total_comments": len(comments),
+        "time_range": cache_dict.get("time_range"),
+        "time_period_start": cache_dict.get("time_period_start"),
+        "time_period_end": cache_dict.get("time_period_end"),
+        "language": cache_dict.get("language", "Persian"),
+        "avg_sentiment": analysis["avg_sentiment"],
+        "top_words": analysis["top_words"],
+        "topics": analysis["topics"],
+        "trigrams": analysis.get("trigrams", []),
+        "bigrams_pmi": analysis.get("bigrams_pmi", []),
+        "trigrams_pmi": analysis.get("trigrams_pmi", []),
+        "discourse_comments": analysis.get("discourse_comments", []),
+        "points_pca": analysis["points_pca"],
+        "points_umap": analysis["points_umap"],
+        "points_tfidf": analysis.get("points_tfidf", analysis.get("points_umap", [])),
+        "points_hdbscan": analysis.get("points_hdbscan", analysis.get("points_umap", [])),
+        "points_minilm": analysis.get("points_minilm", []),
+        "cluster_labels": analysis.get("cluster_labels", []),
+        "cluster_labels_tfidf": analysis.get("cluster_labels_tfidf", analysis.get("cluster_labels", [])),
+        "cluster_labels_hdbscan": analysis.get("cluster_labels_hdbscan", []),
+        "cluster_labels_minilm": analysis.get("cluster_labels_minilm", []),
+        "cluster_assignments_tfidf": analysis.get("cluster_assignments_tfidf", []),
+        "cluster_assignments_hdbscan": analysis.get("cluster_assignments_hdbscan", []),
+        "cluster_assignments_minilm": analysis.get("cluster_assignments_minilm", []),
+        "cluster_stats_tfidf": analysis.get("cluster_stats_tfidf", {}),
+        "cluster_stats_hdbscan": analysis.get("cluster_stats_hdbscan", {}),
+        "cluster_stats_minilm": analysis.get("cluster_stats_minilm", {}),
+        "comments": analysis["comments"],
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @app.get("/api/youtube/channel/comment-analysis")
 def youtube_channel_comment_analysis(
     channel_id: Optional[str] = Query(None, description="YouTube channel ID"),
@@ -1263,7 +1327,7 @@ def youtube_channel_comment_analysis(
     videos_limit: int = Query(5, ge=1, le=50, description="Max videos to analyze"),
     comments_per_video: int = Query(30, ge=1, le=100, description="Max comments per video"),
 ):
-    """Collect comments from recent videos of a YouTube channel and run analysis. Uses 24h cache when available."""
+    """Collect comments from recent videos of a YouTube channel and run analysis. Uses cached comments when available; embeddings and clustering are always recomputed."""
     try:
         if channel_id and channel_id.strip():
             cid = channel_id.strip()
@@ -1272,34 +1336,33 @@ def youtube_channel_comment_analysis(
         else:
             raise HTTPException(status_code=422, detail="Either channel_id or identifier is required.")
 
+        # Try DB cache: load comments, recompute embeddings (do not use cached points)
         cache = get_cached_youtube_comment_analysis(cid)
         if cache:
-            out = dict(cache["analysis_json"])
-            out["videos_analyzed"] = cache["videos_analyzed"]
-            out["comments_analyzed"] = cache["comments_analyzed"]
-            out["computed_at"] = cache["computed_at"]
-            # Backfill cluster_labels if missing (e.g. cache from before labels were added)
-            if not out.get("cluster_labels") and out.get("points_umap") and out.get("comments"):
-                out["cluster_labels"] = compute_cluster_labels_from_umap(
-                    out["points_umap"],
-                    out["comments"],
-                )
-            return out
+            cache_dict = dict(cache["analysis_json"])
+            cache_dict["videos_analyzed"] = cache["videos_analyzed"]
+            cache_dict["comments_analyzed"] = cache["comments_analyzed"]
+            out = _recompute_from_cached_dataset(cache_dict, cid)
+            if out:
+                out["videos_analyzed"] = cache["videos_analyzed"]
+                out["comments_analyzed"] = cache["comments_analyzed"]
+                return out
 
+        # Try file cache: load comments, recompute embeddings (do not modify cache file)
         snapshot = load_cached_snapshot(cid)
         if snapshot:
-            if not snapshot.get("cluster_labels") and snapshot.get("points_umap") and snapshot.get("comments"):
-                snapshot["cluster_labels"] = compute_cluster_labels_from_umap(
-                    snapshot["points_umap"],
-                    snapshot["comments"],
-                )
-            return snapshot
+            out = _recompute_from_cached_dataset(snapshot, cid)
+            if out:
+                return out
 
+        # No cache: fetch from YouTube, run analysis, save to DB
         return _run_youtube_comment_analysis(cid, videos_limit, comments_per_video)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Comment analysis failed: {e}")
 
 
 @app.get("/api/youtube/channel/cache-first")

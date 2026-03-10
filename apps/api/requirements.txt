@@ -7,3 +7,5 @@ python-dotenv>=1.0.0
 textblob>=0.18.0
 scikit-learn>=1.0.0
 umap-learn>=0.5.0
+hdbscan>=0.8.33
+sentence-transformers>=2.2.0

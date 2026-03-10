@@ -389,8 +389,20 @@ export default function StudyDetailPage() {
     discourse_comments?: string[];
     points_pca?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
     points_umap?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
+    points_tfidf?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
+    points_hdbscan?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
+    points_minilm?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
     cluster_labels?: Array<{ x: number; y: number; label: string }>;
-    comments: Array<Record<string, unknown>>;
+    cluster_labels_tfidf?: Array<{ x: number; y: number; label: string }>;
+    cluster_labels_hdbscan?: Array<{ x: number; y: number; label: string }>;
+    cluster_labels_minilm?: Array<{ x: number; y: number; label: string }>;
+      cluster_stats_tfidf?: { clusters: number; noise_count: number; total: number };
+      cluster_stats_hdbscan?: { clusters: number; noise_count: number; total: number };
+      cluster_stats_minilm?: { clusters: number; noise_count: number; total: number };
+      cluster_assignments_tfidf?: number[];
+      cluster_assignments_hdbscan?: number[];
+      cluster_assignments_minilm?: number[];
+      comments: Array<Record<string, unknown>>;
   } | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -977,7 +989,19 @@ export default function StudyDetailPage() {
       discourse_comments?: string[];
       points_pca?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
       points_umap?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
+      points_tfidf?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
+      points_hdbscan?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
+      points_minilm?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
       cluster_labels?: Array<{ x: number; y: number; label: string }>;
+      cluster_labels_tfidf?: Array<{ x: number; y: number; label: string }>;
+      cluster_labels_hdbscan?: Array<{ x: number; y: number; label: string }>;
+      cluster_labels_minilm?: Array<{ x: number; y: number; label: string }>;
+      cluster_stats_tfidf?: { clusters: number; noise_count: number; total: number };
+      cluster_stats_hdbscan?: { clusters: number; noise_count: number; total: number };
+      cluster_stats_minilm?: { clusters: number; noise_count: number; total: number };
+      cluster_assignments_tfidf?: number[];
+      cluster_assignments_hdbscan?: number[];
+      cluster_assignments_minilm?: number[];
       comments: Array<Record<string, unknown>>;
     }>("/api/youtube/channel/comment-analysis?channel_id=UChWB95_-n9rUc3H9srsn9bQ")
       .then((res) => {
@@ -2059,17 +2083,32 @@ export default function StudyDetailPage() {
                 {analysisData.comments_analyzed ?? analysisData.total_comments ?? 0} comments
               </p>
             </section>
-            {((analysisData.points_pca?.length ?? 0) > 0 || (analysisData.points_umap?.length ?? 0) > 0) && (
+            {((analysisData.points_pca?.length ?? 0) > 0 ||
+              (analysisData.points_umap?.length ?? 0) > 0 ||
+              (analysisData.points_tfidf?.length ?? 0) > 0 ||
+              (analysisData.points_minilm?.length ?? 0) > 0) && (
               <section>
                 <h3 className="text-sm font-medium mb-2">Discourse structure</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Each point represents a comment. Proximity indicates similar language.
+                  Each point represents a comment. Proximity indicates similar language. Compare model variants below.
                 </p>
                 <YoutubeDiscourseMaps
                   pointsPca={analysisData.points_pca ?? []}
                   pointsUmap={analysisData.points_umap ?? []}
+                  pointsTfidf={analysisData.points_tfidf ?? analysisData.points_umap ?? []}
+                  pointsHdbscan={analysisData.points_hdbscan ?? analysisData.points_umap ?? []}
+                  pointsMinilm={analysisData.points_minilm ?? []}
                   discourseComments={analysisData.discourse_comments}
                   clusterLabels={analysisData.cluster_labels}
+                  clusterLabelsTfidf={analysisData.cluster_labels_tfidf ?? analysisData.cluster_labels}
+                  clusterLabelsHdbscan={analysisData.cluster_labels_hdbscan}
+                  clusterLabelsMinilm={analysisData.cluster_labels_minilm}
+                  clusterStatsTfidf={analysisData.cluster_stats_tfidf}
+                  clusterStatsHdbscan={analysisData.cluster_stats_hdbscan}
+                  clusterStatsMinilm={analysisData.cluster_stats_minilm}
+                  clusterAssignmentsTfidf={analysisData.cluster_assignments_tfidf}
+                  clusterAssignmentsHdbscan={analysisData.cluster_assignments_hdbscan}
+                  clusterAssignmentsMinilm={analysisData.cluster_assignments_minilm}
                 />
               </section>
             )}

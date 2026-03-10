@@ -1,12 +1,19 @@
 # -*- coding: utf-8 -*-
 import json
+import logging
 import math
 import re
+import threading
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 from collections import Counter
 from textblob import TextBlob
 
 # Lazy imports for sklearn/umap to speed up API startup (healthcheck passes faster)
+
+# Serialize UMAP execution to avoid Numba "Concurrent access" errors when multiple requests run
+_umap_lock = threading.Lock()
 
 
 def load_cached_snapshot(channel_id: str) -> dict | None:
@@ -19,10 +26,51 @@ def load_cached_snapshot(channel_id: str) -> dict | None:
     return None
 
 
+def load_cached_dataset(cache_dict: dict) -> dict | None:
+    """
+    Extract comments and video metadata from a cache snapshot.
+    Used to reuse cached data while recomputing embeddings and clustering.
+    Does NOT modify the cache. Returns None if no comments.
+    """
+    comments = cache_dict.get("comments")
+    if not comments or not isinstance(comments, list):
+        return None
+    return {
+        "comments": comments,
+        "videos": cache_dict.get("videos", []),
+    }
+
+
 def load_persian_stopwords():
     path = Path(__file__).parent.parent / "data" / "persian_stopwords.txt"
-    with open(path, encoding="utf-8") as f:
-        return {line.strip() for line in f if line.strip()}
+    if path.exists():
+        with open(path, encoding="utf-8") as f:
+            return {line.strip() for line in f if line.strip()}
+    return set()
+
+
+# Curated base Persian stopwords (prepositions, pronouns, common verbs, adverbs)
+PERSIAN_BASE_STOPWORDS = {
+    "و", "در", "به", "از", "که", "این", "آن", "با", "برای", "تا", "یا", "اما",
+    "اگر", "هم", "همه", "هر", "هیچ", "چند", "چرا", "چطور", "کجا", "کی",
+    "من", "تو", "او", "ما", "شما", "آنها", "ایشان",
+    "است", "هست", "بود", "بودند", "بوده", "باشه", "باشید", "باشد",
+    "شد", "شده", "میشود", "میشه", "می‌شود", "شود",
+    "کرد", "کرده", "کردند", "میکرد", "میکردند",
+    "میکنم", "میکنی", "میکنه", "میکنیم", "میکنن",
+    "دارم", "داری", "داره", "داریم", "دارید", "دارند",
+    "میدانم", "میدانی", "میداند", "میدانیم", "میدانید", "میدانند",
+    "میدونم", "میدونی", "میدونه", "میدونیم", "میدونید", "میدونن",
+    "گفت", "گفته", "میگوید", "میگه",
+    "باید", "میتوان", "میتونه", "نمیتوان", "نمیشه",
+    "خیلی", "زیاد", "کم", "دیگه", "الان", "قبلا", "بعد", "قبل",
+    "چیزی", "کسی", "چند", "چنین", "همین", "همان",
+    "واقعا", "اصلا", "تقریبا",
+    "سلام", "مرسی", "ممنون", "تشکر",
+}
+
+# Merge file-loaded stopwords with curated base
+PERSIAN_STOPWORDS = load_persian_stopwords().union(PERSIAN_BASE_STOPWORDS)
 
 
 TOPIC_KEYWORDS = {
@@ -74,8 +122,6 @@ STOPWORDS = {
     "this", "be", "are", "was", "at", "as", "an", "or", "by", "from"
 }
 
-PERSIAN_STOPWORDS = load_persian_stopwords()
-
 CUSTOM_STOPWORDS = {
     "مثلا", "مثل", "ولی", "اما", "بعد", "چرا", "باید", "فکر", "بسیار",
     "واقعا", "خیلی", "حتما", "اصلا", "دقیقا", "احتمالا", "فقط", "البته",
@@ -92,6 +138,7 @@ CUSTOM_STOPWORDS = {
     "لطفا", "آقای", "ممنون", "درود",
     "علی", "بندری", "ویدیو", "کانال", "اپیزود", "پادکست",
     "thank", "you",
+    "these", "nativity", "scene",
 }
 CUSTOM_STOPWORDS.update({
     "های", "داره", "درست", "سال", "توی", "دست", "نمی",
@@ -108,6 +155,21 @@ CUSTOM_STOPWORDS.update({
     "عزیز", "عده", "داشتم",
     "گرم", "برامون", "گفتی", "داری",
 })
+CUSTOM_STOPWORDS.update([
+    "میکنم",
+    "میکنی",
+    "میکنه",
+    "میکنیم",
+    "میکنن",
+    "میدونم",
+    "میدونی",
+    "میدونه",
+    "میکنید",
+    "میکند",
+    "می‌کند",
+    "می‌کنه",
+    "می‌کنیم",
+])
 
 CHANNEL_STOPWORDS = {
     "ویدئو",
@@ -137,6 +199,10 @@ PHRASE_STOPWORDS.update({
     "thank you",
     "مرسی",
     "دمت گرم علی",
+})
+PHRASE_STOPWORDS.update({
+    "these nativitiy scene",
+    "these nativity scene",
 })
 
 PRAISE_WORDS = {
@@ -177,6 +243,8 @@ def tokenize(text: str):
     for w in tokens:
         if w.startswith("ایران"):
             w = "ایران"
+        if any(c.isdigit() for c in w):
+            continue  # skip timestamps, numbers
         if w not in ALL_STOPWORDS and len(w) > 2 and not looks_like_verb(w):
             result.append(w)
     return result
@@ -260,6 +328,39 @@ def _phrase_stopword_ratio(phrase: str) -> float:
     return bad_count / len(tokens)
 
 
+def _has_numeric_tokens(phrase: str) -> bool:
+    """Reject phrases/words that contain digits (e.g. timestamps like 31:29, 4430)."""
+    for t in phrase.split():
+        if any(c.isdigit() for c in t):
+            return True
+    return False
+
+
+def _is_mostly_ascii(phrase: str) -> bool:
+    """Reject labels that are predominantly ASCII letters (likely English)."""
+    letters = [c for c in phrase if c.isalpha()]
+    if not letters:
+        return False
+    ascii_count = sum(1 for c in letters if ord(c) < 128)
+    return ascii_count >= len(letters) / 2
+
+
+def _has_persian(phrase: str) -> bool:
+    """Require at least one Persian character (reject pure ASCII)."""
+    return any("\u0600" <= c <= "\u06FF" for c in phrase)
+
+
+def _valid_token(t: str) -> bool:
+    """Token passes: no digits, len>=3, not mixed-language."""
+    if not t or len(t) < 3:
+        return False
+    if any(c.isdigit() for c in t):
+        return False
+    if _is_mostly_ascii(t):
+        return False
+    return True
+
+
 def classify_comment_topics(tokens: list[str]) -> set[str]:
     topics = set()
     for topic, keywords in TOPIC_KEYWORDS.items():
@@ -270,30 +371,219 @@ def classify_comment_topics(tokens: list[str]) -> set[str]:
     return topics
 
 
+PRAISE_INDICATORS = frozenset({
+    "thank", "thanks", "great", "دمت", "مرسی", "خسته",
+})
+PRAISE_PHRASES = frozenset({"well done"})
+
+
+def _is_praise_cluster(comment_texts: list[str]) -> bool:
+    """Detect if cluster content is dominated by praise/appreciation.
+    Requires praise in a majority of comments, not just any occurrence."""
+    if not comment_texts:
+        return False
+    praise_count = 0
+    for t in comment_texts:
+        if not t or not isinstance(t, str):
+            continue
+        toks = t.lower().split()
+        tokens_set = set(toks)
+        bigrams = {f"{toks[i]} {toks[i+1]}" for i in range(len(toks) - 1)}
+        if (tokens_set & PRAISE_INDICATORS) or (bigrams & PRAISE_PHRASES):
+            praise_count += 1
+    return praise_count >= len(comment_texts) / 2
+
+
 def compute_cluster_label(comment_texts: list[str]) -> str:
-    """Extract most frequent meaningful phrase; fallback to most common word."""
-    word_counter = Counter()
-    bigram_counter = Counter()
-    trigram_counter = Counter()
+    """Extract cluster label using TF-IDF within cluster. Prefer bigrams.
+    Rules: no digits, len>=3 per token, no mixed-language, prefer bigrams."""
+    if _is_praise_cluster(comment_texts):
+        return "praise / appreciation"
+
+    N = len([t for t in comment_texts if t and isinstance(t, str)])
+    if N < 1:
+        return "(cluster)"
+
+    # Build per-document token lists
+    doc_tokens: list[list[str]] = []
+
     for text in comment_texts:
         if not text or not isinstance(text, str):
             continue
-        tokens = tokenize(text)
-        word_counter.update(tokens)
-        bigram_counter.update(generate_bigrams(tokens))
-        trigram_counter.update(generate_trigrams(tokens))
-    # Priority: trigram (≥2) > bigram (≥2) > most frequent meaningful word
-    for phrase, count in trigram_counter.most_common():
-        if count >= 2 and phrase not in PHRASE_STOPWORDS and _phrase_stopword_ratio(phrase) <= 0.5:
-            return _dedupe_phrase(phrase)
-    for phrase, count in bigram_counter.most_common():
-        if count >= 2 and phrase not in PHRASE_STOPWORDS and phrase not in CHANNEL_STOPWORDS and _phrase_stopword_ratio(phrase) <= 0.5:
-            return _dedupe_phrase(phrase)
-    if word_counter:
-        word, _ = word_counter.most_common(1)[0]
-        if word:
-            return word
+        tokens = [t for t in tokenize(text) if _valid_token(t)]
+        doc_tokens.append(tokens)
+
+    def _accept_phrase(phrase: str) -> bool:
+        if not phrase or phrase in PHRASE_STOPWORDS or phrase in CHANNEL_STOPWORDS:
+            return False
+        if _has_numeric_tokens(phrase) or _is_mostly_ascii(phrase) or not _has_persian(phrase):
+            return False
+        for t in phrase.split():
+            if not _valid_token(t):
+                return False
+        if _phrase_stopword_ratio(phrase) > 0.5:
+            return False
+        return True
+
+    # Build phrase TF (total count) and DF (documents containing phrase)
+    phrase_tf: dict[str, int] = {}
+    for toks in doc_tokens:
+        for i in range(len(toks) - 1):
+            bg = f"{toks[i]} {toks[i+1]}"
+            if _accept_phrase(bg):
+                phrase_tf[bg] = phrase_tf.get(bg, 0) + 1
+        for w in toks:
+            if _accept_phrase(w):
+                phrase_tf[w] = phrase_tf.get(w, 0) + 1
+
+    phrase_df: dict[str, int] = {}
+    for phrase in phrase_tf:
+        parts = phrase.split()
+        df = 0
+        for toks in doc_tokens:
+            found = False
+            if len(parts) == 1:
+                found = phrase in toks
+            else:
+                for i in range(len(toks) - len(parts) + 1):
+                    if toks[i : i + len(parts)] == parts:
+                        found = True
+                        break
+            if found:
+                df += 1
+        phrase_df[phrase] = df
+
+    def _score(phrase: str) -> float:
+        tf = phrase_tf.get(phrase, 0)
+        df = phrase_df.get(phrase, 0)
+        if tf == 0:
+            return 0.0
+        return tf * math.log(N / (df + 1) + 1)
+
+    # Prefer bigrams: collect from phrase_tf (already filtered)
+    candidates: list[tuple[str, float]] = []
+    for phrase in phrase_tf:
+        score = _score(phrase)
+        if score > 0:
+            candidates.append((phrase, score))
+
+    # Sort: bigrams first (by score), then unigrams
+    def _key(item: tuple[str, float]) -> tuple[int, float]:
+        is_bigram = 1 if " " in item[0] else 0
+        return (-is_bigram, -item[1])  # bigrams first, then by score desc
+
+    candidates.sort(key=_key)
+    if candidates:
+        label = _dedupe_phrase(candidates[0][0])[:40]
+        if not _has_numeric_tokens(label):
+            return label
     return "(cluster)"
+
+
+def _compute_tfidf_embeddings(to_map: list[str]):
+    """Step 2: Compute TF-IDF embeddings from comment texts."""
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    vectorizer = TfidfVectorizer(
+        max_features=200,
+        token_pattern=r"(?u)\b[\u0600-\u06FF]+\b"
+    )
+    X = vectorizer.fit_transform(to_map)
+    return X.toarray()
+
+
+def _run_umap(embeddings, random_state: int = 42):
+    """Step 3: Run UMAP with fixed seed. Returns 2D coords or None. Uses lock to avoid Numba concurrent access."""
+    import umap
+    with _umap_lock:
+        reducer = umap.UMAP(
+            n_components=2,
+            n_neighbors=15,
+            min_dist=0.3,
+            metric="cosine",
+            random_state=random_state,
+        )
+        return reducer.fit_transform(embeddings)
+
+
+def _cluster_kmeans(coords, comments: list, to_map: list) -> tuple[list[dict], dict, list[int]]:
+    """Step 4: KMeans clustering for TF-IDF pipeline. Returns (labels, stats, cluster_assignments)."""
+    from sklearn.cluster import KMeans
+    kmeans = KMeans(n_clusters=4, random_state=0)
+    cluster_ids = kmeans.fit_predict(coords)
+    labels, stats, assignments = _cluster_labels_from_coords(coords, cluster_ids, comments, to_map)
+    return labels, stats, assignments
+
+
+def _cluster_hdbscan(coords, comments: list, to_map: list, min_cluster_size: int = 8) -> tuple[list[dict], dict, list[int]]:
+    """Step 4: HDBSCAN clustering. Returns (labels, stats, cluster_assignments)."""
+    import hdbscan
+    clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, min_samples=min(min_cluster_size // 2, 4))
+    cluster_ids = clusterer.fit_predict(coords)
+    labels, stats, assignments = _cluster_labels_from_coords(coords, cluster_ids, comments, to_map)
+    return labels, stats, assignments
+
+
+def _compute_pca_points(X_dense, to_map: list, comments: list) -> list:
+    """PCA projection of embeddings (linear dimensionality reduction). Computed before UMAP."""
+    from sklearn.decomposition import PCA
+    pca = PCA(n_components=2, random_state=42)
+    coords_pca = pca.fit_transform(X_dense)
+    return [
+        {
+            "x": round(float(coords_pca[i][0]), 2),
+            "y": round(float(coords_pca[i][1]), 2),
+            "text": comments[i].get("comment_text", "") or to_map[i] or "",
+        }
+        for i in range(len(to_map))
+    ]
+
+
+def _compute_minilm_embeddings(to_map: list, comments: list):
+    """Step 2: Compute MiniLM sentence transformer embeddings."""
+    try:
+        from sentence_transformers import SentenceTransformer
+        model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+        raw_texts = [comments[i].get("comment_text", "") or to_map[i] or "" for i in range(len(to_map))]
+        return model.encode(raw_texts)
+    except Exception as e:
+        log.warning("MiniLM embeddings failed: %s", e)
+        return None
+
+
+def _cluster_labels_from_coords(
+    coords: list,
+    cluster_ids: list,
+    comments: list,
+    to_map: list,
+) -> tuple[list[dict], dict, list[int]]:
+    """Build cluster labels from coords and cluster assignments. Handles HDBSCAN (-1 = noise).
+    Returns (labels, stats, cluster_assignments) where stats has clusters, noise_count, total."""
+    clusters: dict[int, list[int]] = {}
+    noise_count = 0
+    for i, cid in enumerate(cluster_ids):
+        if cid < 0:
+            noise_count += 1
+            continue
+        if cid not in clusters:
+            clusters[cid] = []
+        clusters[cid].append(i)
+    total = len(cluster_ids)
+    result = []
+    for cid, indices in sorted(clusters.items()):
+        if not indices:
+            continue
+        comment_texts = [
+            comments[i].get("comment_text", "")
+            for i in indices
+            if i < len(comments)
+        ]
+        label = compute_cluster_label(comment_texts)
+        x = float(sum(coords[i][0] for i in indices) / len(indices))
+        y = float(sum(coords[i][1] for i in indices) / len(indices))
+        result.append({"x": round(x, 2), "y": round(y, 2), "label": label, "cluster_id": int(cid)})
+    stats = {"clusters": len(result), "noise_count": noise_count, "total": total}
+    cluster_assignments = [int(cid) for cid in cluster_ids]
+    return result, stats, cluster_assignments
 
 
 def _point_to_xy(p) -> tuple[float, float] | None:
@@ -416,7 +706,7 @@ def analyze_comments(comments):
     if sentiments:
         avg_sentiment = sum(sentiments) / len(sentiments)
 
-    # 2D discourse map
+    # 2D discourse maps: recompute embeddings and clustering from cached comments
     clean_comments = []
     for c in comments:
         tokens = tokenize(c.get("comment_text", ""))
@@ -424,73 +714,70 @@ def analyze_comments(comments):
 
     discourse_comments = []
     points_pca = []
-    points_umap = []
-    cluster_labels: list[dict] = []
+    points_tfidf = []
+    points_minilm = []
+    cluster_labels_tfidf: list[dict] = []
+    cluster_labels_hdbscan: list[dict] = []
+    cluster_labels_minilm: list[dict] = []
+    cluster_assignments_tfidf: list[int] = []
+    cluster_assignments_hdbscan: list[int] = []
+    cluster_assignments_minilm: list[int] = []
+    cluster_stats_tfidf: dict = {}
+    cluster_stats_hdbscan: dict = {}
+    cluster_stats_minilm: dict = {}
     MAX_DISCOURSE = 500  # cap for TF-IDF to keep response fast
     to_map = clean_comments[:MAX_DISCOURSE] if len(clean_comments) > MAX_DISCOURSE else clean_comments
+
     if len(to_map) >= 2:
         try:
-            from sklearn.feature_extraction.text import TfidfVectorizer
-            from sklearn.decomposition import PCA
-            from sklearn.cluster import KMeans
-            import umap
-            vectorizer = TfidfVectorizer(
-                max_features=200,
-                token_pattern=r"(?u)\b[\u0600-\u06FF]+\b"
-            )
-            X = vectorizer.fit_transform(to_map)
-            X_dense = X.toarray()
+            # Step 2: Compute TF-IDF embeddings
+            tfidf_embeddings = _compute_tfidf_embeddings(to_map)
+            if tfidf_embeddings is None:
+                raise ValueError("TF-IDF failed")
 
-            # PCA projection
-            pca = PCA(n_components=2)
-            coords_pca = pca.fit_transform(X_dense)
-            for i, _ in enumerate(to_map):
-                display_text = (comments[i].get("comment_text", "") or to_map[i] or "")[:120]
-                display_text = display_text.strip() or "(no text)"
-                discourse_comments.append(display_text)
-                x = round(float(coords_pca[i][0]), 2)
-                y = round(float(coords_pca[i][1]), 2)
-                points_pca.append([x, y, i])
+            # PCA (legacy) — compute early so it's not lost if UMAP/clustering fails
+            try:
+                points_pca = _compute_pca_points(tfidf_embeddings, to_map, comments)
+            except Exception:
+                points_pca = []
 
-            # UMAP projection
-            reducer = umap.UMAP(
-                n_components=2,
-                n_neighbors=15,
-                min_dist=0.3,
-                metric="cosine",
-                random_state=42,
-            )
-            coords_umap = reducer.fit_transform(X_dense)
-            for i, _ in enumerate(to_map):
-                x = round(float(coords_umap[i][0]), 2)
-                y = round(float(coords_umap[i][1]), 2)
-                points_umap.append([x, y, i])
+            # Step 3: Run UMAP for each embedding (random_state=42)
+            umap_tfidf = _run_umap(tfidf_embeddings)
+            if umap_tfidf is not None:
+                for i, _ in enumerate(to_map):
+                    display_text = (comments[i].get("comment_text", "") or to_map[i] or "")[:120]
+                    display_text = display_text.strip() or "(no text)"
+                    discourse_comments.append(display_text)
+                    x = round(float(umap_tfidf[i][0]), 2)
+                    y = round(float(umap_tfidf[i][1]), 2)
+                    points_tfidf.append([x, y, i])
 
-            # K-means clustering and cluster labels
-            k = 4
-            kmeans = KMeans(n_clusters=k, random_state=0)
-            cluster_ids = kmeans.fit_predict(coords_umap)
-            clusters = {i: [] for i in range(k)}
-            for i, cid in enumerate(cluster_ids):
-                clusters[cid].append(i)
-            cluster_labels = []
-            for cid in range(k):
-                indices = clusters[cid]
-                if not indices:
-                    continue
-                comment_texts = [
-                    comments[i].get("comment_text", "")
-                    for i in indices
-                    if i < len(comments)
-                ]
-                label = compute_cluster_label(comment_texts)
-                x = float(sum(coords_umap[i][0] for i in indices) / len(indices))
-                y = float(sum(coords_umap[i][1] for i in indices) / len(indices))
-                cluster_labels.append({"x": round(x, 2), "y": round(y, 2), "label": label})
+                # Step 4: Run clustering for TF-IDF pipeline
+                cluster_labels_tfidf, cluster_stats_tfidf, cluster_assignments_tfidf = _cluster_kmeans(umap_tfidf, comments, to_map)
+                cluster_labels_hdbscan, cluster_stats_hdbscan, cluster_assignments_hdbscan = _cluster_hdbscan(umap_tfidf, comments, to_map)
+
         except Exception:
-            cluster_labels = []
-    else:
-        cluster_labels = []
+            pass
+
+        # MiniLM in its own try so TF-IDF failures don't block it
+        try:
+            minilm_embeddings = _compute_minilm_embeddings(to_map, comments)
+            if minilm_embeddings is not None:
+                umap_minilm = _run_umap(minilm_embeddings)
+                if umap_minilm is not None:
+                    for i, _ in enumerate(to_map):
+                        x = round(float(umap_minilm[i][0]), 2)
+                        y = round(float(umap_minilm[i][1]), 2)
+                        points_minilm.append([x, y, i])
+                    cluster_labels_minilm, cluster_stats_minilm, cluster_assignments_minilm = _cluster_hdbscan(
+                        umap_minilm, comments, to_map, min_cluster_size=5
+                    )
+        except Exception as e:
+            log.warning("MiniLM pipeline failed: %s", e)
+
+    # Backward compatibility: points_umap = points_tfidf, cluster_labels = cluster_labels_tfidf
+    points_umap = points_tfidf
+    cluster_labels = cluster_labels_tfidf
 
     return {
         "avg_sentiment": avg_sentiment,
@@ -502,6 +789,18 @@ def analyze_comments(comments):
         "discourse_comments": discourse_comments,
         "points_pca": points_pca,
         "points_umap": points_umap,
+        "points_tfidf": points_tfidf,
+        "points_hdbscan": points_tfidf,  # same coords as TF-IDF
+        "points_minilm": points_minilm,
         "cluster_labels": cluster_labels,
+        "cluster_labels_tfidf": cluster_labels_tfidf,
+        "cluster_labels_hdbscan": cluster_labels_hdbscan,
+        "cluster_labels_minilm": cluster_labels_minilm,
+        "cluster_assignments_tfidf": cluster_assignments_tfidf,
+        "cluster_assignments_hdbscan": cluster_assignments_hdbscan,
+        "cluster_assignments_minilm": cluster_assignments_minilm,
+        "cluster_stats_tfidf": cluster_stats_tfidf,
+        "cluster_stats_hdbscan": cluster_stats_hdbscan,
+        "cluster_stats_minilm": cluster_stats_minilm,
         "comments": comments
     }
