@@ -164,6 +164,10 @@ CUSTOM_STOPWORDS.update({
     "عزیز", "عده", "داشتم",
     "گرم", "برامون", "گفتی", "داری",
     "منفعل",  # passive — often in fragments like "منفعل منفعت"
+    "خواست",  # wanted — fragments like "شده خواست"
+    "رتاریخ",  # malformed (تاریخ with stray ر)
+    "مارچ",  # March — date fragment, not a topic
+    "هجمون",  # fragment — "منشی هجمون" is nonsensical
 })
 CUSTOM_STOPWORDS.update([
     "میکنم",
@@ -247,6 +251,7 @@ VERB_STOPWORDS = {
     "داشتند", "داشت", "دارند",
     "میگن", "میگه", "میکنه", "میکنن",
     "بود", "bood",  # was — fragments like "jalebi bood"
+    "خواست",  # wanted — fragments like "شده خواست"
 }
 
 # Verb endings that make a token unsuitable as label
