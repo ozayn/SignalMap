@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type DiscoursePoint = { x: number; y: number; text: string } | [number, number, number];
 
@@ -8,69 +8,362 @@ function getPointCoords(p: DiscoursePoint): { x: number; y: number } {
   return Array.isArray(p) ? { x: p[0], y: p[1] } : { x: p.x, y: p.y };
 }
 
-type LabelWithLayout = { x: number; y: number; label: string; cluster_id?: number; displayX: number; displayY: number };
+const LABEL_DIRECTIONS: [number, number][] = [
+  [1, 0],   // right
+  [-1, 0],  // left
+  [0, -1],  // up
+  [0, 1],   // down
+  [1, 1],
+  [-1, -1],
+  [1, -1],
+  [-1, 1],
+];
 
-function countPointsInCorner(
-  scaledPoints: Array<{ x: number; y: number }>,
-  corner: "tl" | "tr" | "bl" | "br",
-  w: number,
-  h: number,
-  pad: number
-): number {
-  const cx = w / 2;
-  const cy = h / 2;
-  return scaledPoints.filter((p) => {
-    if (corner === "tl") return p.x < cx && p.y < cy;
-    if (corner === "tr") return p.x >= cx && p.y < cy;
-    if (corner === "bl") return p.x < cx && p.y >= cy;
-    return p.x >= cx && p.y >= cy;
-  }).length;
+const LABEL_OVERLAP_OFFSETS_2D: [number, number][] = [
+  [0, 0],
+  [0, 0.06],
+  [0, -0.06],
+  [0.06, 0],
+  [-0.06, 0],
+  [0.06, 0.06],
+  [0.06, -0.06],
+  [-0.06, 0.06],
+  [-0.06, -0.06],
+  [0, 0.1],
+  [0, -0.1],
+  [0.1, 0],
+  [-0.1, 0],
+  [0.1, 0.1],
+  [0.1, -0.1],
+  [-0.1, 0.1],
+  [-0.1, -0.1],
+  [0.12, 0],
+  [0, 0.12],
+  [-0.12, 0],
+  [0, -0.12],
+  [0.12, 0.06],
+  [-0.12, 0.06],
+  [0.06, 0.12],
+  [0.06, -0.12],
+];
+const LABEL_OVERLAP_THRESHOLD = 0.12;
+const LABEL_BOUNDS_MARGIN = 0.05;
+
+function clampLabelBounds<
+  T extends { labelX: number; labelY: number }
+>(
+  layout: T[],
+  rangeX: number,
+  rangeY: number,
+  minX: number,
+  minY: number,
+  margin = LABEL_BOUNDS_MARGIN
+): T[] {
+  return layout.map((item) => {
+    const normX = (item.labelX - minX) / rangeX;
+    const normY = (item.labelY - minY) / rangeY;
+    const clampedNormX = Math.max(margin, Math.min(1 - margin, normX));
+    const clampedNormY = Math.max(margin, Math.min(1 - margin, normY));
+    return {
+      ...item,
+      labelX: minX + clampedNormX * rangeX,
+      labelY: minY + clampedNormY * rangeY,
+    };
+  });
 }
 
-function layoutLabelsInCorner(
-  labels: Array<{ x: number; y: number; label: string; cluster_id?: number }>,
-  scaleX: (v: number) => number,
-  scaleY: (v: number) => number,
-  w: number,
-  h: number,
-  pad: number,
-  scaledPoints: Array<{ x: number; y: number }>,
-  boxPad = 6
-): LabelWithLayout[] {
+function computeLabelLayoutOutsideCluster<
+  T extends { x: number; y: number; label: string; cluster_id?: number }
+>(
+  labels: T[],
+  points: Array<{ x: number; y: number }>,
+  assignments: number[] | null,
+  rangeX: number,
+  rangeY: number,
+  minX: number,
+  minY: number,
+  overlapThreshold = LABEL_OVERLAP_THRESHOLD
+): Array<T & { centroidX: number; centroidY: number; labelX: number; labelY: number }> {
   if (labels.length === 0) return [];
-  const boxH = 22;
-  const gap = 6;
-  const cornerMargin = 8;
-  const corners: Array<"tl" | "tr" | "bl" | "br"> = ["tl", "tr", "bl", "br"];
-  const counts = corners.map((c) => countPointsInCorner(scaledPoints, c, w, h, pad));
-  const corner = corners[counts.indexOf(Math.min(...counts))]!;
-  const sorted = [...labels].sort((a, b) => scaleY(a.y) - scaleY(b.y));
-  const result: LabelWithLayout[] = [];
-  const totalHeight = sorted.length * boxH + (sorted.length - 1) * gap;
+  const fallbackRadius = Math.max(rangeX, rangeY) * 0.05;
+  const placed: { x: number; y: number }[] = [];
 
-  let startX: number;
-  let startY: number;
-  if (corner === "tl") {
-    startX = pad + cornerMargin;
-    startY = pad + 20 + cornerMargin;
-  } else if (corner === "tr") {
-    startX = w - pad - cornerMargin;
-    startY = pad + 20 + cornerMargin;
-  } else if (corner === "bl") {
-    startX = pad + cornerMargin;
-    startY = h - pad - totalHeight - cornerMargin;
-  } else {
-    startX = w - pad - cornerMargin;
-    startY = h - pad - totalHeight - cornerMargin;
-  }
-
-  sorted.forEach((cl, i) => {
-    const textWidth = Math.max(40, cl.label.length * 7);
-    const boxW = textWidth + boxPad * 2;
-    const displayX = corner === "tl" || corner === "bl" ? startX + boxW / 2 : startX - boxW / 2;
-    const displayY = startY + boxH / 2 + i * (boxH + gap);
-    result.push({ ...cl, displayX, displayY });
+  const toNorm = (x: number, y: number) => ({
+    x: (x - minX) / rangeX,
+    y: (y - minY) / rangeY,
   });
+  const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+
+  return labels.map((cl) => {
+    const cx = cl.x;
+    const cy = cl.y;
+    const clusterId = (cl as { cluster_id?: number }).cluster_id ?? labels.indexOf(cl);
+
+    let radius = fallbackRadius;
+    if (assignments && assignments.length >= points.length) {
+      const clusterPoints = points.filter((_, i) => assignments[i] === clusterId);
+      if (clusterPoints.length > 0) {
+        radius = Math.max(
+          ...clusterPoints.map((p) => Math.sqrt((p.x - cx) ** 2 + (p.y - cy) ** 2))
+        );
+        if (radius < fallbackRadius * 0.5) radius = fallbackRadius;
+      }
+    }
+
+    const overlaps = (lx: number, ly: number) =>
+      placed.some((p) => dist(toNorm(lx, ly), toNorm(p.x, p.y)) < overlapThreshold);
+
+    const offset = radius * 1.2;
+    let labelX = cx + offset;
+    let labelY = cy;
+
+    for (let di = 0; di < LABEL_DIRECTIONS.length; di++) {
+      const [dx, dy] = LABEL_DIRECTIONS[di]!;
+      const tryX = cx + dx * offset;
+      const tryY = cy + dy * offset;
+      if (!overlaps(tryX, tryY)) {
+        labelX = tryX;
+        labelY = tryY;
+        break;
+      }
+    }
+    placed.push({ x: labelX, y: labelY });
+
+    return {
+      ...cl,
+      centroidX: cx,
+      centroidY: cy,
+      labelX,
+      labelY,
+    };
+  });
+}
+
+type LaidOutLabel = {
+  label: string;
+  cluster_id?: number;
+  centroidX: number;
+  centroidY: number;
+  labelX: number;
+  labelY: number;
+  displayX: number;
+  displayY: number;
+  centroidDisplayX: number;
+  centroidDisplayY: number;
+};
+
+function computeClusterLabelLayout(
+  labels: Array<{ x: number; y: number; label: string; cluster_id?: number }>,
+  points: Array<{ x: number; y: number }>,
+  assignments: number[] | null,
+  minX: number,
+  maxX: number,
+  minY: number,
+  maxY: number,
+  scaleX: (v: number) => number,
+  scaleY: (v: number) => number
+): LaidOutLabel[] {
+  if (!labels || labels.length === 0) return [];
+  const rangeX = maxX - minX || 1;
+  const rangeY = maxY - minY || 1;
+  let layout = computeLabelLayoutOutsideCluster(
+    labels,
+    points,
+    assignments,
+    rangeX,
+    rangeY,
+    minX,
+    minY
+  );
+  layout = resolveLabelOverlap(layout, rangeX, rangeY, minX, minY);
+  layout = clampLabelBounds(layout, rangeX, rangeY, minX, minY);
+  return layout.map((item) => ({
+    ...item,
+    displayX: scaleX(item.labelX),
+    displayY: scaleY(item.labelY),
+    centroidDisplayX: scaleX(item.centroidX),
+    centroidDisplayY: scaleY(item.centroidY),
+  }));
+}
+
+function ClusterLabels({
+  laidOutLabels,
+  colorPalette = PALETTE_KMEANS,
+  filterId = "scatterLabelShadow",
+}: {
+  laidOutLabels: LaidOutLabel[];
+  colorPalette?: string[];
+  filterId?: string;
+}) {
+  const [overrides, setOverrides] = useState<Record<number, { displayX: number; displayY: number }>>({});
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number; labelX: number; labelY: number } | null>(null);
+  const captureTargetRef = useRef<SVGElement | null>(null);
+
+  const layoutKey = useMemo(() => laidOutLabels.map((l) => l.label).join("|"), [laidOutLabels]);
+  useEffect(() => {
+    setOverrides({});
+  }, [layoutKey]);
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent, i: number) => {
+      e.stopPropagation();
+      const base = overrides[i] ?? { displayX: laidOutLabels[i]!.displayX, displayY: laidOutLabels[i]!.displayY };
+      dragStartRef.current = { x: e.clientX, y: e.clientY, labelX: base.displayX, labelY: base.displayY };
+      setDraggingIndex(i);
+      captureTargetRef.current = e.currentTarget as SVGElement;
+      captureTargetRef.current.setPointerCapture(e.pointerId);
+    },
+    [laidOutLabels, overrides]
+  );
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (draggingIndex === null || !dragStartRef.current) return;
+      const dx = e.clientX - dragStartRef.current.x;
+      const dy = e.clientY - dragStartRef.current.y;
+      setOverrides((prev) => ({
+        ...prev,
+        [draggingIndex]: {
+          displayX: dragStartRef.current!.labelX + dx,
+          displayY: dragStartRef.current!.labelY + dy,
+        },
+      }));
+    },
+    [draggingIndex]
+  );
+
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (draggingIndex !== null && captureTargetRef.current) {
+        captureTargetRef.current.releasePointerCapture(e.pointerId);
+        captureTargetRef.current = null;
+        setDraggingIndex(null);
+        dragStartRef.current = null;
+      }
+    },
+    [draggingIndex]
+  );
+
+  useEffect(() => {
+    if (draggingIndex === null) return;
+    const onPointerUp = () => {
+      captureTargetRef.current = null;
+      setDraggingIndex(null);
+      dragStartRef.current = null;
+    };
+    window.addEventListener("pointerup", onPointerUp);
+    return () => window.removeEventListener("pointerup", onPointerUp);
+  }, [draggingIndex]);
+
+  if (laidOutLabels.length === 0) return null;
+  return (
+    <g
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
+    >
+      {laidOutLabels.map((cl, i) => {
+        const padX = 6;
+        const padY = 4;
+        const textWidth = Math.max(40, cl.label.length * 7);
+        const boxW = textWidth + padX * 2;
+        const boxH = 12 + padY * 2;
+        const clusterId = cl.cluster_id ?? i;
+        const accentColor = getClusterColor(clusterId, colorPalette);
+        const displayX = overrides[i]?.displayX ?? cl.displayX;
+        const displayY = overrides[i]?.displayY ?? cl.displayY;
+        return (
+          <g key={i}>
+            <line
+              x1={cl.centroidDisplayX}
+              y1={cl.centroidDisplayY}
+              x2={displayX}
+              y2={displayY}
+              stroke="#999"
+              strokeWidth={0.6}
+            />
+            <g
+              transform={`translate(${displayX},${displayY})`}
+              data-cluster-label
+              onPointerDown={(e) => handlePointerDown(e, i)}
+              style={{
+                cursor: draggingIndex === i ? "grabbing" : "grab",
+                pointerEvents: "all",
+              }}
+            >
+              <rect
+                x={-boxW / 2}
+                y={-boxH / 2}
+                width={boxW}
+                height={boxH}
+                rx={6}
+                fill="white"
+                stroke={accentColor}
+                strokeWidth={1}
+                filter={`url(#${filterId})`}
+              />
+              <text
+                textAnchor="middle"
+                dominantBaseline="middle"
+                style={{ fontSize: 12, fontWeight: 500, fill: "#333", pointerEvents: "none" }}
+              >
+                {cl.label}
+              </text>
+            </g>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+function resolveLabelOverlap<
+  T extends { centroidX: number; centroidY: number; labelX: number; labelY: number }
+>(
+  layout: T[],
+  rangeX: number,
+  rangeY: number,
+  minX: number,
+  minY: number,
+  overlapThreshold = LABEL_OVERLAP_THRESHOLD
+): T[] {
+  if (layout.length === 0) return layout;
+  const toNorm = (x: number, y: number) => ({
+    x: (x - minX) / rangeX,
+    y: (y - minY) / rangeY,
+  });
+  const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+
+  const result: T[] = [];
+  for (let i = 0; i < layout.length; i++) {
+    const item = layout[i]!;
+    let labelX = item.labelX;
+    let labelY = item.labelY;
+
+    const overlaps = (lx: number, ly: number) => {
+      const norm = toNorm(lx, ly);
+      return result.some((placed) => {
+        const oNorm = toNorm(placed.labelX, placed.labelY);
+        return dist(norm, oNorm) < overlapThreshold;
+      });
+    };
+
+    for (let oi = 0; oi < LABEL_OVERLAP_OFFSETS_2D.length; oi++) {
+      const [dx, dy] = LABEL_OVERLAP_OFFSETS_2D[oi]!;
+      const tryX = item.labelX + dx * rangeX;
+      const tryY = item.labelY + dy * rangeY;
+      if (!overlaps(tryX, tryY)) {
+        labelX = tryX;
+        labelY = tryY;
+        break;
+      }
+    }
+
+    result.push({ ...item, labelX, labelY } as T);
+  }
   return result;
 }
 
@@ -190,88 +483,28 @@ function DiscourseScatter({
     return { effectiveLabels: [], assignmentsForColor: null };
   }, [clusterLabels, clusterAssignments, points, discourseComments]);
 
-  const scaledPoints = useMemo(
-    () => points.map((p) => ({ x: scaleX(getPointCoords(p).x), y: scaleY(getPointCoords(p).y) })),
-    [points, scaleX, scaleY]
+  const pointCoords = useMemo(
+    () => points.map((p) => getPointCoords(p)),
+    [points]
   );
   const laidOutLabels = useMemo(
     () =>
-      effectiveLabels && effectiveLabels.length > 0
-        ? layoutLabelsInCorner(effectiveLabels, scaleX, scaleY, w, h, pad, scaledPoints)
-        : [],
-    [effectiveLabels, scaleX, scaleY, w, h, pad, scaledPoints]
+      computeClusterLabelLayout(
+        effectiveLabels ?? [],
+        pointCoords,
+        assignmentsForColor,
+        minX,
+        maxX,
+        minY,
+        maxY,
+        scaleX,
+        scaleY
+      ),
+    [effectiveLabels, pointCoords, assignmentsForColor, minX, maxX, minY, maxY, scaleX, scaleY]
   );
 
   return (
     <div className="relative overflow-hidden bg-white rounded-lg border border-border text-muted-foreground" style={{ width: w, height: h }}>
-      <svg width={w} height={h} className="absolute inset-0">
-        {laidOutLabels.length > 0 && (
-          <defs>
-            <filter id="scatterLabelShadow">
-              <feDropShadow dx={0} dy={1} stdDeviation={1.5} floodColor="rgba(0,0,0,0.15)" />
-            </filter>
-          </defs>
-        )}
-        {title && (
-          <text x={10} y={18} fontSize={11} fill="#555" style={{ fontWeight: 500 }}>
-            {title}
-          </text>
-        )}
-        <g>{gridLines}</g>
-        {points.map((p, i) => {
-          const { x, y } = getPointCoords(p);
-          const fill =
-            assignmentsForColor && i < assignmentsForColor.length
-              ? getClusterColor(assignmentsForColor[i], colorPalette)
-              : POINT_COLOR;
-          return (
-            <circle
-              key={i}
-              cx={scaleX(x)}
-              cy={scaleY(y)}
-              r={hovered === i ? 6 : POINT_RADIUS}
-              fill={fill}
-              style={{ opacity: hovered === i ? 1 : opacities[i] ?? 0.5 }}
-              className="cursor-pointer transition-all duration-150"
-            />
-          );
-        })}
-        {laidOutLabels.map((cl, i) => {
-          const textWidth = Math.max(40, cl.label.length * 7);
-          const boxW = textWidth + 12;
-          const boxH = 22;
-          const clusterId = (cl as { cluster_id?: number }).cluster_id ?? i;
-          const accentColor = getClusterColor(clusterId, colorPalette);
-          return (
-            <g key={i} transform={`translate(${cl.displayX},${cl.displayY})`} style={{ pointerEvents: "none" }}>
-              <rect
-                x={-boxW / 2}
-                y={-boxH / 2}
-                width={boxW}
-                height={boxH}
-                rx={6}
-                fill="rgba(255,255,255,0.55)"
-                stroke={accentColor}
-                strokeWidth={2}
-                filter="url(#scatterLabelShadow)"
-              />
-              <text
-                textAnchor="middle"
-                dominantBaseline="middle"
-                style={{ fontSize: 12, fontWeight: 600, fill: "#333" }}
-              >
-                {cl.label}
-              </text>
-            </g>
-          );
-        })}
-        <text x={w / 2} y={h - 6} textAnchor="middle" fill="currentColor" style={{ fontSize: 10 }}>
-          {xLabel}
-        </text>
-        <text x={14} y={h / 2} textAnchor="middle" fill="currentColor" style={{ fontSize: 10 }} transform={`rotate(-90, 14, ${h / 2})`}>
-          {yLabel}
-        </text>
-      </svg>
       <DiscourseScatterTooltip
         points={points}
         discourseComments={discourseComments}
@@ -285,7 +518,48 @@ function DiscourseScatter({
         setHovered={setHovered}
         pos={pos}
         setPos={setPos}
-      />
+      >
+        <svg width={w} height={h} className="absolute inset-0">
+          {laidOutLabels.length > 0 && (
+            <defs>
+              <filter id="scatterLabelShadow">
+                <feDropShadow dx={0} dy={1} stdDeviation={1.5} floodColor="rgba(0,0,0,0.15)" />
+              </filter>
+            </defs>
+          )}
+          {title && (
+            <text x={10} y={18} fontSize={11} fill="#555" style={{ fontWeight: 500 }}>
+              {title}
+            </text>
+          )}
+          <g>{gridLines}</g>
+          {points.map((p, i) => {
+            const { x, y } = getPointCoords(p);
+            const fill =
+              assignmentsForColor && i < assignmentsForColor.length
+                ? getClusterColor(assignmentsForColor[i], colorPalette)
+                : POINT_COLOR;
+            return (
+              <circle
+                key={i}
+                cx={scaleX(x)}
+                cy={scaleY(y)}
+                r={hovered === i ? 6 : POINT_RADIUS}
+                fill={fill}
+                style={{ opacity: hovered === i ? 1 : opacities[i] ?? 0.5 }}
+                className="cursor-pointer transition-all duration-150"
+              />
+            );
+          })}
+          <ClusterLabels laidOutLabels={laidOutLabels} colorPalette={colorPalette} filterId="scatterLabelShadow" />
+          <text x={w / 2} y={h - 6} textAnchor="middle" fill="currentColor" style={{ fontSize: 10 }}>
+            {xLabel}
+          </text>
+          <text x={14} y={h / 2} textAnchor="middle" fill="currentColor" style={{ fontSize: 10 }} transform={`rotate(-90, 14, ${h / 2})`}>
+            {yLabel}
+          </text>
+        </svg>
+      </DiscourseScatterTooltip>
     </div>
   );
 }
@@ -303,6 +577,7 @@ function DiscourseScatterTooltip({
   setHovered,
   pos,
   setPos,
+  children,
 }: {
   points: DiscoursePoint[];
   discourseComments?: string[];
@@ -316,12 +591,14 @@ function DiscourseScatterTooltip({
   setHovered: (v: number | null) => void;
   pos: { x: number; y: number };
   setPos: (v: { x: number; y: number }) => void;
+  children?: React.ReactNode;
 }) {
   return (
     <>
       <div
         className={`absolute inset-0 ${onPointClick ? "cursor-pointer" : ""}`}
-        onClick={() => {
+        onClick={(e) => {
+          if ((e.target as Element).closest?.("[data-cluster-label]")) return;
           if (hovered !== null && onPointClick && clusterAssignments && hovered < clusterAssignments.length) {
             const clusterId = clusterAssignments[hovered];
             if (clusterId >= 0) onPointClick(hovered, clusterId);
@@ -347,7 +624,9 @@ function DiscourseScatterTooltip({
           setPos({ x: mx, y: my });
         }}
         onMouseLeave={() => setHovered(null)}
-      />
+      >
+        {children}
+      </div>
       {hovered !== null && points[hovered] && (
         <div
           className="absolute z-10 text-xs"
@@ -565,86 +844,24 @@ function DensityUmapScatter({
     });
   }, [topClusterLabels]);
 
-  const scaledDensityPoints = useMemo(
-    () => coords.map((c) => ({ x: scaleX(c.x), y: scaleY(c.y) })),
-    [coords, scaleX, scaleY]
-  );
   const laidOutDensityLabels = useMemo(
-    () => layoutLabelsInCorner(densityLabelsForLayout, scaleX, scaleY, w, h, pad, scaledDensityPoints),
-    [densityLabelsForLayout, scaleX, scaleY, w, h, pad, scaledDensityPoints]
+    () =>
+      computeClusterLabelLayout(
+        densityLabelsForLayout,
+        coords,
+        assignmentsForColor,
+        minX,
+        maxX,
+        minY,
+        maxY,
+        scaleX,
+        scaleY
+      ),
+    [densityLabelsForLayout, coords, assignmentsForColor, minX, maxX, minY, maxY, scaleX, scaleY]
   );
 
   return (
     <div className="relative overflow-hidden bg-white rounded-lg border border-border text-muted-foreground" style={{ width: w, height: h }}>
-      <svg width={w} height={h} className="absolute inset-0">
-        <defs>
-          <filter id="densityLabelShadow">
-            <feDropShadow dx={0} dy={1} stdDeviation={1.5} floodColor="rgba(0,0,0,0.15)" />
-          </filter>
-        </defs>
-        {title && (
-          <text x={10} y={18} fontSize={11} fill="#555" style={{ fontWeight: 500 }}>
-            {title}
-          </text>
-        )}
-        <g>{gridLines}</g>
-        {points.map((p, i) => {
-          const { x, y } = getPointCoords(p);
-          const fill =
-            assignmentsForColor && i < assignmentsForColor.length
-              ? getClusterColor(assignmentsForColor[i], colorPalette)
-              : POINT_COLOR;
-          return (
-            <circle
-              key={i}
-              cx={scaleX(x)}
-              cy={scaleY(y)}
-              r={hovered === i ? 6 : DENSITY_POINT_RADIUS}
-              fill={fill}
-              style={{ opacity: hovered === i ? 1 : opacities[i] ?? 0.2 }}
-              className="cursor-pointer transition-all duration-150"
-            />
-          );
-        })}
-        {laidOutDensityLabels.map((cl, i) => {
-          const label = cl.label;
-          const clusterId = (cl as { cluster_id?: number }).cluster_id ?? i;
-          const accentColor = getClusterColor(clusterId, colorPalette);
-          const padX = 6;
-          const padY = 3;
-          const textWidth = Math.max(40, label.length * 7);
-          const boxW = textWidth + padX * 2;
-          const boxH = 16 + padY * 2;
-          return (
-            <g key={i} transform={`translate(${cl.displayX},${cl.displayY})`} style={{ pointerEvents: "none" }}>
-              <rect
-                x={-boxW / 2}
-                y={-boxH / 2}
-                width={boxW}
-                height={boxH}
-                rx={6}
-                fill="rgba(255,255,255,0.55)"
-                stroke={accentColor}
-                strokeWidth={2}
-                filter="url(#densityLabelShadow)"
-              />
-              <text
-                textAnchor="middle"
-                dominantBaseline="middle"
-                style={{ fontSize: 12, fontWeight: 600, fill: "#333" }}
-              >
-                {label}
-              </text>
-            </g>
-          );
-        })}
-        <text x={w / 2} y={h - 6} textAnchor="middle" fill="currentColor" style={{ fontSize: 10 }}>
-          UMAP dimension 1
-        </text>
-        <text x={14} y={h / 2} textAnchor="middle" fill="currentColor" style={{ fontSize: 10 }} transform={`rotate(-90, 14, ${h / 2})`}>
-          UMAP dimension 2
-        </text>
-      </svg>
       <DiscourseScatterTooltip
         points={points}
         discourseComments={discourseComments}
@@ -656,7 +873,50 @@ function DensityUmapScatter({
         setHovered={setHovered}
         pos={pos}
         setPos={setPos}
-      />
+      >
+        <svg width={w} height={h} className="absolute inset-0">
+          <defs>
+            <filter id="densityLabelShadow">
+              <feDropShadow dx={0} dy={1} stdDeviation={1.5} floodColor="rgba(0,0,0,0.15)" />
+            </filter>
+          </defs>
+          {title && (
+            <text x={10} y={18} fontSize={11} fill="#555" style={{ fontWeight: 500 }}>
+              {title}
+            </text>
+          )}
+          <g>{gridLines}</g>
+          {points.map((p, i) => {
+            const { x, y } = getPointCoords(p);
+            const fill =
+              assignmentsForColor && i < assignmentsForColor.length
+                ? getClusterColor(assignmentsForColor[i], colorPalette)
+                : POINT_COLOR;
+            return (
+              <circle
+                key={i}
+                cx={scaleX(x)}
+                cy={scaleY(y)}
+                r={hovered === i ? 6 : DENSITY_POINT_RADIUS}
+                fill={fill}
+                style={{ opacity: hovered === i ? 1 : opacities[i] ?? 0.2 }}
+                className="cursor-pointer transition-all duration-150"
+              />
+            );
+          })}
+          <ClusterLabels
+            laidOutLabels={laidOutDensityLabels}
+            colorPalette={colorPalette}
+            filterId="densityLabelShadow"
+          />
+          <text x={w / 2} y={h - 6} textAnchor="middle" fill="currentColor" style={{ fontSize: 10 }}>
+            UMAP dimension 1
+          </text>
+          <text x={14} y={h / 2} textAnchor="middle" fill="currentColor" style={{ fontSize: 10 }} transform={`rotate(-90, 14, ${h / 2})`}>
+            UMAP dimension 2
+          </text>
+        </svg>
+      </DiscourseScatterTooltip>
     </div>
   );
 }
@@ -959,128 +1219,72 @@ function UmapDensityContours({
     return `${x},${y}`;
   }).join("|");
   const useApiLabels = clusterLabels && clusterLabels.length > 0;
-  const { clusters, labels, contourPaths } = useMemo(() => {
+  const { contourPaths, labelsForLayout, assignmentsForLayout } = useMemo(() => {
     const contourPaths = computeContourPaths(
       coords.map((c) => ({ x: c.x, y: c.y })),
       40,
       0.25
     );
-    if (useApiLabels) {
-      return { clusters: [] as number[], labels: [] as string[], contourPaths };
+    if (useApiLabels && clusterLabels) {
+      const labelsWithId = clusterLabels.map((cl, i) => ({
+        ...cl,
+        cluster_id: (cl as { cluster_id?: number }).cluster_id ?? i,
+      }));
+      const assignments = coords.map((c) => {
+        let best = 0;
+        let bestD = Infinity;
+        labelsWithId.forEach((cl, j) => {
+          const d = (c.x - cl.x) ** 2 + (c.y - cl.y) ** 2;
+          if (d < bestD) {
+            bestD = d;
+            best = (cl as { cluster_id?: number }).cluster_id ?? j;
+          }
+        });
+        return best;
+      });
+      return { contourPaths, labelsForLayout: labelsWithId, assignmentsForLayout: assignments };
     }
     try {
       const pts = coords.map((c) => ({ x: c.x, y: c.y, idx: c.idx }));
       const assignments = kMeansClusters(pts, 4);
       const commentsRef = discourseComments ?? [];
-      const labels: string[] = [];
+      const labelsForLayout: Array<{ x: number; y: number; label: string; cluster_id: number }> = [];
       for (let c = 0; c < 4; c++) {
-        const indices = pts
-          .map((p, i) => (assignments[i] === c ? p.idx : -1))
-          .filter((i) => i >= 0);
+        const members = coords.filter((_, i) => assignments[i] === c);
+        if (members.length === 0) continue;
+        const cx = members.reduce((s, m) => s + m.x, 0) / members.length;
+        const cy = members.reduce((s, m) => s + m.y, 0) / members.length;
+        const indices = members.map((m) => m.idx);
         const comments = indices
           .filter((i) => i >= 0 && i < commentsRef.length)
           .map((i) => commentsRef[i])
           .filter((c): c is string => typeof c === "string");
-        labels.push(cleanLabel(computeClusterLabel(comments)));
+        labelsForLayout.push({ x: cx, y: cy, label: cleanLabel(computeClusterLabel(comments)), cluster_id: c });
       }
-      return { clusters: assignments, labels, contourPaths };
+      return { contourPaths, labelsForLayout, assignmentsForLayout: assignments };
     } catch {
-      return { clusters: [] as number[], labels: [] as string[], contourPaths };
+      return { contourPaths, labelsForLayout: [], assignmentsForLayout: [] as number[] };
     }
-  }, [pointsKey, useApiLabels, discourseComments]);
+  }, [pointsKey, useApiLabels, discourseComments, clusterLabels, coords]);
+
+  const laidOutContourLabels = useMemo(
+    () =>
+      computeClusterLabelLayout(
+        labelsForLayout,
+        coords,
+        assignmentsForLayout.length > 0 ? assignmentsForLayout : null,
+        minX,
+        maxX,
+        minY,
+        maxY,
+        scaleX,
+        scaleY
+      ),
+    [labelsForLayout, coords, assignmentsForLayout, minX, maxX, minY, maxY, scaleX, scaleY]
+  );
 
   return (
     <div className="relative overflow-hidden bg-white rounded-lg border border-border text-muted-foreground" style={{ width: w, height: h }}>
-      <svg width={w} height={h} className="absolute inset-0">
-        {/* 1. Contours */}
-        <g transform={`translate(${pad},${pad}) scale(${(w - 2 * pad) / rangeX},${-(h - 2 * pad) / rangeY}) translate(${-minX},${-minY})`}>
-          {contourPaths.map((d, i) => (
-            <path
-              key={i}
-              d={d}
-              fill="lightblue"
-              fillOpacity={0.15}
-              stroke="none"
-            />
-          ))}
-        </g>
-        {/* 2. Scatter points */}
-        {points.map((p, i) => {
-          const { x, y } = getPointCoords(p);
-          return (
-            <circle
-              key={i}
-              cx={scaleX(x)}
-              cy={scaleY(y)}
-              r={hovered === i ? 6 : 3}
-              style={{ opacity: 0.6 }}
-              className="fill-primary/60 hover:fill-primary cursor-pointer transition-all duration-150"
-            />
-          );
-        })}
-        {/* 3. Cluster labels (offset above centroid, render above points) */}
-        {useApiLabels
-          ? (clusterLabels ?? []).map((cl, i) => (
-              <g key={i} transform={`translate(${scaleX(cl.x)},${scaleY(cl.y) - 8})`} style={{ pointerEvents: "none" }}>
-                <rect
-                  x={-60}
-                  y={-8}
-                  width={120}
-                  height={16}
-                  rx={4}
-                  fill="rgba(255,255,255,0.55)"
-                />
-                <text
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    fill: "#333",
-                    opacity: 0.9,
-                  }}
-                >
-                  {cl.label}
-                </text>
-              </g>
-            ))
-          : [0, 1, 2, 3].map((c) => {
-              const members = coords.filter((_, i) => clusters[i] === c);
-              if (members.length === 0) return null;
-              const cx = members.reduce((s, m) => s + m.x, 0) / members.length;
-              const cy = members.reduce((s, m) => s + m.y, 0) / members.length;
-              return (
-                <g key={c} transform={`translate(${scaleX(cx)},${scaleY(cy) - 8})`} style={{ pointerEvents: "none" }}>
-                  <rect
-                    x={-60}
-                    y={-8}
-                    width={120}
-                    height={16}
-                    rx={4}
-                    fill="rgba(255,255,255,0.55)"
-                  />
-                  <text
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      fill: "#333",
-                      opacity: 0.9,
-                    }}
-                  >
-                    {labels[c]}
-                  </text>
-                </g>
-              );
-            })}
-        <text x={w / 2} y={h - 6} textAnchor="middle" fill="currentColor" style={{ fontSize: 10 }}>
-          UMAP dimension 1
-        </text>
-        <text x={14} y={h / 2} textAnchor="middle" fill="currentColor" style={{ fontSize: 10 }} transform={`rotate(-90, 14, ${h / 2})`}>
-          UMAP dimension 2
-        </text>
-      </svg>
       <DiscourseScatterTooltip
         points={points}
         discourseComments={discourseComments}
@@ -1092,7 +1296,53 @@ function UmapDensityContours({
         setHovered={setHovered}
         pos={pos}
         setPos={setPos}
-      />
+      >
+        <svg width={w} height={h} className="absolute inset-0">
+          <defs>
+            <filter id="contourLabelShadow">
+              <feDropShadow dx={0} dy={1} stdDeviation={1.5} floodColor="rgba(0,0,0,0.15)" />
+            </filter>
+          </defs>
+          {/* 1. Contours */}
+          <g transform={`translate(${pad},${pad}) scale(${(w - 2 * pad) / rangeX},${-(h - 2 * pad) / rangeY}) translate(${-minX},${-minY})`}>
+            {contourPaths.map((d, i) => (
+              <path
+                key={i}
+                d={d}
+                fill="lightblue"
+                fillOpacity={0.15}
+                stroke="none"
+              />
+            ))}
+          </g>
+          {/* 2. Scatter points */}
+          {points.map((p, i) => {
+            const { x, y } = getPointCoords(p);
+            return (
+              <circle
+                key={i}
+                cx={scaleX(x)}
+                cy={scaleY(y)}
+                r={hovered === i ? 6 : 3}
+                style={{ opacity: 0.6 }}
+                className="fill-primary/60 hover:fill-primary cursor-pointer transition-all duration-150"
+              />
+            );
+          })}
+          {/* 3. Cluster labels (outside cluster, connector line, edge clamping) */}
+          <ClusterLabels
+            laidOutLabels={laidOutContourLabels}
+            colorPalette={PALETTE_HDBSCAN}
+            filterId="contourLabelShadow"
+          />
+          <text x={w / 2} y={h - 6} textAnchor="middle" fill="currentColor" style={{ fontSize: 10 }}>
+            UMAP dimension 1
+          </text>
+          <text x={14} y={h / 2} textAnchor="middle" fill="currentColor" style={{ fontSize: 10 }} transform={`rotate(-90, 14, ${h / 2})`}>
+            UMAP dimension 2
+          </text>
+        </svg>
+      </DiscourseScatterTooltip>
     </div>
   );
 }
@@ -1184,6 +1434,8 @@ function ClusterStatsLine({ stats }: { stats: ClusterStats }) {
   );
 }
 
+type ClusterSummaryItem = { label: string; size: number; percent: number };
+
 export function YoutubeDiscourseMaps({
   pointsPca,
   pointsUmap,
@@ -1201,6 +1453,9 @@ export function YoutubeDiscourseMaps({
   clusterAssignmentsTfidf,
   clusterAssignmentsHdbscan,
   clusterAssignmentsMinilm,
+  clustersSummaryHdbscan,
+  clustersSummaryTfidf,
+  clustersSummaryMinilm,
 }: {
   pointsPca?: DiscoursePoint[];
   pointsUmap?: DiscoursePoint[];
@@ -1218,6 +1473,9 @@ export function YoutubeDiscourseMaps({
   clusterAssignmentsTfidf?: number[];
   clusterAssignmentsHdbscan?: number[];
   clusterAssignmentsMinilm?: number[];
+  clustersSummaryHdbscan?: ClusterSummaryItem[];
+  clustersSummaryTfidf?: ClusterSummaryItem[];
+  clustersSummaryMinilm?: ClusterSummaryItem[];
 }) {
   const [selectedCluster, setSelectedCluster] = useState<{
     label: string;
@@ -1464,6 +1722,39 @@ export function YoutubeDiscourseMaps({
         )}
       </div>
 
+      {/* Discourse composition: cluster proportions */}
+      {(() => {
+        const summary = clustersSummaryHdbscan ?? clustersSummaryTfidf ?? clustersSummaryMinilm ?? [];
+        if (summary.length === 0) return null;
+        const palette = [...PALETTE_HDBSCAN, ...PALETTE_KMEANS, ...PALETTE_MINILM];
+        return (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium">Discourse composition</h3>
+            <div className="flex flex-col gap-2">
+              {summary.map((item, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <span className="text-sm text-foreground min-w-[140px] shrink-0" dir="auto">
+                    {item.label}
+                  </span>
+                  <div className="flex-1 min-w-0 h-5 rounded-md bg-muted overflow-hidden flex">
+                    <div
+                      className="h-full rounded-md shrink-0 transition-[width]"
+                      style={{
+                        width: `${item.percent}%`,
+                        backgroundColor: palette[i % palette.length],
+                        opacity: 0.7,
+                      }}
+                    />
+                  </div>
+                  <span className="text-sm text-muted-foreground shrink-0 tabular-nums w-10 text-right">
+                    {item.percent}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </div>
     </div>
   );
