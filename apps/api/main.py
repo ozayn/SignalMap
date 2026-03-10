@@ -1232,6 +1232,9 @@ def _run_youtube_comment_analysis(
         "cluster_stats_tfidf": analysis.get("cluster_stats_tfidf", {}),
         "cluster_stats_hdbscan": analysis.get("cluster_stats_hdbscan", {}),
         "cluster_stats_minilm": analysis.get("cluster_stats_minilm", {}),
+        "clusters_summary_tfidf": analysis.get("clusters_summary_tfidf", []),
+        "clusters_summary_hdbscan": analysis.get("clusters_summary_hdbscan", []),
+        "clusters_summary_minilm": analysis.get("clusters_summary_minilm", []),
         "comments": analysis["comments"],
     }
 
@@ -1315,6 +1318,9 @@ def _recompute_from_cached_dataset(cache_dict: dict, cid: str) -> dict | None:
         "cluster_stats_tfidf": analysis.get("cluster_stats_tfidf", {}),
         "cluster_stats_hdbscan": analysis.get("cluster_stats_hdbscan", {}),
         "cluster_stats_minilm": analysis.get("cluster_stats_minilm", {}),
+        "clusters_summary_tfidf": analysis.get("clusters_summary_tfidf", []),
+        "clusters_summary_hdbscan": analysis.get("clusters_summary_hdbscan", []),
+        "clusters_summary_minilm": analysis.get("clusters_summary_minilm", []),
         "comments": analysis["comments"],
         "computed_at": datetime.now(timezone.utc).isoformat(),
     }

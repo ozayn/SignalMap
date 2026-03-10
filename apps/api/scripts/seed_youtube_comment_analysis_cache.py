@@ -105,7 +105,23 @@ def main():
         "topics": analysis["topics"],
         "points_pca": analysis["points_pca"],
         "points_umap": analysis["points_umap"],
+        "points_tfidf": analysis.get("points_tfidf", analysis.get("points_umap", [])),
+        "points_hdbscan": analysis.get("points_hdbscan", analysis.get("points_umap", [])),
+        "points_minilm": analysis.get("points_minilm", []),
         "cluster_labels": analysis.get("cluster_labels", []),
+        "cluster_labels_tfidf": analysis.get("cluster_labels_tfidf", analysis.get("cluster_labels", [])),
+        "cluster_labels_hdbscan": analysis.get("cluster_labels_hdbscan", []),
+        "cluster_labels_minilm": analysis.get("cluster_labels_minilm", []),
+        "cluster_assignments_tfidf": analysis.get("cluster_assignments_tfidf", []),
+        "cluster_assignments_hdbscan": analysis.get("cluster_assignments_hdbscan", []),
+        "cluster_assignments_minilm": analysis.get("cluster_assignments_minilm", []),
+        "cluster_stats_tfidf": analysis.get("cluster_stats_tfidf", {}),
+        "cluster_stats_hdbscan": analysis.get("cluster_stats_hdbscan", {}),
+        "cluster_stats_minilm": analysis.get("cluster_stats_minilm", {}),
+        "clusters_summary_tfidf": analysis.get("clusters_summary_tfidf", []),
+        "clusters_summary_hdbscan": analysis.get("clusters_summary_hdbscan", []),
+        "clusters_summary_minilm": analysis.get("clusters_summary_minilm", []),
+        "discourse_comments": analysis.get("discourse_comments", []),
         "comments": analysis["comments"],
     }
 
@@ -120,7 +136,7 @@ def main():
     print(f"Seeded cache for channel {CHANNEL_ID}")
     print(f"  Videos: {len(videos_list)}, Comments: {len(comments)}")
     print(f"  Time range: {time_range_start} – {time_range_end}")
-    print(f"  Points PCA: {len(analysis['points_pca'])}, UMAP: {len(analysis['points_umap'])}")
+    print(f"  Points PCA: {len(analysis['points_pca'])}, TF-IDF: {len(analysis.get('points_tfidf', []))}, MiniLM: {len(analysis.get('points_minilm', []))}")
 
 
 if __name__ == "__main__":

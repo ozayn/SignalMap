@@ -59,7 +59,9 @@ function clampLabelBounds<
   minY: number,
   margin = LABEL_BOUNDS_MARGIN
 ): T[] {
-  return layout.map((item) => {
+  return layout
+    .filter((item): item is T => item != null)
+    .map((item) => {
     const normX = (item.labelX - minX) / rangeX;
     const normY = (item.labelY - minY) / rangeY;
     const clampedNormX = Math.max(margin, Math.min(1 - margin, normX));
@@ -84,7 +86,8 @@ function computeLabelLayoutOutsideCluster<
   minY: number,
   overlapThreshold = LABEL_OVERLAP_THRESHOLD
 ): Array<T & { centroidX: number; centroidY: number; labelX: number; labelY: number }> {
-  if (labels.length === 0) return [];
+  const safeLabels = labels.filter((l): l is T => l != null && typeof l === "object" && "x" in l && "y" in l && "label" in l);
+  if (safeLabels.length === 0) return [];
   const fallbackRadius = Math.max(rangeX, rangeY) * 0.05;
   const placed: { x: number; y: number }[] = [];
 
@@ -95,10 +98,10 @@ function computeLabelLayoutOutsideCluster<
   const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
     Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 
-  return labels.map((cl) => {
+  return safeLabels.map((cl) => {
     const cx = cl.x;
     const cy = cl.y;
-    const clusterId = (cl as { cluster_id?: number }).cluster_id ?? labels.indexOf(cl);
+    const clusterId = (cl as { cluster_id?: number }).cluster_id ?? safeLabels.indexOf(cl);
 
     let radius = fallbackRadius;
     if (assignments && assignments.length >= points.length) {
@@ -164,11 +167,15 @@ function computeClusterLabelLayout(
   scaleX: (v: number) => number,
   scaleY: (v: number) => number
 ): LaidOutLabel[] {
-  if (!labels || labels.length === 0) return [];
+  const safeLabels = (labels ?? []).filter(
+    (l): l is { x: number; y: number; label: string; cluster_id?: number } =>
+      l != null && typeof l === "object" && typeof l.x === "number" && typeof l.y === "number" && typeof l.label === "string"
+  );
+  if (safeLabels.length === 0) return [];
   const rangeX = maxX - minX || 1;
   const rangeY = maxY - minY || 1;
   let layout = computeLabelLayoutOutsideCluster(
-    labels,
+    safeLabels,
     points,
     assignments,
     rangeX,
@@ -209,7 +216,9 @@ function ClusterLabels({
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, i: number) => {
       e.stopPropagation();
-      const base = overrides[i] ?? { displayX: laidOutLabels[i]!.displayX, displayY: laidOutLabels[i]!.displayY };
+      const label = laidOutLabels[i];
+      if (!label) return;
+      const base = overrides[i] ?? { displayX: label.displayX, displayY: label.displayY };
       dragStartRef.current = { x: e.clientX, y: e.clientY, labelX: base.displayX, labelY: base.displayY };
       setDraggingIndex(i);
       captureTargetRef.current = e.currentTarget as SVGElement;
@@ -329,7 +338,8 @@ function resolveLabelOverlap<
   minY: number,
   overlapThreshold = LABEL_OVERLAP_THRESHOLD
 ): T[] {
-  if (layout.length === 0) return layout;
+  const safeLayout = layout.filter((item): item is T => item != null);
+  if (safeLayout.length === 0) return [];
   const toNorm = (x: number, y: number) => ({
     x: (x - minX) / rangeX,
     y: (y - minY) / rangeY,
@@ -338,8 +348,8 @@ function resolveLabelOverlap<
     Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 
   const result: T[] = [];
-  for (let i = 0; i < layout.length; i++) {
-    const item = layout[i]!;
+  for (let i = 0; i < safeLayout.length; i++) {
+    const item = safeLayout[i]!;
     let labelX = item.labelX;
     let labelY = item.labelY;
 
@@ -774,7 +784,10 @@ function DensityUmapScatter({
   const { clusters, labels, topClusterLabels, clientAssignments } = useMemo(() => {
     if (useApiLabels && clusterLabels) {
       const radius = Math.max(rangeX, rangeY) * 0.1;
-      const withSize = clusterLabels.map((cl) => {
+      const safeClusterLabels = clusterLabels.filter(
+        (cl): cl is NonNullable<typeof cl> => cl != null && typeof cl === "object" && "x" in cl && "y" in cl
+      );
+      const withSize = safeClusterLabels.map((cl) => {
         const count = coords.filter((c) => {
           const dx = c.x - cl.x;
           const dy = c.y - cl.y;
@@ -837,11 +850,13 @@ function DensityUmapScatter({
   }, [clusterAssignments, clusterLabels, points, clientAssignments]);
 
   const densityLabelsForLayout = useMemo(() => {
-    return topClusterLabels.map((cl, i) => {
-      const x = "cx" in cl ? (cl as { cx: number; cy: number }).cx : (cl as { x: number; y: number }).x;
-      const y = "cy" in cl ? (cl as { cx: number; cy: number }).cy : (cl as { x: number; y: number }).y;
-      return { x, y, label: cl.label, cluster_id: (cl as { cluster_id?: number }).cluster_id ?? i };
-    });
+    return topClusterLabels
+      .filter((cl): cl is NonNullable<typeof cl> => cl != null && typeof cl === "object")
+      .map((cl, i) => {
+        const x = "cx" in cl ? (cl as { cx: number; cy: number }).cx : (cl as { x: number; y: number }).x;
+        const y = "cy" in cl ? (cl as { cx: number; cy: number }).cy : (cl as { x: number; y: number }).y;
+        return { x, y, label: cl.label ?? "", cluster_id: (cl as { cluster_id?: number }).cluster_id ?? i };
+      });
   }, [topClusterLabels]);
 
   const laidOutDensityLabels = useMemo(
@@ -1226,10 +1241,12 @@ function UmapDensityContours({
       0.25
     );
     if (useApiLabels && clusterLabels) {
-      const labelsWithId = clusterLabels.map((cl, i) => ({
-        ...cl,
-        cluster_id: (cl as { cluster_id?: number }).cluster_id ?? i,
-      }));
+      const labelsWithId = clusterLabels
+        .filter((cl): cl is NonNullable<typeof cl> => cl != null && typeof cl === "object" && "x" in cl && "y" in cl)
+        .map((cl, i) => ({
+          ...cl,
+          cluster_id: (cl as { cluster_id?: number }).cluster_id ?? i,
+        }));
       const assignments = coords.map((c) => {
         let best = 0;
         let bestD = Infinity;

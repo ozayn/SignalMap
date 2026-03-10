@@ -437,6 +437,7 @@
 /* Page content spacing below navbar */
 .main-content {
   margin-top: 28px;
+  padding-bottom: 64px;
 }
 
 /* Study page - aligned with nav */

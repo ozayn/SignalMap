@@ -6,7 +6,7 @@ import { Navbar } from "@/components/navbar";
 import { SuppressDevLogs } from "@/components/suppress-dev-logs";
 import { Analytics } from "@/components/analytics";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans", preload: false });
 
 export const metadata: Metadata = {
   title: "SignalMap",

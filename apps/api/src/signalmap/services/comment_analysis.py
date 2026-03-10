@@ -264,10 +264,41 @@ def generate_trigrams(tokens):
     ]
 
 
-def compute_bigram_pmi(bigram_counter, word_counter, total_tokens):
+def _normalize_phrase_for_match(phrase: str) -> str:
+    """Normalize phrase for consistent matching (handles half-spaces, etc.)."""
+    return normalize_persian(phrase).lower().strip()
+
+
+def extract_title_phrases(comments: list) -> frozenset[str]:
+    """Extract bigrams and trigrams from video titles. Used to filter title phrases from
+    discourse analysis (e.g. cluster labels, PMI, word cloud) without removing individual words.
+    Example: title 'جنگ صلیبی چیست' -> {'جنگ صلیبی', 'صلیبی چیست', 'جنگ صلیبی چیست'}.
+    Normalizes half-spaces (ZWNJ) so 'جنگ‌صلیبی' matches 'جنگ صلیبی'."""
+    phrases: set[str] = set()
+    seen_titles: set[str] = set()
+    for c in comments:
+        if not isinstance(c, dict):
+            continue
+        title = c.get("video_title") or c.get("title") or ""
+        if not title or not isinstance(title, str) or title in seen_titles:
+            continue
+        seen_titles.add(title)
+        text = normalize_persian(title).lower()
+        tokens = [t for t in text.split() if len(t) >= 2 and not any(c.isdigit() for c in t)]
+        if len(tokens) >= 2:
+            for bg in generate_bigrams(tokens):
+                phrases.add(_normalize_phrase_for_match(bg))
+        if len(tokens) >= 3:
+            for tg in generate_trigrams(tokens):
+                phrases.add(_normalize_phrase_for_match(tg))
+    return frozenset(phrases)
+
+
+def compute_bigram_pmi(bigram_counter, word_counter, total_tokens, title_phrase_stopwords: frozenset[str] | None = None):
+    title_stop = title_phrase_stopwords or frozenset()
     pmi_scores = []
     for phrase, count in bigram_counter.items():
-        if phrase in PHRASE_STOPWORDS or phrase in CHANNEL_STOPWORDS:
+        if phrase in PHRASE_STOPWORDS or phrase in CHANNEL_STOPWORDS or _normalize_phrase_for_match(phrase) in title_stop:
             continue
         parts = phrase.split()
         if len(parts) != 2:
@@ -286,10 +317,13 @@ def compute_bigram_pmi(bigram_counter, word_counter, total_tokens):
     return pmi_scores[:20]
 
 
-def compute_trigram_pmi(trigram_counter, word_counter, total_tokens):
+def compute_trigram_pmi(trigram_counter, word_counter, total_tokens, title_phrase_stopwords: frozenset[str] | None = None):
+    title_stop = title_phrase_stopwords or frozenset()
     pmi_scores = []
     for phrase, count in trigram_counter.items():
         if count < 2:
+            continue
+        if _normalize_phrase_for_match(phrase) in title_stop:
             continue
         parts = phrase.split()
         if len(parts) != 3:
@@ -371,121 +405,133 @@ def classify_comment_topics(tokens: list[str]) -> set[str]:
     return topics
 
 
-PRAISE_INDICATORS = frozenset({
-    "thank", "thanks", "great", "دمت", "مرسی", "خسته",
+PRAISE_KEYWORDS = [
+    "دمت", "مرسی", "تشکر", "خسته", "دمت گرم",
+    "عالی", "مثل همیشه عالی", "دمت گرم علی",
+    "خسته نباشید", "دمتون گرم", "thank", "thanks", "great", "well done",
+]
+
+
+def is_praise_comment(text: str) -> bool:
+    """Return True if text contains any praise keyword/phrase."""
+    if not text or not isinstance(text, str):
+        return False
+    t = normalize_persian(text)
+    for kw in PRAISE_KEYWORDS:
+        if kw in t:
+            return True
+    return False
+
+
+PRAISE_LABEL_FILTER = frozenset({
+    "دمت", "مرسی", "تشکر", "خسته", "دمت گرم", "دمت گرم علی",
+    "عالی", "مثل همیشه عالی", "خسته نباشید", "دمتون گرم",
+    "thank", "thanks", "great", "well done", "well done ali",
+    "thank you", "great video", "مرسی هستین",
 })
-PRAISE_PHRASES = frozenset({"well done"})
 
 
 def _is_praise_cluster(comment_texts: list[str]) -> bool:
-    """Detect if cluster content is dominated by praise/appreciation.
-    Requires praise in a majority of comments, not just any occurrence."""
+    """A cluster is labeled 'praise / appreciation' only if praise_comments / cluster_size >= 0.5."""
     if not comment_texts:
         return False
-    praise_count = 0
-    for t in comment_texts:
-        if not t or not isinstance(t, str):
-            continue
-        toks = t.lower().split()
-        tokens_set = set(toks)
-        bigrams = {f"{toks[i]} {toks[i+1]}" for i in range(len(toks) - 1)}
-        if (tokens_set & PRAISE_INDICATORS) or (bigrams & PRAISE_PHRASES):
-            praise_count += 1
-    return praise_count >= len(comment_texts) / 2
+    valid_texts = [t for t in comment_texts if t and isinstance(t, str)]
+    if not valid_texts:
+        return False
+    praise_count = sum(1 for t in valid_texts if is_praise_comment(t))
+    return praise_count / len(valid_texts) >= 0.5
 
 
-def compute_cluster_label(comment_texts: list[str]) -> str:
-    """Extract cluster label using TF-IDF within cluster. Prefer bigrams.
-    Rules: no digits, len>=3 per token, no mixed-language, prefer bigrams."""
-    if _is_praise_cluster(comment_texts):
+def compute_cluster_label(
+    comment_texts: list[str],
+    all_texts: list[str] | None = None,
+    raw_texts_for_praise: list[str] | None = None,
+    title_phrase_stopwords: frozenset[str] | None = None,
+) -> str:
+    """Extract cluster label using cluster-vs-global TF-IDF importance.
+    importance = cluster_tfidf - global_tfidf. Prefer bigrams/trigrams.
+    When all_texts is None, falls back to within-cluster TF-IDF only.
+    raw_texts_for_praise: use for praise detection when comment_texts are cleaned (stopwords removed).
+    title_phrase_stopwords: multi-word phrases from video titles to exclude (not individual words)."""
+    texts_for_praise = raw_texts_for_praise if raw_texts_for_praise is not None else comment_texts
+    if _is_praise_cluster(texts_for_praise):
         return "praise / appreciation"
 
-    N = len([t for t in comment_texts if t and isinstance(t, str)])
-    if N < 1:
+    texts = [t for t in comment_texts if t and isinstance(t, str)]
+    if len(texts) < 1:
         return "(cluster)"
 
-    # Build per-document token lists
-    doc_tokens: list[list[str]] = []
+    from sklearn.feature_extraction.text import TfidfVectorizer
 
-    for text in comment_texts:
-        if not text or not isinstance(text, str):
-            continue
-        tokens = [t for t in tokenize(text) if _valid_token(t)]
-        doc_tokens.append(tokens)
+    stop_list = list(PERSIAN_STOPWORDS | STOPWORDS | CUSTOM_STOPWORDS)
+    corpus = all_texts if (all_texts and len(all_texts) >= 2) else texts
+    title_stop = title_phrase_stopwords or frozenset()
+
+    vectorizer = TfidfVectorizer(
+        ngram_range=(1, 3),
+        min_df=2,
+        stop_words=stop_list,
+        token_pattern=r"(?u)\b[\u0600-\u06FFa-zA-Z]{3,}\b",
+    )
+    try:
+        X_global = vectorizer.fit_transform(corpus)
+    except ValueError:
+        return "(cluster)"
+
+    if X_global.shape[1] == 0:
+        return "(cluster)"
+
+    feature_names = vectorizer.get_feature_names_out()
+
+    # Global average TF-IDF per term
+    global_mean = X_global.mean(axis=0).A1
+
+    # Cluster TF-IDF: transform cluster texts (vocabulary from global fit)
+    X_cluster = vectorizer.transform(texts)
+    cluster_mean = X_cluster.mean(axis=0).A1
+
+    # importance = cluster_tfidf - global_tfidf
+    importance = cluster_mean - global_mean
 
     def _accept_phrase(phrase: str) -> bool:
-        if not phrase or phrase in PHRASE_STOPWORDS or phrase in CHANNEL_STOPWORDS:
+        if not phrase or phrase in PHRASE_STOPWORDS or phrase in CHANNEL_STOPWORDS or _normalize_phrase_for_match(phrase) in title_stop:
             return False
-        if _has_numeric_tokens(phrase) or _is_mostly_ascii(phrase) or not _has_persian(phrase):
+        if phrase in PRAISE_LABEL_FILTER:
+            return False
+        if _has_numeric_tokens(phrase):
             return False
         for t in phrase.split():
-            if not _valid_token(t):
+            if len(t) < 3 or any(c.isdigit() for c in t):
                 return False
-        if _phrase_stopword_ratio(phrase) > 0.5:
-            return False
+            if t.lower() in stop_list:
+                return False
         return True
 
-    # Build phrase TF (total count) and DF (documents containing phrase)
-    phrase_tf: dict[str, int] = {}
-    for toks in doc_tokens:
-        for i in range(len(toks) - 1):
-            bg = f"{toks[i]} {toks[i+1]}"
-            if _accept_phrase(bg):
-                phrase_tf[bg] = phrase_tf.get(bg, 0) + 1
-        for w in toks:
-            if _accept_phrase(w):
-                phrase_tf[w] = phrase_tf.get(w, 0) + 1
+    # Prefer bigrams/trigrams, then by importance descending
+    scored = [(feature_names[i], float(importance[i])) for i in range(len(feature_names))]
+    scored.sort(key=lambda x: (-len(x[0].split()), -x[1]))
 
-    phrase_df: dict[str, int] = {}
-    for phrase in phrase_tf:
-        parts = phrase.split()
-        df = 0
-        for toks in doc_tokens:
-            found = False
-            if len(parts) == 1:
-                found = phrase in toks
-            else:
-                for i in range(len(toks) - len(parts) + 1):
-                    if toks[i : i + len(parts)] == parts:
-                        found = True
-                        break
-            if found:
-                df += 1
-        phrase_df[phrase] = df
+    for phrase, imp in scored:
+        if imp <= 0:
+            continue
+        if _accept_phrase(phrase):
+            return _dedupe_phrase(phrase)[:40]
 
-    def _score(phrase: str) -> float:
-        tf = phrase_tf.get(phrase, 0)
-        df = phrase_df.get(phrase, 0)
-        if tf == 0:
-            return 0.0
-        return tf * math.log(N / (df + 1) + 1)
-
-    # Prefer bigrams: collect from phrase_tf (already filtered)
-    candidates: list[tuple[str, float]] = []
-    for phrase in phrase_tf:
-        score = _score(phrase)
-        if score > 0:
-            candidates.append((phrase, score))
-
-    # Sort: bigrams first (by score), then unigrams
-    def _key(item: tuple[str, float]) -> tuple[int, float]:
-        is_bigram = 1 if " " in item[0] else 0
-        return (-is_bigram, -item[1])  # bigrams first, then by score desc
-
-    candidates.sort(key=_key)
-    if candidates:
-        label = _dedupe_phrase(candidates[0][0])[:40]
-        if not _has_numeric_tokens(label):
-            return label
     return "(cluster)"
 
 
 def _compute_tfidf_embeddings(to_map: list[str]):
-    """Step 2: Compute TF-IDF embeddings from comment texts."""
+    """Step 2: Compute TF-IDF embeddings from comment texts.
+    norm='l2' and sublinear_tf reduce document-length bias for PCA."""
     from sklearn.feature_extraction.text import TfidfVectorizer
     vectorizer = TfidfVectorizer(
+        ngram_range=(1, 3),
+        min_df=2,
+        max_df=0.85,
         max_features=200,
-        token_pattern=r"(?u)\b[\u0600-\u06FF]+\b"
+        norm="l2",
+        sublinear_tf=True,
+        token_pattern=r"(?u)\b[\u0600-\u06FF]+\b",
     )
     X = vectorizer.fit_transform(to_map)
     return X.toarray()
@@ -505,21 +551,29 @@ def _run_umap(embeddings, random_state: int = 42):
         return reducer.fit_transform(embeddings)
 
 
-def _cluster_kmeans(coords, comments: list, to_map: list) -> tuple[list[dict], dict, list[int]]:
+def _cluster_kmeans(
+    coords, comments: list, to_map: list, title_phrase_stopwords: frozenset[str] | None = None
+) -> tuple[list[dict], dict, list[int]]:
     """Step 4: KMeans clustering for TF-IDF pipeline. Returns (labels, stats, cluster_assignments)."""
     from sklearn.cluster import KMeans
     kmeans = KMeans(n_clusters=4, random_state=0)
     cluster_ids = kmeans.fit_predict(coords)
-    labels, stats, assignments = _cluster_labels_from_coords(coords, cluster_ids, comments, to_map)
+    labels, stats, assignments = _cluster_labels_from_coords(
+        coords, cluster_ids, comments, to_map, title_phrase_stopwords=title_phrase_stopwords
+    )
     return labels, stats, assignments
 
 
-def _cluster_hdbscan(coords, comments: list, to_map: list, min_cluster_size: int = 8) -> tuple[list[dict], dict, list[int]]:
+def _cluster_hdbscan(
+    coords, comments: list, to_map: list, min_cluster_size: int = 8, title_phrase_stopwords: frozenset[str] | None = None
+) -> tuple[list[dict], dict, list[int]]:
     """Step 4: HDBSCAN clustering. Returns (labels, stats, cluster_assignments)."""
     import hdbscan
     clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, min_samples=min(min_cluster_size // 2, 4))
     cluster_ids = clusterer.fit_predict(coords)
-    labels, stats, assignments = _cluster_labels_from_coords(coords, cluster_ids, comments, to_map)
+    labels, stats, assignments = _cluster_labels_from_coords(
+        coords, cluster_ids, comments, to_map, title_phrase_stopwords=title_phrase_stopwords
+    )
     return labels, stats, assignments
 
 
@@ -555,6 +609,7 @@ def _cluster_labels_from_coords(
     cluster_ids: list,
     comments: list,
     to_map: list,
+    title_phrase_stopwords: frozenset[str] | None = None,
 ) -> tuple[list[dict], dict, list[int]]:
     """Build cluster labels from coords and cluster assignments. Handles HDBSCAN (-1 = noise).
     Returns (labels, stats, cluster_assignments) where stats has clusters, noise_count, total."""
@@ -572,18 +627,50 @@ def _cluster_labels_from_coords(
     for cid, indices in sorted(clusters.items()):
         if not indices:
             continue
-        comment_texts = [
-            comments[i].get("comment_text", "")
-            for i in indices
-            if i < len(comments)
-        ]
-        label = compute_cluster_label(comment_texts)
+        cluster_texts = [to_map[i] for i in indices if i < len(to_map)]
+        raw_texts = [comments[i].get("comment_text", "") for i in indices if i < len(comments)]
+        label = compute_cluster_label(
+            cluster_texts,
+            all_texts=to_map,
+            raw_texts_for_praise=raw_texts,
+            title_phrase_stopwords=title_phrase_stopwords,
+        )
         x = float(sum(coords[i][0] for i in indices) / len(indices))
         y = float(sum(coords[i][1] for i in indices) / len(indices))
         result.append({"x": round(x, 2), "y": round(y, 2), "label": label, "cluster_id": int(cid)})
     stats = {"clusters": len(result), "noise_count": noise_count, "total": total}
     cluster_assignments = [int(cid) for cid in cluster_ids]
     return result, stats, cluster_assignments
+
+
+def _clusters_summary(
+    cluster_labels: list[dict],
+    cluster_assignments: list[int],
+) -> list[dict]:
+    """Build clusters_summary: [{label, size, percent}, ...] for API response."""
+    if not cluster_labels or not cluster_assignments:
+        return []
+    total = len(cluster_assignments)
+    if total == 0:
+        return []
+    counts: dict[int, int] = {}
+    for cid in cluster_assignments:
+        if cid >= 0:
+            counts[cid] = counts.get(cid, 0) + 1
+    summary = []
+    for cl in cluster_labels:
+        cid = cl.get("cluster_id", -1)
+        if cid < 0:
+            continue
+        size = counts.get(cid, 0)
+        if size == 0:
+            continue
+        percent = round(size / total * 100, 1)
+        summary.append({"label": cl.get("label", ""), "size": size, "percent": percent})
+    noise_count = sum(1 for cid in cluster_assignments if cid < 0)
+    if noise_count > 0:
+        summary.append({"label": "noise / unclustered", "size": noise_count, "percent": round(noise_count / total * 100, 1)})
+    return summary
 
 
 def _point_to_xy(p) -> tuple[float, float] | None:
@@ -613,6 +700,7 @@ def compute_cluster_labels_from_umap(
         return []
     try:
         from sklearn.cluster import KMeans
+        title_phrase_stopwords = extract_title_phrases(comments)
         coords = []
         for p in points_umap:
             xy = _point_to_xy(p)
@@ -625,6 +713,7 @@ def compute_cluster_labels_from_umap(
         clusters: dict[int, list[int]] = {i: [] for i in range(k)}
         for i, cid in enumerate(cluster_ids):
             clusters[cid].append(i)
+        all_texts = [c.get("comment_text", "") for c in comments]
         cluster_labels = []
         for cid in range(k):
             indices = clusters[cid]
@@ -635,7 +724,9 @@ def compute_cluster_labels_from_umap(
                 for i in indices
                 if i < len(comments)
             ]
-            label = compute_cluster_label(comment_texts)
+            label = compute_cluster_label(
+                comment_texts, all_texts=all_texts, title_phrase_stopwords=title_phrase_stopwords
+            )
             xs = [float(coords[i][0]) for i in indices]
             ys = [float(coords[i][1]) for i in indices]
             x = float(sum(xs) / len(xs))
@@ -647,6 +738,7 @@ def compute_cluster_labels_from_umap(
 
 
 def analyze_comments(comments):
+    title_phrase_stopwords = extract_title_phrases(comments)
     word_counter = Counter()
     bigram_counter = Counter()
     trigram_counter = Counter()
@@ -683,20 +775,27 @@ def analyze_comments(comments):
     top_bigrams = [
         (phrase, count)
         for phrase, count in bigram_counter.items()
-        if count >= 3 and phrase not in PHRASE_STOPWORDS and phrase not in CHANNEL_STOPWORDS
+        if count >= 3
+        and phrase not in PHRASE_STOPWORDS
+        and phrase not in CHANNEL_STOPWORDS
+        and _normalize_phrase_for_match(phrase) not in title_phrase_stopwords
     ]
     top_bigrams = sorted(top_bigrams, key=lambda x: x[1], reverse=True)[:30]
 
     top_trigrams = [
         (phrase, count)
         for phrase, count in trigram_counter.items()
-        if count >= 2
+        if count >= 2 and _normalize_phrase_for_match(phrase) not in title_phrase_stopwords
     ]
     top_trigrams = sorted(top_trigrams, key=lambda x: x[1], reverse=True)[:20]
 
     total_tokens = sum(word_counter.values()) or 1
-    bigrams_pmi = compute_bigram_pmi(bigram_counter, word_counter, total_tokens)
-    trigrams_pmi = compute_trigram_pmi(trigram_counter, word_counter, total_tokens)
+    bigrams_pmi = compute_bigram_pmi(
+        bigram_counter, word_counter, total_tokens, title_phrase_stopwords=title_phrase_stopwords
+    )
+    trigrams_pmi = compute_trigram_pmi(
+        trigram_counter, word_counter, total_tokens, title_phrase_stopwords=title_phrase_stopwords
+    )
 
     combined_terms = list(word_counter.most_common(40))
     combined_terms.extend(top_bigrams)
@@ -753,8 +852,12 @@ def analyze_comments(comments):
                     points_tfidf.append([x, y, i])
 
                 # Step 4: Run clustering for TF-IDF pipeline
-                cluster_labels_tfidf, cluster_stats_tfidf, cluster_assignments_tfidf = _cluster_kmeans(umap_tfidf, comments, to_map)
-                cluster_labels_hdbscan, cluster_stats_hdbscan, cluster_assignments_hdbscan = _cluster_hdbscan(umap_tfidf, comments, to_map)
+                cluster_labels_tfidf, cluster_stats_tfidf, cluster_assignments_tfidf = _cluster_kmeans(
+                    umap_tfidf, comments, to_map, title_phrase_stopwords=title_phrase_stopwords
+                )
+                cluster_labels_hdbscan, cluster_stats_hdbscan, cluster_assignments_hdbscan = _cluster_hdbscan(
+                    umap_tfidf, comments, to_map, title_phrase_stopwords=title_phrase_stopwords
+                )
 
         except Exception:
             pass
@@ -770,7 +873,7 @@ def analyze_comments(comments):
                         y = round(float(umap_minilm[i][1]), 2)
                         points_minilm.append([x, y, i])
                     cluster_labels_minilm, cluster_stats_minilm, cluster_assignments_minilm = _cluster_hdbscan(
-                        umap_minilm, comments, to_map, min_cluster_size=5
+                        umap_minilm, comments, to_map, min_cluster_size=5, title_phrase_stopwords=title_phrase_stopwords
                     )
         except Exception as e:
             log.warning("MiniLM pipeline failed: %s", e)
@@ -778,6 +881,10 @@ def analyze_comments(comments):
     # Backward compatibility: points_umap = points_tfidf, cluster_labels = cluster_labels_tfidf
     points_umap = points_tfidf
     cluster_labels = cluster_labels_tfidf
+
+    clusters_summary_tfidf = _clusters_summary(cluster_labels_tfidf, cluster_assignments_tfidf)
+    clusters_summary_hdbscan = _clusters_summary(cluster_labels_hdbscan, cluster_assignments_hdbscan)
+    clusters_summary_minilm = _clusters_summary(cluster_labels_minilm, cluster_assignments_minilm)
 
     return {
         "avg_sentiment": avg_sentiment,
@@ -802,5 +909,8 @@ def analyze_comments(comments):
         "cluster_stats_tfidf": cluster_stats_tfidf,
         "cluster_stats_hdbscan": cluster_stats_hdbscan,
         "cluster_stats_minilm": cluster_stats_minilm,
+        "clusters_summary_tfidf": clusters_summary_tfidf,
+        "clusters_summary_hdbscan": clusters_summary_hdbscan,
+        "clusters_summary_minilm": clusters_summary_minilm,
         "comments": comments
     }

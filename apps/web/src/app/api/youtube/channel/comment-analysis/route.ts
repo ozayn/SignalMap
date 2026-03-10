@@ -37,6 +37,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Request failed";
-    return NextResponse.json({ error: msg }, { status: 502 });
+    const hint = !process.env.API_URL
+      ? "Set API_URL on the web service. For local dev, ensure the API is running (pnpm dev in apps/api)."
+      : "Backend unreachable. Check API_URL and that the API service is running.";
+    return NextResponse.json(
+      { error: msg, hint },
+      { status: 502 }
+    );
   }
 }

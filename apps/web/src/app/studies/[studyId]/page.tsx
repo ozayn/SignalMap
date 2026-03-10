@@ -402,6 +402,9 @@ export default function StudyDetailPage() {
       cluster_assignments_tfidf?: number[];
       cluster_assignments_hdbscan?: number[];
       cluster_assignments_minilm?: number[];
+      clusters_summary_tfidf?: Array<{ label: string; size: number; percent: number }>;
+      clusters_summary_hdbscan?: Array<{ label: string; size: number; percent: number }>;
+      clusters_summary_minilm?: Array<{ label: string; size: number; percent: number }>;
       comments: Array<Record<string, unknown>>;
   } | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -1002,6 +1005,9 @@ export default function StudyDetailPage() {
       cluster_assignments_tfidf?: number[];
       cluster_assignments_hdbscan?: number[];
       cluster_assignments_minilm?: number[];
+      clusters_summary_tfidf?: Array<{ label: string; size: number; percent: number }>;
+      clusters_summary_hdbscan?: Array<{ label: string; size: number; percent: number }>;
+      clusters_summary_minilm?: Array<{ label: string; size: number; percent: number }>;
       comments: Array<Record<string, unknown>>;
     }>("/api/youtube/channel/comment-analysis?channel_id=UChWB95_-n9rUc3H9srsn9bQ")
       .then((res) => {
@@ -2109,6 +2115,9 @@ export default function StudyDetailPage() {
                   clusterAssignmentsTfidf={analysisData.cluster_assignments_tfidf}
                   clusterAssignmentsHdbscan={analysisData.cluster_assignments_hdbscan}
                   clusterAssignmentsMinilm={analysisData.cluster_assignments_minilm}
+                  clustersSummaryHdbscan={analysisData.clusters_summary_hdbscan}
+                  clustersSummaryTfidf={analysisData.clusters_summary_tfidf}
+                  clustersSummaryMinilm={analysisData.clusters_summary_minilm}
                 />
               </section>
             )}

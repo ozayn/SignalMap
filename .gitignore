@@ -38,6 +38,7 @@ apps/api/.env
 
 # Data (future) - only root-level; apps/api/src/signalmap/data/ holds gold/oil constants
 /data/
+cache/
 *.duckdb
 *.db
 logs
