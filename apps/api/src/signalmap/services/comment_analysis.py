@@ -5,6 +5,7 @@ import math
 import os
 import re
 import threading
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -75,6 +76,9 @@ PERSIAN_BASE_STOPWORDS = {
     "واقعا", "اصلا", "تقریبا",
     "سلام", "مرسی", "ممنون", "تشکر",
 }
+
+# Tokens produced by sklearn's tokenizer when tokenizing our stop words (must be in stop list)
+TFIDF_STOPWORDS_EXTRA = {"آید", "توان", "تواند", "توانند", "رسد", "رود", "گوید", "گویند"}
 
 # Merge file-loaded stopwords with curated base
 PERSIAN_STOPWORDS = load_persian_stopwords().union(PERSIAN_BASE_STOPWORDS)
@@ -262,9 +266,9 @@ CONVERSATIONAL_WORDS = {
     "به", "باید", "گفتند", "میگن", "فکر", "نظرم",
 }
 
-# Additional tokens to filter in TF-IDF centroid labeling
+# Conversational/verb tokens to filter in TF-IDF centroid labeling (produce themes, not fragments)
 LABEL_TOKEN_FILTER = {
-    "باید", "نباید", "به", "نظرم", "گفتند", "مگه",
+    "آره", "باید", "نباید", "به", "نظرم", "گفتند", "مگه",
     "کردند", "میکند", "میکنم", "میکنی",
 }
 
@@ -503,9 +507,7 @@ PRAISE_KEYWORDS = [
 
 # Keywords for collapsing praise clusters (40% threshold)
 PRAISE_CLUSTER_KEYWORDS = [
-    "عالی",
-    "مرسی",
-    "دمت",
+    "مرسی", "عالی", "دمت", "ممنون",
     "خسته نباشید",
     "مثل همیشه عالی",
     "سپاس فراوان",
@@ -514,7 +516,7 @@ PRAISE_CLUSTER_KEYWORDS = [
 
 PRAISE_CLUSTER_THRESHOLD = 0.4
 
-# Labels that are synonyms for "praise / appreciation" — normalize to canonical form
+# Labels that are praise synonyms — normalize to "تحسین"
 PRAISE_LABEL_SYNONYMS = frozenset({
     "سپاس فراوان", "سپاس", "مرسی", "تشکر", "تحسین",
     "thank", "thanks", "great", "well done",
@@ -575,7 +577,7 @@ def compute_cluster_label(
         return "DEBUG_LABEL"
     texts_for_praise = raw_texts_for_praise if raw_texts_for_praise is not None else comment_texts
     if _is_praise_cluster(texts_for_praise):
-        return "praise / appreciation"
+        return "تحسین"
 
     texts = [t for t in comment_texts if t and isinstance(t, str)]
     if len(texts) < 1:
@@ -583,18 +585,20 @@ def compute_cluster_label(
 
     from sklearn.feature_extraction.text import TfidfVectorizer
 
-    stop_list = list(PERSIAN_STOPWORDS | STOPWORDS | CUSTOM_STOPWORDS | LABEL_TOKEN_FILTER)
+    stop_list = list(PERSIAN_STOPWORDS | STOPWORDS | CUSTOM_STOPWORDS | LABEL_TOKEN_FILTER | TFIDF_STOPWORDS_EXTRA)
     corpus = all_texts if (all_texts and len(all_texts) >= 2) else texts
 
-    vectorizer = TfidfVectorizer(
-        ngram_range=(1, 1),
-        min_df=1,
-        stop_words=stop_list,
-        token_pattern=r"(?u)\b[\u0600-\u06FFa-zA-Z]{3,}\b",
-    )
     try:
-        X_corpus = vectorizer.fit_transform(corpus)
-        X_cluster = vectorizer.transform(texts)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Your stop_words may be inconsistent")
+            vectorizer = TfidfVectorizer(
+                ngram_range=(1, 1),
+                min_df=1,
+                stop_words=stop_list,
+                token_pattern=r"(?u)\b[\u0600-\u06FFa-zA-Z]{3,}\b",
+            )
+            X_corpus = vectorizer.fit_transform(corpus)
+            X_cluster = vectorizer.transform(texts)
     except ValueError:
         return "(cluster)"
 
@@ -627,15 +631,34 @@ def compute_cluster_label(
     if filtered and praise_count >= len(filtered) / 2:
         return "تحسین"
 
-    # Select top 2 remaining tokens
-    top2 = filtered[:2]
-    if not top2:
+    top_tokens = filtered[:5]
+    if not top_tokens:
         return "(cluster)"
-    label = _dedupe_phrase(" ".join(top2))[:40]
+
+    # Prefer real bigrams from cluster texts over arbitrary token pairs
+    top_tokens_set = {_normalize_phrase_for_match(t) for t in top_tokens}
+    bigram_counts: Counter[str] = Counter()
+    for text in texts:
+        tokens = tokenize(text)
+        for bg in generate_bigrams(tokens):
+            parts = bg.split(" ", 1)
+            if len(parts) != 2:
+                continue
+            w1, w2 = _normalize_phrase_for_match(parts[0]), _normalize_phrase_for_match(parts[1])
+            if w1 in top_tokens_set and w2 in top_tokens_set:
+                bigram_key = _normalize_phrase_for_match(bg)
+                bigram_counts[bigram_key] += 1
+
+    if bigram_counts:
+        label = bigram_counts.most_common(1)[0][0]
+    else:
+        label = top_tokens[0]
+
+    label = _dedupe_phrase(label)[:40]
     if not _is_valid_label_for_display(label):
         return "(cluster)"
     if _normalize_phrase_for_match(label) in PRAISE_LABEL_SYNONYMS:
-        return "praise / appreciation"
+        return "تحسین"
     return label
 
 
@@ -831,14 +854,17 @@ def _run_umap(embeddings, random_state: int = 42):
     Deterministic: same embedding for identical inputs."""
     import umap
     with _umap_lock:
-        reducer = umap.UMAP(
-            n_neighbors=15,
-            min_dist=0.1,
-            n_components=2,
-            metric="cosine",
-            random_state=random_state,
-        )
-        return reducer.fit_transform(embeddings)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="n_jobs value .* overridden")
+            reducer = umap.UMAP(
+                n_neighbors=15,
+                min_dist=0.1,
+                n_components=2,
+                metric="cosine",
+                n_jobs=1,
+                random_state=random_state,
+            )
+            return reducer.fit_transform(embeddings)
 
 
 def _cluster_kmeans(
@@ -1010,7 +1036,9 @@ def _cluster_labels_from_coords(
         clusters[cid].append(i)
     total = len(cluster_ids)
     result = []
-    use_semantic = embeddings is not None and len(embeddings) >= len(to_map)
+    # Use TF-IDF centroid labeling for theme labels (تاریخ ایران, دین اسلام)
+    # Semantic labeling produces comment fragments; TF-IDF produces topic themes
+    use_semantic = False
     used_labels: set[str] = set()
     for cid, indices in sorted(clusters.items()):
         if not indices:
