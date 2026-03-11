@@ -26,7 +26,10 @@ function getSignalTags(study: StudyMeta): string[] {
   if (kind === "gold_and_oil") tags.push("Gold");
   if (kind === "events_timeline") tags.push("Events");
   if (kind === "follower_growth_dynamics") tags.push("Growth");
-  if (kind === "youtube_comment_analysis") tags.push("Discourse");
+  if (kind === "youtube_comment_analysis") {
+    tags.push("Discourse");
+    if (study.youtubeLanguage !== "English") tags.push("Persian");
+  }
   if (kind === "wage_cpi_real") tags.push("Wage");
   if (kind === "oil_trade_network" || kind === "oil_exporter_timeseries") tags.push("Trade");
   if (study.eventLayers && study.eventLayers.length > 0 && !tags.includes("Events")) {
