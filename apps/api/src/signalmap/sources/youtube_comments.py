@@ -2,6 +2,7 @@
 YouTube comment source: fetch recent videos from a channel.
 First step toward collecting comments for discourse analysis.
 Uses YouTube Data API v3 search.
+Excludes Shorts by using videoDuration=medium (4–20 min) or long (>20 min) at search time.
 """
 
 import os
@@ -57,15 +58,9 @@ def get_video_comments(video_id: str, max_results: int = 50):
     return comments
 
 
-def get_channel_videos(channel_id: str, max_results: int = 10):
-    """
-    Fetch recent videos from a YouTube channel.
-    """
-    if not YOUTUBE_API_KEY:
-        raise RuntimeError("YOUTUBE_API_KEY not configured")
-
+def _search_videos(channel_id: str, max_results: int, video_duration: str | None) -> list[dict]:
+    """Run search.list; video_duration: 'short'|'medium'|'long' or None for any."""
     url = f"{BASE_URL}/search"
-
     params = {
         "part": "snippet",
         "channelId": channel_id,
@@ -74,27 +69,46 @@ def get_channel_videos(channel_id: str, max_results: int = 10):
         "type": "video",
         "key": YOUTUBE_API_KEY,
     }
-
+    if video_duration:
+        params["videoDuration"] = video_duration
     r = httpx.get(url, params=params, timeout=15.0)
-
     if r.status_code != 200:
         raise RuntimeError(f"YouTube API error: {r.text}")
-
     try:
         from db import record_youtube_quota_usage
         record_youtube_quota_usage(100)  # search.list = 100 units
     except Exception:
         pass
-
-    data = r.json()
-
     videos = []
-
-    for item in data.get("items", []):
+    for item in r.json().get("items", []):
         videos.append({
             "video_id": item["id"]["videoId"],
             "title": item["snippet"]["title"],
             "published_at": item["snippet"]["publishedAt"],
         })
-
     return videos
+
+
+def get_channel_videos(channel_id: str, max_results: int = 10, exclude_shorts: bool = True):
+    """
+    Fetch recent videos from a YouTube channel.
+    Excludes Shorts by using videoDuration at search time (no extra API call).
+    Tries 'long' (>20 min) first, then 'medium' (4–20 min) if needed.
+    """
+    if not YOUTUBE_API_KEY:
+        raise RuntimeError("YOUTUBE_API_KEY not configured")
+
+    if not exclude_shorts:
+        return _search_videos(channel_id, max_results, video_duration=None)
+
+    # Try long first (typical for commentary/news), then medium if few results
+    videos = _search_videos(channel_id, max_results, video_duration="long")
+    if len(videos) < max_results:
+        more = _search_videos(channel_id, 50, video_duration="medium")
+        seen = {v["video_id"] for v in videos}
+        for v in more:
+            if v["video_id"] not in seen:
+                videos.append(v)
+                seen.add(v["video_id"])
+        videos.sort(key=lambda x: x["published_at"], reverse=True)
+    return videos[:max_results]

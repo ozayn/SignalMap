@@ -40,6 +40,12 @@ def main() -> int:
         action="store_true",
         help="Delete all prod rows before sync (removes stale data)",
     )
+    parser.add_argument(
+        "--channel-id",
+        type=str,
+        default=None,
+        help="Sync only this channel (e.g. UCGttrUON87gWfU6dMWm1fcA for Tucker)",
+    )
     args = parser.parse_args()
 
     source_url = os.getenv("DATABASE_URL", "").replace("postgres://", "postgresql://", 1)
@@ -67,13 +73,24 @@ def main() -> int:
     rows = []
     try:
         with conn_src.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                """
-                SELECT channel_id, analysis_json, videos_analyzed, comments_analyzed, computed_at
-                FROM youtube_comment_analysis
-                """
-            )
-            rows = cur.fetchall()
+            if args.channel_id:
+                cur.execute(
+                    """
+                    SELECT channel_id, analysis_json, videos_analyzed, comments_analyzed, computed_at
+                    FROM youtube_comment_analysis
+                    WHERE channel_id = %s
+                    """,
+                    (args.channel_id.strip(),),
+                )
+                rows = cur.fetchall()
+            else:
+                cur.execute(
+                    """
+                    SELECT channel_id, analysis_json, videos_analyzed, comments_analyzed, computed_at
+                    FROM youtube_comment_analysis
+                    """
+                )
+                rows = cur.fetchall()
     finally:
         conn_src.close()
 

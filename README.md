@@ -105,3 +105,22 @@ Idempotent—safe to run multiple times.
 **YouTube channels:** Set `YOUTUBE_DAILY_UPDATE_CHANNELS` (comma-separated handles or channel IDs) and `YOUTUBE_API_KEY` to refresh channel snapshots daily.
 
 **FRED API (Brent oil):** Required for oil signals and cron updates. Local: `export FRED_API_KEY=your_key`. Railway: Add `FRED_API_KEY` in API service variables. Get a key at [fred.stlouisfed.org/docs/api](https://fred.stlouisfed.org/docs/api/api_key.html).
+
+### Sync YouTube comment analysis to production
+
+To push cached YouTube comment analysis (keywords, narrative phrases, discourse maps) from local to production:
+
+```bash
+cd apps/api
+
+# 1. Seed local DB from file cache (if needed)
+.venv/bin/python scripts/seed_all_youtube_cache_to_db.py
+
+# 2. Sync to production (requires DATABASE_URL and DATABASE_URL_PROD in .env)
+.venv/bin/python scripts/sync_youtube_comment_analysis_to_production.py --channel-id UCGttrUON87gWfU6dMWm1fcA
+```
+
+- `DATABASE_URL` = local Postgres (source)
+- `DATABASE_URL_PROD` = production Postgres (Railway public URL, not internal)
+- Omit `--channel-id` to sync all channels
+- Use `--clear` to delete all prod rows before syncing
