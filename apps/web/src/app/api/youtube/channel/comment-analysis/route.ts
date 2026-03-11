@@ -24,6 +24,8 @@ export async function GET(request: NextRequest) {
     if (commentsPerVideo != null) params.set("comments_per_video", commentsPerVideo);
     const refresh = searchParams.get("refresh");
     if (refresh === "1" || refresh === "true") params.set("refresh", "1");
+    const recompute = searchParams.get("recompute");
+    if (recompute === "1" || recompute === "true") params.set("recompute", "1");
 
     const res = await fetch(`${API_BASE}/api/youtube/channel/comment-analysis?${params}`, {
       headers: { Accept: "application/json" },

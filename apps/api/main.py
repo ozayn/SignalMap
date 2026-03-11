@@ -1397,6 +1397,8 @@ def youtube_channel_comment_analysis(
             if out:
                 out["videos_analyzed"] = cache["videos_analyzed"]
                 out["comments_analyzed"] = cache["comments_analyzed"]
+                save_youtube_comment_analysis(cid, out, cache["videos_analyzed"], cache["comments_analyzed"])
+                save_cached_snapshot(cid, out)
                 return out
 
         # Try file cache
@@ -1407,6 +1409,10 @@ def youtube_channel_comment_analysis(
                 return snapshot
             out = _recompute_from_cached_dataset(snapshot, cid)
             if out:
+                v = snapshot.get("videos_analyzed", 0)
+                c = snapshot.get("comments_analyzed", 0)
+                save_youtube_comment_analysis(cid, out, v, c)
+                save_cached_snapshot(cid, out)
                 return out
 
         # No cache: fetch from YouTube, run analysis, save to DB

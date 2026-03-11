@@ -1031,7 +1031,7 @@ export default function StudyDetailPage() {
           clusters_summary_minilm?: Array<{ label: string; size: number; percent: number }>;
           comments: Array<Record<string, unknown>>;
         }>(url);
-        setAnalysisData(res);
+        if (res.channel_id === channelId) setAnalysisData(res);
       } catch (e) {
         setAnalysisError(e instanceof Error ? e.message : "Fetch failed");
       } finally {
