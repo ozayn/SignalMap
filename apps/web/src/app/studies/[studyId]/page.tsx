@@ -20,7 +20,7 @@ import { OilTradeSankey } from "@/components/oil-trade-sankey";
 import LatestValueBanner from "@/components/studies/LatestValueBanner";
 import { MultiSeriesStats } from "@/components/studies/MultiSeriesStats";
 import { YoutubeDiscourseMaps } from "@/components/studies/youtube-discourse";
-import { getStudyById, getPrevNextStudies } from "@/lib/studies";
+import { getStudyById, getPrevNextStudies, YOUTUBE_DISCOURSE_VIDEOS_LIMIT, YOUTUBE_DISCOURSE_COMMENTS_PER_VIDEO } from "@/lib/studies";
 import { fetchJson } from "@/lib/api";
 import { enrichOilPointsWithVolatility } from "@/lib/oil-volatility";
 import { filterForNetwork, filterForSankey } from "@/lib/oil-trade-network-filter";
@@ -979,8 +979,8 @@ export default function StudyDetailPage() {
       setAnalysisError(null);
       if (!forceRefresh) setAnalysisData(null);
       const channelId = study.youtubeChannelId ?? "UChWB95_-n9rUc3H9srsn9bQ";
-      const videosLimit = study.youtubeVideosLimit ?? 5;
-      const commentsPerVideo = study.youtubeCommentsPerVideo ?? 30;
+      const videosLimit = YOUTUBE_DISCOURSE_VIDEOS_LIMIT;
+      const commentsPerVideo = YOUTUBE_DISCOURSE_COMMENTS_PER_VIDEO;
       const params = new URLSearchParams({
         channel_id: channelId,
         videos_limit: String(videosLimit),

@@ -20,6 +20,10 @@ export type PrimarySignal =
 
 import type { ConceptKey } from "./concepts";
 
+/** YouTube discourse: videos and comments per video. Set here; all discourse studies use these. */
+export const YOUTUBE_DISCOURSE_VIDEOS_LIMIT = 10;
+export const YOUTUBE_DISCOURSE_COMMENTS_PER_VIDEO = 50;
+
 export type StudyMeta = {
   id: string;
   number: number;
@@ -43,10 +47,6 @@ export type StudyMeta = {
   unitLabel?: string;
   /** YouTube discourse: channel ID (default: bplus). */
   youtubeChannelId?: string;
-  /** YouTube discourse: max videos to analyze (default: 5). */
-  youtubeVideosLimit?: number;
-  /** YouTube discourse: max comments per video (default: 30). */
-  youtubeCommentsPerVideo?: number;
 };
 
 export const STUDIES: StudyMeta[] = [
@@ -274,8 +274,6 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCDRIjKy6eZOvKtOELtTdeUA",
-    youtubeVideosLimit: 10,
-    youtubeCommentsPerVideo: 50,
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
   },
   {
@@ -287,8 +285,6 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCGttrUON87gWfU6dMWm1fcA",
-    youtubeVideosLimit: 10,
-    youtubeCommentsPerVideo: 50,
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
   },
   {
@@ -300,8 +296,6 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCupvZG-5ko_eiXAupbDfxWw",
-    youtubeVideosLimit: 10,
-    youtubeCommentsPerVideo: 50,
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
   },
   {
@@ -313,8 +307,6 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCXIJgqnII2ZOINSWNOGFThA",
-    youtubeVideosLimit: 10,
-    youtubeCommentsPerVideo: 50,
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
   },
   {
@@ -326,8 +318,6 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UC16niRr50-MSBwiO3YDb3RA",
-    youtubeVideosLimit: 10,
-    youtubeCommentsPerVideo: 50,
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
   },
   {
@@ -339,8 +329,6 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCHZk9MrT3DGWmVqdsj5y0EA",
-    youtubeVideosLimit: 10,
-    youtubeCommentsPerVideo: 50,
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
   },
   {
@@ -352,8 +340,6 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCat6bC0Wrqq9Bcq7EkH_yQw",
-    youtubeVideosLimit: 10,
-    youtubeCommentsPerVideo: 50,
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
   },
   {

@@ -1153,7 +1153,7 @@ def youtube_channel_comments(
 
 def _run_youtube_comment_analysis(
     cid: str,
-    videos_limit: int = 5,
+    videos_limit: int = 10,
     comments_per_video: int = 30,
 ) -> dict:
     """Fetch comments, run analysis, save to cache, return result. Does not check cache."""
@@ -1284,7 +1284,7 @@ def youtube_channel_refresh_analysis(body: RefreshAnalysisBody):
             raise HTTPException(status_code=422, detail="channel_id is required.")
 
         delete_youtube_comment_analysis(cid)
-        result = _run_youtube_comment_analysis(cid, videos_limit=5, comments_per_video=30)
+        result = _run_youtube_comment_analysis(cid, videos_limit=10, comments_per_video=30)
         return result
     except HTTPException:
         raise
@@ -1364,7 +1364,7 @@ def _recompute_from_cached_dataset(cache_dict: dict, cid: str) -> dict | None:
 def youtube_channel_comment_analysis(
     channel_id: Optional[str] = Query(None, description="YouTube channel ID"),
     identifier: Optional[str] = Query(None, description="Handle, URL, or channel ID (resolved to channel_id)"),
-    videos_limit: int = Query(5, ge=1, le=50, description="Max videos to analyze"),
+    videos_limit: int = Query(10, ge=1, le=50, description="Max videos to analyze"),
     comments_per_video: int = Query(30, ge=1, le=100, description="Max comments per video"),
     refresh: bool = Query(False, description="If true, delete cache and fetch fresh from YouTube (uses API quota)"),
     recompute: bool = Query(False, description="If true, recompute labels from cached comments (slow)"),
