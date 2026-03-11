@@ -1380,10 +1380,10 @@ def youtube_channel_comment_analysis(
         else:
             raise HTTPException(status_code=422, detail="Either channel_id or identifier is required.")
 
-        # If refresh=1: require admin code when YOUTUBE_REFRESH_CODE is set, then delete cache and fetch from YouTube
+        # If refresh=1: require YOUTUBE_REFRESH_CODE to be set and admin_code to match (protects quota)
         if refresh:
             expected = os.environ.get("YOUTUBE_REFRESH_CODE")
-            if expected and (not admin_code or (admin_code or "").strip() != expected):
+            if not expected or (not admin_code or (admin_code or "").strip() != expected):
                 raise HTTPException(status_code=403, detail="Admin code required to refresh from YouTube.")
             delete_youtube_comment_analysis(cid)
             return _run_youtube_comment_analysis(cid, videos_limit, comments_per_video)
@@ -1419,7 +1419,7 @@ def youtube_channel_comment_analysis(
                 save_cached_snapshot(cid, out)
                 return out
 
-        # No cache: fetch from YouTube, run analysis, save to DB
+        # No cache: fetch from YouTube (no admin required for initial setup of new channels)
         return _run_youtube_comment_analysis(cid, videos_limit, comments_per_video)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
