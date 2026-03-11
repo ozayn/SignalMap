@@ -973,7 +973,7 @@ export default function StudyDetailPage() {
   }, [study, isEventsTimeline, isFollowerGrowthDynamics, isYoutubeCommentAnalysis]);
 
   const fetchYoutubeAnalysis = useCallback(
-    async (forceRefresh: boolean) => {
+    async (forceRefresh: boolean, forceRecompute: boolean = false) => {
       if (!study) return;
       setAnalysisLoading(true);
       setAnalysisError(null);
@@ -988,6 +988,7 @@ export default function StudyDetailPage() {
         _: String(Date.now()),
       });
       if (forceRefresh) params.set("refresh", "1");
+      if (forceRecompute) params.set("recompute", "1");
       const url = `/api/youtube/channel/comment-analysis?${params.toString()}`;
       try {
         const res = await fetchJson<{
@@ -1976,12 +1977,12 @@ export default function StudyDetailPage() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => fetchYoutubeAnalysis(false)}
+                onClick={() => fetchYoutubeAnalysis(false, true)}
                 disabled={analysisLoading}
                 className="text-xs px-2 py-1 rounded border border-border hover:bg-muted transition-colors disabled:opacity-50"
-                title="Recompute cluster labels from cached comments (no API quota)"
+                title="Recompute cluster labels from cached comments (no API quota, may take a minute)"
               >
-                {analysisLoading ? "Loading…" : "Recompute labels"}
+                {analysisLoading ? "Recomputing…" : "Recompute labels"}
               </button>
               <button
                 type="button"

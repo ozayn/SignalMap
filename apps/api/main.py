@@ -1367,8 +1367,10 @@ def youtube_channel_comment_analysis(
     videos_limit: int = Query(5, ge=1, le=50, description="Max videos to analyze"),
     comments_per_video: int = Query(30, ge=1, le=100, description="Max comments per video"),
     refresh: bool = Query(False, description="If true, delete cache and fetch fresh from YouTube (uses API quota)"),
+    recompute: bool = Query(False, description="If true, recompute labels from cached comments (slow)"),
 ):
-    """Collect comments from recent videos of a YouTube channel and run analysis. Uses cached comments when available; embeddings and clustering are always recomputed."""
+    """Collect comments from recent videos of a YouTube channel and run analysis.
+    Cache-first: when cached, returns immediately unless recompute=1. Recompute only when explicitly requested."""
     try:
         if channel_id and channel_id.strip():
             cid = channel_id.strip()
@@ -1382,21 +1384,27 @@ def youtube_channel_comment_analysis(
             delete_youtube_comment_analysis(cid)
             return _run_youtube_comment_analysis(cid, videos_limit, comments_per_video)
 
-        # Try DB cache: load comments, recompute embeddings (do not use cached points)
+        # Try DB cache
         cache = get_cached_youtube_comment_analysis(cid)
         if cache:
             cache_dict = dict(cache["analysis_json"])
             cache_dict["videos_analyzed"] = cache["videos_analyzed"]
             cache_dict["comments_analyzed"] = cache["comments_analyzed"]
+            if not recompute:
+                # Return cached result immediately (fast)
+                return cache_dict
             out = _recompute_from_cached_dataset(cache_dict, cid)
             if out:
                 out["videos_analyzed"] = cache["videos_analyzed"]
                 out["comments_analyzed"] = cache["comments_analyzed"]
                 return out
 
-        # Try file cache: load comments, recompute embeddings (do not modify cache file)
+        # Try file cache
         snapshot = load_cached_snapshot(cid)
         if snapshot:
+            if not recompute:
+                # Return cached result immediately (fast)
+                return snapshot
             out = _recompute_from_cached_dataset(snapshot, cid)
             if out:
                 return out
