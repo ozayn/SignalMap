@@ -430,6 +430,18 @@ NUMERIC_FRAGMENT_TOKENS = frozenset({
     "barrel", "barrels", "old", "percent", "dollar", "dollars",
 })
 
+# Generic tokens: if BOTH (bigram) or ALL (trigram) tokens are in this set, skip (low-information)
+GENERIC_PHRASE_TOKENS = frozenset({
+    "real", "change", "problem", "thing", "person", "year", "mind", "ago",
+    "main", "stream", "social", "medium", "media", "good", "bad", "new",
+    "old", "big", "small", "long", "short", "right", "wrong", "true", "false",
+})
+
+# Malformed/off-topic tokens — reject phrases containing any of these
+MALFORMED_PHRASE_TOKENS = frozenset({
+    "bebe", "nappy", "nappies", "core",  # typos, off-topic (deal bebe nappy, fix core)
+})
+
 # English conversational filler and sentence fragments (not meaningful topics)
 # Host/channel names are per-channel only (CHANNEL_EXTRA_STOPWORDS)
 PHRASE_STOPWORDS_EN = frozenset({
@@ -539,6 +551,24 @@ def _is_numeric_fragment_phrase(phrase: str) -> bool:
     if not tokens:
         return False
     return all(t in NUMERIC_FRAGMENT_TOKENS for t in tokens)
+
+
+def _is_generic_phrase(phrase: str) -> bool:
+    """True if all tokens are generic (real problem, change mind) — low-information, skip."""
+    if not phrase:
+        return False
+    tokens = [t.lower().strip(".,;:!?\"'()") for t in phrase.split()]
+    return tokens and all(t in GENERIC_PHRASE_TOKENS for t in tokens)
+
+
+def _is_malformed_phrase(phrase: str) -> bool:
+    """True if phrase contains any malformed/off-topic token (bebe, nappy, etc.)."""
+    if not phrase:
+        return False
+    for t in phrase.lower().split():
+        if t.strip(".,;:!?\"'()") in MALFORMED_PHRASE_TOKENS:
+            return True
+    return False
 
 
 def _is_english_only(phrase: str) -> bool:
@@ -1920,6 +1950,11 @@ def compute_wordcloud_from_comments(comments: list, channel_id: str | None = Non
         trigram_counter, word_counter, total_tokens, title_phrase_stopwords=title_phrase_stopwords, lang=lang
     )
 
+    BIGRAM_MIN_COUNT = 3 if lang == "fa" else 2
+    TRIGRAM_MIN_COUNT = 3
+    allowed_bigrams = frozenset(p for p, _, c in bigrams_pmi if c >= BIGRAM_MIN_COUNT)
+    top_tokens = frozenset(w for w, _ in word_counter.most_common(500))
+
     def _ok_for_wordcloud(item, lang: str) -> bool:
         if isinstance(item, tuple) and len(item) >= 2:
             phrase = item[0]
@@ -1944,6 +1979,22 @@ def compute_wordcloud_from_comments(comments: list, channel_id: str | None = Non
             return False
         if lang == "en" and norm in PHRASE_STOPWORDS_EN:
             return False
+        # Phrase-specific filters (skip for single-token keywords)
+        tokens = phrase.lower().split()
+        if len(tokens) >= 2:
+            if _is_generic_phrase(phrase):
+                return False
+            if _is_malformed_phrase(phrase):
+                return False
+            # Top-tokens grounding: all tokens must appear in top 300 words
+            clean_tokens = [t.strip(".,;:!?\"'()") for t in tokens]
+            if not all(t in top_tokens for t in clean_tokens):
+                return False
+        if len(tokens) == 3:
+            # Trigram quality: require at least one component bigram to be a clear noun phrase
+            bg1, bg2 = " ".join(tokens[:2]), " ".join(tokens[1:])
+            if bg1 not in allowed_bigrams and bg2 not in allowed_bigrams:
+                return False
         return True
 
     if lang == "en":
@@ -1951,8 +2002,6 @@ def compute_wordcloud_from_comments(comments: list, channel_id: str | None = Non
     else:
         unigrams_raw = list(word_counter.most_common(50))
         keywords = [x for x in unigrams_raw if _ok_for_wordcloud(x, lang)][:40]
-    BIGRAM_MIN_COUNT = 3 if lang == "fa" else 2
-    TRIGRAM_MIN_COUNT = 3
     combined_phrases: list[tuple[str, int]] = []
     for phrase, _pmi, count in bigrams_pmi:
         if count >= BIGRAM_MIN_COUNT:
@@ -2046,6 +2095,11 @@ def analyze_comments(comments, channel_id: str | None = None):
         trigram_counter, word_counter, total_tokens, title_phrase_stopwords=title_phrase_stopwords, lang=lang
     )
 
+    BIGRAM_MIN_COUNT = 3 if lang == "fa" else 2
+    TRIGRAM_MIN_COUNT = 3
+    allowed_bigrams = frozenset(p for p, _, c in bigrams_pmi if c >= BIGRAM_MIN_COUNT)
+    top_tokens = frozenset(w for w, _ in word_counter.most_common(500))
+
     # Filter out channel-specific terms and conversational filler from word cloud
     def _ok_for_wordcloud(item, lang: str) -> bool:
         if isinstance(item, tuple) and len(item) >= 2:
@@ -2069,6 +2123,22 @@ def analyze_comments(comments, channel_id: str | None = None):
             return False
         if lang == "en" and norm in PHRASE_STOPWORDS_EN:
             return False
+        # Phrase-specific filters (skip for single-token keywords)
+        tokens = phrase.lower().split()
+        if len(tokens) >= 2:
+            if _is_generic_phrase(phrase):
+                return False
+            if _is_malformed_phrase(phrase):
+                return False
+            # Top-tokens grounding: all tokens must appear in top 500 words
+            clean_tokens = [t.strip(".,;:!?\"'()") for t in tokens]
+            if not all(t in top_tokens for t in clean_tokens):
+                return False
+        if len(tokens) == 3:
+            # Trigram quality: require at least one component bigram to be a clear noun phrase
+            bg1, bg2 = " ".join(tokens[:2]), " ".join(tokens[1:])
+            if bg1 not in allowed_bigrams and bg2 not in allowed_bigrams:
+                return False
         return True
 
     # Keyword layer: unigrams only — general discourse topics
@@ -2080,8 +2150,6 @@ def analyze_comments(comments, channel_id: str | None = None):
 
     # Narrative phrase layer: prefer stable bigrams; include trigrams only if stronger than components
     # Min frequency: bigram >= 2, trigram >= 3 (repeated discourse frames, not isolated mentions)
-    BIGRAM_MIN_COUNT = 3 if lang == "fa" else 2
-    TRIGRAM_MIN_COUNT = 3
     combined_phrases: list[tuple[str, int]] = []
     for phrase, _pmi, count in bigrams_pmi:
         if count >= BIGRAM_MIN_COUNT:
