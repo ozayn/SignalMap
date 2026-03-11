@@ -58,8 +58,14 @@ const SECTIONS: { title: string; description: string; studyIds: string[] }[] = [
   },
   {
     title: "Audience dynamics (growth & networks)",
-    description: "Follower growth, simple growth models, network prototypes, and discourse analysis.",
-    studyIds: ["follower_growth_dynamics", "youtube_discourse", "oil_trade_network", "oil_exporter_timeseries"],
+    description: "Follower growth, simple growth models, and network prototypes.",
+    studyIds: ["follower_growth_dynamics", "oil_trade_network", "oil_exporter_timeseries"],
+  },
+  {
+    title: "Media discourse",
+    description:
+      "Language, narrative, and audience discourse extracted from YouTube comment sections.",
+    studyIds: ["bplus-discourse", "bbc_persian_discourse", "iran_international_discourse", "breaking_points_discourse", "tucker_carlson_discourse", "cnn_discourse", "fox_news_discourse", "bbc_discourse"],
   },
 ];
 

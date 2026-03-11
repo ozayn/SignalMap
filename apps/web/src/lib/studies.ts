@@ -41,6 +41,12 @@ export type StudyMeta = {
   observations?: string[];
   /** Unit label for stat cards; shown once above cards when all share the same unit. */
   unitLabel?: string;
+  /** YouTube discourse: channel ID (default: bplus). */
+  youtubeChannelId?: string;
+  /** YouTube discourse: max videos to analyze (default: 5). */
+  youtubeVideosLimit?: number;
+  /** YouTube discourse: max comments per video (default: 30). */
+  youtubeCommentsPerVideo?: number;
 };
 
 export const STUDIES: StudyMeta[] = [
@@ -250,13 +256,104 @@ export const STUDIES: StudyMeta[] = [
     unitLabel: "thousand barrels/day",
   },
   {
-    id: "youtube_discourse",
+    id: "bplus-discourse",
     number: 18,
-    title: "YouTube discourse signals",
+    title: "Bplus YouTube Discourse",
     timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
-    description: "Audience sentiment and discourse topics from YouTube comments.",
+    description: "Audience sentiment and discourse topics from Bplus Podcast YouTube comments.",
     status: "active",
     primarySignal: { kind: "youtube_comment_analysis" },
+    concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
+  },
+  {
+    id: "breaking_points_discourse",
+    number: 19,
+    title: "Breaking Points YouTube Discourse",
+    timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
+    description: "Audience sentiment and discourse topics from Breaking Points YouTube comments.",
+    status: "active",
+    primarySignal: { kind: "youtube_comment_analysis" },
+    youtubeChannelId: "UCDRIjKy6eZOvKtOELtTdeUA",
+    youtubeVideosLimit: 10,
+    youtubeCommentsPerVideo: 50,
+    concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
+  },
+  {
+    id: "tucker_carlson_discourse",
+    number: 20,
+    title: "Tucker Carlson YouTube Discourse",
+    timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
+    description: "Audience sentiment and discourse topics from Tucker Carlson YouTube comments.",
+    status: "active",
+    primarySignal: { kind: "youtube_comment_analysis" },
+    youtubeChannelId: "UCGttrUON87gWfU6dMWm1fcA",
+    youtubeVideosLimit: 10,
+    youtubeCommentsPerVideo: 50,
+    concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
+  },
+  {
+    id: "cnn_discourse",
+    number: 21,
+    title: "CNN YouTube Discourse",
+    timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
+    description: "Audience sentiment and discourse topics from CNN YouTube comments.",
+    status: "active",
+    primarySignal: { kind: "youtube_comment_analysis" },
+    youtubeChannelId: "UCupvZG-5ko_eiXAupbDfxWw",
+    youtubeVideosLimit: 10,
+    youtubeCommentsPerVideo: 50,
+    concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
+  },
+  {
+    id: "fox_news_discourse",
+    number: 22,
+    title: "Fox News YouTube Discourse",
+    timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
+    description: "Audience sentiment and discourse topics from Fox News YouTube comments.",
+    status: "active",
+    primarySignal: { kind: "youtube_comment_analysis" },
+    youtubeChannelId: "UCXIJgqnII2ZOINSWNOGFThA",
+    youtubeVideosLimit: 10,
+    youtubeCommentsPerVideo: 50,
+    concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
+  },
+  {
+    id: "bbc_discourse",
+    number: 23,
+    title: "BBC News YouTube Discourse",
+    timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
+    description: "Audience sentiment and discourse topics from BBC News YouTube comments.",
+    status: "active",
+    primarySignal: { kind: "youtube_comment_analysis" },
+    youtubeChannelId: "UC16niRr50-MSBwiO3YDb3RA",
+    youtubeVideosLimit: 10,
+    youtubeCommentsPerVideo: 50,
+    concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
+  },
+  {
+    id: "bbc_persian_discourse",
+    number: 24,
+    title: "BBC Persian YouTube Discourse",
+    timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
+    description: "Audience sentiment and discourse topics from BBC Persian YouTube comments.",
+    status: "active",
+    primarySignal: { kind: "youtube_comment_analysis" },
+    youtubeChannelId: "UCHZk9MrT3DGWmVqdsj5y0EA",
+    youtubeVideosLimit: 10,
+    youtubeCommentsPerVideo: 50,
+    concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
+  },
+  {
+    id: "iran_international_discourse",
+    number: 25,
+    title: "Iran International YouTube Discourse",
+    timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
+    description: "Audience sentiment and discourse topics from Iran International YouTube comments.",
+    status: "active",
+    primarySignal: { kind: "youtube_comment_analysis" },
+    youtubeChannelId: "UCat6bC0Wrqq9Bcq7EkH_yQw",
+    youtubeVideosLimit: 10,
+    youtubeCommentsPerVideo: 50,
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
   },
   {
@@ -299,7 +396,7 @@ export function getPrevNextStudies(currentId: string): {
   prev: StudyMeta | null;
   next: StudyMeta | null;
 } {
-  const visible = getVisibleStudies();
+  const visible = [...getVisibleStudies()].sort((a, b) => a.number - b.number);
   const idx = visible.findIndex((s) => s.id === currentId);
   if (idx < 0) return { prev: null, next: null };
   return {

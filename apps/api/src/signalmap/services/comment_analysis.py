@@ -33,6 +33,19 @@ def load_cached_snapshot(channel_id: str) -> dict | None:
     return None
 
 
+def save_cached_snapshot(channel_id: str, analysis: dict) -> None:
+    """Persist analysis to file cache. Used when fetching from YouTube so we avoid re-using API quota."""
+    base = Path(__file__).resolve().parent.parent.parent.parent
+    cache_dir = base / "data" / "youtube_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    path = cache_dir / f"{channel_id}.json"
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(analysis, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log.warning("Failed to write YouTube cache file %s: %s", path, e)
+
+
 def load_cached_dataset(cache_dict: dict) -> dict | None:
     """
     Extract comments and video metadata from a cache snapshot.
@@ -83,6 +96,97 @@ TFIDF_STOPWORDS_EXTRA = {"آید", "توان", "تواند", "توانند", "ر
 # Merge file-loaded stopwords with curated base
 PERSIAN_STOPWORDS = load_persian_stopwords().union(PERSIAN_BASE_STOPWORDS)
 
+# English stopwords: sklearn (Glasgow IR Group) + extended fillers/contractions
+def _get_english_stopwords():
+    from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
+    return set(ENGLISH_STOP_WORDS) | ENGLISH_STOPWORDS_EXTENDED
+
+
+# Extended English stopwords for word clouds (sklearn misses many common fillers)
+# Covers: contractions, common verbs/adverbs, social/comment filler
+ENGLISH_STOPWORDS_EXTENDED = frozenset({
+    # Contractions & apostrophe-stripped forms
+    "it's", "its", "that's", "thats", "what's", "whats", "there's", "theres",
+    "i'm", "im", "he's", "hes", "she's", "shes", "we're", "were", "they're", "theyre",
+    "don't", "dont", "doesn't", "doesnt", "didn't", "didnt", "won't", "wont",
+    "can't", "cant", "couldn't", "couldnt", "shouldn't", "shouldnt", "wouldn't", "wouldnt",
+    "isn't", "isnt", "aren't", "arent", "wasn't", "wasnt", "weren't", "werent",
+    "haven't", "havent", "hasn't", "hasnt", "hadn't", "hadnt",
+    "you're", "youre", "you've", "youve", "you'll", "youll", "i've", "ive", "i'll", "ill",
+    "we've", "weve", "we'll", "well", "they've", "theyve", "they'll", "theyll",
+    "who's", "whos", "who'll", "wholl", "that'll", "thatll", "here's", "heres",
+    # Common verbs (conversational, not topical)
+    "just", "like", "going", "need", "really", "actually", "think", "thinks", "thinking",
+    "thought", "know", "knows", "known", "said", "say", "says", "get", "gets", "got",
+    "did", "does", "do",     "want", "wants", "wanted", "make", "makes", "made",
+    "come", "comes", "came", "let", "lets", "try", "tries", "tried", "tell", "tells", "told",
+    "feel", "feels", "felt", "believe", "believes", "understand", "understands",
+    "remember", "remembers", "forget", "forgets", "forgot", "mean", "means", "meant",
+    "look", "looks", "looking", "looked", "see", "sees", "saw", "seen",
+    "going", "gonna", "gotta", "kinda", "sorta",
+    # Adverbs & modifiers
+    "something", "thing", "things", "someone", "somebody", "anyone", "anybody",
+    "everything", "everyone", "everybody", "nothing", "nobody",
+    "maybe", "probably", "perhaps", "basically", "literally", "honestly", "obviously",
+    "definitely", "absolutely", "totally", "completely", "actually", "really",
+    "very", "quite", "rather", "pretty", "enough", "almost", "already", "still",
+    # Fillers & discourse markers
+    "period", "anyway", "anyways", "whatever", "whenever", "wherever", "however",
+    "yeah", "yes", "yep", "nope", "nah", "ok", "okay", "right", "wrong",
+    "well", "so", "because", "though", "although", "however", "therefore",
+    "also", "too", "either", "neither", "both", "each", "every",
+    # Pronouns & determiners (supplement sklearn)
+    "you", "your", "yours", "he", "him", "his", "she", "her", "hers",
+    "we", "us", "our", "ours", "they", "them", "their", "theirs",
+    "who", "whom", "whose", "which", "what", "that", "this", "these", "those",
+})
+
+
+def _get_stopwords_for_tfidf(lang: str) -> list:
+    """Return stopword list for TfidfVectorizer. English: sklearn; Persian: custom."""
+    if lang == "en":
+        return list(_get_english_stopwords())
+    return list(PERSIAN_STOPWORDS | STOPWORDS | CUSTOM_STOPWORDS | LABEL_TOKEN_FILTER | TFIDF_STOPWORDS_EXTRA)
+
+
+def _detect_language(comments: list) -> str:
+    """Detect primary language from comment texts. Returns 'en' or 'fa'."""
+    def _mostly_ascii() -> bool:
+        """Heuristic: if corpus is mostly ASCII letters, treat as English."""
+        total, ascii_count = 0, 0
+        for c in comments[:min(100, len(comments))]:
+            t = (c.get("comment_text") or "").strip()
+            for ch in t:
+                if ch.isalpha():
+                    total += 1
+                    if ord(ch) < 128:
+                        ascii_count += 1
+        return total > 20 and ascii_count / total > 0.8
+
+    try:
+        import langdetect
+    except ImportError:
+        return "en" if _mostly_ascii() else "fa"
+    texts = []
+    for c in comments[:min(50, len(comments))]:
+        t = (c.get("comment_text") or "").strip()
+        if t and len(t) >= 20:
+            texts.append(t)
+    if not texts:
+        return "en" if _mostly_ascii() else "fa"
+    lang_counts: Counter[str] = Counter()
+    for t in texts:
+        try:
+            lang = langdetect.detect(t)
+            lang_counts[lang] += 1
+        except Exception:
+            pass
+    if lang_counts:
+        top = lang_counts.most_common(1)[0][0]
+        if top == "en" or (isinstance(top, str) and top.startswith("en")):
+            return "en"
+    return "en" if _mostly_ascii() else "fa"
+
 
 TOPIC_KEYWORDS = {
     "geopolitics": [
@@ -128,9 +232,10 @@ def normalize_persian(text: str) -> str:
     return text.strip()
 
 
+# Base stopwords (minimal; English uses _get_english_stopwords() which includes sklearn + extended)
 STOPWORDS = {
     "the", "and", "to", "of", "in", "that", "is", "it", "for", "on", "with",
-    "this", "be", "are", "was", "at", "as", "an", "or", "by", "from"
+    "this", "be", "are", "was", "at", "as", "an", "or", "by", "from",
 }
 
 CUSTOM_STOPWORDS = {
@@ -198,6 +303,36 @@ CHANNEL_STOPWORDS = {
     "تیم پلاس",
 }
 
+# Per-channel extra stopwords (host names, channel names) — merged into title_phrase_stopwords
+CHANNEL_EXTRA_STOPWORDS: dict[str, frozenset[str]] = {
+    "UChWB95_-n9rUc3H9srsn9bQ": frozenset({  # Bplus — Ali Bandari
+        "ali", "bandari", "ali bandari", "bplus",
+        "علی", "بندری", "علی بندری", "بپلاس",
+    }),
+    "UCDRIjKy6eZOvKtOELtTdeUA": frozenset({  # Breaking Points — Saagar, Krystal
+        "saagar", "krystal", "saagar enjeti", "krystal ball",
+        "breaking points",
+    }),
+    "UCGttrUON87gWfU6dMWm1fcA": frozenset({  # Tucker Carlson
+        "tucker", "carlson", "tucker carlson",
+    }),
+    "UCupvZG-5ko_eiXAupbDfxWw": frozenset({  # CNN
+        "cnn",
+    }),
+    "UCXIJgqnII2ZOINSWNOGFThA": frozenset({  # Fox News
+        "fox", "fox news",
+    }),
+    "UC16niRr50-MSBwiO3YDb3RA": frozenset({  # BBC News
+        "bbc", "bbc news",
+    }),
+    "UCHZk9MrT3DGWmVqdsj5y0EA": frozenset({  # BBC Persian
+        "bbc", "bbc persian", "بیبیسی", "بیبیسی فارسی",
+    }),
+    "UCat6bC0Wrqq9Bcq7EkH_yQw": frozenset({  # Iran International
+        "iran international", "ایران اینترنشنال",
+    }),
+}
+
 PHRASE_STOPWORDS = {
     "تشکر تشکر",
     "خسته نباشید",
@@ -227,6 +362,18 @@ PHRASE_STOPWORDS.update({
 PHRASE_STOPWORDS.update({
     "وغیره",  # etc. / and so on — conversational filler, not a meaningful topic
     "و غیره",
+})
+
+# English conversational filler and sentence fragments (not meaningful topics)
+# Host/channel names are per-channel only (CHANNEL_EXTRA_STOPWORDS)
+PHRASE_STOPWORDS_EN = frozenset({
+    "and", "and that", "and that's", "and that's it", "that's it",
+    "and so", "and so on", "and the", "and then", "and we",
+    "and i", "and you", "and it", "and this", "and that",
+    "or something", "or whatever", "or something like",
+    "i mean", "you know", "you know what", "kind of", "sort of",
+    "and stuff", "and things", "and everything", "and all",
+    "like this", "like that",
 })
 
 PRAISE_WORDS = {
@@ -280,8 +427,10 @@ def looks_like_verb(word):
     return any(word.endswith(suffix) for suffix in VERB_SUFFIXES)
 
 
-def _is_verb_like_phrase(phrase: str) -> bool:
+def _is_verb_like_phrase(phrase: str, lang: str = "fa") -> bool:
     """Reject phrases that are verbs or verb-like (start with می, end with verb suffixes)."""
+    if lang == "en":
+        return False  # Skip Hazm-style filtering for English
     if not phrase or phrase in VERB_STOPWORDS:
         return True
     tokens = phrase.split()
@@ -303,23 +452,34 @@ def _starts_with_conversational_marker(phrase: str) -> bool:
     return first.lower() in CONVERSATIONAL_WORDS
 
 
-def clean_text(text: str):
+def clean_text(text: str, lang: str = "fa"):
     text = re.sub(r"http\S+", "", text)  # remove URLs before normalization
-    text = normalize_persian(text)
+    if lang != "en":
+        text = normalize_persian(text)
     text = text.lower()
     return text
 
 
-def tokenize(text: str):
-    text = clean_text(text)
+def tokenize(text: str, lang: str = "fa"):
+    text = clean_text(text, lang)
     tokens = text.split()
     result = []
+    stopwords = _get_english_stopwords() | STOPWORDS if lang == "en" else ALL_STOPWORDS
     for w in tokens:
-        if w.startswith("ایران"):
+        # Strip punctuation so "like." matches stopword "like"
+        w = w.strip(".,;:!?\"'()\u201d\u201c\u2018\u2019")
+        # Normalize curly apostrophes so "it's" and "don't" match stopwords
+        if lang == "en":
+            w = w.replace("\u2019", "'").replace("\u2018", "'")
+        if lang != "en" and w.startswith("ایران"):
             w = "ایران"
         if any(c.isdigit() for c in w):
             continue  # skip timestamps, numbers
-        if w not in ALL_STOPWORDS and len(w) > 2 and not looks_like_verb(w):
+        # Also check apostrophe-stripped form (it's->its, don't->dont)
+        w_check = w.replace("'", "") if lang == "en" else w
+        if w not in stopwords and w_check not in stopwords and len(w) > 2:
+            if lang != "en" and looks_like_verb(w):
+                continue  # Hazm-style verb filtering for Persian only
             result.append(w)
     return result
 
@@ -338,8 +498,12 @@ def generate_trigrams(tokens):
     ]
 
 
-def _normalize_phrase_for_match(phrase: str) -> str:
+def _normalize_phrase_for_match(phrase: str, lang: str = "fa") -> str:
     """Normalize phrase for consistent matching (handles half-spaces, etc.)."""
+    if lang == "en":
+        s = phrase.lower().strip()
+        # Strip trailing punctuation so "like this." matches "like this"
+        return s.rstrip(".,;:!?") if s else s
     return normalize_persian(phrase).lower().strip()
 
 
@@ -347,17 +511,21 @@ def _normalize_phrase_for_match(phrase: str) -> str:
 _DIACRITICS_RE = re.compile(r"[\u064B-\u0652\u0670\u06D6-\u06ED]+")
 
 
-def _normalize_title_for_phrases(title: str) -> str:
+def _normalize_title_for_phrases(title: str, lang: str = "fa") -> str:
     """Normalize a video title before extracting phrases. Handles Persian character
     variants (ي→ی, ك→ک), diacritics, half-space (ZWNJ→space), and whitespace.
-    Example: 'جنگهاي صليبي' and 'جنگ‌های صلیبی' both normalize to comparable form."""
+    Example: 'جنگهاي صليبي' and 'جنگ‌های صلیبی' both normalize to comparable form.
+    For English, skips Persian normalization."""
+    if lang == "en":
+        text = re.sub(r"\s+", " ", title)
+        return text.strip().lower()
     text = normalize_persian(title)
     text = _DIACRITICS_RE.sub("", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip().lower()
 
 
-def extract_title_phrases(comments: list) -> frozenset[str]:
+def extract_title_phrases(comments: list, lang: str = "fa") -> frozenset[str]:
     """Extract bigrams and trigrams from video titles. Used to filter title phrases from
     discourse analysis (e.g. cluster labels, PMI, word cloud) without removing individual words.
     Example: title 'جنگ صلیبی چیست' -> {'جنگ صلیبی', 'صلیبی چیست', 'جنگ صلیبی چیست'}.
@@ -370,7 +538,7 @@ def extract_title_phrases(comments: list) -> frozenset[str]:
         title = c.get("video_title") or c.get("title") or ""
         if not title or not isinstance(title, str):
             continue
-        normalized_title = _normalize_title_for_phrases(title)
+        normalized_title = _normalize_title_for_phrases(title, lang)
         if not normalized_title or normalized_title in seen_normalized:
             continue
         seen_normalized.add(normalized_title)
@@ -381,18 +549,18 @@ def extract_title_phrases(comments: list) -> frozenset[str]:
         ]
         if len(tokens) >= 2:
             for bg in generate_bigrams(tokens):
-                phrases.add(_normalize_phrase_for_match(bg))
+                phrases.add(_normalize_phrase_for_match(bg, lang))
         if len(tokens) >= 3:
             for tg in generate_trigrams(tokens):
-                phrases.add(_normalize_phrase_for_match(tg))
+                phrases.add(_normalize_phrase_for_match(tg, lang))
     return frozenset(phrases)
 
 
-def compute_bigram_pmi(bigram_counter, word_counter, total_tokens, title_phrase_stopwords: frozenset[str] | None = None):
+def compute_bigram_pmi(bigram_counter, word_counter, total_tokens, title_phrase_stopwords: frozenset[str] | None = None, lang: str = "fa"):
     title_stop = title_phrase_stopwords or frozenset()
     pmi_scores = []
     for phrase, count in bigram_counter.items():
-        if phrase in PHRASE_STOPWORDS or phrase in CHANNEL_STOPWORDS or _normalize_phrase_for_match(phrase) in title_stop:
+        if phrase in PHRASE_STOPWORDS or phrase in CHANNEL_STOPWORDS or _normalize_phrase_for_match(phrase, lang) in title_stop:
             continue
         parts = phrase.split()
         if len(parts) != 2:
@@ -411,13 +579,13 @@ def compute_bigram_pmi(bigram_counter, word_counter, total_tokens, title_phrase_
     return pmi_scores[:20]
 
 
-def compute_trigram_pmi(trigram_counter, word_counter, total_tokens, title_phrase_stopwords: frozenset[str] | None = None):
+def compute_trigram_pmi(trigram_counter, word_counter, total_tokens, title_phrase_stopwords: frozenset[str] | None = None, lang: str = "fa"):
     title_stop = title_phrase_stopwords or frozenset()
     pmi_scores = []
     for phrase, count in trigram_counter.items():
         if count < 2:
             continue
-        if _normalize_phrase_for_match(phrase) in title_stop:
+        if _normalize_phrase_for_match(phrase, lang) in title_stop:
             continue
         parts = phrase.split()
         if len(parts) != 3:
@@ -512,7 +680,9 @@ PRAISE_CLUSTER_KEYWORDS = [
     "مثل همیشه عالی",
     "سپاس فراوان",
     "سپاس",
+    "thank", "thanks", "great", "well done",
 ]
+PRAISE_CLUSTER_KEYWORDS_EN = ["thank", "thanks", "great", "awesome", "love", "amazing", "well done"]
 
 PRAISE_CLUSTER_THRESHOLD = 0.4
 
@@ -534,13 +704,13 @@ def is_praise_comment(text: str) -> bool:
     return False
 
 
-def _contains_praise_keyword(text: str, keywords: list[str]) -> bool:
+def _contains_praise_keyword(text: str, keywords: list[str], lang: str = "fa") -> bool:
     """Return True if text contains any of the given keywords (for cluster detection)."""
     if not text or not isinstance(text, str):
         return False
-    t = normalize_persian(text)
+    t = text.lower() if lang == "en" else normalize_persian(text)
     for kw in keywords:
-        if kw in t:
+        if kw.lower() in t:
             return True
     return False
 
@@ -553,14 +723,15 @@ PRAISE_LABEL_FILTER = frozenset({
 })
 
 
-def _is_praise_cluster(comment_texts: list[str]) -> bool:
+def _is_praise_cluster(comment_texts: list[str], lang: str = "fa") -> bool:
     """A cluster is labeled 'praise / appreciation' if >= 40% of comments contain praise keywords."""
     if not comment_texts:
         return False
     valid_texts = [t for t in comment_texts if t and isinstance(t, str)]
     if not valid_texts:
         return False
-    praise_count = sum(1 for t in valid_texts if _contains_praise_keyword(t, PRAISE_CLUSTER_KEYWORDS))
+    keywords = PRAISE_CLUSTER_KEYWORDS_EN if lang == "en" else PRAISE_CLUSTER_KEYWORDS
+    praise_count = sum(1 for t in valid_texts if _contains_praise_keyword(t, keywords, lang))
     return praise_count / len(valid_texts) >= PRAISE_CLUSTER_THRESHOLD
 
 
@@ -569,6 +740,7 @@ def compute_cluster_label(
     all_texts: list[str] | None = None,
     raw_texts_for_praise: list[str] | None = None,
     title_phrase_stopwords: frozenset[str] | None = None,
+    lang: str = "fa",
 ) -> str:
     """TF-IDF centroid labeling: top tokens from cluster centroid, filtered.
     Produces topic labels (تاریخ ایران, دین اسلام) instead of sentence fragments.
@@ -576,8 +748,8 @@ def compute_cluster_label(
     if DEBUG_CLUSTER_LABELS:
         return "DEBUG_LABEL"
     texts_for_praise = raw_texts_for_praise if raw_texts_for_praise is not None else comment_texts
-    if _is_praise_cluster(texts_for_praise):
-        return "تحسین"
+    if _is_praise_cluster(texts_for_praise, lang):
+        return "praise" if lang == "en" else "تحسین"
 
     texts = [t for t in comment_texts if t and isinstance(t, str)]
     if len(texts) < 1:
@@ -585,7 +757,7 @@ def compute_cluster_label(
 
     from sklearn.feature_extraction.text import TfidfVectorizer
 
-    stop_list = list(PERSIAN_STOPWORDS | STOPWORDS | CUSTOM_STOPWORDS | LABEL_TOKEN_FILTER | TFIDF_STOPWORDS_EXTRA)
+    stop_list = _get_stopwords_for_tfidf(lang)
     corpus = all_texts if (all_texts and len(all_texts) >= 2) else texts
 
     try:
@@ -613,12 +785,22 @@ def compute_cluster_label(
     scored.sort(key=lambda x: -x[1])
     top5 = [t for t, _ in scored[:5] if _ > 0]
 
-    # Filter: verb-like, conversational, digits
+    label_filter = (
+        {t.lower() for t in LABEL_TOKEN_FILTER}
+        if lang != "en"
+        else (_get_english_stopwords() | STOPWORDS)
+    )
+    title_stop = title_phrase_stopwords or frozenset()
+    praise_tokens = PRAISE_LABEL_TOKENS | {"thank", "thanks", "great"} if lang == "en" else PRAISE_LABEL_TOKENS
+
+    # Filter: verb-like, conversational, digits, channel-specific (host names)
     filtered = []
     for t in top5:
-        if _is_verb_like_phrase(t):
+        if _is_verb_like_phrase(t, lang):
             continue
-        if t.lower() in LABEL_TOKEN_FILTER:
+        if t.lower() in label_filter:
+            continue
+        if _normalize_phrase_for_match(t, lang) in title_stop:
             continue
         if any(c.isdigit() for c in t):
             continue
@@ -626,30 +808,36 @@ def compute_cluster_label(
             continue
         filtered.append(t)
 
-    # Fallback: if mostly praise tokens, use "تحسین"
-    praise_count = sum(1 for t in filtered if t.lower() in PRAISE_LABEL_TOKENS)
+    # Fallback: if mostly praise tokens
+    praise_count = sum(1 for t in filtered if t.lower() in praise_tokens)
     if filtered and praise_count >= len(filtered) / 2:
-        return "تحسین"
+        return "praise" if lang == "en" else "تحسین"
 
     top_tokens = filtered[:5]
     if not top_tokens:
         return "(cluster)"
 
     # Prefer real bigrams from cluster texts over arbitrary token pairs
-    top_tokens_set = {_normalize_phrase_for_match(t) for t in top_tokens}
-    label_filter_set = {t.lower() for t in LABEL_TOKEN_FILTER}
+    top_tokens_set = {_normalize_phrase_for_match(t, lang) for t in top_tokens}
+    label_filter_set = (
+        {t.lower() for t in LABEL_TOKEN_FILTER}
+        if lang != "en"
+        else (_get_english_stopwords() | STOPWORDS)
+    )
     bigram_counts: Counter[str] = Counter()
     for text in texts:
-        tokens = tokenize(text)
+        tokens = tokenize(text, lang)
         for bg in generate_bigrams(tokens):
             parts = bg.split(" ", 1)
             if len(parts) != 2:
                 continue
-            w1, w2 = _normalize_phrase_for_match(parts[0]), _normalize_phrase_for_match(parts[1])
-            if w1 in label_filter_set or w2 in label_filter_set:
+            w1, w2 = _normalize_phrase_for_match(parts[0], lang), _normalize_phrase_for_match(parts[1], lang)
+            if label_filter_set and (w1 in label_filter_set or w2 in label_filter_set):
+                continue
+            if title_stop and (w1 in title_stop or w2 in title_stop or _normalize_phrase_for_match(bg, lang) in title_stop):
                 continue
             if w1 in top_tokens_set or w2 in top_tokens_set:
-                bigram_key = _normalize_phrase_for_match(bg)
+                bigram_key = _normalize_phrase_for_match(bg, lang)
                 bigram_counts[bigram_key] += 1
 
     if bigram_counts:
@@ -658,10 +846,10 @@ def compute_cluster_label(
         label = top_tokens[0]
 
     label = _dedupe_phrase(label)[:40]
-    if not _is_valid_label_for_display(label):
+    if not _is_valid_label_for_display(label, lang, title_phrase_stopwords=title_stop):
         return "(cluster)"
-    if _normalize_phrase_for_match(label) in PRAISE_LABEL_SYNONYMS:
-        return "تحسین"
+    if _normalize_phrase_for_match(label, lang) in PRAISE_LABEL_SYNONYMS:
+        return "praise" if lang == "en" else "تحسین"
     return label
 
 
@@ -689,20 +877,32 @@ def _looks_like_sentence_fragment(phrase: str) -> bool:
     return False
 
 
-def _is_valid_label_for_display(phrase: str) -> bool:
-    """Reject labels that are too short, stopwords, truncated/malformed, or sentence fragments."""
+def _is_valid_label_for_display(
+    phrase: str, lang: str = "fa", title_phrase_stopwords: frozenset[str] | None = None
+) -> bool:
+    """Reject labels that are too short, stopwords, truncated/malformed, or sentence fragments.
+    title_phrase_stopwords: per-channel extras (host names, etc.) — when provided, reject if phrase is in it."""
     if not phrase:
         return False
-    if _looks_like_sentence_fragment(phrase):
+    norm = _normalize_phrase_for_match(phrase, lang)
+    if title_phrase_stopwords and norm in title_phrase_stopwords:
+        return False
+    if lang == "en" and norm in PHRASE_STOPWORDS_EN:
+        return False
+    if lang != "en" and _looks_like_sentence_fragment(phrase):
         return False
     has_persian = any("\u0600" <= c <= "\u06FF" for c in phrase)
     # Persian: allow 3+ chars (meaningful short words like دین, شاه). ASCII: require 4+ to filter truncated words like "ppreciat"
     min_len = 3 if has_persian else 4
     if len(phrase) < min_len:
         return False
-    # Reject single-token labels that are stopwords (e.g. "به")
+    # Reject single-token labels that are stopwords (e.g. "به", "and")
     tokens = phrase.split()
-    if len(tokens) == 1 and phrase.lower().strip() in (PERSIAN_STOPWORDS | STOPWORDS | CUSTOM_STOPWORDS):
+    stopwords = _get_english_stopwords() | STOPWORDS if lang == "en" else (PERSIAN_STOPWORDS | STOPWORDS | CUSTOM_STOPWORDS)
+    if len(tokens) == 1 and phrase.lower().strip() in stopwords:
+        return False
+    # Reject labels that start with a stopword (e.g. "and that's it")
+    if lang == "en" and tokens and tokens[0].lower() in stopwords:
         return False
     # Reject mostly-ASCII labels that are too short (truncated English like "ppreciat")
     letters = [c for c in phrase if c.isalpha()]
@@ -713,17 +913,19 @@ def _is_valid_label_for_display(phrase: str) -> bool:
     return True
 
 
-def _accept_phrase_for_label(phrase: str, title_stop: frozenset[str], stop_list: list) -> bool:
+def _accept_phrase_for_label(phrase: str, title_stop: frozenset[str], stop_list: list, lang: str = "fa") -> bool:
     """Shared phrase acceptance for semantic and TF-IDF labeling."""
     if not phrase or phrase in PHRASE_STOPWORDS or phrase in CHANNEL_STOPWORDS:
         return False
-    if _looks_like_sentence_fragment(phrase):
+    if lang == "en" and _normalize_phrase_for_match(phrase, lang) in PHRASE_STOPWORDS_EN:
         return False
-    if _is_verb_like_phrase(phrase):
+    if lang != "en" and _looks_like_sentence_fragment(phrase):
+        return False
+    if _is_verb_like_phrase(phrase, lang):
         return False
     if _starts_with_conversational_marker(phrase):
         return False
-    if _normalize_phrase_for_match(phrase) in title_stop:
+    if _normalize_phrase_for_match(phrase, lang) in title_stop:
         return False
     if phrase in PRAISE_LABEL_FILTER:
         return False
@@ -744,12 +946,13 @@ def compute_cluster_label_semantic(
     raw_texts_for_praise: list[str] | None = None,
     title_phrase_stopwords: frozenset[str] | None = None,
     used_labels: frozenset[str] | None = None,
+    lang: str = "fa",
 ) -> str:
     """Label cluster by semantic similarity: phrase embedding vs cluster centroid.
     Falls back to 'discussion' if no good phrase."""
     if DEBUG_CLUSTER_LABELS:
         return "DEBUG_LABEL"
-    if raw_texts_for_praise and _is_praise_cluster(raw_texts_for_praise):
+    if raw_texts_for_praise and _is_praise_cluster(raw_texts_for_praise, lang):
         return "praise / appreciation"
 
     texts = [t for t in comment_texts if t and isinstance(t, str)]
@@ -761,7 +964,7 @@ def compute_cluster_label_semantic(
         return "discussion"
 
     title_stop = title_phrase_stopwords or frozenset()
-    stop_list = list(PERSIAN_STOPWORDS | STOPWORDS | CUSTOM_STOPWORDS)
+    stop_list = _get_stopwords_for_tfidf(lang)
 
     # 1. Cluster centroid
     valid_idx = [i for i in embedding_indices if 0 <= i < len(embeddings)]
@@ -775,22 +978,24 @@ def compute_cluster_label_semantic(
     phrase_counts: Counter[str] = Counter()
     norm_to_display: dict[str, str] = {}  # normalized -> best display form (first seen)
     for text in texts:
-        tokens = tokenize(text)
+        tokens = tokenize(text, lang)
         for t in tokens:
-            if len(t) >= 3 and not any(c.isdigit() for c in t) and t.lower() not in stop_list and not _is_verb_like_phrase(t):
-                norm = _normalize_phrase_for_match(t)
+            norm = _normalize_phrase_for_match(t, lang)
+            if (len(t) >= 3 and not any(c.isdigit() for c in t)
+                and t.lower() not in stop_list and norm not in title_stop
+                and not _is_verb_like_phrase(t, lang)):
                 phrase_counts[norm] += 1
                 if norm not in norm_to_display:
                     norm_to_display[norm] = t
         for bg in generate_bigrams(tokens):
-            if _accept_phrase_for_label(bg, title_stop, stop_list):
-                norm = _normalize_phrase_for_match(bg)
+            if _accept_phrase_for_label(bg, title_stop, stop_list, lang):
+                norm = _normalize_phrase_for_match(bg, lang)
                 phrase_counts[norm] += 1
                 if norm not in norm_to_display:
                     norm_to_display[norm] = bg
         for tg in generate_trigrams(tokens):
-            if _accept_phrase_for_label(tg, title_stop, stop_list):
-                norm = _normalize_phrase_for_match(tg)
+            if _accept_phrase_for_label(tg, title_stop, stop_list, lang):
+                norm = _normalize_phrase_for_match(tg, lang)
                 phrase_counts[norm] += 1
                 if norm not in norm_to_display:
                     norm_to_display[norm] = tg
@@ -815,9 +1020,9 @@ def compute_cluster_label_semantic(
                 continue
             if i >= len(phrase_embeddings):
                 break
-            if phrase in used or _normalize_phrase_for_match(phrase) in {_normalize_phrase_for_match(u) for u in used}:
+            if phrase in used or _normalize_phrase_for_match(phrase, lang) in {_normalize_phrase_for_match(u, lang) for u in used}:
                 continue
-            if not _is_valid_label_for_display(phrase):
+            if not _is_valid_label_for_display(phrase, lang, title_phrase_stopwords=title_stop):
                 continue
             sim = float(np.dot(centroid_norm, phrase_embeddings[i]))
             if sim > best_s and sim >= min_sim:
@@ -829,27 +1034,66 @@ def compute_cluster_label_semantic(
         best_phrase, best_sim = best_in_tier(n)
         if best_phrase and best_sim > 0.1:
             label = _dedupe_phrase(best_phrase)[:40]
-            if _normalize_phrase_for_match(label) in PRAISE_LABEL_SYNONYMS:
+            if _normalize_phrase_for_match(label, lang) in PRAISE_LABEL_SYNONYMS:
                 return "praise / appreciation"
             return label
     return "discussion"
 
 
-def _compute_tfidf_embeddings(to_map: list[str]):
+def _compute_tfidf_embeddings(to_map: list[str], lang: str = "fa"):
     """Step 2: Compute TF-IDF embeddings from comment texts.
     norm='l2' and sublinear_tf reduce document-length bias for PCA."""
     from sklearn.feature_extraction.text import TfidfVectorizer
-    vectorizer = TfidfVectorizer(
-        ngram_range=(1, 3),
-        min_df=2,
-        max_df=0.85,
-        max_features=200,
-        norm="l2",
-        sublinear_tf=True,
-        token_pattern=r"(?u)\b[\u0600-\u06FF]+\b",
-    )
-    X = vectorizer.fit_transform(to_map)
-    return X.toarray()
+    # English: include a-zA-Z; Persian: Persian script only
+    token_pattern = r"(?u)\b[\u0600-\u06FFa-zA-Z]+\b" if lang == "en" else r"(?u)\b[\u0600-\u06FF]+\b"
+    # English comments can be more diverse; min_df=1 avoids empty vocabulary
+    min_df = 1 if lang == "en" else 2
+    try:
+        vectorizer = TfidfVectorizer(
+            ngram_range=(1, 3),
+            min_df=min_df,
+            max_df=0.85,
+            max_features=200,
+            norm="l2",
+            sublinear_tf=True,
+            token_pattern=token_pattern,
+            stop_words=_get_stopwords_for_tfidf(lang),
+        )
+        X = vectorizer.fit_transform(to_map)
+        return X.toarray()
+    except ValueError as e:
+        err = str(e).lower()
+        if "empty vocabulary" in err:
+            # Content may be English but we detected fa, or English pattern filtered everything
+            if lang == "fa":
+                # Retry with English pattern: content is likely ASCII/English
+                log.warning("TF-IDF empty vocabulary for fa, retrying with English pattern: %s", e)
+                vectorizer = TfidfVectorizer(
+                    ngram_range=(1, 3),
+                    min_df=1,
+                    max_df=0.85,
+                    max_features=200,
+                    norm="l2",
+                    sublinear_tf=True,
+                    token_pattern=r"(?u)\b[\u0600-\u06FFa-zA-Z]+\b",
+                    stop_words=_get_stopwords_for_tfidf("en"),
+                )
+                X = vectorizer.fit_transform(to_map)
+                return X.toarray()
+            elif lang == "en":
+                log.warning("TF-IDF empty vocabulary for English, retrying with relaxed config: %s", e)
+                vectorizer = TfidfVectorizer(
+                    ngram_range=(1, 2),
+                    min_df=1,
+                    max_df=0.95,
+                    max_features=200,
+                    norm="l2",
+                    sublinear_tf=True,
+                    token_pattern=r"(?u)\b\w{2,}\b",
+                )
+                X = vectorizer.fit_transform(to_map)
+                return X.toarray()
+        raise
 
 
 def _run_umap(embeddings, random_state: int = 42):
@@ -873,6 +1117,7 @@ def _run_umap(embeddings, random_state: int = 42):
 def _cluster_kmeans(
     coords, comments: list, to_map: list, title_phrase_stopwords: frozenset[str] | None = None,
     embeddings: np.ndarray | None = None,
+    lang: str = "fa",
 ) -> tuple[list[dict], dict, list[int]]:
     """Step 4: KMeans clustering for TF-IDF pipeline. Returns (labels, stats, cluster_assignments)."""
     from sklearn.cluster import KMeans
@@ -882,6 +1127,7 @@ def _cluster_kmeans(
         coords, cluster_ids, comments, to_map,
         title_phrase_stopwords=title_phrase_stopwords,
         embeddings=embeddings,
+        lang=lang,
     )
     return labels, stats, assignments
 
@@ -889,6 +1135,7 @@ def _cluster_kmeans(
 def _cluster_hdbscan(
     coords, comments: list, to_map: list, min_cluster_size: int = 12, title_phrase_stopwords: frozenset[str] | None = None,
     embeddings: np.ndarray | None = None,
+    lang: str = "fa",
 ) -> tuple[list[dict], dict, list[int]]:
     """Step 4: HDBSCAN clustering. Returns (labels, stats, cluster_assignments)."""
     import hdbscan
@@ -898,6 +1145,7 @@ def _cluster_hdbscan(
         coords, cluster_ids, comments, to_map,
         title_phrase_stopwords=title_phrase_stopwords,
         embeddings=embeddings,
+        lang=lang,
     )
     return labels, stats, assignments
 
@@ -905,6 +1153,7 @@ def _cluster_hdbscan(
 def _compute_pca_points(
     X_dense, to_map: list, comments: list,
     title_phrase_stopwords: frozenset[str] | None = None,
+    lang: str = "fa",
 ) -> tuple[list, list[dict], dict, list[int]]:
     """PCA projection of embeddings (linear dimensionality reduction). Computed before UMAP.
     Returns (points, cluster_labels, cluster_stats, cluster_assignments) using same labeling as TF-IDF."""
@@ -926,6 +1175,7 @@ def _compute_pca_points(
         coords_pca, cluster_ids, comments, to_map,
         title_phrase_stopwords=title_phrase_stopwords,
         embeddings=None,
+        lang=lang,
     )
     return points, cluster_labels_pca, cluster_stats_pca, cluster_assignments_pca
 
@@ -958,10 +1208,10 @@ def _compute_minilm_embeddings(to_map: list, comments: list):
         return None
 
 
-def _collapse_substring_labels(labels: list[dict]) -> list[dict]:
+def _collapse_substring_labels(labels: list[dict], lang: str = "fa") -> list[dict]:
     """When one label is a substring of another, prefer the shorter (e.g. 'expression' over 'expression with added two').
     Do not collapse to stopwords (e.g. keep 'به نظر' rather than collapsing to 'به')."""
-    stopwords = PERSIAN_STOPWORDS | STOPWORDS | CUSTOM_STOPWORDS
+    stopwords = _get_english_stopwords() | STOPWORDS if lang == "en" else (PERSIAN_STOPWORDS | STOPWORDS | CUSTOM_STOPWORDS)
     label_strs = [item.get("label", "(cluster)") for item in labels]
     result = []
     for item in labels:
@@ -971,14 +1221,14 @@ def _collapse_substring_labels(labels: list[dict]) -> list[dict]:
         candidates = [
             o for o in label_strs
             if o and o != label and o in label and len(o) < len(label)
-            and _normalize_phrase_for_match(o) not in {_normalize_phrase_for_match(s) for s in stopwords}
+            and _normalize_phrase_for_match(o, lang) not in {_normalize_phrase_for_match(s, lang) for s in stopwords}
         ]
         best = max(candidates, key=len) if candidates else label
         result.append({**item, "label": best})
     return result
 
 
-def _unify_cluster_ids_by_label(labels: list[dict], cluster_assignments: list[int]) -> tuple[list[dict], list[int]]:
+def _unify_cluster_ids_by_label(labels: list[dict], cluster_assignments: list[int], lang: str = "fa") -> tuple[list[dict], list[int]]:
     """Merge clusters with the same label so they share one color. Returns (labels, assignments)."""
     if not labels:
         return labels, cluster_assignments
@@ -988,7 +1238,7 @@ def _unify_cluster_ids_by_label(labels: list[dict], cluster_assignments: list[in
         cid = item.get("cluster_id", -1)
         if cid < 0:
             continue
-        norm = _normalize_phrase_for_match(item.get("label", ""))
+        norm = _normalize_phrase_for_match(item.get("label", ""), lang)
         if norm not in label_to_canonical or cid < label_to_canonical[norm]:
             label_to_canonical[norm] = cid
     # Map old cluster_id -> new (canonical) cluster_id
@@ -996,7 +1246,7 @@ def _unify_cluster_ids_by_label(labels: list[dict], cluster_assignments: list[in
     for item in labels:
         old_cid = item.get("cluster_id", -1)
         if old_cid >= 0:
-            norm = _normalize_phrase_for_match(item.get("label", ""))
+            norm = _normalize_phrase_for_match(item.get("label", ""), lang)
             old_to_new[old_cid] = label_to_canonical.get(norm, old_cid)
     # Update assignments
     new_assignments = [old_to_new.get(a, a) if a >= 0 else a for a in cluster_assignments]
@@ -1007,7 +1257,7 @@ def _unify_cluster_ids_by_label(labels: list[dict], cluster_assignments: list[in
         old_cid = item.get("cluster_id", -1)
         if old_cid < 0:
             continue
-        norm = _normalize_phrase_for_match(item.get("label", ""))
+        norm = _normalize_phrase_for_match(item.get("label", ""), lang)
         new_cid = label_to_canonical.get(norm, old_cid)
         if new_cid not in seen_cid:
             seen_cid.add(new_cid)
@@ -1036,6 +1286,7 @@ def _cluster_labels_from_coords(
     to_map: list,
     title_phrase_stopwords: frozenset[str] | None = None,
     embeddings: np.ndarray | None = None,
+    lang: str = "fa",
 ) -> tuple[list[dict], dict, list[int]]:
     """Build cluster labels from coords and cluster assignments. Handles HDBSCAN (-1 = noise).
     Returns (labels, stats, cluster_assignments) where stats has clusters, noise_count, total.
@@ -1069,22 +1320,24 @@ def _cluster_labels_from_coords(
                 raw_texts_for_praise=raw_texts,
                 title_phrase_stopwords=title_phrase_stopwords,
                 used_labels=frozenset(used_labels),
+                lang=lang,
             )
             if label and label != "discussion":
-                used_labels.add(_normalize_phrase_for_match(label))
+                used_labels.add(_normalize_phrase_for_match(label, lang))
         else:
             label = compute_cluster_label(
                 cluster_texts,
                 all_texts=to_map,
                 raw_texts_for_praise=raw_texts,
                 title_phrase_stopwords=title_phrase_stopwords,
+                lang=lang,
             )
         x = float(sum(coords[i][0] for i in indices) / len(indices))
         y = float(sum(coords[i][1] for i in indices) / len(indices))
         result.append({"x": round(x, 2), "y": round(y, 2), "label": label, "cluster_id": int(cid)})
-    result = _collapse_substring_labels(result)
+    result = _collapse_substring_labels(result, lang)
     cluster_assignments = [int(cid) for cid in cluster_ids]
-    result, cluster_assignments = _unify_cluster_ids_by_label(result, cluster_assignments)
+    result, cluster_assignments = _unify_cluster_ids_by_label(result, cluster_assignments, lang)
     result = _make_labels_unique(result)
     stats = {"clusters": len(result), "noise_count": noise_count, "total": total}
     return result, stats, cluster_assignments
@@ -1148,7 +1401,8 @@ def compute_cluster_labels_from_umap(
         return []
     try:
         from sklearn.cluster import KMeans
-        title_phrase_stopwords = extract_title_phrases(comments)
+        lang = _detect_language(comments)
+        title_phrase_stopwords = extract_title_phrases(comments, lang)
         coords = []
         for p in points_umap:
             xy = _point_to_xy(p)
@@ -1195,13 +1449,14 @@ def compute_cluster_labels_from_umap(
                     raw_texts_for_praise=raw_texts,
                     title_phrase_stopwords=title_phrase_stopwords,
                     used_labels=frozenset(used_labels),
+                    lang=lang,
                 )
                 if label and label != "discussion":
-                    used_labels.add(_normalize_phrase_for_match(label))
+                    used_labels.add(_normalize_phrase_for_match(label, lang))
             else:
                 all_texts = [c.get("comment_text", "") for c in comments]
                 label = compute_cluster_label(
-                    comment_texts, all_texts=all_texts, title_phrase_stopwords=title_phrase_stopwords
+                    comment_texts, all_texts=all_texts, title_phrase_stopwords=title_phrase_stopwords, lang=lang
                 )
             xs = [float(coords[i][0]) for i in indices]
             ys = [float(coords[i][1]) for i in indices]
@@ -1213,8 +1468,12 @@ def compute_cluster_labels_from_umap(
         return []
 
 
-def analyze_comments(comments):
-    title_phrase_stopwords = extract_title_phrases(comments)
+def analyze_comments(comments, channel_id: str | None = None):
+    lang = _detect_language(comments)
+    title_phrase_stopwords = extract_title_phrases(comments, lang)
+    extra = CHANNEL_EXTRA_STOPWORDS.get((channel_id or "").strip(), frozenset())
+    if extra:
+        title_phrase_stopwords = title_phrase_stopwords | extra
     word_counter = Counter()
     bigram_counter = Counter()
     trigram_counter = Counter()
@@ -1233,7 +1492,7 @@ def analyze_comments(comments):
         c["sentiment"] = polarity
 
         # words
-        tokens = tokenize(text)
+        tokens = tokenize(text, lang)
         word_counter.update(tokens)
 
         bigrams = generate_bigrams(tokens)
@@ -1254,28 +1513,40 @@ def analyze_comments(comments):
         if count >= 3
         and phrase not in PHRASE_STOPWORDS
         and phrase not in CHANNEL_STOPWORDS
-        and _normalize_phrase_for_match(phrase) not in title_phrase_stopwords
+        and _normalize_phrase_for_match(phrase, lang) not in title_phrase_stopwords
     ]
     top_bigrams = sorted(top_bigrams, key=lambda x: x[1], reverse=True)[:30]
 
     top_trigrams = [
         (phrase, count)
         for phrase, count in trigram_counter.items()
-        if count >= 2 and _normalize_phrase_for_match(phrase) not in title_phrase_stopwords
+        if count >= 2 and _normalize_phrase_for_match(phrase, lang) not in title_phrase_stopwords
     ]
     top_trigrams = sorted(top_trigrams, key=lambda x: x[1], reverse=True)[:20]
 
     total_tokens = sum(word_counter.values()) or 1
     bigrams_pmi = compute_bigram_pmi(
-        bigram_counter, word_counter, total_tokens, title_phrase_stopwords=title_phrase_stopwords
+        bigram_counter, word_counter, total_tokens, title_phrase_stopwords=title_phrase_stopwords, lang=lang
     )
     trigrams_pmi = compute_trigram_pmi(
-        trigram_counter, word_counter, total_tokens, title_phrase_stopwords=title_phrase_stopwords
+        trigram_counter, word_counter, total_tokens, title_phrase_stopwords=title_phrase_stopwords, lang=lang
     )
 
     combined_terms = list(word_counter.most_common(40))
     combined_terms.extend(top_bigrams)
-    top_words = combined_terms
+    # Filter out channel-specific terms and conversational filler from word cloud
+    def _ok_for_wordcloud(item, lang: str) -> bool:
+        if isinstance(item, tuple) and len(item) >= 2:
+            phrase = item[0]
+        else:
+            return True
+        norm = _normalize_phrase_for_match(phrase, lang)
+        if norm in title_phrase_stopwords:
+            return False
+        if lang == "en" and norm in PHRASE_STOPWORDS_EN:
+            return False
+        return True
+    top_words = [x for x in combined_terms if _ok_for_wordcloud(x, lang)]
 
     avg_sentiment = 0
     if sentiments:
@@ -1284,7 +1555,7 @@ def analyze_comments(comments):
     # 2D discourse maps: recompute embeddings and clustering from cached comments
     clean_comments = []
     for c in comments:
-        tokens = tokenize(c.get("comment_text", ""))
+        tokens = tokenize(c.get("comment_text", ""), lang)
         clean_comments.append(" ".join(tokens))
 
     discourse_comments = []
@@ -1311,14 +1582,14 @@ def analyze_comments(comments):
 
         try:
             # Step 2: Compute TF-IDF embeddings
-            tfidf_embeddings = _compute_tfidf_embeddings(to_map)
+            tfidf_embeddings = _compute_tfidf_embeddings(to_map, lang)
             if tfidf_embeddings is None:
                 raise ValueError("TF-IDF failed")
 
             # PCA (legacy) — compute early so it's not lost if UMAP/clustering fails
             try:
                 points_pca, cluster_labels_pca, cluster_stats_pca, cluster_assignments_pca = _compute_pca_points(
-                    tfidf_embeddings, to_map, comments, title_phrase_stopwords=title_phrase_stopwords,
+                    tfidf_embeddings, to_map, comments, title_phrase_stopwords=title_phrase_stopwords, lang=lang,
                 )
             except Exception:
                 points_pca = []
@@ -1340,15 +1611,15 @@ def analyze_comments(comments):
                 # Step 4: Run clustering for TF-IDF pipeline (semantic labels when MiniLM available)
                 cluster_labels_tfidf, cluster_stats_tfidf, cluster_assignments_tfidf = _cluster_kmeans(
                     umap_tfidf, comments, to_map, title_phrase_stopwords=title_phrase_stopwords,
-                    embeddings=minilm_embeddings,
+                    embeddings=minilm_embeddings, lang=lang,
                 )
                 cluster_labels_hdbscan, cluster_stats_hdbscan, cluster_assignments_hdbscan = _cluster_hdbscan(
                     umap_tfidf, comments, to_map, title_phrase_stopwords=title_phrase_stopwords,
-                    embeddings=minilm_embeddings,
+                    embeddings=minilm_embeddings, lang=lang,
                 )
 
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("TF-IDF pipeline failed (lang=%s): %s", lang, e)
 
         # MiniLM in its own try so TF-IDF failures don't block it
         try:
@@ -1361,7 +1632,7 @@ def analyze_comments(comments):
                         points_minilm.append([x, y, i])
                     cluster_labels_minilm, cluster_stats_minilm, cluster_assignments_minilm = _cluster_hdbscan(
                         umap_minilm, comments, to_map, min_cluster_size=18, title_phrase_stopwords=title_phrase_stopwords,
-                        embeddings=minilm_embeddings,
+                        embeddings=minilm_embeddings, lang=lang,
                     )
         except Exception as e:
             log.warning("MiniLM pipeline failed: %s", e)
@@ -1379,6 +1650,7 @@ def analyze_comments(comments):
     print("[cluster_labels]", json.dumps(labels, ensure_ascii=False))
 
     return {
+        "language": "en" if lang == "en" else "fa",
         "avg_sentiment": avg_sentiment,
         "top_words": top_words,
         "topics": topic_counter.most_common(),

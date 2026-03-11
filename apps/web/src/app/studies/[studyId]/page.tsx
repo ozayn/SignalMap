@@ -970,10 +970,21 @@ export default function StudyDetailPage() {
 
   const fetchYoutubeAnalysis = useCallback(
     async (forceRefresh: boolean) => {
+      if (!study) return;
       setAnalysisLoading(true);
       setAnalysisError(null);
       setAnalysisData(null);
-      const url = `/api/youtube/channel/comment-analysis?channel_id=UChWB95_-n9rUc3H9srsn9bQ&_=${Date.now()}${forceRefresh ? "&refresh=1" : ""}`;
+      const channelId = study.youtubeChannelId ?? "UChWB95_-n9rUc3H9srsn9bQ";
+      const videosLimit = study.youtubeVideosLimit ?? 5;
+      const commentsPerVideo = study.youtubeCommentsPerVideo ?? 30;
+      const params = new URLSearchParams({
+        channel_id: channelId,
+        videos_limit: String(videosLimit),
+        comments_per_video: String(commentsPerVideo),
+        _: String(Date.now()),
+      });
+      if (forceRefresh) params.set("refresh", "1");
+      const url = `/api/youtube/channel/comment-analysis?${params.toString()}`;
       try {
         const res = await fetchJson<{
           channel_id: string;
@@ -1022,7 +1033,7 @@ export default function StudyDetailPage() {
         setAnalysisLoading(false);
       }
     },
-    []
+    [study]
   );
 
   useEffect(() => {
@@ -2067,7 +2078,7 @@ export default function StudyDetailPage() {
         </Card>
         <Card className="border-border min-w-0 overflow-visible">
           <CardHeader>
-            <CardTitle className="text-base font-medium">YouTube discourse signals</CardTitle>
+            <CardTitle className="text-base font-medium">{study.title}</CardTitle>
             <p className="text-sm text-muted-foreground">{study.description}</p>
           </CardHeader>
           <CardContent className="space-y-8">
@@ -2083,12 +2094,12 @@ export default function StudyDetailPage() {
                 style={{
                   display: "flex",
                   flexWrap: "wrap",
-                  gap: "12px",
+                  gap: "6px",
                   justifyContent: "center",
                   alignItems: "center",
-                  padding: "24px",
-                  lineHeight: "1.8",
-                  direction: "rtl",
+                  padding: "12px",
+                  lineHeight: "1.5",
+                  direction: (analysisData.language ?? "").toLowerCase().startsWith("english") ? "ltr" : "rtl",
                 }}
               >
                 {(() => {
@@ -2102,20 +2113,24 @@ export default function StudyDetailPage() {
                       typeof w[1] === "number"
                     )
                     .map(([word, value]) => ({ word: String(word), value: Number(value) }));
-                  return words.map(({ word, value }) => (
-                    <span
-                      key={`${word}-${value}`}
-                      style={{
-                        fontSize: `${Math.min(48, 12 + value * 0.6)}px`,
-                        fontWeight: 500,
-                        opacity: 0.9,
-                        whiteSpace: "nowrap",
-                      }}
-                      title={`${word}: ${value}`}
-                    >
-                      {word}
-                    </span>
-                  ));
+                  const maxCount = words.length ? Math.max(...words.map((w) => w.value), 1) : 1;
+                  return words.map(({ word, value }) => {
+                    const size = 10 + (value / maxCount) * 10;
+                    return (
+                      <span
+                        key={`${word}-${value}`}
+                        style={{
+                          fontSize: `${Math.min(18, size)}px`,
+                          fontWeight: 500,
+                          opacity: 0.9,
+                          whiteSpace: "nowrap",
+                        }}
+                        title={`${word}: ${value}`}
+                      >
+                        {word}
+                      </span>
+                    );
+                  });
                 })()}
               </div>
             </section>

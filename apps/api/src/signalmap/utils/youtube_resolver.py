@@ -62,6 +62,13 @@ def resolve_channel_id(identifier: str) -> str:
     with httpx.Client(timeout=TIMEOUT) as client:
         resp = client.get(CHANNELS_URL, params=params)
 
+    if resp.status_code == 200:
+        try:
+            from db import record_youtube_quota_usage
+            record_youtube_quota_usage(1)  # channels.list = 1 unit
+        except Exception:
+            pass
+
     if resp.status_code != 200:
         raise ValueError(f"YouTube API error: {resp.text[:300]}")
 

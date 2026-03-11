@@ -45,6 +45,11 @@ def get_uploads_playlist_id(
         resp = client.get(CHANNELS_URL, params=params)
     if resp.status_code != 200:
         raise RuntimeError(f"YouTube channels.list returned {resp.status_code}: {resp.text[:300]}")
+    try:
+        from db import record_youtube_quota_usage
+        record_youtube_quota_usage(1)  # channels.list = 1 unit
+    except Exception:
+        pass
     data = resp.json()
     items = data.get("items") or []
     if not items:
@@ -84,6 +89,11 @@ def list_recent_video_ids(
             resp = client.get(PLAYLIST_ITEMS_URL, params=params)
         if resp.status_code != 200:
             raise RuntimeError(f"YouTube playlistItems.list returned {resp.status_code}: {resp.text[:300]}")
+        try:
+            from db import record_youtube_quota_usage
+            record_youtube_quota_usage(1)  # playlistItems.list = 1 unit per page
+        except Exception:
+            pass
         data = resp.json()
         for item in data.get("items") or []:
             sn = item.get("snippet") or {}
@@ -132,6 +142,11 @@ def list_top_comments_for_video(
         raise RuntimeError(f"YouTube commentThreads.list 403: {reason}")
     if resp.status_code != 200:
         return []
+    try:
+        from db import record_youtube_quota_usage
+        record_youtube_quota_usage(1)  # commentThreads.list = 1 unit
+    except Exception:
+        pass
     data = resp.json()
     out = []
     for thread in data.get("items") or []:

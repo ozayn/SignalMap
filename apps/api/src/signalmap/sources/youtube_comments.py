@@ -33,6 +33,12 @@ def get_video_comments(video_id: str, max_results: int = 50):
     if r.status_code != 200:
         raise RuntimeError(f"YouTube API error: {r.text}")
 
+    try:
+        from db import record_youtube_quota_usage
+        record_youtube_quota_usage(1)  # commentThreads.list = 1 unit
+    except Exception:
+        pass
+
     data = r.json()
 
     comments = []
@@ -73,6 +79,12 @@ def get_channel_videos(channel_id: str, max_results: int = 10):
 
     if r.status_code != 200:
         raise RuntimeError(f"YouTube API error: {r.text}")
+
+    try:
+        from db import record_youtube_quota_usage
+        record_youtube_quota_usage(100)  # search.list = 100 units
+    except Exception:
+        pass
 
     data = r.json()
 

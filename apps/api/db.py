@@ -6,8 +6,9 @@ Tables created idempotently on startup when DATABASE_URL is set.
 import json
 import os
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Generator
+from zoneinfo import ZoneInfo
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -210,6 +211,13 @@ def init_tables() -> None:
                     computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS youtube_quota_usage (
+                    usage_date DATE PRIMARY KEY,
+                    units_used INT NOT NULL DEFAULT 0,
+                    last_updated TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
     except Exception:
         pass  # DB may not be available; job endpoints will return 503
 
@@ -252,10 +260,10 @@ def get_data_update(key: str) -> str | None:
         return None
 
 
-def get_cached_youtube_comment_analysis(channel_id: str, max_age_hours: int = 24) -> dict | None:
+def get_cached_youtube_comment_analysis(channel_id: str) -> dict | None:
     """
-    Return cached analysis for channel if computed within max_age_hours.
-    Returns dict with analysis_json, videos_analyzed, comments_analyzed, computed_at, or None.
+    Return stored analysis for channel. No expiry—treat as a database of comments.
+    Refresh via explicit refresh action or scheduled job (e.g. weekly).
     """
     if not DATABASE_URL:
         return None
@@ -273,16 +281,13 @@ def get_cached_youtube_comment_analysis(channel_id: str, max_age_hours: int = 24
             if not row:
                 return None
             computed_at = row["computed_at"]
-            if computed_at.tzinfo is None:
+            if computed_at and computed_at.tzinfo is None:
                 computed_at = computed_at.replace(tzinfo=timezone.utc)
-            cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
-            if computed_at < cutoff:
-                return None
             return {
                 "analysis_json": row["analysis_json"],
                 "videos_analyzed": row["videos_analyzed"],
                 "comments_analyzed": row["comments_analyzed"],
-                "computed_at": computed_at.isoformat() if hasattr(computed_at, "isoformat") else str(computed_at),
+                "computed_at": computed_at.isoformat() if computed_at and hasattr(computed_at, "isoformat") else str(computed_at) if computed_at else None,
             }
     except Exception:
         return None
@@ -328,3 +333,69 @@ def save_youtube_comment_analysis(
             )
     except Exception:
         pass
+
+
+# YouTube quota resets at midnight Pacific Time
+YOUTUBE_QUOTA_DAILY_LIMIT = 10_000
+_PT = ZoneInfo("America/Los_Angeles")
+
+
+def _today_pt() -> date:
+    """Current date in Pacific Time (YouTube quota reset timezone)."""
+    return datetime.now(_PT).date()
+
+
+def record_youtube_quota_usage(units: int) -> None:
+    """Record YouTube API quota usage for today (Pacific Time)."""
+    if not DATABASE_URL or units <= 0:
+        return
+    try:
+        today = _today_pt()
+        with cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO youtube_quota_usage (usage_date, units_used, last_updated)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (usage_date)
+                DO UPDATE SET
+                    units_used = youtube_quota_usage.units_used + EXCLUDED.units_used,
+                    last_updated = NOW()
+                """,
+                (today, units),
+            )
+    except Exception:
+        pass
+
+
+def get_youtube_quota_usage_today() -> dict:
+    """
+    Return today's YouTube quota usage. Quota resets at midnight Pacific Time.
+    Returns: { units_used, limit, remaining, usage_date_pt, last_updated }
+    """
+    today = _today_pt()
+    result = {
+        "units_used": 0,
+        "limit": YOUTUBE_QUOTA_DAILY_LIMIT,
+        "remaining": YOUTUBE_QUOTA_DAILY_LIMIT,
+        "usage_date_pt": today.isoformat(),
+        "last_updated": None,
+    }
+    if not DATABASE_URL:
+        return result
+    try:
+        with cursor() as cur:
+            cur.execute(
+                "SELECT units_used, last_updated FROM youtube_quota_usage WHERE usage_date = %s",
+                (today,),
+            )
+            row = cur.fetchone()
+            if row:
+                used = int(row.get("units_used") or 0)
+                result["units_used"] = used
+                result["remaining"] = max(0, YOUTUBE_QUOTA_DAILY_LIMIT - used)
+                lu = row.get("last_updated")
+                if lu:
+                    result["last_updated"] = lu.isoformat() if hasattr(lu, "isoformat") else str(lu)
+    except Exception:
+        pass
+    return result

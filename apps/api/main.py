@@ -37,6 +37,7 @@ from signalmap.services.comment_analysis import (
     compute_cluster_labels_from_umap,
     load_cached_dataset,
     load_cached_snapshot,
+    save_cached_snapshot,
 )
 from signalmap.sources.youtube_comments import get_channel_videos, get_video_comments
 from signalmap.utils.youtube_resolver import resolve_channel_id
@@ -46,6 +47,7 @@ from db import (
     cursor,
     delete_youtube_comment_analysis,
     get_cached_youtube_comment_analysis,
+    get_youtube_quota_usage_today,
     init_tables,
     save_youtube_comment_analysis,
 )
@@ -1030,6 +1032,15 @@ def _youtube_channel_cache_response(cache_rows: list, handle: Optional[str], cha
     }
 
 
+@app.get("/api/youtube/quota")
+def youtube_quota():
+    """
+    Return today's YouTube API quota usage. Quota resets at midnight Pacific Time.
+    Returns units_used, limit (10000), remaining, usage_date_pt, last_updated.
+    """
+    return get_youtube_quota_usage_today()
+
+
 @app.get("/api/youtube/debug")
 def youtube_debug(handle: str = Query("googledevelopers", description="Channel handle to test")):
     """
@@ -1158,11 +1169,11 @@ def _run_youtube_comment_analysis(
             return []
 
     all_comments = []
-    with ThreadPoolExecutor(max_workers=min(8, len(videos))) as ex:
+    with ThreadPoolExecutor(max_workers=max(1, min(8, len(videos)))) as ex:
         for result in ex.map(fetch_for_video, videos):
             all_comments.extend(result)
 
-    analysis = analyze_comments(all_comments)
+    analysis = analyze_comments(all_comments, channel_id=cid)
 
     channel_name = ""
     channel_owner = ""
@@ -1212,7 +1223,7 @@ def _run_youtube_comment_analysis(
         "time_range": {"start": time_range_start, "end": time_range_end},
         "time_period_start": time_range_start,
         "time_period_end": time_range_end,
-        "language": "Persian",
+        "language": "English" if analysis.get("language") == "en" else "Persian",
         "avg_sentiment": analysis["avg_sentiment"],
         "top_words": analysis["top_words"],
         "topics": analysis["topics"],
@@ -1253,6 +1264,10 @@ def _run_youtube_comment_analysis(
     )
 
     result["computed_at"] = datetime.now(timezone.utc).isoformat()
+
+    # Also persist to file cache so we avoid re-using API quota when DB isn't available
+    save_cached_snapshot(cid, result)
+
     return result
 
 
@@ -1297,7 +1312,7 @@ def _recompute_from_cached_dataset(cache_dict: dict, cid: str) -> dict | None:
     comments = dataset["comments"]
     videos = dataset.get("videos", [])
     log.info("Recomputing cluster labels from cached comments (channel=%s, n=%d)", cid, len(comments))
-    analysis = analyze_comments(comments)
+    analysis = analyze_comments(comments, channel_id=cid)
     return {
         "channel_id": cid,
         "channel_name": cache_dict.get("channel_name"),
@@ -1310,7 +1325,7 @@ def _recompute_from_cached_dataset(cache_dict: dict, cid: str) -> dict | None:
         "time_range": cache_dict.get("time_range"),
         "time_period_start": cache_dict.get("time_period_start"),
         "time_period_end": cache_dict.get("time_period_end"),
-        "language": cache_dict.get("language", "Persian"),
+        "language": "English" if analysis.get("language") == "en" else "Persian",
         "avg_sentiment": analysis["avg_sentiment"],
         "top_words": analysis["top_words"],
         "topics": analysis["topics"],

@@ -79,6 +79,12 @@ def fetch_channel(
         raise RuntimeError(f"YouTube API returned {resp.status_code}: {resp.text[:500]}")
 
     try:
+        from db import record_youtube_quota_usage
+        record_youtube_quota_usage(1)  # channels.list = 1 unit
+    except Exception:
+        pass
+
+    try:
         data = resp.json()
     except Exception as e:
         raise RuntimeError(f"YouTube API invalid JSON: {e}") from e
