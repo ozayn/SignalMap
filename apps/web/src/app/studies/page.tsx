@@ -68,7 +68,7 @@ const SECTIONS: { title: string; description: string; studyIds: string[] }[] = [
     title: "Media discourse",
     description:
       "Language, narrative, and audience discourse extracted from YouTube comment sections.",
-    studyIds: ["bplus-discourse", "bbc_persian_discourse", "iran_international_discourse", "breaking_points_discourse", "tucker_carlson_discourse", "cnn_discourse", "fox_news_discourse", "bbc_discourse"],
+    studyIds: ["bplus-discourse", "bbc_persian_discourse", "iran_international_discourse", "breaking_points_discourse", "tucker_carlson_discourse", "cnn_discourse", "fox_news_discourse", "bbc_discourse", "rest_is_politics_discourse"],
   },
 ];
 

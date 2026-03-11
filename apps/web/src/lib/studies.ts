@@ -328,6 +328,18 @@ export const STUDIES: StudyMeta[] = [
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
   },
   {
+    id: "rest_is_politics_discourse",
+    number: 26,
+    title: "The Rest Is Politics YouTube Discourse",
+    timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
+    description: "Audience sentiment and discourse topics from The Rest Is Politics YouTube comments.",
+    status: "active",
+    primarySignal: { kind: "youtube_comment_analysis" },
+    youtubeChannelId: "UCsufaClk5if2RGqABb-09Uw",
+    youtubeLanguage: "English",
+    concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
+  },
+  {
     id: "bbc_persian_discourse",
     number: 24,
     title: "BBC Persian YouTube Discourse",

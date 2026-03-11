@@ -330,6 +330,7 @@ CHANNEL_LANGUAGE_OVERRIDE: dict[str, str] = {
     "UCupvZG-5ko_eiXAupbDfxWw": "en",  # CNN
     "UCXIJgqnII2ZOINSWNOGFThA": "en",  # Fox News
     "UC16niRr50-MSBwiO3YDb3RA": "en",  # BBC News
+    "UCsufaClk5if2RGqABb-09Uw": "en",  # The Rest Is Politics
 }
 
 # Per-channel extra stopwords (host names, channel names) — merged into title_phrase_stopwords
@@ -353,6 +354,9 @@ CHANNEL_EXTRA_STOPWORDS: dict[str, frozenset[str]] = {
     }),
     "UC16niRr50-MSBwiO3YDb3RA": frozenset({  # BBC News
         "bbc", "bbc news",
+    }),
+    "UCsufaClk5if2RGqABb-09Uw": frozenset({  # The Rest Is Politics
+        "rest", "politics", "rest is politics", "rory", "alastair", "campbell", "stewart",
     }),
     "UCHZk9MrT3DGWmVqdsj5y0EA": frozenset({  # BBC Persian
         "bbc", "bbc persian", "بیبیسی", "بیبیسی فارسی",
@@ -673,7 +677,11 @@ COUNTRY_NORMALIZATION_MAP: dict[str, str] = {
 KEYWORD_STOPWORDS_EN = frozenset({
     "itu", "sendiri",  # Indonesian function words
     "year", "thing", "stuff",  # generic fillers
+    "doe",  # mis-lemmatized from "does"; filter if it slips through
 } | NUMERIC_FRAGMENT_TOKENS)
+
+# Tokens that mis-lemmatize as nouns (does→doe, leaves→leaf, doses→dos). Try verb first.
+_LEMMATIZE_VERB_FIRST = frozenset({"does", "leaves", "lives", "doses"})
 
 
 def _normalize_country_phrases_en(text: str) -> str:
@@ -723,6 +731,12 @@ def _lemmatize_token_en(w: str) -> str:
         return w
     if len(w) < 4 or any(c.isdigit() for c in w):
         return w
+    w_lower = w.lower()
+    # For tokens that mis-lemmatize as nouns (does→doe, leaves→leaf), try verb first
+    if w_lower in _LEMMATIZE_VERB_FIRST:
+        lemma_v = lemmatizer.lemmatize(w, "v")
+        if lemma_v != w:
+            return lemma_v
     # Try noun first (handles plurals: prices, countries, files)
     lemma_n = lemmatizer.lemmatize(w, "n")
     if lemma_n != w:
