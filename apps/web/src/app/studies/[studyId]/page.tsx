@@ -2158,13 +2158,15 @@ export default function StudyDetailPage() {
                     <p className="text-xs text-muted-foreground mb-1">General discourse topics (single words)</p>
                     <ChipBlock items={keywords} />
                   </section>
-                  {narrativePhrases.length > 0 && (
-                    <section>
-                      <h3 className="text-sm font-medium mb-2">Narrative phrases</h3>
-                      <p className="text-xs text-muted-foreground mb-1">Frames and slogans (multi-word phrases)</p>
+                  <section className="mt-6 pt-6 border-t border-border">
+                    <h3 className="text-sm font-medium mb-2">Narrative phrases</h3>
+                    <p className="text-xs text-muted-foreground mb-1">Frames and slogans (multi-word phrases)</p>
+                    {narrativePhrases.length > 0 ? (
                       <ChipBlock items={narrativePhrases} />
-                    </section>
-                  )}
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic">No phrases with count ≥ 3</p>
+                    )}
+                  </section>
                 </>
               );
             })()}
