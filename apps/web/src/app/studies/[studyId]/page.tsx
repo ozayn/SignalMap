@@ -990,8 +990,6 @@ export default function StudyDetailPage() {
         _: String(Date.now()),
       });
       if (forceRefresh) params.set("refresh", "1");
-      // Recompute word cloud only (keeps cached plots; fast)
-      params.set("recompute_wordcloud", "1");
       if (forceRecompute) params.set("recompute", "1");
       if (forceRefresh && adminCode?.trim()) params.set("admin_code", adminCode.trim());
       const url = `/api/youtube/channel/comment-analysis?${params.toString()}`;
