@@ -17,6 +17,19 @@ export function cssColor(varName: string, fallback: string) {
   return raw ? raw : fallback;
 }
 
+/** Decode HTML entities in text (e.g. &#39; → ', &amp; → &). */
+export function decodeHtmlEntities(str: string): string {
+  if (!str || typeof str !== "string") return str || "";
+  return str
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCharCode(parseInt(n, 16)));
+}
+
 /** Format date for stat cards. Daily: "Mar 2, 2026". Monthly/annual: "Mar 2026". */
 export function formatStatDate(dateStr: string): string {
   const parts = dateStr.split("-");

@@ -229,14 +229,16 @@ function ClusterLabels({
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (draggingIndex === null || !dragStartRef.current) return;
-      const dx = e.clientX - dragStartRef.current.x;
-      const dy = e.clientY - dragStartRef.current.y;
+      if (draggingIndex === null) return;
+      const start = dragStartRef.current;
+      if (!start) return;
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
       setOverrides((prev) => ({
         ...prev,
         [draggingIndex]: {
-          displayX: dragStartRef.current!.labelX + dx,
-          displayY: dragStartRef.current!.labelY + dy,
+          displayX: start.labelX + dx,
+          displayY: start.labelY + dy,
         },
       }));
     },
@@ -389,6 +391,7 @@ function DiscourseScatter({
   xLabel,
   yLabel,
   colorPalette = PALETTE_KMEANS,
+  textDir = "rtl",
 }: {
   points: DiscoursePoint[];
   discourseComments?: string[];
@@ -401,6 +404,7 @@ function DiscourseScatter({
   xLabel: string;
   yLabel: string;
   colorPalette?: string[];
+  textDir?: "ltr" | "rtl";
 }) {
   const [hovered, setHovered] = useState<number | null>(null);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -528,6 +532,7 @@ function DiscourseScatter({
         setHovered={setHovered}
         pos={pos}
         setPos={setPos}
+        textDir={textDir}
       >
         <svg width={w} height={h} className="absolute inset-0">
           {laidOutLabels.length > 0 && (
@@ -587,6 +592,7 @@ function DiscourseScatterTooltip({
   setHovered,
   pos,
   setPos,
+  textDir = "rtl",
   children,
 }: {
   points: DiscoursePoint[];
@@ -601,6 +607,7 @@ function DiscourseScatterTooltip({
   setHovered: (v: number | null) => void;
   pos: { x: number; y: number };
   setPos: (v: { x: number; y: number }) => void;
+  textDir?: "ltr" | "rtl";
   children?: React.ReactNode;
 }) {
   return (
@@ -653,7 +660,7 @@ function DiscourseScatterTooltip({
             pointerEvents: "none",
           }}
         >
-          <p className="text-muted-foreground line-clamp-3" dir="rtl">
+          <p className="text-muted-foreground line-clamp-3" dir={textDir}>
             {(() => {
               const p = points[hovered]!;
               const comment = Array.isArray(p) && discourseComments ? discourseComments[p[2]] : null;
@@ -1407,10 +1414,12 @@ function ClusterPanel({
   label,
   comments,
   onClose,
+  textDir = "rtl",
 }: {
   label: string;
   comments: string[];
   onClose: () => void;
+  textDir?: "ltr" | "rtl";
 }) {
   const top5 = comments.slice(0, 5);
   return (
@@ -1432,7 +1441,7 @@ function ClusterPanel({
           <p className="text-sm text-muted-foreground">No comments in this cluster.</p>
         ) : (
           top5.map((c, i) => (
-            <p key={i} className="text-sm text-foreground border-b border-border pb-2 last:border-0" dir="rtl">
+            <p key={i} className="text-sm text-foreground border-b border-border pb-2 last:border-0" dir={textDir}>
               {c || "(no text)"}
             </p>
           ))
@@ -1454,6 +1463,7 @@ function ClusterStatsLine({ stats }: { stats: ClusterStats }) {
 type ClusterSummaryItem = { label: string; size: number; percent: number };
 
 export function YoutubeDiscourseMaps({
+  textDir = "rtl",
   pointsPca,
   pointsUmap,
   pointsTfidf,
@@ -1501,7 +1511,7 @@ export function YoutubeDiscourseMaps({
   clustersSummaryHdbscan?: ClusterSummaryItem[];
   clustersSummaryTfidf?: ClusterSummaryItem[];
   clustersSummaryMinilm?: ClusterSummaryItem[];
-}) {
+} & { textDir?: "ltr" | "rtl" }) {
   const [selectedCluster, setSelectedCluster] = useState<{
     label: string;
     comments: string[];
@@ -1656,6 +1666,7 @@ export function YoutubeDiscourseMaps({
           label={selectedCluster.label}
           comments={selectedCluster.comments}
           onClose={() => setSelectedCluster(null)}
+          textDir={textDir}
         />
       )}
     <div className="space-y-6">
@@ -1680,6 +1691,7 @@ export function YoutubeDiscourseMaps({
                 xLabel="Principal component 1"
                 yLabel="Principal component 2"
                 colorPalette={PALETTE_KMEANS}
+                textDir={textDir}
               />
             </div>
           </div>
@@ -1703,6 +1715,7 @@ export function YoutubeDiscourseMaps({
                 xLabel="UMAP dimension 1"
                 yLabel="UMAP dimension 2"
                 colorPalette={PALETTE_MINILM}
+                textDir={textDir}
               />
             </div>
           </div>
@@ -1730,6 +1743,7 @@ export function YoutubeDiscourseMaps({
                 xLabel="UMAP dimension 1"
                 yLabel="UMAP dimension 2"
                 colorPalette={PALETTE_KMEANS}
+                textDir={textDir}
               />
             </div>
           </div>
@@ -1753,6 +1767,7 @@ export function YoutubeDiscourseMaps({
                 xLabel="UMAP dimension 1"
                 yLabel="UMAP dimension 2"
                 colorPalette={PALETTE_HDBSCAN}
+                textDir={textDir}
               />
             </div>
           </div>

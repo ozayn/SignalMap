@@ -303,6 +303,15 @@ CHANNEL_STOPWORDS = {
     "تیم پلاس",
 }
 
+# Per-channel language override ("en" or "fa") — skip auto-detect when set
+CHANNEL_LANGUAGE_OVERRIDE: dict[str, str] = {
+    "UCDRIjKy6eZOvKtOELtTdeUA": "en",  # Breaking Points
+    "UCGttrUON87gWfU6dMWm1fcA": "en",  # Tucker Carlson
+    "UCupvZG-5ko_eiXAupbDfxWw": "en",  # CNN
+    "UCXIJgqnII2ZOINSWNOGFThA": "en",  # Fox News
+    "UC16niRr50-MSBwiO3YDb3RA": "en",  # BBC News
+}
+
 # Per-channel extra stopwords (host names, channel names) — merged into title_phrase_stopwords
 CHANNEL_EXTRA_STOPWORDS: dict[str, frozenset[str]] = {
     "UChWB95_-n9rUc3H9srsn9bQ": frozenset({  # Bplus — Ali Bandari
@@ -1469,7 +1478,7 @@ def compute_cluster_labels_from_umap(
 
 
 def analyze_comments(comments, channel_id: str | None = None):
-    lang = _detect_language(comments)
+    lang = CHANNEL_LANGUAGE_OVERRIDE.get((channel_id or "").strip()) or _detect_language(comments)
     title_phrase_stopwords = extract_title_phrases(comments, lang)
     extra = CHANNEL_EXTRA_STOPWORDS.get((channel_id or "").strip(), frozenset())
     if extra:

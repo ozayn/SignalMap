@@ -47,6 +47,8 @@ export type StudyMeta = {
   unitLabel?: string;
   /** YouTube discourse: channel ID (default: bplus). */
   youtubeChannelId?: string;
+  /** YouTube discourse: language for display and text direction ("English" | "Persian"). Overrides API when set. */
+  youtubeLanguage?: "English" | "Persian";
 };
 
 export const STUDIES: StudyMeta[] = [
@@ -274,6 +276,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCDRIjKy6eZOvKtOELtTdeUA",
+    youtubeLanguage: "English",
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
   },
   {
@@ -285,6 +288,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCGttrUON87gWfU6dMWm1fcA",
+    youtubeLanguage: "English",
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
   },
   {
@@ -296,6 +300,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCupvZG-5ko_eiXAupbDfxWw",
+    youtubeLanguage: "English",
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
   },
   {
@@ -307,6 +312,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCXIJgqnII2ZOINSWNOGFThA",
+    youtubeLanguage: "English",
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
   },
   {
@@ -318,6 +324,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UC16niRr50-MSBwiO3YDb3RA",
+    youtubeLanguage: "English",
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
   },
   {

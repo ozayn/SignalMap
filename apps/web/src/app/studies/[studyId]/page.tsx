@@ -35,7 +35,7 @@ import {
   toDisplayName,
 } from "@/lib/oil-trade-regions";
 import { trackEvent } from "@/lib/analytics";
-import { formatStatDate } from "@/lib/utils";
+import { formatStatDate, decodeHtmlEntities } from "@/lib/utils";
 
 type OverviewData = {
   study_id: string;
@@ -2047,7 +2047,7 @@ export default function StudyDetailPage() {
                     : "—"}
               </dd>
             </div>
-            <div><dt>Language</dt><dd>{analysisData.language ?? "Persian"}</dd></div>
+            <div><dt>Language</dt><dd>{study?.youtubeLanguage ?? analysisData.language ?? "Persian"}</dd></div>
           </dl>
         </div>
         {analysisData.videos && analysisData.videos.length > 0 && (
@@ -2065,9 +2065,11 @@ export default function StudyDetailPage() {
                       }
                     })()
                   : "";
+                const lang = study?.youtubeLanguage ?? analysisData.language ?? "";
+                const textDir = lang.toLowerCase().startsWith("english") ? "ltr" : "rtl";
                 return (
                   <li key={v.video_id || i} className="flex flex-wrap gap-x-2 gap-y-0.5 items-baseline">
-                    <span dir="rtl" className="min-w-0 flex-1">{v.title || "(no title)"}</span>
+                    <span dir={textDir} className="min-w-0 flex-1">{decodeHtmlEntities(v.title || "") || "(no title)"}</span>
                     {dateStr && <span className="text-xs shrink-0">— {dateStr}</span>}
                   </li>
                 );
@@ -2113,7 +2115,7 @@ export default function StudyDetailPage() {
                   alignItems: "center",
                   padding: "12px",
                   lineHeight: "1.5",
-                  direction: (analysisData.language ?? "").toLowerCase().startsWith("english") ? "ltr" : "rtl",
+                  direction: ((study?.youtubeLanguage ?? analysisData.language) ?? "").toLowerCase().startsWith("english") ? "ltr" : "rtl",
                 }}
               >
                 {(() => {
@@ -2164,6 +2166,7 @@ export default function StudyDetailPage() {
                   Each point represents a comment. Proximity indicates similar language. Compare model variants below.
                 </p>
                 <YoutubeDiscourseMaps
+                  textDir={((study?.youtubeLanguage ?? analysisData.language) ?? "").toLowerCase().startsWith("english") ? "ltr" : "rtl"}
                   pointsPca={analysisData.points_pca ?? []}
                   pointsUmap={analysisData.points_umap ?? []}
                   pointsTfidf={analysisData.points_tfidf ?? analysisData.points_umap ?? []}
