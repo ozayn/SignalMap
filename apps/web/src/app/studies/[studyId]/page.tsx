@@ -977,7 +977,7 @@ export default function StudyDetailPage() {
       if (!study) return;
       setAnalysisLoading(true);
       setAnalysisError(null);
-      setAnalysisData(null);
+      if (!forceRefresh) setAnalysisData(null);
       const channelId = study.youtubeChannelId ?? "UChWB95_-n9rUc3H9srsn9bQ";
       const videosLimit = study.youtubeVideosLimit ?? 5;
       const commentsPerVideo = study.youtubeCommentsPerVideo ?? 30;
@@ -1034,7 +1034,12 @@ export default function StudyDetailPage() {
         }>(url);
         if (res.channel_id === channelId) setAnalysisData(res);
       } catch (e) {
-        setAnalysisError(e instanceof Error ? e.message : "Fetch failed");
+        const msg = e instanceof Error ? e.message : "Fetch failed";
+        if (forceRefresh && (msg.includes("403") || msg.includes("Admin code"))) {
+          // Wrong admin code: silently return, keep existing data
+        } else {
+          setAnalysisError(msg);
+        }
       } finally {
         setAnalysisLoading(false);
       }
