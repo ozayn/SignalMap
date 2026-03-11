@@ -74,8 +74,9 @@ def load_persian_stopwords():
 PERSIAN_BASE_STOPWORDS = {
     "و", "در", "به", "از", "که", "این", "آن", "با", "برای", "تا", "یا", "اما",
     "اگر", "هم", "همه", "هر", "هیچ", "چند", "چرا", "چطور", "کجا", "کی",
+    "اینا", "مگر", "هستم",
     "من", "تو", "او", "ما", "شما", "آنها", "ایشان",
-    "است", "هست", "بود", "بودند", "بوده", "باشه", "باشید", "باشد",
+    "است", "هست", "هستید", "بود", "بودند", "بوده", "باشه", "باشید", "باشد",
     "شد", "شده", "میشود", "میشه", "می‌شود", "شود",
     "کرد", "کرده", "کردند", "میکرد", "میکردند",
     "میکنم", "میکنی", "میکنه", "میکنیم", "میکنن",
@@ -96,15 +97,27 @@ TFIDF_STOPWORDS_EXTRA = {"آید", "توان", "تواند", "توانند", "ر
 # Merge file-loaded stopwords with curated base
 PERSIAN_STOPWORDS = load_persian_stopwords().union(PERSIAN_BASE_STOPWORDS)
 
-# English stopwords: sklearn (Glasgow IR Group) + extended fillers/contractions
+# English stopwords: sklearn + discourse filter + custom + label filter
+# Applied to TF-IDF, word cloud, and cluster labeling
 def _get_english_stopwords():
     from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
-    return set(ENGLISH_STOP_WORDS) | ENGLISH_STOPWORDS_EXTENDED
+    return (
+        set(ENGLISH_STOP_WORDS)
+        | ENGLISH_DISCOURSE_STOPWORDS
+        | CUSTOM_STOPWORDS
+        | LABEL_TOKEN_FILTER
+    )
 
 
-# Extended English stopwords for word clouds (sklearn misses many common fillers)
-# Covers: contractions, common verbs/adverbs, social/comment filler
-ENGLISH_STOPWORDS_EXTENDED = frozenset({
+# Generic discourse words that appear in almost every comment corpus.
+# Filter these so word clouds highlight meaningful topics (war, immigration, policy, etc.)
+# instead of conversational filler.
+ENGLISH_DISCOURSE_STOPWORDS = frozenset({
+    # User-specified generic words
+    "people", "time", "times", "way", "good", "man", "true", "days", "doing", "saying", "use", "used",
+    "really", "thing", "things", "video", "watch", "watching", "guy", "guys",
+    # Conversational filler (non-topical)
+    "hey", "thanks", "ass", "blah", "stuff", "long", "rest",
     # Contractions & apostrophe-stripped forms
     "it's", "its", "that's", "thats", "what's", "whats", "there's", "theres",
     "i'm", "im", "he's", "hes", "she's", "shes", "we're", "were", "they're", "theyre",
@@ -116,29 +129,32 @@ ENGLISH_STOPWORDS_EXTENDED = frozenset({
     "we've", "weve", "we'll", "well", "they've", "theyve", "they'll", "theyll",
     "who's", "whos", "who'll", "wholl", "that'll", "thatll", "here's", "heres",
     # Common verbs (conversational, not topical)
-    "just", "like", "going", "need", "really", "actually", "think", "thinks", "thinking",
+    "just", "like", "going", "need", "actually", "think", "thinks", "thinking",
     "thought", "know", "knows", "known", "said", "say", "says", "get", "gets", "got",
-    "did", "does", "do",     "want", "wants", "wanted", "make", "makes", "made",
+    "did", "does", "do", "want", "wants", "wanted", "make", "makes", "made",
     "come", "comes", "came", "let", "lets", "try", "tries", "tried", "tell", "tells", "told",
     "feel", "feels", "felt", "believe", "believes", "understand", "understands",
     "remember", "remembers", "forget", "forgets", "forgot", "mean", "means", "meant",
     "look", "looks", "looking", "looked", "see", "sees", "saw", "seen",
-    "going", "gonna", "gotta", "kinda", "sorta",
+    "gonna", "gotta", "kinda", "sorta",
     # Adverbs & modifiers
-    "something", "thing", "things", "someone", "somebody", "anyone", "anybody",
+    "something", "someone", "somebody", "anyone", "anybody",
     "everything", "everyone", "everybody", "nothing", "nobody",
     "maybe", "probably", "perhaps", "basically", "literally", "honestly", "obviously",
-    "definitely", "absolutely", "totally", "completely", "actually", "really",
-    "very", "quite", "rather", "pretty", "enough", "almost", "already", "still",
+    "definitely", "absolutely", "totally", "completely", "very", "quite", "rather", "pretty",
+    "enough", "almost", "already", "still",
     # Fillers & discourse markers
     "period", "anyway", "anyways", "whatever", "whenever", "wherever", "however",
     "yeah", "yes", "yep", "nope", "nah", "ok", "okay", "right", "wrong",
-    "well", "so", "because", "though", "although", "however", "therefore",
+    "well", "so", "because", "though", "although", "therefore",
     "also", "too", "either", "neither", "both", "each", "every",
-    # Pronouns & determiners (supplement sklearn)
+    # Pronouns & determiners
     "you", "your", "yours", "he", "him", "his", "she", "her", "hers",
     "we", "us", "our", "ours", "they", "them", "their", "theirs",
     "who", "whom", "whose", "which", "what", "that", "this", "these", "those",
+    # Auxiliary verbs & common words
+    "has", "have", "had", "will", "would", "should", "could", "can", "may", "might",
+    "don", "does", "when", "where", "why", "how", "all", "but", "not",
 })
 
 
@@ -208,25 +224,29 @@ TOPIC_KEYWORDS = {
 
 
 def normalize_persian(text: str) -> str:
-    # 1) Normalize Arabic → Persian characters
+    # 1) Normalize Arabic → Persian characters (ي → ی, ك → ک)
     text = text.replace("ي", "ی")
     text = text.replace("ك", "ک")
 
-    # 2) Normalize half-space (ZWNJ)
+    # 2) Normalize common spelling variants (امریکا → آمریکا, اسراییل → اسرائیل)
+    text = text.replace("امریکا", "آمریکا")
+    text = text.replace("اسراییل", "اسرائیل")
+
+    # 3) Normalize half-space (ZWNJ)
     text = text.replace("\u200c", " ")
 
-    # 3) Normalize Heh variants
+    # 4) Normalize Heh variants
     text = text.replace("ة", "ه")
     text = text.replace("ۀ", "ه")
 
-    # 4) Normalize verb prefixes
+    # 5) Normalize verb prefixes
     text = text.replace("می ", "می")
     text = text.replace("نمی ", "نمی")
 
-    # 5) Remove punctuation (keep Persian letters)
+    # 6) Remove punctuation (keep Persian letters)
     text = re.sub(r"[^\w\s\u0600-\u06FF]", " ", text)
 
-    # 6) Collapse multiple spaces
+    # 7) Collapse multiple spaces
     text = re.sub(r"\s+", " ", text)
 
     return text.strip()
@@ -373,6 +393,39 @@ PHRASE_STOPWORDS.update({
     "و غیره",
 })
 
+# Profanity: filter from narrative phrases, cluster labels, and word cloud (keep discourse focused on themes)
+PROFANITY_FILTER = frozenset({
+    "fuck", "fucker", "fucking", "shit", "bullshit",
+})
+
+# Punctuation chars that invalidate a phrase (e.g. "vote *twice!*")
+PHRASE_PUNCTUATION_CHARS = frozenset("*!?")
+
+# Tokens shorter than 3 chars are rejected unless in this whitelist (acronyms)
+PHRASE_ALLOWED_SHORT_TOKENS = frozenset({"usa", "uk", "us", "cnn", "fox", "id"})
+
+# Domain nouns that produce sliding-window chain phrases (hospital medical, medical pharmaceutical)
+# Skip bigrams where both tokens are in this set
+PHRASE_CHAIN_TOKENS = frozenset({
+    "hospital", "medical", "pharmaceutical", "facility", "school", "refinery",
+})
+
+# Persian: token prefixes that indicate verb forms — reject phrases containing these
+PERSIAN_VERB_PREFIXES = frozenset({"می", "نمی", "خواهد", "خواهند", "کرد", "شد", "میکن"})
+
+# Persian: conversational/sentence fragment tokens — reject phrases containing any of these
+PERSIAN_PHRASE_FRAGMENT_TOKENS = frozenset({
+    "میخواهند", "اینجاست", "نشده", "سراغ", "احتمالاً", "هاست",
+})
+
+# Generic numeric/quantity fragments: year old, million barrel, day old — not geopolitical frames
+# Rule: if ALL tokens in phrase are in this set, skip (no substantive noun)
+NUMERIC_FRAGMENT_TOKENS = frozenset({
+    "year", "years", "million", "billion", "trillion", "thousand", "hundred",
+    "day", "days", "week", "weeks", "month", "months",
+    "barrel", "barrels", "old", "percent", "dollar", "dollars",
+})
+
 # English conversational filler and sentence fragments (not meaningful topics)
 # Host/channel names are per-channel only (CHANNEL_EXTRA_STOPWORDS)
 PHRASE_STOPWORDS_EN = frozenset({
@@ -383,6 +436,7 @@ PHRASE_STOPWORDS_EN = frozenset({
     "i mean", "you know", "you know what", "kind of", "sort of",
     "and stuff", "and things", "and everything", "and all",
     "like this", "like that",
+    "itu sendiri",  # Indonesian filler ("that itself") — not a geopolitical frame
 })
 
 PRAISE_WORDS = {
@@ -436,6 +490,128 @@ def looks_like_verb(word):
     return any(word.endswith(suffix) for suffix in VERB_SUFFIXES)
 
 
+def _contains_profanity(phrase: str) -> bool:
+    """True if any token in phrase is in PROFANITY_FILTER."""
+    if not phrase:
+        return False
+    for t in phrase.lower().split():
+        if t.strip(".,;:!?\"'()") in PROFANITY_FILTER:
+            return True
+    return False
+
+
+def _contains_punctuation_artifact(phrase: str) -> bool:
+    """True if phrase contains *, !, ? (invalidates phrase)."""
+    return any(c in phrase for c in PHRASE_PUNCTUATION_CHARS)
+
+
+def _has_disallowed_short_tokens(phrase: str) -> bool:
+    """True if any token is < 3 chars and not in PHRASE_ALLOWED_SHORT_TOKENS."""
+    for t in phrase.lower().split():
+        clean = t.strip(".,;:!?\"'()")
+        if len(clean) < 3 and clean not in PHRASE_ALLOWED_SHORT_TOKENS:
+            return True
+    return False
+
+
+def _is_artifact_phrase(phrase: str) -> bool:
+    """True if phrase is a sliding-window chain (both tokens domain nouns from PHRASE_CHAIN_TOKENS)."""
+    tokens = [t.lower() for t in phrase.split()]
+    if len(tokens) == 2:
+        return tokens[0] in PHRASE_CHAIN_TOKENS and tokens[1] in PHRASE_CHAIN_TOKENS
+    if len(tokens) == 3:
+        return (
+            (tokens[0] in PHRASE_CHAIN_TOKENS and tokens[1] in PHRASE_CHAIN_TOKENS)
+            or (tokens[1] in PHRASE_CHAIN_TOKENS and tokens[2] in PHRASE_CHAIN_TOKENS)
+        )
+    return False
+
+
+def _is_numeric_fragment_phrase(phrase: str) -> bool:
+    """True if phrase is a generic numeric fragment (year old, million barrel, day old) — no substantive noun."""
+    if not phrase:
+        return False
+    tokens = [t.lower().strip(".,;:!?\"'()") for t in phrase.split()]
+    if not tokens:
+        return False
+    return all(t in NUMERIC_FRAGMENT_TOKENS for t in tokens)
+
+
+def _is_english_only(phrase: str) -> bool:
+    """True if all tokens in phrase are ASCII letters only [a-zA-Z]+."""
+    if not phrase:
+        return False
+    for t in phrase.split():
+        clean = t.strip(".,;:!?\"'()")
+        if not clean:
+            continue
+        if not all(c.isalpha() and ord(c) < 128 for c in clean):
+            return False
+    return True
+
+
+def _merge_related_phrases(phrases: list[tuple[str, int]]) -> list[tuple[str, int]]:
+    """Merge phrases that chain via a shared token (A ends with T, B starts with T).
+    E.g. epic fury + operation epic -> operation epic fury. Avoids merging air base + military base."""
+    if len(phrases) <= 1:
+        return phrases
+    MAX_MERGED_TOKENS = 5
+    # Process "chain starters" first: phrases that can extend (no other phrase ends with our first token)
+    # So "operation epic" is processed before "epic fury", yielding "operation epic fury"
+    first_tokens = {p.split()[0].lower() for p, _ in phrases}
+    last_tokens = {p.split()[-1].lower() for p, _ in phrases}
+    indexed = [(i, p, c) for i, (p, c) in enumerate(phrases)]
+    indexed.sort(key=lambda x: (
+        0 if (p := x[1].split()[0].lower()) not in last_tokens else 1,  # starters first
+        -x[2],  # then by count desc
+    ))
+    merged: list[tuple[str, int]] = []
+    used: set[int] = set()
+    for i, phrase, count in indexed:
+        if i in used:
+            continue
+        chain = [(i, phrase, count)]
+        chain_count = count
+        while True:
+            last_tokens = chain[-1][1].lower().split()
+            if not last_tokens:
+                break
+            pivot = last_tokens[-1]
+            found = False
+            for j, (p, c) in enumerate(phrases):
+                if j in used or j in {x[0] for x in chain}:
+                    continue
+                tokens = p.lower().split()
+                if tokens and tokens[0] == pivot:
+                    chain.append((j, p, c))
+                    chain_count += c
+                    used.add(j)
+                    found = True
+                    break
+            if not found:
+                break
+            result_tokens: list[str] = []
+            for _, p, _ in chain:
+                for t in p.lower().split():
+                    if not result_tokens or t != result_tokens[-1]:
+                        result_tokens.append(t)
+            if len(result_tokens) > MAX_MERGED_TOKENS:
+                break
+        if len(chain) == 1:
+            merged.append((phrase, count))
+            continue
+        result_tokens = []
+        for _, p, _ in chain:
+            for t in p.lower().split():
+                if not result_tokens or t != result_tokens[-1]:
+                    result_tokens.append(t)
+        merged_phrase = " ".join(result_tokens[:MAX_MERGED_TOKENS])
+        merged.append((merged_phrase, chain_count))
+        used.add(i)
+    merged.sort(key=lambda x: -x[1])
+    return merged
+
+
 def _is_verb_like_phrase(phrase: str, lang: str = "fa") -> bool:
     """Reject phrases that are verbs or verb-like (start with می, end with verb suffixes)."""
     if lang == "en":
@@ -453,6 +629,20 @@ def _is_verb_like_phrase(phrase: str, lang: str = "fa") -> bool:
     return False
 
 
+def _is_persian_verb_or_fragment_phrase(phrase: str) -> bool:
+    """Reject Persian phrases containing verb forms or conversational fragments."""
+    if not phrase:
+        return False
+    tokens = phrase.split()
+    for t in tokens:
+        if t in PERSIAN_PHRASE_FRAGMENT_TOKENS:
+            return True
+        for prefix in PERSIAN_VERB_PREFIXES:
+            if t.startswith(prefix):
+                return True
+    return False
+
+
 def _starts_with_conversational_marker(phrase: str) -> bool:
     """Reject phrases that start with conversational markers (sentence fragments)."""
     if not phrase:
@@ -461,11 +651,146 @@ def _starts_with_conversational_marker(phrase: str) -> bool:
     return first.lower() in CONVERSATIONAL_WORDS
 
 
+# Country/region normalization for English geopolitical discourse.
+# Maps variants to canonical form so word cloud consolidates signal.
+COUNTRY_NORMALIZATION_MAP: dict[str, str] = {
+    "america": "usa",
+    "usa": "usa",
+    "u.s": "usa",
+    "u.s.": "usa",
+    "u.s.a": "usa",
+    "u.s.a.": "usa",
+    "americans": "american",
+    "u.k": "united_kingdom",
+    "u.k.": "united_kingdom",
+    "britain": "united_kingdom",
+    "british": "united_kingdom",
+    "iranian": "iran",
+    "iranians": "iran",
+}
+
+# Keyword stopwords for English: function words, fillers, numeric fragments
+KEYWORD_STOPWORDS_EN = frozenset({
+    "itu", "sendiri",  # Indonesian function words
+    "year", "thing", "stuff",  # generic fillers
+} | NUMERIC_FRAGMENT_TOKENS)
+
+
+def _normalize_country_phrases_en(text: str) -> str:
+    """Replace common country phrases with canonical form before tokenization."""
+    # Use word boundaries to avoid partial matches
+    text = re.sub(r"\bunited\s+states\b", "usa", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bunited\s+kingdom\b", "united_kingdom", text, flags=re.IGNORECASE)
+    return text
+
+
+_LEMMATIZER = None
+_LEMMATIZER_LOCK = threading.Lock()
+
+
+def _get_lemmatizer():
+    """Lazy-load NLTK WordNetLemmatizer. Requires nltk.download('wordnet') and optionally 'omw-1.4'."""
+    global _LEMMATIZER
+    if _LEMMATIZER is None:
+        with _LEMMATIZER_LOCK:
+            if _LEMMATIZER is None:
+                try:
+                    from nltk.stem import WordNetLemmatizer
+                    import nltk
+                    try:
+                        nltk.data.find("corpora/wordnet")
+                    except LookupError:
+                        nltk.download("wordnet", quiet=True)
+                    try:
+                        nltk.data.find("corpora/omw-1.4")
+                    except LookupError:
+                        nltk.download("omw-1.4", quiet=True)
+                    # Preload WordNet to avoid _LazyCorpusLoader__args race in multi-threaded use
+                    wn = getattr(nltk.corpus, "wordnet", None)
+                    if wn is not None and hasattr(wn, "ensure_loaded"):
+                        wn.ensure_loaded()
+                    _LEMMATIZER = WordNetLemmatizer()
+                except Exception as e:
+                    log.warning("NLTK WordNetLemmatizer unavailable, skipping lemmatization: %s", e)
+                    _LEMMATIZER = False
+    return _LEMMATIZER if _LEMMATIZER else None
+
+
+def _lemmatize_token_en(w: str) -> str:
+    """Lemmatize English token (e.g. prices→price, countries→country). Returns original if lemmatizer unavailable."""
+    lemmatizer = _get_lemmatizer()
+    if not lemmatizer:
+        return w
+    if len(w) < 4 or any(c.isdigit() for c in w):
+        return w
+    # Try noun first (handles plurals: prices, countries, files)
+    lemma_n = lemmatizer.lemmatize(w, "n")
+    if lemma_n != w:
+        return lemma_n
+    # Try verb (handles -ing, -ed: running→run, watched→watch)
+    lemma_v = lemmatizer.lemmatize(w, "v")
+    if lemma_v != w:
+        return lemma_v
+    return w
+
+
+def _normalize_token_country_en(w: str) -> str:
+    """Map country token variants to canonical form."""
+    key = w.lower().strip(".,;:!?\"'()")
+    key_no_dots = key.replace(".", "")
+    return COUNTRY_NORMALIZATION_MAP.get(key, COUNTRY_NORMALIZATION_MAP.get(key_no_dots, w))
+
+
+def _process_keywords_en(word_counter: Counter, title_phrase_stopwords: frozenset[str]) -> list[tuple[str, int]]:
+    """Process English keywords: filter non-ASCII, stopwords, numeric fragments; lemmatize; merge counts."""
+    merged: Counter = Counter()
+    for token, count in word_counter.items():
+        clean = token.lower().strip(".,;:!?\"'()")
+        if not clean:
+            continue
+        if len(clean) < 3 and clean not in PHRASE_ALLOWED_SHORT_TOKENS:
+            continue
+        if not is_english_token(clean):
+            continue
+        if clean in KEYWORD_STOPWORDS_EN:
+            continue
+        if _contains_profanity(clean):
+            continue
+        if clean in title_phrase_stopwords:
+            continue
+        # Country normalization (iranian→iran) then lemmatization (attacks→attack)
+        norm = _normalize_token_country_en(clean)
+        lemma = _lemmatize_token_en(norm)
+        merged[lemma] += count
+    return merged.most_common(50)
+
+
+def is_persian_token(token: str) -> bool:
+    """True if token contains at least one Persian/Arabic character."""
+    return bool(re.search(r"[\u0600-\u06FF]", token))
+
+
+def is_english_token(token: str) -> bool:
+    """True if token is composed only of ASCII letters."""
+    return bool(re.fullmatch(r"[a-zA-Z]+", token))
+
+
+def filter_tokens_by_language(tokens: list[str], language: str) -> list[str]:
+    """Keep only tokens matching the study language. fa=Persian, en=English."""
+    if language == "fa":
+        return [t for t in tokens if is_persian_token(t)]
+    if language == "en":
+        return [t for t in tokens if is_english_token(t)]
+    return tokens
+
+
 def clean_text(text: str, lang: str = "fa"):
     text = re.sub(r"http\S+", "", text)  # remove URLs before normalization
     if lang != "en":
         text = normalize_persian(text)
     text = text.lower()
+    if lang == "en":
+        text = _normalize_country_phrases_en(text)
     return text
 
 
@@ -480,6 +805,8 @@ def tokenize(text: str, lang: str = "fa"):
         # Normalize curly apostrophes so "it's" and "don't" match stopwords
         if lang == "en":
             w = w.replace("\u2019", "'").replace("\u2018", "'")
+            w = _normalize_token_country_en(w)
+            w = _lemmatize_token_en(w)
         if lang != "en" and w.startswith("ایران"):
             w = "ایران"
         if any(c.isdigit() for c in w):
@@ -489,6 +816,10 @@ def tokenize(text: str, lang: str = "fa"):
         if w not in stopwords and w_check not in stopwords and len(w) > 2:
             if lang != "en" and looks_like_verb(w):
                 continue  # Hazm-style verb filtering for Persian only
+            if lang == "fa" and not is_persian_token(w):
+                continue  # Persian study: only Persian tokens
+            if lang == "en" and not is_english_token(w):
+                continue  # English study: only English tokens
             result.append(w)
     return result
 
@@ -497,6 +828,7 @@ def generate_bigrams(tokens):
     return [
         f"{tokens[i]} {tokens[i+1]}"
         for i in range(len(tokens) - 1)
+        if tokens[i] != tokens[i + 1]
     ]
 
 
@@ -504,6 +836,7 @@ def generate_trigrams(tokens):
     return [
         f"{tokens[i]} {tokens[i+1]} {tokens[i+2]}"
         for i in range(len(tokens) - 2)
+        if len({tokens[i], tokens[i + 1], tokens[i + 2]}) > 1
     ]
 
 
@@ -566,13 +899,32 @@ def extract_title_phrases(comments: list, lang: str = "fa") -> frozenset[str]:
 
 
 def compute_bigram_pmi(bigram_counter, word_counter, total_tokens, title_phrase_stopwords: frozenset[str] | None = None, lang: str = "fa"):
+    """Score bigrams by frequency + PMI. Keeps count >= 2. Uses combined score to surface
+    both high-frequency phrases (oil prices, gas prices) and distinctive ones (epstein files)."""
     title_stop = title_phrase_stopwords or frozenset()
-    pmi_scores = []
+    scored = []
     for phrase, count in bigram_counter.items():
         if phrase in PHRASE_STOPWORDS or phrase in CHANNEL_STOPWORDS or _normalize_phrase_for_match(phrase, lang) in title_stop:
             continue
+        if _contains_profanity(phrase):
+            continue
+        if _contains_punctuation_artifact(phrase):
+            continue
+        if _has_disallowed_short_tokens(phrase):
+            continue
+        if _is_artifact_phrase(phrase):
+            continue
+        if _is_numeric_fragment_phrase(phrase):
+            continue
+        if lang == "en" and not _is_english_only(phrase):
+            continue
+        if lang == "fa" and _is_persian_verb_or_fragment_phrase(phrase):
+            continue
         parts = phrase.split()
         if len(parts) != 2:
+            continue
+        min_bigram = 3 if lang == "fa" else 2
+        if count < min_bigram:
             continue
         w1, w2 = parts[0], parts[1]
         p_w1 = word_counter.get(w1, 0) / total_tokens
@@ -581,20 +933,35 @@ def compute_bigram_pmi(bigram_counter, word_counter, total_tokens, title_phrase_
 
         if p_w1w2 > 0 and p_w1 > 0 and p_w2 > 0:
             pmi = math.log(p_w1w2 / (p_w1 * p_w2))
-            if count >= 3:
-                pmi_scores.append((phrase, pmi, count))
+            # Combined score: frequency + PMI boost (favors both common and distinctive phrases)
+            score = count + 0.5 * max(0, pmi)
+            scored.append((phrase, pmi, count, score))
 
-    pmi_scores.sort(key=lambda x: x[1], reverse=True)
-    return pmi_scores[:20]
+    scored.sort(key=lambda x: x[3], reverse=True)
+    return [(p, pm, c) for p, pm, c, _ in scored[:40]]
 
 
 def compute_trigram_pmi(trigram_counter, word_counter, total_tokens, title_phrase_stopwords: frozenset[str] | None = None, lang: str = "fa"):
     title_stop = title_phrase_stopwords or frozenset()
     pmi_scores = []
     for phrase, count in trigram_counter.items():
-        if count < 2:
+        if count < 3:
             continue
         if _normalize_phrase_for_match(phrase, lang) in title_stop:
+            continue
+        if _contains_profanity(phrase):
+            continue
+        if _contains_punctuation_artifact(phrase):
+            continue
+        if _has_disallowed_short_tokens(phrase):
+            continue
+        if _is_artifact_phrase(phrase):
+            continue
+        if _is_numeric_fragment_phrase(phrase):
+            continue
+        if lang == "en" and not _is_english_only(phrase):
+            continue
+        if lang == "fa" and _is_persian_verb_or_fragment_phrase(phrase):
             continue
         parts = phrase.split()
         if len(parts) != 3:
@@ -845,12 +1212,19 @@ def compute_cluster_label(
                 continue
             if title_stop and (w1 in title_stop or w2 in title_stop or _normalize_phrase_for_match(bg, lang) in title_stop):
                 continue
+            if _is_artifact_phrase(bg):
+                continue
             if w1 in top_tokens_set or w2 in top_tokens_set:
                 bigram_key = _normalize_phrase_for_match(bg, lang)
                 bigram_counts[bigram_key] += 1
 
+    # Require bigram to appear >= 2 times in cluster (repeated frame, not isolated mention)
     if bigram_counts:
-        label = bigram_counts.most_common(1)[0][0]
+        top_bigrams = [(bg, c) for bg, c in bigram_counts.most_common(10) if c >= 2]
+        if top_bigrams:
+            label = top_bigrams[0][0]
+        else:
+            label = top_tokens[0]
     else:
         label = top_tokens[0]
 
@@ -893,6 +1267,14 @@ def _is_valid_label_for_display(
     title_phrase_stopwords: per-channel extras (host names, etc.) — when provided, reject if phrase is in it."""
     if not phrase:
         return False
+    if _contains_profanity(phrase):
+        return False
+    if _contains_punctuation_artifact(phrase):
+        return False
+    if _has_disallowed_short_tokens(phrase):
+        return False
+    if _is_artifact_phrase(phrase):
+        return False
     norm = _normalize_phrase_for_match(phrase, lang)
     if title_phrase_stopwords and norm in title_phrase_stopwords:
         return False
@@ -925,6 +1307,14 @@ def _is_valid_label_for_display(
 def _accept_phrase_for_label(phrase: str, title_stop: frozenset[str], stop_list: list, lang: str = "fa") -> bool:
     """Shared phrase acceptance for semantic and TF-IDF labeling."""
     if not phrase or phrase in PHRASE_STOPWORDS or phrase in CHANNEL_STOPWORDS:
+        return False
+    if _contains_profanity(phrase):
+        return False
+    if _contains_punctuation_artifact(phrase):
+        return False
+    if _has_disallowed_short_tokens(phrase):
+        return False
+    if _is_artifact_phrase(phrase):
         return False
     if lang == "en" and _normalize_phrase_for_match(phrase, lang) in PHRASE_STOPWORDS_EN:
         return False
@@ -1010,8 +1400,15 @@ def compute_cluster_label_semantic(
                     norm_to_display[norm] = tg
 
     # 3. Prefer bigrams, then trigrams only if no suitable bigram (noun-like labels)
-    # Use normalized form for candidates; display form comes from norm_to_display
-    candidates = [norm_to_display.get(p, p) for p, _ in phrase_counts.most_common(80)]
+    # Filter: bigram count >= 2, trigram count >= 3 (repeated frames, not isolated mentions)
+    BIGRAM_MIN_COUNT, TRIGRAM_MIN_COUNT = 2, 3
+    filtered_counts = [
+        (p, c) for p, c in phrase_counts.most_common(80)
+        if (len(p.split()) == 1)
+        or (len(p.split()) == 2 and c >= BIGRAM_MIN_COUNT)
+        or (len(p.split()) == 3 and c >= TRIGRAM_MIN_COUNT)
+    ]
+    candidates = [norm_to_display.get(p, p) for p, _ in filtered_counts]
     if not candidates:
         return "discussion"
 
@@ -1477,6 +1874,99 @@ def compute_cluster_labels_from_umap(
         return []
 
 
+def compute_wordcloud_from_comments(comments: list, channel_id: str | None = None) -> dict:
+    """Compute only word cloud fields (keywords, narrative_phrases, topics, etc.) from comments.
+    Used when recompute_wordcloud=1: keep cached plots, refresh word cloud from cached comments."""
+    lang = CHANNEL_LANGUAGE_OVERRIDE.get((channel_id or "").strip()) or _detect_language(comments)
+    title_phrase_stopwords = extract_title_phrases(comments, lang)
+    extra = CHANNEL_EXTRA_STOPWORDS.get((channel_id or "").strip(), frozenset())
+    if extra:
+        title_phrase_stopwords = title_phrase_stopwords | extra
+    word_counter = Counter()
+    bigram_counter = Counter()
+    trigram_counter = Counter()
+    topic_counter = Counter()
+    sentiments = []
+    for c in comments:
+        text = c.get("comment_text", "")
+        blob = TextBlob(text)
+        sentiments.append(blob.sentiment.polarity)
+        tokens = tokenize(text, lang)
+        word_counter.update(tokens)
+        bigram_counter.update(generate_bigrams(tokens))
+        trigram_counter.update(generate_trigrams(tokens))
+        terms = tokens + generate_bigrams(tokens)
+        for t in classify_comment_topics(terms):
+            topic_counter[t] += 1
+    total_tokens = sum(word_counter.values()) or 1
+    bigrams_pmi = compute_bigram_pmi(
+        bigram_counter, word_counter, total_tokens, title_phrase_stopwords=title_phrase_stopwords, lang=lang
+    )
+    trigrams_pmi = compute_trigram_pmi(
+        trigram_counter, word_counter, total_tokens, title_phrase_stopwords=title_phrase_stopwords, lang=lang
+    )
+
+    def _ok_for_wordcloud(item, lang: str) -> bool:
+        if isinstance(item, tuple) and len(item) >= 2:
+            phrase = item[0]
+        else:
+            return True
+        if _contains_profanity(phrase):
+            return False
+        if _contains_punctuation_artifact(phrase):
+            return False
+        if _has_disallowed_short_tokens(phrase):
+            return False
+        if _is_artifact_phrase(phrase):
+            return False
+        if _is_numeric_fragment_phrase(phrase):
+            return False
+        if lang == "en" and not _is_english_only(phrase):
+            return False
+        if lang == "fa" and _is_persian_verb_or_fragment_phrase(phrase):
+            return False
+        norm = _normalize_phrase_for_match(phrase, lang)
+        if norm in title_phrase_stopwords:
+            return False
+        if lang == "en" and norm in PHRASE_STOPWORDS_EN:
+            return False
+        return True
+
+    if lang == "en":
+        keywords = _process_keywords_en(word_counter, title_phrase_stopwords)[:40]
+    else:
+        unigrams_raw = list(word_counter.most_common(50))
+        keywords = [x for x in unigrams_raw if _ok_for_wordcloud(x, lang)][:40]
+    BIGRAM_MIN_COUNT = 3 if lang == "fa" else 2
+    TRIGRAM_MIN_COUNT = 3
+    combined_phrases: list[tuple[str, int]] = []
+    for phrase, _pmi, count in bigrams_pmi:
+        if count >= BIGRAM_MIN_COUNT:
+            combined_phrases.append((phrase, count))
+    for phrase, _pmi, count in trigrams_pmi:
+        if count < TRIGRAM_MIN_COUNT:
+            continue
+        parts = phrase.split()
+        if len(parts) != 3:
+            continue
+        bg1, bg2 = " ".join(parts[:2]), " ".join(parts[1:])
+        if bigram_counter.get(bg1, 0) >= count or bigram_counter.get(bg2, 0) >= count:
+            continue
+        combined_phrases.append((phrase, count))
+    combined_phrases.sort(key=lambda x: x[1], reverse=True)
+    filtered = [(p, c) for p, c in combined_phrases[:50] if _ok_for_wordcloud((p, c), lang)]
+    merged = _merge_related_phrases(filtered)
+    narrative_phrases = merged[:35]
+    avg_sentiment = sum(sentiments) / len(sentiments) if sentiments else 0
+    return {
+        "top_words": keywords,
+        "keywords": keywords,
+        "narrative_phrases": narrative_phrases,
+        "topics": topic_counter.most_common(),
+        "avg_sentiment": avg_sentiment,
+    }
+
+
 def analyze_comments(comments, channel_id: str | None = None):
     lang = CHANNEL_LANGUAGE_OVERRIDE.get((channel_id or "").strip()) or _detect_language(comments)
     title_phrase_stopwords = extract_title_phrases(comments, lang)
@@ -1516,10 +2006,11 @@ def analyze_comments(comments, channel_id: str | None = None):
         for t in topics:
             topic_counter[t] += 1
 
+    # Min frequency: bigram >= 2, trigram >= 3 (repeated discourse patterns, not isolated mentions)
     top_bigrams = [
         (phrase, count)
         for phrase, count in bigram_counter.items()
-        if count >= 3
+        if count >= 2
         and phrase not in PHRASE_STOPWORDS
         and phrase not in CHANNEL_STOPWORDS
         and _normalize_phrase_for_match(phrase, lang) not in title_phrase_stopwords
@@ -1529,7 +2020,7 @@ def analyze_comments(comments, channel_id: str | None = None):
     top_trigrams = [
         (phrase, count)
         for phrase, count in trigram_counter.items()
-        if count >= 2 and _normalize_phrase_for_match(phrase, lang) not in title_phrase_stopwords
+        if count >= 3 and _normalize_phrase_for_match(phrase, lang) not in title_phrase_stopwords
     ]
     top_trigrams = sorted(top_trigrams, key=lambda x: x[1], reverse=True)[:20]
 
@@ -1541,21 +2032,63 @@ def analyze_comments(comments, channel_id: str | None = None):
         trigram_counter, word_counter, total_tokens, title_phrase_stopwords=title_phrase_stopwords, lang=lang
     )
 
-    combined_terms = list(word_counter.most_common(40))
-    combined_terms.extend(top_bigrams)
     # Filter out channel-specific terms and conversational filler from word cloud
     def _ok_for_wordcloud(item, lang: str) -> bool:
         if isinstance(item, tuple) and len(item) >= 2:
             phrase = item[0]
         else:
             return True
+        if _contains_profanity(phrase):
+            return False
+        if _contains_punctuation_artifact(phrase):
+            return False
+        if _has_disallowed_short_tokens(phrase):
+            return False
+        if _is_artifact_phrase(phrase):
+            return False
+        if _is_numeric_fragment_phrase(phrase):
+            return False
+        if lang == "en" and not _is_english_only(phrase):
+            return False
         norm = _normalize_phrase_for_match(phrase, lang)
         if norm in title_phrase_stopwords:
             return False
         if lang == "en" and norm in PHRASE_STOPWORDS_EN:
             return False
         return True
-    top_words = [x for x in combined_terms if _ok_for_wordcloud(x, lang)]
+
+    # Keyword layer: unigrams only — general discourse topics
+    if lang == "en":
+        keywords = _process_keywords_en(word_counter, title_phrase_stopwords)[:40]
+    else:
+        unigrams_raw = list(word_counter.most_common(50))
+        keywords = [x for x in unigrams_raw if _ok_for_wordcloud(x, lang)][:40]
+
+    # Narrative phrase layer: prefer stable bigrams; include trigrams only if stronger than components
+    # Min frequency: bigram >= 2, trigram >= 3 (repeated discourse frames, not isolated mentions)
+    BIGRAM_MIN_COUNT = 3 if lang == "fa" else 2
+    TRIGRAM_MIN_COUNT = 3
+    combined_phrases: list[tuple[str, int]] = []
+    for phrase, _pmi, count in bigrams_pmi:
+        if count >= BIGRAM_MIN_COUNT:
+            combined_phrases.append((phrase, count))
+    for phrase, _pmi, count in trigrams_pmi:
+        if count < TRIGRAM_MIN_COUNT:
+            continue
+        parts = phrase.split()
+        if len(parts) != 3:
+            continue
+        bg1, bg2 = " ".join(parts[:2]), " ".join(parts[1:])
+        if bigram_counter.get(bg1, 0) >= count or bigram_counter.get(bg2, 0) >= count:
+            continue  # bigram component is stronger — keep bigram, skip trigram
+        combined_phrases.append((phrase, count))
+    combined_phrases.sort(key=lambda x: x[1], reverse=True)
+    filtered = [(p, c) for p, c in combined_phrases[:50] if _ok_for_wordcloud((p, c), lang)]
+    merged = _merge_related_phrases(filtered)
+    narrative_phrases = merged[:35]
+
+    # Backward compatibility: top_words = keywords (unigrams only)
+    top_words = keywords
 
     avg_sentiment = 0
     if sentiments:
@@ -1662,6 +2195,8 @@ def analyze_comments(comments, channel_id: str | None = None):
         "language": "en" if lang == "en" else "fa",
         "avg_sentiment": avg_sentiment,
         "top_words": top_words,
+        "keywords": keywords,
+        "narrative_phrases": narrative_phrases,
         "topics": topic_counter.most_common(),
         "trigrams": top_trigrams,
         "bigrams_pmi": bigrams_pmi,

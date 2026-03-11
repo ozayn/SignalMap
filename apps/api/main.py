@@ -35,6 +35,7 @@ from signalmap.connectors.youtube import fetch_channel, test_youtube_api
 from signalmap.services.comment_analysis import (
     analyze_comments,
     compute_cluster_labels_from_umap,
+    compute_wordcloud_from_comments,
     load_cached_dataset,
     load_cached_snapshot,
     save_cached_snapshot,
@@ -1226,6 +1227,8 @@ def _run_youtube_comment_analysis(
         "language": "English" if analysis.get("language") == "en" else "Persian",
         "avg_sentiment": analysis["avg_sentiment"],
         "top_words": analysis["top_words"],
+        "keywords": analysis.get("keywords", analysis["top_words"]),
+        "narrative_phrases": analysis.get("narrative_phrases", []),
         "topics": analysis["topics"],
         "trigrams": analysis.get("trigrams", []),
         "bigrams_pmi": analysis.get("bigrams_pmi", []),
@@ -1328,6 +1331,8 @@ def _recompute_from_cached_dataset(cache_dict: dict, cid: str) -> dict | None:
         "language": "English" if analysis.get("language") == "en" else "Persian",
         "avg_sentiment": analysis["avg_sentiment"],
         "top_words": analysis["top_words"],
+        "keywords": analysis.get("keywords", analysis["top_words"]),
+        "narrative_phrases": analysis.get("narrative_phrases", []),
         "topics": analysis["topics"],
         "trigrams": analysis.get("trigrams", []),
         "bigrams_pmi": analysis.get("bigrams_pmi", []),
@@ -1368,6 +1373,7 @@ def youtube_channel_comment_analysis(
     comments_per_video: int = Query(30, ge=1, le=100, description="Max comments per video"),
     refresh: bool = Query(False, description="If true, delete cache and fetch fresh from YouTube (uses API quota)"),
     recompute: bool = Query(False, description="If true, recompute labels from cached comments (slow)"),
+    recompute_wordcloud: bool = Query(False, description="If true, recompute only word cloud from cached comments (fast; keeps plots)"),
     admin_code: Optional[str] = Query(None, description="Required when refresh=1 if YOUTUBE_REFRESH_CODE is set"),
 ):
     """Collect comments from recent videos of a YouTube channel and run analysis.
@@ -1394,8 +1400,15 @@ def youtube_channel_comment_analysis(
             cache_dict = dict(cache["analysis_json"])
             cache_dict["videos_analyzed"] = cache["videos_analyzed"]
             cache_dict["comments_analyzed"] = cache["comments_analyzed"]
-            if not recompute:
+            if not recompute and not recompute_wordcloud:
                 # Return cached result immediately (fast)
+                return cache_dict
+            if recompute_wordcloud and not recompute:
+                # Recompute only word cloud; keep cached plots
+                comments = cache_dict.get("comments", [])
+                if comments:
+                    wc = compute_wordcloud_from_comments(comments, cid)
+                    cache_dict.update(wc)
                 return cache_dict
             out = _recompute_from_cached_dataset(cache_dict, cid)
             if out:
@@ -1408,8 +1421,16 @@ def youtube_channel_comment_analysis(
         # Try file cache
         snapshot = load_cached_snapshot(cid)
         if snapshot:
-            if not recompute:
+            if not recompute and not recompute_wordcloud:
                 # Return cached result immediately (fast)
+                return snapshot
+            if recompute_wordcloud and not recompute:
+                # Recompute only word cloud; keep cached plots
+                comments = snapshot.get("comments", [])
+                if comments:
+                    wc = compute_wordcloud_from_comments(comments, cid)
+                    snapshot = dict(snapshot)
+                    snapshot.update(wc)
                 return snapshot
             out = _recompute_from_cached_dataset(snapshot, cid)
             if out:

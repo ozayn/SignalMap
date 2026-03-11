@@ -26,6 +26,8 @@ export async function GET(request: NextRequest) {
     if (refresh === "1" || refresh === "true") params.set("refresh", "1");
     const recompute = searchParams.get("recompute");
     if (recompute === "1" || recompute === "true") params.set("recompute", "1");
+    const recomputeWordcloud = searchParams.get("recompute_wordcloud");
+    if (recomputeWordcloud === "1" || recomputeWordcloud === "true") params.set("recompute_wordcloud", "1");
     const adminCode = searchParams.get("admin_code");
     if (adminCode?.trim()) params.set("admin_code", adminCode.trim());
 

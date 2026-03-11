@@ -385,6 +385,8 @@ export default function StudyDetailPage() {
     language?: string | null;
     avg_sentiment: number;
     top_words: [string, number][];
+    keywords?: [string, number][];
+    narrative_phrases?: [string, number][];
     topics?: [string, number][];
     discourse_comments?: string[];
     points_pca?: Array<{ x: number; y: number; text: string } | [number, number, number]>;
@@ -988,6 +990,8 @@ export default function StudyDetailPage() {
         _: String(Date.now()),
       });
       if (forceRefresh) params.set("refresh", "1");
+      // Recompute word cloud only (keeps cached plots; fast)
+      params.set("recompute_wordcloud", "1");
       if (forceRecompute) params.set("recompute", "1");
       if (forceRefresh && adminCode?.trim()) params.set("admin_code", adminCode.trim());
       const url = `/api/youtube/channel/comment-analysis?${params.toString()}`;
@@ -2104,52 +2108,68 @@ export default function StudyDetailPage() {
                 Sentiment score: {(analysisData.avg_sentiment ?? 0).toFixed(2)}
               </p>
             </section>
-            <section>
-              <h3 className="text-sm font-medium mb-2">Top words</h3>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "6px",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  padding: "12px",
-                  lineHeight: "1.5",
-                  direction: ((study?.youtubeLanguage ?? analysisData.language) ?? "").toLowerCase().startsWith("english") ? "ltr" : "rtl",
-                }}
-              >
-                {(() => {
-                  const raw = analysisData?.top_words ?? [];
-                  const words = raw
-                    .filter((w): w is [string, number] =>
-                      w != null &&
-                      Array.isArray(w) &&
-                      w.length >= 2 &&
-                      typeof w[0] === "string" &&
-                      typeof w[1] === "number"
-                    )
-                    .map(([word, value]) => ({ word: String(word), value: Number(value) }));
-                  const maxCount = words.length ? Math.max(...words.map((w) => w.value), 1) : 1;
-                  return words.map(({ word, value }) => {
-                    const size = 10 + (value / maxCount) * 10;
-                    return (
-                      <span
-                        key={`${word}-${value}`}
-                        style={{
-                          fontSize: `${Math.min(18, size)}px`,
-                          fontWeight: 500,
-                          opacity: 0.9,
-                          whiteSpace: "nowrap",
-                        }}
-                        title={`${word}: ${value}`}
-                      >
-                        {word}
-                      </span>
-                    );
-                  });
-                })()}
-              </div>
-            </section>
+            {(() => {
+              const textDir = ((study?.youtubeLanguage ?? analysisData.language) ?? "").toLowerCase().startsWith("english") ? "ltr" : "rtl";
+              const toItems = (raw: [string, number][] | undefined) =>
+                (raw ?? [])
+                  .filter((w): w is [string, number] =>
+                    w != null && Array.isArray(w) && w.length >= 2 && typeof w[0] === "string" && typeof w[1] === "number"
+                  )
+                  .map(([word, value]) => ({ word: String(word), value: Number(value) }));
+              const keywords = toItems(analysisData?.keywords ?? analysisData?.top_words);
+              const narrativePhrases = toItems(analysisData?.narrative_phrases).filter((i) => i.value >= 3);
+              const allCounts = [...keywords.map((i) => i.value), ...narrativePhrases.map((i) => i.value)];
+              const scaleMin = allCounts.length ? Math.min(...allCounts) : 0;
+              const scaleMax = allCounts.length ? Math.max(...allCounts) : 1;
+              const logMin = Math.log(scaleMin + 1);
+              const logMax = Math.log(scaleMax + 1);
+              const logRange = logMax - logMin || 1;
+              const ChipBlock = ({ items }: { items: { word: string; value: number }[] }) => {
+                const minSize = 8;
+                const maxSize = 20;
+                return (
+                  <div
+                    className="flex flex-wrap gap-1.5 p-2"
+                    dir={textDir}
+                    style={{ direction: textDir }}
+                  >
+                    {items.map(({ word, value }) => {
+                      const logVal = Math.log(Math.max(value, scaleMin) + 1);
+                      const t = Math.min(1, Math.max(0, (logVal - logMin) / logRange));
+                      const size = minSize + t * (maxSize - minSize);
+                      return (
+                        <span
+                          key={`${word}-${value}`}
+                          className="inline-flex items-baseline gap-1 px-2 py-0.5 rounded-md bg-muted font-medium whitespace-nowrap"
+                          style={{ fontSize: `${Math.round(size)}px` }}
+                        >
+                          {word}
+                          <span className="text-[9px] tabular-nums text-muted-foreground/70 font-normal">
+                            {value}
+                          </span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                );
+              };
+              return (
+                <>
+                  <section>
+                    <h3 className="text-sm font-medium mb-2">Keywords</h3>
+                    <p className="text-xs text-muted-foreground mb-1">General discourse topics (single words)</p>
+                    <ChipBlock items={keywords} />
+                  </section>
+                  {narrativePhrases.length > 0 && (
+                    <section>
+                      <h3 className="text-sm font-medium mb-2">Narrative phrases</h3>
+                      <p className="text-xs text-muted-foreground mb-1">Frames and slogans (multi-word phrases)</p>
+                      <ChipBlock items={narrativePhrases} />
+                    </section>
+                  )}
+                </>
+              );
+            })()}
             <section>
               <h3 className="text-sm font-medium mb-2">Comments analyzed</h3>
               <p className="text-muted-foreground">
@@ -2223,7 +2243,7 @@ export default function StudyDetailPage() {
             {
               heading: "Visual elements",
               bullets: [
-                "Word cloud: Shows the most frequent non-stopwords appearing in analyzed YouTube comments.",
+                "Keywords: Single-word topics from the discourse. Narrative phrases: Multi-word frames and slogans.",
                 "Topics: Counts of comments containing keywords associated with thematic groups such as geopolitics, history, or religion.",
                 "Discourse maps: Each point represents one comment. Points close together use similar vocabulary. Two projection methods are shown: PCA (linear) and UMAP (nonlinear clustering).",
               ],
@@ -2254,7 +2274,7 @@ export default function StudyDetailPage() {
         />
         <InSimpleTerms>
           <p>
-            This study analyzes what viewers say in YouTube comments. The word cloud shows the most common words; the discourse maps group comments by similar vocabulary. PCA and UMAP are two ways to project high-dimensional text into 2D for visualization.
+            This study analyzes what viewers say in YouTube comments. Keywords and narrative phrases show topics and frames; the discourse maps group comments by similar vocabulary. PCA and UMAP are two ways to project high-dimensional text into 2D for visualization.
           </p>
         </InSimpleTerms>
         </>
