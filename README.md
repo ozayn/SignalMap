@@ -76,6 +76,7 @@ Add a **Postgres** database and link it to the API service for Wayback jobs (cac
 | API | `FRED_API_KEY` | **Required for Brent oil.** FRED API key for DCOILBRENTEU. Get one at [fred.stlouisfed.org/docs/api](https://fred.stlouisfed.org/docs/api/api_key.html). Do not commit. |
 | API | `YOUTUBE_API_KEY` | Optional. YouTube Data API v3 key for channel snapshots (subscriber/view/video counts). Create at [Google Cloud Console](https://console.cloud.google.com/apis/credentials); do not commit real keys. |
 | API | `YOUTUBE_DAILY_UPDATE_CHANNELS` | Optional. Comma-separated handles or channel IDs to refresh daily via cron (e.g. `googledevelopers,@bpluspodcast`). |
+| API | `YOUTUBE_REFRESH_CODE` | Optional. Admin code required for "Refresh from YouTube" on discourse studies (uses API quota). If set, users must enter this code to refresh. |
 | API | `WEB_ORIGIN` | Optional. Web URL for CORS (only needed if clients hit API directly) |
 
 **Custom domain:** With a custom domain on the web service, the client uses same-origin fetches (`/api/...`). Next.js proxies to the backend, so no CORS or `NEXT_PUBLIC_API_URL` is needed.

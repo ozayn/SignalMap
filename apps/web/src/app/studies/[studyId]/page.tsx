@@ -973,7 +973,7 @@ export default function StudyDetailPage() {
   }, [study, isEventsTimeline, isFollowerGrowthDynamics, isYoutubeCommentAnalysis]);
 
   const fetchYoutubeAnalysis = useCallback(
-    async (forceRefresh: boolean, forceRecompute: boolean = false) => {
+    async (forceRefresh: boolean, forceRecompute: boolean = false, adminCode?: string) => {
       if (!study) return;
       setAnalysisLoading(true);
       setAnalysisError(null);
@@ -989,6 +989,7 @@ export default function StudyDetailPage() {
       });
       if (forceRefresh) params.set("refresh", "1");
       if (forceRecompute) params.set("recompute", "1");
+      if (forceRefresh && adminCode?.trim()) params.set("admin_code", adminCode.trim());
       const url = `/api/youtube/channel/comment-analysis?${params.toString()}`;
       try {
         const res = await fetchJson<{
@@ -1986,7 +1987,10 @@ export default function StudyDetailPage() {
               </button>
               <button
                 type="button"
-                onClick={() => fetchYoutubeAnalysis(true)}
+                onClick={() => {
+                  const code = window.prompt("Enter admin code to refresh from YouTube (uses API quota):");
+                  if (code !== null) fetchYoutubeAnalysis(true, false, code);
+                }}
                 disabled={analysisLoading}
                 className="text-xs px-2 py-1 rounded border border-border hover:bg-muted transition-colors disabled:opacity-50"
                 title="Fetch fresh comments from YouTube (uses API quota)"

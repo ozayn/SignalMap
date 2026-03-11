@@ -1368,6 +1368,7 @@ def youtube_channel_comment_analysis(
     comments_per_video: int = Query(30, ge=1, le=100, description="Max comments per video"),
     refresh: bool = Query(False, description="If true, delete cache and fetch fresh from YouTube (uses API quota)"),
     recompute: bool = Query(False, description="If true, recompute labels from cached comments (slow)"),
+    admin_code: Optional[str] = Query(None, description="Required when refresh=1 if YOUTUBE_REFRESH_CODE is set"),
 ):
     """Collect comments from recent videos of a YouTube channel and run analysis.
     Cache-first: when cached, returns immediately unless recompute=1. Recompute only when explicitly requested."""
@@ -1379,8 +1380,11 @@ def youtube_channel_comment_analysis(
         else:
             raise HTTPException(status_code=422, detail="Either channel_id or identifier is required.")
 
-        # If refresh=1: delete cache and run fresh from YouTube (uses quota)
+        # If refresh=1: require admin code when YOUTUBE_REFRESH_CODE is set, then delete cache and fetch from YouTube
         if refresh:
+            expected = os.environ.get("YOUTUBE_REFRESH_CODE")
+            if expected and (not admin_code or (admin_code or "").strip() != expected):
+                raise HTTPException(status_code=403, detail="Admin code required to refresh from YouTube.")
             delete_youtube_comment_analysis(cid)
             return _run_youtube_comment_analysis(cid, videos_limit, comments_per_video)
 
