@@ -12,7 +12,8 @@ export const metadata: Metadata = {
   title: "SignalMap",
   description: "Longitudinal studies of emotion, language, and interaction",
   icons: {
-    icon: [{ url: "/favicon.ico", type: "image/svg+xml" }],
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/apple-icon", sizes: "180x180", type: "image/png" }],
   },
 };
 
