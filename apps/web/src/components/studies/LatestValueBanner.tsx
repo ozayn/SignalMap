@@ -21,7 +21,7 @@ export default function LatestValueBanner({ label, value, unit, date, valuePrefi
       : String(value);
 
   return (
-    <div className={`text-right text-sm text-muted-foreground shrink-0 ${inline ? "" : "mb-2"} ${date ? "" : "whitespace-nowrap"}`}>
+    <div className={`text-right text-sm text-muted-foreground shrink-0 min-w-0 break-words ${inline ? "" : "mb-2"} ${date ? "" : "sm:whitespace-nowrap"}`}>
       <div>
         Latest {label}: <strong>{valuePrefix}{displayValue}</strong>
         {unit ? ` ${unit}` : ""}

@@ -21,7 +21,7 @@ export function LearningNote({
 }: LearningNoteProps) {
   return (
     <div className="study-panel">
-      <p className="study-panel-title">
+      <p className="snapshot-style-title mb-2">
         {title}
       </p>
         <div className="flex flex-col gap-6 min-w-0">

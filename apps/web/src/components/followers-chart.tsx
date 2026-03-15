@@ -50,6 +50,7 @@ export function FollowersChart({ data, username, metricLabel = "Followers" }: Fo
         animation: false,
         tooltip: {
           trigger: "axis",
+          triggerOn: "mousemove|click",
           formatter: (params: unknown) => {
             const p = Array.isArray(params) ? params[0] : params;
             if (p && typeof p === "object" && "dataIndex" in p) {

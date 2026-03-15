@@ -20,7 +20,7 @@ export function ConceptsUsed({ conceptKeys }: ConceptsUsedProps) {
         className="flex w-full items-center justify-between text-left -m-[2px]"
         aria-expanded={open}
       >
-        <span className="study-panel-title mb-0">
+        <span className="snapshot-style-title mb-0">
           Concepts used in this study
         </span>
         <span

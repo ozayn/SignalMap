@@ -65,7 +65,7 @@ export function MultiSeriesStats({ series, timeRange }: MultiSeriesStatsProps) {
   const showDates = true;
 
   return (
-    <div className="flex flex-wrap gap-4 mb-4">
+    <div className="flex flex-wrap gap-4 mb-4 min-w-0">
       {series.map((s) => {
         const stats = computeStats(s.points, timeRange);
         const hasAny =
@@ -95,7 +95,7 @@ export function MultiSeriesStats({ series, timeRange }: MultiSeriesStatsProps) {
         return (
           <div
             key={s.label}
-            className="rounded-lg border border-border bg-card px-4 py-3 w-fit"
+            className="rounded-lg border border-border bg-card px-4 py-3 min-w-0 flex-1 min-w-[200px] sm:flex-none sm:w-fit"
             style={{
               display: "grid",
               gridTemplateColumns: "auto auto",

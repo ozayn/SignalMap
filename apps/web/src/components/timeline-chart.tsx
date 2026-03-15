@@ -535,6 +535,7 @@ export function TimelineChart({
             : {}),
       tooltip: {
         trigger: "axis",
+        triggerOn: "mousemove|click",
         confine: true,
         extraCssText: "max-width: 320px; overflow-wrap: break-word; word-wrap: break-word; white-space: normal;",
         formatter: (params: unknown) => {

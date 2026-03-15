@@ -110,7 +110,7 @@ export function OilTradeSankey({ edges, year, exporterOrder = [], importerOrder 
     const option: echarts.EChartsOption = {
       tooltip: {
         trigger: "item",
-        triggerOn: "mousemove",
+        triggerOn: "mousemove|click",
         formatter: (params: unknown) => {
           const p = params as { data?: { value?: number; source?: string; target?: string }; value?: number };
           const v = p.data?.value ?? p.value ?? 0;

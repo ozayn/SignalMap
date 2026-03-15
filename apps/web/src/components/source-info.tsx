@@ -21,7 +21,7 @@ export function SourceInfo({
 }: SourceInfoProps) {
   return (
     <div className="study-panel">
-      <p className="study-panel-title">
+      <p className="snapshot-style-title mb-2">
         {title}
       </p>
         <div className="grid gap-4 sm:grid-cols-2 min-w-0">
@@ -46,8 +46,8 @@ export function SourceInfo({
                 )}
               </p>
               {item.unitLabel && (
-                <p className="text-xs text-muted-foreground">
-                  Unit: {item.unitLabel}
+                <p className="text-sm text-muted-foreground">
+                  <span className="snapshot-style-title">Unit</span>: {item.unitLabel}
                   {item.unitNote && (
                     <span className="text-muted-foreground/80"> — {item.unitNote}</span>
                   )}

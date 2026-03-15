@@ -2672,7 +2672,9 @@ export default function StudyDetailPage() {
       ) : isOilGeopoliticalReaction && geopoliticalStats ? (
         <div>
           {study?.unitLabel && (
-            <p className="text-xs text-muted-foreground mb-2">Unit: {study.unitLabel}</p>
+            <p className="text-sm text-muted-foreground mb-2">
+              <span className="snapshot-style-title">Unit</span>: {study.unitLabel}
+            </p>
           )}
           <div className="metric-cards-grid grid sm:grid-cols-2 lg:grid-cols-4">
             <Card className="metric-card border-border">
@@ -2825,7 +2827,9 @@ export default function StudyDetailPage() {
       ) : (isOilBrent || isOilGlobalLong) && oilKpis ? (
         <div>
           {study?.unitLabel && (
-            <p className="text-xs text-muted-foreground mb-2">Unit: {study.unitLabel}</p>
+            <p className="text-sm text-muted-foreground mb-2">
+              <span className="snapshot-style-title">Unit</span>: {study.unitLabel}
+            </p>
           )}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="border-border">
@@ -2890,7 +2894,9 @@ export default function StudyDetailPage() {
       ) : isRealOil && realOilKpis ? (
         <div>
           {study?.unitLabel && (
-            <p className="text-xs text-muted-foreground mb-2">Unit: {study.unitLabel}</p>
+            <p className="text-sm text-muted-foreground mb-2">
+              <span className="snapshot-style-title">Unit</span>: {study.unitLabel}
+            </p>
           )}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card className="border-border">
@@ -2955,7 +2961,9 @@ export default function StudyDetailPage() {
       ) : isOilPppIran && pppIranKpis && !hasTurkeyComparator ? (
         <div>
           {study?.unitLabel && (
-            <p className="text-xs text-muted-foreground mb-2">Unit: {study.unitLabel}</p>
+            <p className="text-sm text-muted-foreground mb-2">
+              <span className="snapshot-style-title">Unit</span>: {study.unitLabel}
+            </p>
           )}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="border-border">
@@ -3017,7 +3025,9 @@ export default function StudyDetailPage() {
       ) : isOilPppIran && pppIranKpis && hasTurkeyComparator ? (
         <div>
           {study?.unitLabel && (
-            <p className="text-xs text-muted-foreground mb-2">Unit: {study.unitLabel}</p>
+            <p className="text-sm text-muted-foreground mb-2">
+              <span className="snapshot-style-title">Unit</span>: {study.unitLabel}
+            </p>
           )}
           <div className="grid gap-4 sm:grid-cols-3">
             <Card className="border-border">
@@ -3065,7 +3075,9 @@ export default function StudyDetailPage() {
       ) : isFxUsdToman && fxKpis ? (
         <div>
           {study?.unitLabel && (
-            <p className="text-xs text-muted-foreground mb-2">Unit: {study.unitLabel}</p>
+            <p className="text-sm text-muted-foreground mb-2">
+              <span className="snapshot-style-title">Unit</span>: {study.unitLabel}
+            </p>
           )}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="border-border">
@@ -3546,7 +3558,7 @@ export default function StudyDetailPage() {
                 </div>
               )}
               <div className="mt-4 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm">
-                <h4 className="mb-3 font-medium text-foreground">
+                <h4 className="mb-3 snapshot-style-title">
                   {oilTradeView === "sankey" ? "How to read this Sankey diagram" : "How to read this network"}
                 </h4>
                 {oilTradeView === "sankey" ? (

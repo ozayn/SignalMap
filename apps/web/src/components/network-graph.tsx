@@ -313,6 +313,11 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder =
     }
 
     const option: echarts.EChartsOption = {
+      tooltip: {
+        trigger: "item",
+        triggerOn: "mousemove|click",
+        confine: true,
+      },
       series: [seriesConfig],
     };
 

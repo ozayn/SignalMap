@@ -104,8 +104,8 @@ export function EventsTimeline({ events, timeRange }: Props) {
   }, [timeRange]);
 
   return (
-    <TooltipProvider delayDuration={200}>
-    <div className="space-y-4">
+    <TooltipProvider delayDuration={100}>
+    <div className="space-y-4 min-w-0">
       <div className="flex flex-wrap gap-x-4 gap-y-2 items-center">
         <span className="text-xs font-medium text-muted-foreground shrink-0">Categories:</span>
         {categories.map((cat) => (
@@ -113,7 +113,7 @@ export function EventsTimeline({ events, timeRange }: Props) {
             key={cat}
             type="button"
             onClick={() => toggleCategory(cat)}
-            className="flex items-center gap-2 text-sm text-left bg-transparent border-none cursor-pointer p-0 hover:opacity-80 transition-opacity"
+            className="flex items-center gap-2 text-sm text-left bg-transparent border-none cursor-pointer p-2 -m-2 rounded-md hover:opacity-80 hover:bg-muted/30 transition-opacity touch-manipulation min-h-[44px] md:min-h-0 md:p-0 md:m-0"
           >
             <span
               className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
@@ -138,8 +138,8 @@ export function EventsTimeline({ events, timeRange }: Props) {
         ))}
       </div>
 
-      <div className="min-w-0 w-full overflow-x-auto overflow-y-visible pb-16 px-2">
-        <div className="min-w-[900px] w-max relative">
+      <div className="min-w-0 w-full overflow-x-auto overflow-y-visible pb-16 px-2 -mx-2 sm:mx-0 touch-pan-x">
+        <div className="min-w-[560px] sm:min-w-[720px] md:min-w-[900px] w-max relative">
           {/* Time axis */}
           <div className="h-6 flex items-center text-xs text-muted-foreground mb-2 relative">
             {yearMarks.map((y) => (
@@ -166,7 +166,7 @@ export function EventsTimeline({ events, timeRange }: Props) {
                 className="flex items-center gap-1 mb-1"
                 style={{ minHeight: 36 }}
               >
-                <span className="w-36 shrink-0 text-xs text-muted-foreground truncate">
+                <span className="w-24 sm:w-28 md:w-36 shrink-0 text-xs text-muted-foreground truncate">
                   {CATEGORY_LABELS[cat] ?? cat}
                 </span>
                 <div className="flex-1 relative h-8 bg-muted/30 rounded overflow-visible">
@@ -180,18 +180,24 @@ export function EventsTimeline({ events, timeRange }: Props) {
                       <Tooltip key={ev.id}>
                           <TooltipTrigger asChild>
                             <div
-                              className="absolute top-1/2 -translate-y-1/2 cursor-help rounded transition-opacity hover:opacity-90"
+                              className="absolute top-1/2 -translate-y-1/2 -m-3 p-3 touch-manipulation"
                               style={{
                                 left: `${left}%`,
                                 width: isPoint ? "6px" : `${width}%`,
                                 minWidth: isPoint ? "6px" : "8px",
-                                height: isPoint ? "6px" : "10px",
-                                backgroundColor: CATEGORY_COLORS[cat] ?? "#888",
-                                borderLeft: isPoint ? "none" : `2px solid ${CATEGORY_BORDERS[cat] ?? "#666"}`,
-                                borderRadius: isPoint ? "50%" : "2px",
                               }}
-                              title={ev.title}
-                            />
+                            >
+                              <div
+                                className="cursor-help rounded transition-opacity hover:opacity-90 w-full"
+                                style={{
+                                  height: isPoint ? "6px" : "10px",
+                                  backgroundColor: CATEGORY_COLORS[cat] ?? "#888",
+                                  borderLeft: isPoint ? "none" : `2px solid ${CATEGORY_BORDERS[cat] ?? "#666"}`,
+                                  borderRadius: isPoint ? "50%" : "2px",
+                                }}
+                                title={ev.title}
+                              />
+                            </div>
                           </TooltipTrigger>
                           <TooltipContent
                             side="right"

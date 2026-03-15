@@ -10,7 +10,7 @@ type InSimpleTermsProps = {
 export function InSimpleTerms({ children }: InSimpleTermsProps) {
   return (
     <div className="study-panel">
-      <p className="study-panel-title">
+      <p className="snapshot-style-title mb-2">
         In simple terms
       </p>
       <div className="space-y-2 text-sm text-muted-foreground leading-relaxed break-words min-w-0 [&>p]:mb-0 [&>ul]:mt-1 [&>ul]:list-inside [&>ul]:list-disc [&>li]:mb-0.5">

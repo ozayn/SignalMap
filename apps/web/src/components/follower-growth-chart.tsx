@@ -111,7 +111,7 @@ export function FollowerGrowthChart({
 
     const option: echarts.EChartsOption = {
       animation: false,
-      tooltip: { trigger: "axis" },
+      tooltip: { trigger: "axis", triggerOn: "mousemove|click" },
       grid: { left: "3%", right: "4%", bottom: "12%", top: "18%", containLabel: true },
       xAxis: {
         type: "time",
