@@ -2127,7 +2127,7 @@ export default function StudyDetailPage() {
                 const maxSize = 20;
                 return (
                   <div
-                    className="flex flex-wrap gap-1.5 p-2"
+                    className="flex flex-wrap gap-1.5 p-2 min-w-0"
                     dir={textDir}
                     style={{ direction: textDir }}
                   >
@@ -2138,7 +2138,7 @@ export default function StudyDetailPage() {
                       return (
                         <span
                           key={`${word}-${value}`}
-                          className="inline-flex items-baseline gap-1 px-2 py-0.5 rounded-md bg-muted font-medium whitespace-nowrap"
+                          className="inline-flex items-baseline gap-1 px-2 py-0.5 rounded-md bg-muted font-medium break-words"
                           style={{ fontSize: `${Math.round(size)}px` }}
                         >
                           {word}

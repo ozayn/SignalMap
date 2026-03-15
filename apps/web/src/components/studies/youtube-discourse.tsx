@@ -610,10 +610,32 @@ function DiscourseScatterTooltip({
   textDir?: "ltr" | "rtl";
   children?: React.ReactNode;
 }) {
+  const findNearest = useCallback(
+    (clientX: number, clientY: number, el: HTMLElement) => {
+      const rect = el.getBoundingClientRect();
+      const mx = clientX - rect.left;
+      const my = clientY - rect.top;
+      let nearest = -1;
+      let best = Infinity;
+      for (let i = 0; i < points.length; i++) {
+        const { x, y } = getPointCoords(points[i]!);
+        const cx = scaleX(x);
+        const cy = scaleY(y);
+        const d = (mx - cx) ** 2 + (my - cy) ** 2;
+        if (d < best && d < 900) {
+          best = d;
+          nearest = i;
+        }
+      }
+      return { nearest, mx, my };
+    },
+    [points, scaleX, scaleY]
+  );
+
   return (
     <>
       <div
-        className={`absolute inset-0 ${onPointClick ? "cursor-pointer" : ""}`}
+        className={`absolute inset-0 touch-manipulation ${onPointClick ? "cursor-pointer" : ""}`}
         onClick={(e) => {
           if ((e.target as Element).closest?.("[data-cluster-label]")) return;
           if (hovered !== null && onPointClick && clusterAssignments && hovered < clusterAssignments.length) {
@@ -622,25 +644,19 @@ function DiscourseScatterTooltip({
           }
         }}
         onMouseMove={(e) => {
-          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          const mx = e.clientX - rect.left;
-          const my = e.clientY - rect.top;
-          let nearest = -1;
-          let best = Infinity;
-          for (let i = 0; i < points.length; i++) {
-            const { x, y } = getPointCoords(points[i]!);
-            const cx = scaleX(x);
-            const cy = scaleY(y);
-            const d = (mx - cx) ** 2 + (my - cy) ** 2;
-            if (d < best && d < 400) {
-              best = d;
-              nearest = i;
-            }
-          }
+          const { nearest, mx, my } = findNearest(e.clientX, e.clientY, e.currentTarget as HTMLElement);
           setHovered(nearest >= 0 ? nearest : null);
           setPos({ x: mx, y: my });
         }}
         onMouseLeave={() => setHovered(null)}
+        onTouchStart={(e) => {
+          const touch = e.touches[0];
+          if (!touch) return;
+          const { nearest, mx, my } = findNearest(touch.clientX, touch.clientY, e.currentTarget as HTMLElement);
+          setHovered(nearest >= 0 ? nearest : null);
+          setPos({ x: mx, y: my });
+        }}
+        onTouchEnd={() => setHovered(null)}
       >
         {children}
       </div>
@@ -1423,7 +1439,7 @@ function ClusterPanel({
 }) {
   const top5 = comments.slice(0, 5);
   return (
-    <div className="fixed right-0 top-0 z-50 h-full w-80 max-w-[90vw] border-l border-border bg-background shadow-lg flex flex-col">
+    <div className="fixed z-50 flex flex-col border-border bg-background shadow-lg bottom-0 left-0 right-0 w-full max-h-[70vh] rounded-t-xl sm:bottom-auto sm:left-auto sm:right-0 sm:top-0 sm:h-full sm:w-80 sm:max-w-[90vw] sm:max-h-none sm:rounded-none sm:border-l">
       <div className="flex items-center justify-between border-b border-border p-3">
         <h3 className="text-sm font-medium">Cluster: {label}</h3>
         <button
@@ -1659,8 +1675,12 @@ export function YoutubeDiscourseMaps({
 
   if (!hasAny) return null;
 
+  const { ref: containerRef, width: containerWidth } = useContainerWidth(1100);
+  const chartWidth = Math.min(CHART_WIDTH_GRID, containerWidth || CHART_WIDTH_GRID);
+  const chartHeight = Math.round((chartWidth / CHART_WIDTH_GRID) * CHART_HEIGHT_PCA_UMAP);
+
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative min-w-0 w-full">
       {selectedCluster && (
         <ClusterPanel
           label={selectedCluster.label}
@@ -1673,12 +1693,12 @@ export function YoutubeDiscourseMaps({
       {/* Row 1: PCA | Semantic clustering */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {(pointsPca?.length ?? 0) > 0 && (
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             <p className="text-xs text-muted-foreground">
               PCA projection of comment vectors.
             </p>
             {clusterStatsPca && <ClusterStatsLine stats={clusterStatsPca} />}
-            <div style={{ marginTop: 12 }}>
+            <div style={{ marginTop: 12 }} className="w-full min-w-0">
               <DiscourseScatter
                 points={pointsPca ?? []}
                 discourseComments={discourseComments}
@@ -1686,8 +1706,8 @@ export function YoutubeDiscourseMaps({
                 clusterAssignments={pca.clusterAssignments}
                 onPointClick={makeOnPointClick(pca)}
                 title="PCA projection of comment vectors"
-                w={CHART_WIDTH_GRID}
-                h={CHART_HEIGHT_PCA_UMAP}
+                w={chartWidth}
+                h={chartHeight}
                 xLabel="Principal component 1"
                 yLabel="Principal component 2"
                 colorPalette={PALETTE_KMEANS}
@@ -1697,12 +1717,12 @@ export function YoutubeDiscourseMaps({
           </div>
         )}
         {minilm.points.length > 0 && (
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             <p className="text-xs text-muted-foreground">
               Semantic clustering. Multilingual sentence embeddings + UMAP + HDBSCAN.
             </p>
             {minilmStats && <ClusterStatsLine stats={minilmStats} />}
-            <div style={{ marginTop: 12 }}>
+            <div style={{ marginTop: 12 }} className="w-full min-w-0">
               <DiscourseScatter
                 points={minilm.points}
                 discourseComments={discourseComments}
@@ -1710,8 +1730,8 @@ export function YoutubeDiscourseMaps({
                 clusterAssignments={minilm.clusterAssignments}
                 onPointClick={makeOnPointClick(minilm)}
                 title="Semantic clustering"
-                w={CHART_WIDTH_GRID}
-                h={CHART_HEIGHT_PCA_UMAP}
+                w={chartWidth}
+                h={chartHeight}
                 xLabel="UMAP dimension 1"
                 yLabel="UMAP dimension 2"
                 colorPalette={PALETTE_MINILM}
@@ -1725,12 +1745,12 @@ export function YoutubeDiscourseMaps({
       {/* Row 2: TF-IDF + KMeans | TF-IDF + HDBSCAN */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {tfidf.points.length > 0 && (
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             <p className="text-xs text-muted-foreground">
               TF-IDF + UMAP + KMeans (baseline). Fixed k=4 clusters.
             </p>
             {tfidfStats && <ClusterStatsLine stats={tfidfStats} />}
-            <div style={{ marginTop: 12 }}>
+            <div style={{ marginTop: 12 }} className="w-full min-w-0">
               <DiscourseScatter
                 points={tfidf.points}
                 discourseComments={discourseComments}
@@ -1738,8 +1758,8 @@ export function YoutubeDiscourseMaps({
                 clusterAssignments={tfidf.clusterAssignments}
                 onPointClick={makeOnPointClick(tfidf)}
                 title="TF-IDF + UMAP + KMeans"
-                w={CHART_WIDTH_GRID}
-                h={CHART_HEIGHT_PCA_UMAP}
+                w={chartWidth}
+                h={chartHeight}
                 xLabel="UMAP dimension 1"
                 yLabel="UMAP dimension 2"
                 colorPalette={PALETTE_KMEANS}
@@ -1749,12 +1769,12 @@ export function YoutubeDiscourseMaps({
           </div>
         )}
         {hdbscan.points.length > 0 && (
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             <p className="text-xs text-muted-foreground">
               TF-IDF + UMAP + HDBSCAN. Density-based, variable cluster count.
             </p>
             {hdbscanStats && <ClusterStatsLine stats={hdbscanStats} />}
-            <div style={{ marginTop: 12 }}>
+            <div style={{ marginTop: 12 }} className="w-full min-w-0">
               <DiscourseScatter
                 points={hdbscan.points}
                 discourseComments={discourseComments}
@@ -1762,8 +1782,8 @@ export function YoutubeDiscourseMaps({
                 clusterAssignments={hdbscan.clusterAssignments}
                 onPointClick={makeOnPointClick(hdbscan)}
                 title="TF-IDF + UMAP + HDBSCAN"
-                w={CHART_WIDTH_GRID}
-                h={CHART_HEIGHT_PCA_UMAP}
+                w={chartWidth}
+                h={chartHeight}
                 xLabel="UMAP dimension 1"
                 yLabel="UMAP dimension 2"
                 colorPalette={PALETTE_HDBSCAN}

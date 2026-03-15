@@ -14,7 +14,7 @@ export default function Error({
   }, [error]);
 
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-12 space-y-4">
+    <div className="container mx-auto max-w-4xl px-4 py-12 space-y-4 min-w-0 w-full">
       <p className="text-muted-foreground">Something went wrong.</p>
       <button
         type="button"

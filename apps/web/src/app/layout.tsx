@@ -45,7 +45,7 @@ export default function RootLayout({
           <SuppressDevLogs />
           {gaId && <Analytics gaId={gaId} />}
           <Navbar />
-          <main className="main-content">{children}</main>
+          <main className="main-content min-w-0 overflow-x-hidden">{children}</main>
         </ThemeProvider>
       </body>
     </html>

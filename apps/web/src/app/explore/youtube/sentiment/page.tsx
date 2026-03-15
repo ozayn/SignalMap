@@ -45,7 +45,7 @@ export default function YouTubeSentimentPage() {
   };
 
   return (
-    <div className="container max-w-2xl py-6">
+    <div className="container max-w-2xl py-6 min-w-0 w-full">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">YouTube comments — sentiment (one video)</CardTitle>

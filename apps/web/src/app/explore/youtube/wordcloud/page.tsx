@@ -81,7 +81,7 @@ function YouTubeWordCloudContent() {
   }, [channelId, windowStart, windowEnd]);
 
   return (
-    <div className="container max-w-3xl py-6">
+    <div className="container max-w-3xl py-6 min-w-0 w-full">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">YouTube comments — word cloud</CardTitle>
@@ -183,7 +183,7 @@ function YouTubeWordCloudContent() {
 
 export default function YouTubeWordCloudPage() {
   return (
-    <Suspense fallback={<div className="container max-w-3xl py-6 text-sm text-muted-foreground">Loading…</div>}>
+    <Suspense fallback={<div className="container max-w-3xl py-6 text-sm text-muted-foreground min-w-0 w-full">Loading…</div>}>
       <YouTubeWordCloudContent />
     </Suspense>
   );

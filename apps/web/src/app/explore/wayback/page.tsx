@@ -637,7 +637,7 @@ export default function WaybackExplorePage() {
   };
 
   return (
-    <div className="container mx-auto max-w-3xl px-4 py-12 space-y-8">
+    <div className="container mx-auto max-w-3xl px-4 py-12 space-y-8 min-w-0 w-full">
       <div>
         <Link
           href="/explore"

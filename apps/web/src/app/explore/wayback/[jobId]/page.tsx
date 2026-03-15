@@ -117,7 +117,7 @@ export default function WaybackJobPage() {
 
   if (error && !job) {
     return (
-      <div className="container mx-auto max-w-3xl px-4 py-12">
+      <div className="container mx-auto max-w-3xl px-4 py-12 min-w-0 w-full">
         <Link href="/explore/wayback" className="text-xs text-muted-foreground hover:text-foreground mb-4 inline-block">
           ← Back to Wayback
         </Link>
@@ -128,7 +128,7 @@ export default function WaybackJobPage() {
 
   if (!job) {
     return (
-      <div className="container mx-auto max-w-3xl px-4 py-12">
+      <div className="container mx-auto max-w-3xl px-4 py-12 min-w-0 w-full">
         <Link href="/explore/wayback" className="text-xs text-muted-foreground hover:text-foreground mb-4 inline-block">
           ← Back to Wayback
         </Link>
@@ -142,7 +142,7 @@ export default function WaybackJobPage() {
   const processed = job.processed ?? 0;
 
   return (
-    <div className="container mx-auto max-w-3xl px-4 py-12 space-y-8">
+    <div className="container mx-auto max-w-3xl px-4 py-12 space-y-8 min-w-0 w-full">
       <div>
         <Link href="/explore/wayback" className="text-xs text-muted-foreground hover:text-foreground mb-2 inline-block">
           ← Back to Wayback
