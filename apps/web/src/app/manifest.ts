@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Longitudinal studies of emotion, language, and interaction",
     start_url: "/",
     display: "standalone",
-    background_color: "#5b6cf2",
-    theme_color: "#5b6cf2",
+    background_color: "#737373",
+    theme_color: "#737373",
     icons: [
       {
         src: "/icon-192",

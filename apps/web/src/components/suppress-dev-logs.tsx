@@ -10,12 +10,17 @@ const SUPPRESS_PATTERNS = [
 export function SuppressDevLogs() {
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
+    if (process.env.NEXT_PUBLIC_SUPPRESS_DEV_LOGS === "false") return;
 
     const originalLog = console.log;
     console.log = (...args: unknown[]) => {
-      const str = args.map((a) => (typeof a === "string" ? a : String(a))).join(" ");
-      if (SUPPRESS_PATTERNS.some((p) => p.test(str))) return;
-      originalLog.apply(console, args);
+      try {
+        const str = args.map((a) => (typeof a === "string" ? a : String(a))).join(" ");
+        if (SUPPRESS_PATTERNS.some((p) => p.test(str))) return;
+        originalLog.apply(console, args);
+      } catch {
+        originalLog.apply(console, args);
+      }
     };
 
     const onUnhandledRejection = (e: PromiseRejectionEvent) => {

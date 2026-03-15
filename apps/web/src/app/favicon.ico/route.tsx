@@ -3,7 +3,7 @@ import { ImageResponse } from "next/og";
 export const runtime = "edge";
 
 export async function GET() {
-  return new ImageResponse(
+  const response = new ImageResponse(
     (
       <div
         style={{
@@ -13,23 +13,25 @@ export async function GET() {
           alignItems: "center",
           justifyContent: "center",
           background: "hsl(0, 0%, 45%)",
-          borderRadius: 26,
+          borderRadius: 6,
         }}
       >
         <div
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: 13,
+            gap: 4,
             alignItems: "flex-start",
           }}
         >
-          <div style={{ width: 85, height: 9, background: "white", borderRadius: 4 }} />
-          <div style={{ width: 68, height: 9, background: "white", borderRadius: 4 }} />
-          <div style={{ width: 51, height: 9, background: "white", borderRadius: 4 }} />
+          <div style={{ width: 16, height: 2, background: "white", borderRadius: 1 }} />
+          <div style={{ width: 12, height: 2, background: "white", borderRadius: 1 }} />
+          <div style={{ width: 8, height: 2, background: "white", borderRadius: 1 }} />
         </div>
       </div>
     ),
-    { width: 192, height: 192 }
+    { width: 32, height: 32 }
   );
+  response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+  return response;
 }
