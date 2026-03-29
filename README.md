@@ -22,12 +22,23 @@ signalmap/
 # 1. Install dependencies
 pnpm install
 
-# 2. Install Python API deps
-pip install -r apps/api/requirements.txt
+# 2. Install Python API deps (venv recommended — see apps/api)
+cd apps/api && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && cd ../..
 
 # 3. Start both
 pnpm dev
 ```
+
+**Shell scripts** in `scripts/` (same as `package.json`; run from repo root):
+
+| Script | Equivalent |
+|--------|------------|
+| `./scripts/dev.sh` | `pnpm dev` — web + API |
+| `./scripts/restart.sh` | `pnpm restart` — graceful restart both |
+| `./scripts/restart-api.sh` | `pnpm restart:api` — API only |
+| `./scripts/dev-fresh.sh` | `pnpm dev:fresh` — clean `.next`, kill ports, dev |
+
+Scripts use global `pnpm` if available, otherwise `npx pnpm`. See `docs/DEV_SCRIPTS.md`.
 
 **If you see 404s for `/_next/static/...`** (layout.css, chunks, etc.): the build cache is out of sync. Stop any running dev server, run `pnpm clean`, then `pnpm dev`.
 
