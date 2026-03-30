@@ -3,8 +3,8 @@ import { YouTubeTranscriptTester } from "@/app/internal/youtube-transcript/youtu
 
 export default function TranscriptFallacyExplorePage() {
   return (
-    <div className="mx-auto min-w-0 max-w-6xl overflow-x-hidden px-4 pb-12 pt-10 sm:px-6 sm:pb-16 sm:pt-12">
-      <header className="mx-auto mb-8 max-w-2xl text-center sm:mb-11">
+    <div className="mx-auto min-w-0 max-w-6xl overflow-x-hidden px-4 pb-14 pt-10 sm:px-6 sm:pb-20 sm:pt-12">
+      <header className="mx-auto mb-10 max-w-2xl text-center sm:mb-12">
         <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Explore</p>
         <h1 className="mt-2 text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-[2rem] sm:leading-tight">
           Transcript fallacy analysis

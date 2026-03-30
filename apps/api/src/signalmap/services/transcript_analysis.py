@@ -9,24 +9,31 @@ This layer will later support:
 Modes ``frames`` and ``fallacies`` use keyword heuristics only: they are experimental
 prototypes, not definitive classifiers, and are unsuitable for research claims without validation.
 
-``fallacies`` mode uses English-only, hand-tuned pattern checks with context guards. It is a
-heuristic prototype (not a validated logical-fallacy classifier) and will miss real fallacies
+Dispatch is **language-aware**: each ``mode`` + ``method`` + normalized transcript language
+(English / Persian / other) selects an implementation or returns ``analysis_supported: false``
+with an explicit ``analysis_note`` when that combination is not implemented.
+
+``fallacies`` heuristic mode uses English-only, hand-tuned pattern checks with context guards.
+Persian heuristic rules are scaffolded (``FALLACY_KEYWORDS_FA``) but not wired to detectors yet.
+It is a heuristic prototype (not a validated logical-fallacy classifier) and will miss real fallacies
 and occasionally misfire; use ``label_matches`` for internal rule debugging only.
 
 For ``mode="fallacies"``, use ``method`` to choose how fallacies are detected:
 
-- ``heuristic`` — rule-based (English-only; see below).
+- ``heuristic`` — rule-based (English only today; Persian returns unsupported).
 - ``classifier`` — reserved; returns ``analysis_supported: false`` until implemented.
-- ``llm`` — Groq chat completion per chunk (``llama-3.1-70b-versatile`` by default; requires ``GROQ_API_KEY``; experimental).
+- ``llm`` — Groq chat completion per chunk (English or Persian system prompt; default model
+  aligns with ``GROQ_MODEL`` / ``GROQ_FALLACY_MODEL``; requires ``GROQ_API_KEY``; experimental).
 
 Modes ``summarize_llm`` and ``speaker_guess_llm`` call Groq (see ``GROQ_API_KEY``). They are
 **experimental prototypes** and not substitutes for manual review or validated classifiers.
+Transcript fetch, chunking, and cache remain language-neutral; analysis applies language rules above.
 """
 
 from __future__ import annotations
 
 import re
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import HTTPException
 
@@ -41,6 +48,39 @@ from signalmap.services.llm_transcript_analysis import (
 _LLM_MODE_NOTE = (
     "Groq LLM mode (experimental prototype); not validated for research or moderation decisions."
 )
+
+# Normalized language for analysis routing (transcript or pasted ``language`` hint).
+AnalysisLanguage = Literal["en", "fa", "other"]
+
+_LLM_FALLACY_OTHER_LANG_NOTE = (
+    "Fallacy LLM uses English prompt instructions; results may be less reliable for this "
+    "transcript language."
+)
+
+
+def normalize_analysis_language(lang: Optional[str]) -> AnalysisLanguage:
+    """
+    Map caption pipeline codes or display names (``en``, ``en-US``, ``fa``, ``Persian``, …)
+    to a coarse analysis locale. Unknown or missing values become ``other`` (do not assume English).
+    """
+    if not lang or not isinstance(lang, str):
+        return "other"
+    s = lang.strip().lower()
+    if not s:
+        return "other"
+    if s == "en" or s.startswith("en-") or s.startswith("en_") or s.startswith("english"):
+        return "en"
+    if (
+        s == "fa"
+        or s.startswith("fa-")
+        or s.startswith("fa_")
+        or s == "fas"
+        or "persian" in s
+        or "farsi" in s
+    ):
+        return "fa"
+    return "other"
+
 
 # Fallacy detection backend when mode == "fallacies"
 FALLACY_METHOD_HEURISTIC = "heuristic"
@@ -87,7 +127,7 @@ def _merge_analysis_notes(*parts: Optional[str]) -> Optional[str]:
 
 
 # --- "frames" mode: simple substring triggers (English, case-insensitive) ---
-_FRAME_KEYWORDS: dict[str, tuple[str, ...]] = {
+FRAME_KEYWORDS_EN: dict[str, tuple[str, ...]] = {
     "praise": (
         "praise",
         "commend",
@@ -169,6 +209,9 @@ _FRAME_KEYWORDS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+# Placeholder for future Persian frame cues (do not run English frame keywords on Persian text).
+FRAME_KEYWORDS_FA: dict[str, tuple[str, ...]] = {}
+
 # --- "fallacies" mode: guarded phrase + cue heuristics (see module docstring) ---
 _FALLACY_LABEL_ORDER: tuple[str, ...] = (
     "ad_hominem",
@@ -198,6 +241,16 @@ _AD_HOMINEM_INSULTS: tuple[str, ...] = (
     "stupid",
 )
 
+_AD_HOMINEM_TIER_A: tuple[str, ...] = (
+    "ad hominem",
+    "attack the person",
+    "attack the messenger",
+    "intellectually dishonest",
+    "discredit the source",
+    "look at who",
+    "you're just a",
+)
+
 
 def _matching_insult_keywords(low: str, insults: tuple[str, ...]) -> list[str]:
     """Return every insult token that matches ``low`` (word-boundary), sorted, de-duplicated."""
@@ -210,16 +263,7 @@ def _matching_insult_keywords(low: str, insults: tuple[str, ...]) -> list[str]:
 
 def _det_ad_hominem(low: str) -> Optional[tuple[list[str], str]]:
     """Explicit attack phrases, or person-target + one or more insults (not insult alone)."""
-    tier_a = (
-        "ad hominem",
-        "attack the person",
-        "attack the messenger",
-        "intellectually dishonest",
-        "discredit the source",
-        "look at who",
-        "you're just a",
-    )
-    tier_hits = [p for p in tier_a if p in low]
+    tier_hits = [p for p in _AD_HOMINEM_TIER_A if p in low]
     if tier_hits:
         matches = sorted(set(tier_hits))
         st = "strong" if len(matches) >= 2 else "weak"
@@ -425,8 +469,65 @@ _FALLACY_DETECTORS: dict[str, Any] = {
     "burden_shifting": _det_burden_shifting,
 }
 
+# Aggregated English cue phrases per label (documentation + future parity with FA scaffolding).
+# Detectors above remain the source of truth for matching logic (regex + guards).
+FALLACY_KEYWORDS_EN: dict[str, tuple[str, ...]] = {
+    "ad_hominem": _AD_HOMINEM_TIER_A + _AD_HOMINEM_INSULTS,
+    "straw_man": _STRAW_MAN_CORE + _STRAW_MAN_EXAGGERATION + _STRAW_MAN_OTHER,
+    "false_dilemma": (
+        "false dilemma",
+        "false dichotomy",
+        "either you're with us",
+        "either or",
+        "only two choices",
+        "no middle ground",
+        "black and white",
+        "no other option",
+        "no other choice",
+        "must choose",
+        "must pick",
+    ),
+    "whataboutism": (
+        "what about",
+        "whataboutism",
+        "but what about",
+        "and what about",
+        "and yet",
+        "but when",
+        "why don't you talk about",
+        "why dont you talk about",
+    ),
+    "appeal_to_fear": (
+        "appeal to fear",
+        "be very afraid",
+        "they're coming for",
+        "existential threat",
+        "wake up before it's too late",
+        "wake up before it is too late",
+        "millions will die",
+        "lose the entire region",
+        "never be safe",
+        "will be destroyed",
+    ),
+    "burden_shifting": (
+        "burden of proof",
+        "prove it",
+        "prove that",
+        "where is your evidence",
+        "where's your evidence",
+        "show me the evidence",
+        "you need to prove",
+        "you have to prove",
+        "you have to show",
+        "onus is on",
+    ),
+}
 
-def _fallacy_analysis_for_text(text: str) -> tuple[list[str], dict[str, list[str]], dict[str, str]]:
+# Placeholder: Persian heuristic cues (not yet wired into detectors).
+FALLACY_KEYWORDS_FA: dict[str, tuple[str, ...]] = {}
+
+
+def _fallacy_analysis_for_text_en(text: str) -> tuple[list[str], dict[str, list[str]], dict[str, str]]:
     """
     Run all fallacy detectors on lowercased text. Labels sorted; ``label_matches`` holds
     human-readable rule hits for debugging.
@@ -495,21 +596,6 @@ def _labels_and_matches(
     return labels, matches_sorted
 
 
-def _language_is_english_for_fallacy_analysis(lang: Optional[str]) -> bool:
-    """
-    Fallacy heuristics are English-only. ``language`` is the transcript language code
-    or display name from the caption pipeline (e.g. ``en``, ``en-US``, ``English``).
-    """
-    if not lang or not isinstance(lang, str):
-        return False
-    s = lang.strip().lower()
-    if not s:
-        return False
-    if s == "en" or s.startswith("en-") or s.startswith("en_"):
-        return True
-    return s.startswith("english")
-
-
 def _fallacy_summary_from_chunks(chunks: list[dict[str, Any]]) -> dict[str, int]:
     """
     Video-level fallacy summary: number of chunks tagged with each label (omit labels with
@@ -526,16 +612,21 @@ def label_chunk_frames(text: str) -> list[str]:
     """
     Assign zero or more frame labels to a chunk using keyword substring rules.
     Labels are returned sorted alphabetically for stable output.
+
+    English keyword lists only; callers analyzing non-English text should skip this
+    (see ``normalize_analysis_language`` and ``_execute_transcript_analysis``).
     """
-    labels, _ = _labels_and_matches(text, _FRAME_KEYWORDS)
+    labels, _ = _labels_and_matches(text, FRAME_KEYWORDS_EN)
     return labels
 
 
 def label_chunk_fallacies(text: str) -> list[str]:
     """
     Prototype fallacy-style labels via guarded heuristics (experimental, not definitive).
+
+    English detectors only; do not use for Persian text — use language-aware entry points instead.
     """
-    labels, _, _ = _fallacy_analysis_for_text(text)
+    labels, _, _ = _fallacy_analysis_for_text_en(text)
     return labels
 
 
@@ -546,7 +637,7 @@ def annotate_chunks_frames(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]
         if not isinstance(ch, dict):
             continue
         text = str(ch.get("text", "") or "")
-        labels, label_matches = _labels_and_matches(text, _FRAME_KEYWORDS)
+        labels, label_matches = _labels_and_matches(text, FRAME_KEYWORDS_EN)
         row = {
             "start": ch.get("start"),
             "end": ch.get("end"),
@@ -556,6 +647,26 @@ def annotate_chunks_frames(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]
             "label_matches": label_matches,
         }
         out.append(row)
+    return out
+
+
+def annotate_chunks_frames_skipped(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Same shape as frames mode without running English keyword rules (unsupported language)."""
+    out: list[dict[str, Any]] = []
+    for ch in chunks:
+        if not isinstance(ch, dict):
+            continue
+        text = str(ch.get("text", "") or "")
+        out.append(
+            {
+                "start": ch.get("start"),
+                "end": ch.get("end"),
+                "text": text,
+                "segment_count": ch.get("segment_count", 0),
+                "labels": [],
+                "label_matches": {},
+            }
+        )
     return out
 
 
@@ -592,7 +703,7 @@ def annotate_chunks_fallacies(chunks: list[dict[str, Any]]) -> list[dict[str, An
         if not isinstance(ch, dict):
             continue
         text = str(ch.get("text", "") or "")
-        labels, label_matches, label_strengths = _fallacy_analysis_for_text(text)
+        labels, label_matches, label_strengths = _fallacy_analysis_for_text_en(text)
         row = {
             "start": ch.get("start"),
             "end": ch.get("end"),
@@ -608,10 +719,14 @@ def annotate_chunks_fallacies(chunks: list[dict[str, Any]]) -> list[dict[str, An
 
 def annotate_chunks_fallacies_llm(
     chunks: list[dict[str, Any]],
+    *,
+    analysis_language: AnalysisLanguage = "en",
 ) -> tuple[list[dict[str, Any]], Optional[str]]:
     """
     Per-chunk Groq LLM fallacy detection. Chunk shape matches ``annotate_chunks_fallacies``:
     ``labels``, ``label_matches`` (explanation text per label), ``label_strengths`` (low / medium / high).
+
+    ``analysis_language`` selects the system prompt (English vs Persian vs default English for ``other``).
 
     On API or parse failure for a chunk, that chunk gets empty labels and an optional top-level note
     aggregates failures.
@@ -638,7 +753,7 @@ def annotate_chunks_fallacies_llm(
                 }
             )
             continue
-        raw = groq_fallacy_chunk_json(text)
+        raw = groq_fallacy_chunk_json(text, analysis_language=analysis_language)
         if not raw:
             failed += 1
             out.append(
@@ -672,6 +787,106 @@ def annotate_chunks_fallacies_llm(
     return out, note
 
 
+def _execute_transcript_analysis(
+    mode: str,
+    *,
+    analysis_lang: AnalysisLanguage,
+    chunks_in: list[dict[str, Any]],
+    full_transcript_text: str,
+    fallacy_method: Optional[str],
+) -> dict[str, Any]:
+    """
+    Core dispatch on ``mode`` × fallacy ``method`` × ``analysis_lang`` (``en`` / ``fa`` / ``other``).
+    Returns chunk list, summary, support flags, and optional LLM payloads.
+    """
+    analysis_supported = True
+    analysis_note: Optional[str] = None
+    llm_summarize: Optional[dict[str, Any]] = None
+    speaker_blocks: Optional[list[dict[str, Any]]] = None
+    method_effective: Optional[str] = None
+    chunks_out: list[dict[str, Any]]
+    summary: dict[str, int]
+
+    if mode == "frames":
+        if analysis_lang == "en":
+            chunks_out = annotate_chunks_frames(chunks_in)
+        else:
+            chunks_out = annotate_chunks_frames_skipped(chunks_in)
+            analysis_supported = False
+            analysis_note = (
+                "Frame keyword analysis is not implemented for Persian yet."
+                if analysis_lang == "fa"
+                else "Frame keyword analysis is only available for English transcripts."
+            )
+        summary = {}
+    elif mode == "fallacies":
+        fm = _normalize_fallacy_method(fallacy_method)
+        method_effective = fm
+        if fm == FALLACY_METHOD_HEURISTIC:
+            if analysis_lang == "en":
+                chunks_out = annotate_chunks_fallacies(chunks_in)
+                summary = _fallacy_summary_from_chunks(chunks_out)
+            else:
+                chunks_out = annotate_chunks_fallacies_skipped(chunks_in)
+                summary = {}
+                analysis_supported = False
+                analysis_note = (
+                    "Heuristic fallacy analysis is not implemented for Persian yet."
+                    if analysis_lang == "fa"
+                    else "Heuristic fallacy analysis is only available for English transcripts."
+                )
+        elif fm == FALLACY_METHOD_LLM:
+            require_groq_api_key()
+            chunks_out, llm_note = annotate_chunks_fallacies_llm(
+                chunks_in, analysis_language=analysis_lang
+            )
+            summary = _fallacy_summary_from_chunks(chunks_out)
+            extra = (
+                _LLM_FALLACY_OTHER_LANG_NOTE if analysis_lang == "other" else None
+            )
+            analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, llm_note, extra)
+        elif fm == FALLACY_METHOD_CLASSIFIER:
+            chunks_out = annotate_chunks_fallacies_skipped(chunks_in)
+            summary = {}
+            analysis_supported = False
+            analysis_note = "Classifier method is not implemented yet."
+    elif mode == "summarize_llm":
+        require_groq_api_key()
+        llm_summarize, trunc_note = run_summarize_llm(
+            full_text=full_transcript_text,
+            analysis_language=analysis_lang,
+        )
+        chunks_out = _chunks_passthrough_basic(chunks_in)
+        summary = {}
+        analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, trunc_note)
+    elif mode == "speaker_guess_llm":
+        require_groq_api_key()
+        speaker_blocks, sp_note, trunc_note = run_speaker_guess_llm(
+            chunks_in, analysis_language=analysis_lang
+        )
+        chunks_out = _chunks_passthrough_basic(chunks_in)
+        summary = {}
+        analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, sp_note, trunc_note)
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Unsupported analysis mode: {mode!r}. Supported: 'frames', 'fallacies', "
+                "'summarize_llm', 'speaker_guess_llm'."
+            ),
+        )
+
+    return {
+        "chunks": chunks_out,
+        "summary": summary,
+        "analysis_supported": analysis_supported,
+        "analysis_note": analysis_note,
+        "llm_summarize": llm_summarize,
+        "speaker_blocks": speaker_blocks,
+        "method": method_effective,
+    }
+
+
 def run_transcript_analysis(
     url: str,
     mode: str,
@@ -685,7 +900,7 @@ def run_transcript_analysis(
     ``llm`` (see module docstring). Ignored for other modes.
 
     Heuristic fallacies add per-chunk ``label_strengths`` and top-level ``summary`` (chunk counts
-    per fallacy label). English-only heuristics are skipped for non-English transcripts.
+    per fallacy label). Routing uses ``normalize_analysis_language`` on the transcript language.
     """
     from signalmap.services.youtube_transcripts import get_transcript_for_url
 
@@ -700,75 +915,28 @@ def run_transcript_analysis(
     else:
         transcript_lang = None
 
-    analysis_supported = True
-    analysis_note: Optional[str] = None
-
-    llm_summarize: Optional[dict[str, Any]] = None
-    speaker_blocks: Optional[list[dict[str, Any]]] = None
-    method_effective: Optional[str] = None
-
-    if mode == "frames":
-        chunks_out = annotate_chunks_frames(chunks_in)
-        summary: dict[str, int] = {}
-    elif mode == "fallacies":
-        fm = _normalize_fallacy_method(fallacy_method)
-        method_effective = fm
-        if fm == FALLACY_METHOD_HEURISTIC:
-            if _language_is_english_for_fallacy_analysis(transcript_lang):
-                chunks_out = annotate_chunks_fallacies(chunks_in)
-                summary = _fallacy_summary_from_chunks(chunks_out)
-            else:
-                chunks_out = annotate_chunks_fallacies_skipped(chunks_in)
-                summary = {}
-                analysis_supported = False
-                analysis_note = (
-                    "Fallacies mode is currently implemented only for English transcripts."
-                )
-        elif fm == FALLACY_METHOD_LLM:
-            require_groq_api_key()
-            chunks_out, llm_note = annotate_chunks_fallacies_llm(chunks_in)
-            summary = _fallacy_summary_from_chunks(chunks_out)
-            analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, llm_note)
-        elif fm == FALLACY_METHOD_CLASSIFIER:
-            chunks_out = annotate_chunks_fallacies_skipped(chunks_in)
-            summary = {}
-            analysis_supported = False
-            analysis_note = "Classifier method is not implemented yet."
-    elif mode == "summarize_llm":
-        require_groq_api_key()
-        full_text = str(data.get("transcript_text") or "")
-        llm_summarize, trunc_note = run_summarize_llm(full_text=full_text)
-        chunks_out = _chunks_passthrough_basic(chunks_in)
-        summary = {}
-        analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, trunc_note)
-    elif mode == "speaker_guess_llm":
-        require_groq_api_key()
-        speaker_blocks, sp_note, trunc_note = run_speaker_guess_llm(chunks_in)
-        chunks_out = _chunks_passthrough_basic(chunks_in)
-        summary = {}
-        analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, sp_note, trunc_note)
-    else:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"Unsupported analysis mode: {mode!r}. Supported: 'frames', 'fallacies', "
-                "'summarize_llm', 'speaker_guess_llm'."
-            ),
-        )
+    analysis_lang = normalize_analysis_language(transcript_lang)
+    exec_result = _execute_transcript_analysis(
+        mode,
+        analysis_lang=analysis_lang,
+        chunks_in=chunks_in,
+        full_transcript_text=str(data.get("transcript_text") or ""),
+        fallacy_method=fallacy_method,
+    )
 
     return {
         "video_id": data["video_id"],
         "title": data.get("title"),
         "language": data.get("language"),
         "cached": bool(data.get("_cached")),
-        "chunks": chunks_out,
-        "summary": summary,
+        "chunks": exec_result["chunks"],
+        "summary": exec_result["summary"],
         "fallback_used": bool(data.get("fallback_used")),
-        "analysis_supported": analysis_supported,
-        "analysis_note": analysis_note,
-        "llm_summarize": llm_summarize,
-        "speaker_blocks": speaker_blocks,
-        "method": method_effective,
+        "analysis_supported": exec_result["analysis_supported"],
+        "analysis_note": exec_result["analysis_note"],
+        "llm_summarize": exec_result["llm_summarize"],
+        "speaker_blocks": exec_result["speaker_blocks"],
+        "method": exec_result["method"],
     }
 
 
@@ -801,72 +969,26 @@ def run_transcript_analysis_from_text(
             detail="Transcript text could not be chunked into usable segments.",
         )
 
-    analysis_supported = True
-    analysis_note: Optional[str] = None
-
-    llm_summarize: Optional[dict[str, Any]] = None
-    speaker_blocks: Optional[list[dict[str, Any]]] = None
-    method_effective: Optional[str] = None
-
-    if mode == "frames":
-        chunks_out = annotate_chunks_frames(chunks_in)
-        summary: dict[str, int] = {}
-    elif mode == "fallacies":
-        fm = _normalize_fallacy_method(fallacy_method)
-        method_effective = fm
-        if fm == FALLACY_METHOD_HEURISTIC:
-            if _language_is_english_for_fallacy_analysis(lang):
-                chunks_out = annotate_chunks_fallacies(chunks_in)
-                summary = _fallacy_summary_from_chunks(chunks_out)
-            else:
-                chunks_out = annotate_chunks_fallacies_skipped(chunks_in)
-                summary = {}
-                analysis_supported = False
-                analysis_note = (
-                    "Fallacies mode is currently implemented only for English transcripts."
-                )
-        elif fm == FALLACY_METHOD_LLM:
-            require_groq_api_key()
-            chunks_out, llm_note = annotate_chunks_fallacies_llm(chunks_in)
-            summary = _fallacy_summary_from_chunks(chunks_out)
-            analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, llm_note)
-        elif fm == FALLACY_METHOD_CLASSIFIER:
-            chunks_out = annotate_chunks_fallacies_skipped(chunks_in)
-            summary = {}
-            analysis_supported = False
-            analysis_note = "Classifier method is not implemented yet."
-    elif mode == "summarize_llm":
-        require_groq_api_key()
-        llm_summarize, trunc_note = run_summarize_llm(full_text=raw)
-        chunks_out = _chunks_passthrough_basic(chunks_in)
-        summary = {}
-        analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, trunc_note)
-    elif mode == "speaker_guess_llm":
-        require_groq_api_key()
-        speaker_blocks, sp_note, trunc_note = run_speaker_guess_llm(chunks_in)
-        chunks_out = _chunks_passthrough_basic(chunks_in)
-        summary = {}
-        analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, sp_note, trunc_note)
-    else:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"Unsupported analysis mode: {mode!r}. Supported: 'frames', 'fallacies', "
-                "'summarize_llm', 'speaker_guess_llm'."
-            ),
-        )
+    analysis_lang = normalize_analysis_language(lang)
+    exec_result = _execute_transcript_analysis(
+        mode,
+        analysis_lang=analysis_lang,
+        chunks_in=chunks_in,
+        full_transcript_text=raw,
+        fallacy_method=fallacy_method,
+    )
 
     return {
         "video_id": "",
         "title": None,
         "language": lang,
         "cached": False,
-        "chunks": chunks_out,
-        "summary": summary,
+        "chunks": exec_result["chunks"],
+        "summary": exec_result["summary"],
         "fallback_used": False,
-        "analysis_supported": analysis_supported,
-        "analysis_note": analysis_note,
-        "llm_summarize": llm_summarize,
-        "speaker_blocks": speaker_blocks,
-        "method": method_effective,
+        "analysis_supported": exec_result["analysis_supported"],
+        "analysis_note": exec_result["analysis_note"],
+        "llm_summarize": exec_result["llm_summarize"],
+        "speaker_blocks": exec_result["speaker_blocks"],
+        "method": exec_result["method"],
     }

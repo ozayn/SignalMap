@@ -22,10 +22,12 @@ log = logging.getLogger(__name__)
 
 GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
-# Per-chunk fallacy detection (explicit product default; override with GROQ_FALLACY_MODEL).
-FALLACY_GROQ_MODEL = (os.getenv("GROQ_FALLACY_MODEL") or "llama-3.1-70b-versatile").strip() or "llama-3.1-70b-versatile"
+# Per-chunk fallacy LLM (override with GROQ_FALLACY_MODEL). Explicit default; older ids may be decommissioned.
+DEFAULT_FALLACY_GROQ_MODEL = "llama-3.3-70b-versatile"
+FALLACY_GROQ_MODEL = (os.getenv("GROQ_FALLACY_MODEL") or DEFAULT_FALLACY_GROQ_MODEL).strip() or DEFAULT_FALLACY_GROQ_MODEL
 
-FALLACY_LLM_SYSTEM_PROMPT = """You are a precise analyst of argumentation and logical fallacies.
+# Language-specific fallacy LLM instructions (same JSON schema; see groq_fallacy_chunk_json).
+FALLACY_LLM_SYSTEM_PROMPT_EN = """You are a precise analyst of argumentation and logical fallacies.
 Identify whether the given text contains any of the following fallacies:
 
 - ad_hominem
@@ -43,12 +45,18 @@ Return ONLY valid JSON in this format:
 }
 
 Examples of clear cases (when the text is plainly like this, it usually warrants a label):
-- direct personal attacks on someone instead of engaging their argument → ad_hominem
+- direct personal attacks on a person, speaker, or group instead of engaging their argument → ad_hominem (not attacks on ideas alone — see below)
 - "so you're saying..." style reframing that exaggerates or misstates an opponent's position → straw_man
 - explicit either/or framing that limits the situation to only two options → false_dilemma
 - redirecting criticism or changing the subject with "what about..." → whataboutism
 - exaggerated catastrophic predictions clearly meant to provoke fear (not calm risk analysis) → appeal_to_fear
 - demanding the other side prove your claim for you, or shifting the burden of proof unfairly → burden_shifting
+
+ad_hominem only when attacking people, not ideas:
+- Do not label criticism of an idea, policy, argument, or situation as ad_hominem.
+- Only label ad_hominem when the text attacks a person, speaker, or group in place of engaging their argument.
+- Insulting an idea, policy, or situation is not ad_hominem.
+- Contrast: "He is an idiot" → ad_hominem. "This idea is stupid" → not ad_hominem.
 
 If a chunk clearly matches one of these patterns, assign the label rather than defaulting to no labels.
 
@@ -64,6 +72,41 @@ Rules:
 - For each label, provide a short, specific explanation referencing the exact phrase or reasoning in the text that triggered the label.
 - Avoid generic explanations such as 'this is a fallacy' — instead explain what in the text makes it a fallacy.
 - Be conservative"""
+
+# Persian: same task and JSON schema; model reasons over Persian source text. Explanations may be in Persian.
+FALLACY_LLM_SYSTEM_PROMPT_FA = """شما تحلیل‌گر دقیق استدلال و مغالطات منطقی هستید.
+متن داده‌شده را بخوانید و بررسی کنید آیا هرکدام از این الگوهای مغالطه‌آمیز را دارد:
+
+- ad_hominem
+- straw_man
+- false_dilemma
+- whataboutism
+- appeal_to_fear
+- burden_shifting
+
+فقط JSON معتبر با این قالب برگردانید:
+{
+  "labels": ["..."],
+  "explanation": "...",
+  "confidence": "low" | "medium" | "high"
+}
+
+راهنما:
+- ad_hominem: حمله به فرد یا گوینده به‌جای پاسخ به استدلال (نه انتقاد صرف از یک ایده یا سیاست).
+- straw_man: جاانداختن حرفی که طرف مقابل نگفته یا اغراق در موضع او.
+- false_dilemma: قالب‌بندی صریح دو گزینه‌ی تنها وقتی طیف گزینه‌ها وجود دارد.
+- whataboutism: منحرف کردن با «شما که دربارهٔ X چرا حرف نمی‌زنید» و امثال آن.
+- appeal_to_fear: برانگیختن ترس اغراق‌آمیز (نه تحلیل آرام خطر).
+- burden_shifting: منتقل کردن نادرست بار اثبات به طرف دیگر.
+
+قواعد:
+- فقط در صورت وجود شواهد روشن در متن برچسب بزنید؛ اگر ابهام یا متن خنثی است، labels خالی باشد.
+- برچسب جدید اختراع نکنید؛ فقط مقادیر مجاز بالا.
+- توضیح کوتاه و مشخص با ارجاع به عبارت یا دلیل در متن.
+- محافظه‌کار باشید و حدس نزنید."""
+
+# Back-compat alias for English prompt.
+FALLACY_LLM_SYSTEM_PROMPT = FALLACY_LLM_SYSTEM_PROMPT_EN
 
 # Fallacies LLM: only these labels (subset of heuristic set; no "extra" labels).
 FALLACY_LLM_LABELS: tuple[str, ...] = (
@@ -113,6 +156,52 @@ def require_groq_api_key() -> str:
 
 def _groq_model() -> str:
     return (os.getenv("GROQ_MODEL") or DEFAULT_GROQ_MODEL).strip() or DEFAULT_GROQ_MODEL
+
+
+def _groq_error_suggests_model_unavailable(detail: str) -> bool:
+    """True when Groq's error text likely indicates a bad/decommissioned model id."""
+    d = (detail or "").lower()
+    if "decommission" in d:
+        return True
+    if "model" in d and (
+        "invalid" in d
+        or "unknown" in d
+        or "not found" in d
+        or "does not exist" in d
+        or "no longer" in d
+    ):
+        return True
+    return False
+
+
+def _log_groq_http_rejection(*, status_code: int, detail: str, model_name: str) -> None:
+    """Single log line for HTTP errors; emphasize model availability when it looks like a model issue."""
+    if _groq_error_suggests_model_unavailable(detail):
+        log.error(
+            "Groq rejected the chat request (likely invalid or decommissioned model). "
+            "model=%r http_status=%s detail=%s — "
+            "Set GROQ_FALLACY_MODEL or GROQ_MODEL to a current id from https://console.groq.com/docs/models",
+            model_name,
+            status_code,
+            detail,
+        )
+        return
+    log.warning("Groq API error %s: %s", status_code, detail)
+
+
+def _log_groq_safe_mode_http_exception(e: HTTPException, *, model: Optional[str]) -> None:
+    """When safe wrapper swallows HTTPException, make model/availability issues obvious."""
+    detail = str(e.detail or "")
+    if _groq_error_suggests_model_unavailable(detail):
+        log.error(
+            "Groq fallacy LLM call failed (safe mode returned empty). "
+            "Likely model id issue — model=%r detail=%s — "
+            "See https://console.groq.com/docs/models",
+            model,
+            detail,
+        )
+        return
+    log.warning("Groq safe-mode failure: %s", detail)
 
 
 def _strip_code_fence(raw: str) -> str:
@@ -200,7 +289,7 @@ def groq_chat_json(
                 r.status_code,
                 detail,
             )
-        log.warning("Groq API error %s: %s", r.status_code, detail)
+        _log_groq_http_rejection(status_code=r.status_code, detail=detail, model_name=model_name)
         raise HTTPException(status_code=502, detail=f"Groq API error: {detail}")
 
     try:
@@ -274,7 +363,7 @@ def groq_chat_json_safe(
                 type(e).__name__,
                 e.detail,
             )
-        log.warning("Groq safe-mode failure: %s", e.detail)
+        _log_groq_safe_mode_http_exception(e, model=model)
         return {}
     except Exception as e:
         if fallacy_debug:
@@ -291,9 +380,19 @@ def groq_chat_json_safe(
 _MAX_FALLACY_CHUNK_CHARS = 12_000
 
 
-def groq_fallacy_chunk_json(chunk_text: str) -> dict[str, Any]:
+def _fallacy_llm_system_prompt_for_language(analysis_language: str) -> str:
     """
-    One Groq chat completion per chunk using ``FALLACY_LLM_SYSTEM_PROMPT``.
+    ``analysis_language`` is normalized: ``en``, ``fa``, or ``other`` (non-en/fa uses English prompt).
+    """
+    al = (analysis_language or "").strip().lower()
+    if al == "fa":
+        return FALLACY_LLM_SYSTEM_PROMPT_FA
+    return FALLACY_LLM_SYSTEM_PROMPT_EN
+
+
+def groq_fallacy_chunk_json(chunk_text: str, *, analysis_language: str = "en") -> dict[str, Any]:
+    """
+    One Groq chat completion per chunk using language-specific fallacy instructions.
     Returns parsed JSON object or ``{}`` on failure / empty input.
 
     Set env ``GROQ_FALLACY_LLM_DEBUG=1`` for verbose logging (temporary; see module header).
@@ -305,6 +404,7 @@ def groq_fallacy_chunk_json(chunk_text: str) -> dict[str, Any]:
     if len(t) > _MAX_FALLACY_CHUNK_CHARS:
         t = t[:_MAX_FALLACY_CHUNK_CHARS]
     user = f"Text:\n{t}"
+    system = _fallacy_llm_system_prompt_for_language(analysis_language)
 
     dbg = _fallacy_llm_debug_enabled()
     if dbg:
@@ -313,7 +413,7 @@ def groq_fallacy_chunk_json(chunk_text: str) -> dict[str, Any]:
             log.warning("[GROQ_FALLACY_LLM_DEBUG] --- first chunk INPUT text ---\n%s", t)
 
     raw = groq_chat_json_safe(
-        system=FALLACY_LLM_SYSTEM_PROMPT,
+        system=system,
         user=user,
         temperature=0.2,
         max_tokens=1024,
@@ -408,9 +508,22 @@ def validate_summarize_output(obj: Any) -> dict[str, Any]:
     return out
 
 
+def _transcript_language_hint_for_llm(analysis_language: Optional[str]) -> str:
+    """Short clause appended to user prompts when transcript locale is known."""
+    al = (analysis_language or "").strip().lower()
+    if al == "fa":
+        return "\n\nThe transcript is primarily in Persian (Farsi); respond in the same language as appropriate for the JSON string values."
+    if al == "en":
+        return "\n\nThe transcript is primarily in English."
+    if al == "other":
+        return "\n\nThe transcript language may not be English; stay faithful to the source wording."
+    return ""
+
+
 def run_summarize_llm(
     *,
     full_text: str,
+    analysis_language: Optional[str] = None,
 ) -> tuple[dict[str, Any], Optional[str]]:
     """
     Produce a short summary, bullets, and main topics. Returns ``(llm_summarize_dict, note_extra)``.
@@ -430,6 +543,7 @@ def run_summarize_llm(
     user = (
         "Summarize the following transcript text for internal analysis.\n\n"
         f"TRANSCRIPT:\n{text}"
+        f"{_transcript_language_hint_for_llm(analysis_language)}"
     )
     raw = groq_chat_json(system=system, user=user, temperature=0.25, max_tokens=2048)
     validated = validate_summarize_output(raw)
@@ -476,7 +590,11 @@ def validate_speaker_guess_output(obj: Any) -> tuple[list[dict[str, Any]], str]:
     return blocks, default_note
 
 
-def run_speaker_guess_llm(chunks: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], str, Optional[str]]:
+def run_speaker_guess_llm(
+    chunks: list[dict[str, Any]],
+    *,
+    analysis_language: Optional[str] = None,
+) -> tuple[list[dict[str, Any]], str, Optional[str]]:
     """
     Infer approximate speaker roles from text only. Returns ``speaker_blocks``, ``analysis_note``, truncation note.
     """
@@ -496,7 +614,9 @@ def run_speaker_guess_llm(chunks: list[dict[str, Any]]) -> tuple[list[dict[str, 
     )
     user = (
         "Infer approximate speaker blocks from the following transcript chunks. "
-        "Text-only; no audio.\n\n" + manifest
+        "Text-only; no audio.\n\n"
+        + manifest
+        + _transcript_language_hint_for_llm(analysis_language)
     )
     raw = groq_chat_json(system=system, user=user, temperature=0.3, max_tokens=8192)
     blocks, note = validate_speaker_guess_output(raw)

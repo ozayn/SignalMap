@@ -1116,7 +1116,10 @@ class YouTubeTranscriptAnalyzeRequestBody(BaseModel):
     )
     method: Literal["heuristic", "classifier", "llm"] = Field(
         default="heuristic",
-        description="When mode is fallacies: fallacy detection method. Ignored for other modes.",
+        description=(
+            "When mode is fallacies: fallacy detection method (with transcript language). "
+            "Heuristic: English only. LLM: English or Persian prompts. Ignored for other modes."
+        ),
     )
 
 
@@ -1136,11 +1139,14 @@ class YouTubeTranscriptAnalyzeResponseBody(BaseModel):
     )
     analysis_supported: bool = Field(
         default=True,
-        description="False when fallacies heuristics were skipped (non-English transcript).",
+        description=(
+            "False when the mode/method/language combination is not implemented "
+            "(e.g. Persian heuristic fallacies, or non-English frame keywords)."
+        ),
     )
     analysis_note: Optional[str] = Field(
         default=None,
-        description="Set when analysis_supported is false (e.g. language not supported for fallacies).",
+        description="Human-readable reason when analysis_supported is false or LLM caveats apply.",
     )
     llm_summarize: Optional[dict[str, Any]] = Field(
         default=None,
@@ -1152,7 +1158,7 @@ class YouTubeTranscriptAnalyzeResponseBody(BaseModel):
     )
     method: Optional[Literal["heuristic", "classifier", "llm"]] = Field(
         default=None,
-        description="When the request used mode fallacies: which fallacy method ran.",
+        description="When the request used mode fallacies: which fallacy method was selected.",
     )
 
 
@@ -1160,6 +1166,8 @@ class YouTubeTranscriptAnalyzeResponseBody(BaseModel):
 def api_youtube_transcript_analyze(body: YouTubeTranscriptAnalyzeRequestBody):
     """
     Experimental chunk-level transcript analysis (playground). Reuses fetch + chunking.
+    Language is taken from the fetched transcript; routing is mode × method × language
+    (e.g. Persian heuristic fallacies are not run; LLM fallacies use a Persian prompt when applicable).
     For ``mode=fallacies``, ``method`` selects heuristic, classifier (placeholder), or llm (Groq).
     ``summarize_llm`` and ``speaker_guess_llm`` require ``GROQ_API_KEY`` and are prototypes only.
     """
@@ -1192,11 +1200,17 @@ class TranscriptAnalyzeTextRequestBody(BaseModel):
     )
     method: Literal["heuristic", "classifier", "llm"] = Field(
         default="heuristic",
-        description="When mode is fallacies: fallacy detection method. Ignored for other modes.",
+        description=(
+            "When mode is fallacies: fallacy detection method (with transcript language). "
+            "Heuristic: English only. LLM: English or Persian prompts. Ignored for other modes."
+        ),
     )
     language: str = Field(
         default="en",
-        description="Transcript language hint (e.g. en); used to gate fallacies heuristics.",
+        description=(
+            "Transcript language hint (e.g. en, fa, fa-IR). Gates heuristic rules; "
+            "LLM fallacy mode uses English or Persian system prompts accordingly."
+        ),
     )
 
 

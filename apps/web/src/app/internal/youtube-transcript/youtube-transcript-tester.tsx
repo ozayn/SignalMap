@@ -28,7 +28,8 @@ type AnalyzeChunk = {
   text?: string;
   segment_count?: number;
   labels?: string[];
-  label_matches?: Record<string, string[]>;
+  /** Per label: heuristic cue strings or LLM explanation (string or one-element array). */
+  label_matches?: Record<string, string[] | string>;
   label_strengths?: Record<string, string>;
 };
 
@@ -106,13 +107,13 @@ function sumChunkTextLengths(chunks: AnalyzeChunk[]): number {
 }
 
 /** Flatten chunk `label_matches` into one comma-separated line; strip `phrase:` / `cue:` / `combo:` prefixes. */
-function formatMatchedCuesLine(labelMatches: Record<string, string[]> | undefined): string {
+function formatMatchedCuesLine(labelMatches: Record<string, string[] | string> | undefined): string {
   if (!labelMatches) return "";
   const seen = new Set<string>();
   const parts: string[] = [];
   for (const kws of Object.values(labelMatches)) {
-    if (!Array.isArray(kws)) continue;
-    for (const raw of kws) {
+    const rows = typeof kws === "string" ? [kws] : Array.isArray(kws) ? kws : [];
+    for (const raw of rows) {
       const s = String(raw)
         .replace(/^(phrase|cue|combo):/i, "")
         .trim();
@@ -122,6 +123,39 @@ function formatMatchedCuesLine(labelMatches: Record<string, string[]> | undefine
     }
   }
   return parts.join(", ");
+}
+
+/** Single display string for one label's `label_matches` entry (heuristic cues or LLM explanation). */
+function textFromLabelMatchEntry(
+  lab: string,
+  labelMatches: Record<string, string[] | string> | undefined,
+): string {
+  if (!labelMatches) return "";
+  const v = labelMatches[lab];
+  if (typeof v === "string") return v.trim();
+  if (Array.isArray(v)) {
+    return v
+      .map((s) =>
+        String(s)
+          .replace(/^(phrase|cue|combo):/i, "")
+          .trim()
+      )
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+  }
+  return "";
+}
+
+/** True if any label has non-empty `label_matches` text (reasoning to show in the collapsible). */
+function hasFallacyReasoningContent(
+  labels: string[] | undefined,
+  labelMatches: Record<string, string[] | string> | undefined,
+): boolean {
+  for (const lab of labels ?? []) {
+    if (textFromLabelMatchEntry(lab, labelMatches)) return true;
+  }
+  return false;
 }
 
 function formatSecondsAsClock(totalSeconds: number): string {
@@ -209,7 +243,8 @@ function aggregateLabelMatchesFromChunks(chunks: AnalyzeChunk[]): Record<string,
     for (const [lab, kws] of Object.entries(ch.label_matches ?? {})) {
       if (!m.has(lab)) m.set(lab, new Set());
       const set = m.get(lab)!;
-      for (const kw of kws) set.add(kw);
+      const parts = Array.isArray(kws) ? kws : typeof kws === "string" ? [kws] : [];
+      for (const kw of parts) set.add(kw);
     }
   }
   return Object.fromEntries(
@@ -276,39 +311,214 @@ function LabelStrengthGroup({ label, strength }: { label: string; strength: stri
   );
 }
 
+/** Collapsible per-label reasoning from `label_matches` (fallacies mode). Renders nothing if no content. */
+function FallacyChunkReasoning({
+  labels,
+  labelMatches,
+  labelStrengths,
+}: {
+  labels: string[];
+  labelMatches?: Record<string, string[] | string>;
+  labelStrengths?: Record<string, string>;
+}) {
+  const [open, setOpen] = useState(false);
+  const rows = useMemo(() => {
+    const out: { label: string; text: string }[] = [];
+    for (const lab of labels) {
+      const text = textFromLabelMatchEntry(lab, labelMatches);
+      if (!text) continue;
+      out.push({ label: lab, text });
+    }
+    return out;
+  }, [labels, labelMatches]);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-[12px] text-muted-foreground underline underline-offset-[3px] transition-colors hover:text-foreground"
+      >
+        {open ? "Hide reasoning" : "Show reasoning"}
+      </button>
+      {open ? (
+        <div className="mt-2.5 space-y-3 border-l border-border/20 pl-3">
+          {rows.map(({ label, text }) => (
+            <div key={label}>
+              <p className="text-[12px] leading-snug">
+                <span className="font-medium text-muted-foreground">{label}</span>
+                {labelStrengths?.[label] ? (
+                  <span className="ml-1.5 text-[10px] font-medium tabular-nums text-muted-foreground/50">
+                    {formatStrengthBadge(labelStrengths[label])}
+                  </span>
+                ) : null}
+              </p>
+              <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground/85">{text}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Small uppercase section label — Source / Results / Reference / Input */
+function SectionHeading({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <p
+      className={cn(
+        "mb-2.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/90",
+        className
+      )}
+    >
+      {children}
+    </p>
+  );
+}
+
+const inputSurfaceClass =
+  "border-border/50 bg-background shadow-none transition-[border-color,box-shadow] placeholder:text-muted-foreground/55 focus:border-border/75 focus:outline-none focus:ring-2 focus:ring-ring/25 focus:ring-offset-0 dark:border-border/45";
+
+const textareaSurfaceClass =
+  "border-border/50 bg-background shadow-none transition-[border-color,box-shadow] placeholder:text-muted-foreground/55 focus:border-border/75 focus:outline-none focus:ring-2 focus:ring-ring/25 focus:ring-offset-0 dark:border-border/45";
+
 /** Light panel for summary sections — no heavy shadow */
 function SummarySectionCard({
   title,
   children,
   dense,
+  tone = "default",
 }: {
   title: string;
   children: ReactNode;
   /** Lighter chrome for public explore layout */
   dense?: boolean;
+  /** Quieter panels in the reference column */
+  tone?: "default" | "sidebar";
 }) {
   return (
     <section
       className={cn(
         "rounded-xl border px-3 py-2.5 sm:px-3.5 sm:py-3",
-        dense ? "border-border/25 bg-muted/10" : "border-border/40 bg-muted/20"
+        tone === "sidebar"
+          ? "border-border/20 bg-muted/[0.05] dark:border-border/20 dark:bg-muted/[0.06]"
+          : dense
+            ? "border-border/30 bg-muted/10"
+            : "border-border/40 bg-muted/20"
       )}
     >
       <h3
         className={cn(
-          "mb-2 font-semibold uppercase tracking-[0.14em] text-muted-foreground",
-          dense ? "text-[9px]" : "mb-3 text-[10px]"
+          "font-semibold uppercase tracking-[0.16em]",
+          tone === "sidebar" && "mb-2 text-[9px] text-muted-foreground/75",
+          tone !== "sidebar" && dense && "mb-2 text-[9px] text-muted-foreground/85",
+          tone !== "sidebar" && !dense && "mb-3 text-[10px] text-muted-foreground/85"
         )}
       >
         {title}
       </h3>
-      <div className={cn("leading-snug", dense ? "text-[12px]" : "text-[13px]")}>{children}</div>
+      <div
+        className={cn(
+          "leading-snug",
+          dense ? "text-[12px]" : "text-[13px]",
+          tone === "sidebar" && "text-[11px] text-muted-foreground/88"
+        )}
+      >
+        {children}
+      </div>
     </section>
   );
 }
 
-type AnalyzeMode = "frames" | "fallacies" | "summarize_llm" | "speaker_guess_llm";
 type FallacyMethod = "heuristic" | "classifier" | "llm";
+
+function SourceToggleSegmented({
+  inputSource,
+  onYouTube,
+  onPaste,
+}: {
+  inputSource: InputSource;
+  onYouTube: () => void;
+  onPaste: () => void;
+}) {
+  return (
+    <div
+      className="flex w-full max-w-full rounded-lg border border-border/40 bg-muted/25 p-1 dark:border-border/35 dark:bg-muted/15"
+      role="tablist"
+      aria-label="Transcript source"
+    >
+      <button
+        type="button"
+        role="tab"
+        aria-selected={inputSource === "youtube"}
+        onClick={onYouTube}
+        className={cn(
+          "flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+          inputSource === "youtube"
+            ? "bg-background text-foreground shadow-sm ring-1 ring-black/[0.06] dark:ring-white/10"
+            : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        YouTube
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={inputSource === "paste"}
+        onClick={onPaste}
+        className={cn(
+          "flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+          inputSource === "paste"
+            ? "bg-background text-foreground shadow-sm ring-1 ring-black/[0.06] dark:ring-white/10"
+            : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        Paste
+      </button>
+    </div>
+  );
+}
+
+function FallacyMethodSegmented({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: FallacyMethod;
+  onChange: (m: FallacyMethod) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div
+      className="flex w-full max-w-full flex-wrap gap-0.5 rounded-lg border border-border/40 bg-muted/25 p-1 sm:inline-flex sm:w-auto dark:border-border/35 dark:bg-muted/15"
+      role="tablist"
+      aria-label="Fallacy detection method"
+    >
+      {(["heuristic", "classifier", "llm"] as const).map((m) => (
+        <button
+          key={m}
+          type="button"
+          role="tab"
+          aria-selected={value === m}
+          onClick={() => onChange(m)}
+          disabled={disabled}
+          className={cn(
+            "min-h-[2rem] flex-1 rounded-md px-3 py-1.5 text-[11px] font-semibold transition-colors disabled:opacity-40 sm:flex-initial sm:px-2.5",
+            value === m
+              ? "bg-background text-foreground shadow-sm ring-1 ring-black/[0.06] dark:ring-white/10"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          {m === "heuristic" ? "Heuristic" : m === "classifier" ? "Classifier" : "LLM"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+type AnalyzeMode = "frames" | "fallacies" | "summarize_llm" | "speaker_guess_llm";
 type ChunkFilterMode = "all" | "labeled" | "by_label";
 
 function formatResultsStatusLine(
@@ -615,7 +825,7 @@ export function YouTubeTranscriptTester({
       className={cn(
         "min-w-0",
         exploreFallaciesOnly && "overflow-x-hidden",
-        !exploreFallaciesOnly && "flex flex-col gap-10"
+        !exploreFallaciesOnly && "flex flex-col gap-12"
       )}
     >
       <div
@@ -623,136 +833,103 @@ export function YouTubeTranscriptTester({
           "grid items-start",
           exploreFallaciesOnly
             ? showExploreAnalysisLayout
-              ? "w-full grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(232px,280px)] lg:gap-x-10 lg:gap-y-8"
-              : "w-full grid-cols-1 gap-3"
-            : "gap-12 xl:grid-cols-12 xl:gap-10 2xl:gap-14"
+              ? "w-full grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(232px,280px)] lg:gap-x-12 lg:gap-y-10"
+              : "w-full grid-cols-1 gap-4"
+            : "gap-12 xl:grid-cols-12 xl:gap-12 2xl:gap-14"
         )}
       >
         {/* Explore: compact source band (full width), then 2-col results below */}
         {exploreFallaciesOnly && (
           <section className="col-span-full min-w-0 lg:col-span-2">
-            <div className="rounded-xl border border-border/20 bg-muted/[0.04] px-4 py-4 sm:px-5 sm:py-4">
-              <p className="mb-3 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Source
-              </p>
-              <div className="inline-flex max-w-full flex-wrap rounded-full border border-border/30 bg-background/60 p-0.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputSource("youtube");
-                    setError(null);
-                  }}
-                  className={cn(
-                    "rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
-                    inputSource === "youtube"
-                      ? "bg-muted/80 text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  YouTube
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputSource("paste");
-                    setError(null);
-                  }}
-                  className={cn(
-                    "rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
-                    inputSource === "paste"
-                      ? "bg-muted/80 text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  Paste
-                </button>
-              </div>
+            <div className="rounded-xl border border-border/35 bg-muted/[0.06] px-4 py-5 sm:px-6 sm:py-5 dark:border-border/30 dark:bg-muted/[0.05]">
+              <SectionHeading>Source</SectionHeading>
+              <SourceToggleSegmented
+                inputSource={inputSource}
+                onYouTube={() => {
+                  setInputSource("youtube");
+                  setError(null);
+                }}
+                onPaste={() => {
+                  setInputSource("paste");
+                  setError(null);
+                }}
+              />
 
-              <div className="mt-3 space-y-2">
-                <span className="text-[10px] text-muted-foreground">Fallacy method</span>
-                <div className="flex flex-wrap gap-1 rounded-lg border border-border/40 bg-muted/10 p-0.5">
-                  {(["heuristic", "classifier", "llm"] as const).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setFallacyMethod(m)}
-                      disabled={loading !== null}
-                      className={cn(
-                        "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-40",
-                        fallacyMethod === m
-                          ? "bg-muted/80 text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      {m === "heuristic" ? "Heuristic" : m === "classifier" ? "Classifier" : "LLM"}
-                    </button>
-                  ))}
-                </div>
+              <div className="mt-4 space-y-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/85">
+                  Fallacy method
+                </p>
+                <FallacyMethodSegmented
+                  value={fallacyMethod}
+                  onChange={setFallacyMethod}
+                  disabled={loading !== null}
+                />
                 <TranscriptFallacyMethodNote method={fallacyMethod} className="mt-2" />
               </div>
 
-              <div className="mt-3 space-y-3">
-                {inputSource === "youtube" ? (
-                  <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
-                    <label className="min-w-0 w-full flex-1 space-y-1 sm:min-w-0">
-                      <span className="text-[10px] text-muted-foreground">Video URL</span>
-                      <input
-                        id="yt-url-explore"
-                        type="url"
-                        name="url"
-                        value={url}
-                        onChange={(e) => setUrl(e.target.value)}
-                        placeholder="https://www.youtube.com/watch?v=…"
-                        className="w-full min-w-0 rounded-lg border border-border/35 bg-background px-3 py-2.5 text-[15px] placeholder:text-muted-foreground/55 focus:outline-none focus:ring-1 focus:ring-ring/35 sm:py-2 sm:text-sm"
-                        autoComplete="off"
-                        disabled={loading !== null}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={runAnalyzeTranscript}
-                      disabled={loading !== null}
-                      className="w-full shrink-0 rounded-lg bg-foreground px-5 py-2.5 text-sm font-medium text-background hover:opacity-90 disabled:opacity-40 sm:w-auto sm:min-w-[9rem] sm:py-2"
-                    >
-                      {loading === "analyze" ? "Analyzing…" : "Analyze"}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="min-w-0 space-y-3">
-                    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[5.5rem_1fr] sm:items-end sm:gap-2">
-                      <label className="min-w-0 space-y-1">
-                        <span className="text-[10px] text-muted-foreground">Lang</span>
+              <div className="mt-5">
+                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+                  <div className="flex min-w-0 w-full flex-1 flex-col gap-3">
+                    {inputSource === "youtube" ? (
+                      <label className="block min-w-0 space-y-1.5" htmlFor="yt-url-explore">
+                        <span className="text-[10px] font-medium text-muted-foreground">Video URL</span>
                         <input
-                          type="text"
-                          value={pasteLanguage}
-                          onChange={(e) => setPasteLanguage(e.target.value)}
-                          placeholder="en"
+                          id="yt-url-explore"
+                          type="url"
+                          name="url"
+                          value={url}
+                          onChange={(e) => setUrl(e.target.value)}
+                          placeholder="https://www.youtube.com/watch?v=…"
+                          className={cn(
+                            "w-full min-w-0 rounded-lg px-3 py-2.5 text-[15px] sm:py-2 sm:text-sm",
+                            inputSurfaceClass
+                          )}
+                          autoComplete="off"
                           disabled={loading !== null}
-                          className="w-full min-w-0 rounded-lg border border-border/35 bg-background px-2 py-1.5 text-xs font-mono"
                         />
                       </label>
-                      <label className="min-w-0 space-y-1">
-                        <span className="text-[10px] text-muted-foreground">Transcript</span>
-                        <textarea
-                          value={pastedText}
-                          onChange={(e) => setPastedText(e.target.value)}
-                          rows={4}
-                          placeholder="Paste text…"
-                          disabled={loading !== null}
-                          className="min-h-[5.5rem] max-h-40 w-full min-w-0 resize-y rounded-lg border border-border/35 bg-background px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground/55"
-                        />
-                      </label>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={runAnalyzePastedText}
-                      disabled={loading !== null}
-                      className="w-full rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background hover:opacity-90 disabled:opacity-40 sm:w-auto sm:min-w-[10rem] sm:py-2"
-                    >
-                      {loading === "analyze" ? "Analyzing…" : "Analyze"}
-                    </button>
+                    ) : (
+                      <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[5.5rem_1fr] sm:items-end sm:gap-2">
+                        <label className="min-w-0 space-y-1.5">
+                          <span className="text-[10px] font-medium text-muted-foreground">Lang</span>
+                          <input
+                            type="text"
+                            value={pasteLanguage}
+                            onChange={(e) => setPasteLanguage(e.target.value)}
+                            placeholder="en"
+                            disabled={loading !== null}
+                            className={cn(
+                              "w-full min-w-0 rounded-lg px-2 py-1.5 text-xs font-mono",
+                              inputSurfaceClass
+                            )}
+                          />
+                        </label>
+                        <label className="min-w-0 space-y-1.5">
+                          <span className="text-[10px] font-medium text-muted-foreground">Transcript</span>
+                          <textarea
+                            value={pastedText}
+                            onChange={(e) => setPastedText(e.target.value)}
+                            rows={4}
+                            placeholder="Paste text…"
+                            disabled={loading !== null}
+                            className={cn(
+                              "min-h-[5.5rem] max-h-40 w-full min-w-0 resize-y px-3 py-2 text-sm leading-relaxed",
+                              textareaSurfaceClass
+                            )}
+                          />
+                        </label>
+                      </div>
+                    )}
                   </div>
-                )}
+                  <button
+                    type="button"
+                    onClick={inputSource === "youtube" ? runAnalyzeTranscript : runAnalyzePastedText}
+                    disabled={loading !== null}
+                    className="w-full shrink-0 rounded-lg bg-foreground px-5 py-2.5 text-sm font-medium text-background hover:opacity-90 disabled:opacity-40 sm:w-auto sm:min-w-[9rem] sm:py-2"
+                  >
+                    {loading === "analyze" ? "Analyzing…" : "Analyze"}
+                  </button>
+                </div>
               </div>
 
               {loading && (
@@ -773,98 +950,117 @@ export function YouTubeTranscriptTester({
         )}
 
         {exploreFallaciesOnly && !hasAnalysisResult && loading !== "analyze" && (
-          <p className="col-span-full px-1 text-center text-[13px] leading-relaxed text-muted-foreground">
+          <p className="col-span-full px-1 py-2 text-center text-[13px] leading-relaxed text-muted-foreground">
             Add a YouTube URL or paste a transcript, then run analysis.
           </p>
         )}
 
         {/* Internal: left input rail */}
         {!exploreFallaciesOnly && (
-        <aside className="min-w-0 space-y-4 xl:col-span-2 xl:max-w-[220px]">
-          <h2 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/90">
-            Input
-          </h2>
+        <aside className="min-w-0 space-y-5 xl:col-span-2 xl:max-w-[240px]">
+          <div className="space-y-5 rounded-xl border border-border/35 bg-muted/[0.05] p-4 sm:p-5 dark:border-border/30 dark:bg-muted/[0.05]">
+            <SectionHeading>Input</SectionHeading>
 
-          <div className="inline-flex w-full rounded-lg border border-border/45 p-0.5">
-            <button
-              type="button"
-              onClick={() => {
+            <SourceToggleSegmented
+              inputSource={inputSource}
+              onYouTube={() => {
                 setInputSource("youtube");
                 setError(null);
               }}
-              className={`flex-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
-                inputSource === "youtube"
-                  ? "bg-muted/70 text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              YouTube
-            </button>
-            <button
-              type="button"
-              onClick={() => {
+              onPaste={() => {
                 setInputSource("paste");
                 setError(null);
               }}
-              className={`flex-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
-                inputSource === "paste"
-                  ? "bg-muted/70 text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Paste
-            </button>
-          </div>
+            />
 
-          {inputSource === "youtube" ? (
-            <div className="space-y-1">
-              <label htmlFor="yt-url" className="text-[10px] text-muted-foreground">
-                Video URL
-              </label>
-              <input
-                id="yt-url"
-                type="url"
-                name="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://…"
-                className="w-full rounded-lg border border-border/40 bg-muted/10 px-2.5 py-1.5 text-[13px] placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-ring/40"
-                autoComplete="off"
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+            <div className="flex min-w-0 w-full flex-1 flex-col gap-3">
+              {inputSource === "youtube" ? (
+                <div className="space-y-1.5">
+                  <label htmlFor="yt-url" className="text-[10px] font-medium text-muted-foreground">
+                    Video URL
+                  </label>
+                  <input
+                    id="yt-url"
+                    type="url"
+                    name="url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://…"
+                    className={cn("w-full rounded-lg px-2.5 py-1.5 text-[13px]", inputSurfaceClass)}
+                    autoComplete="off"
+                    disabled={loading !== null}
+                  />
+                </div>
+              ) : (
+                <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[5.5rem_1fr] sm:items-end sm:gap-2">
+                  <div className="space-y-1.5">
+                    <label htmlFor="paste-lang" className="text-[10px] font-medium text-muted-foreground">
+                      Language
+                    </label>
+                    <input
+                      id="paste-lang"
+                      type="text"
+                      value={pasteLanguage}
+                      onChange={(e) => setPasteLanguage(e.target.value)}
+                      placeholder="en"
+                      disabled={loading !== null}
+                      className={cn("w-full rounded-lg px-2.5 py-1 text-[12px] font-mono", inputSurfaceClass)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="paste-body" className="text-[10px] font-medium text-muted-foreground">
+                      Text
+                    </label>
+                    <textarea
+                      id="paste-body"
+                      value={pastedText}
+                      onChange={(e) => setPastedText(e.target.value)}
+                      rows={4}
+                      placeholder="Paste text…"
+                      disabled={loading !== null}
+                      className={cn(
+                        "w-full min-h-[88px] max-h-[200px] resize-y px-2.5 py-2 text-[13px] leading-snug",
+                        textareaSurfaceClass
+                      )}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex w-full shrink-0 flex-col gap-1.5 sm:w-auto sm:min-w-[7.5rem]">
+              {!exploreFallaciesOnly && inputSource === "youtube" ? (
+                <button
+                  type="button"
+                  onClick={runFetchTranscript}
+                  disabled={loading !== null}
+                  className="w-full rounded-lg border border-border/50 bg-foreground px-3 py-1.5 text-[13px] font-medium text-background hover:opacity-90 disabled:opacity-40"
+                >
+                  {loading === "transcript" ? "Fetching…" : "Fetch"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={inputSource === "youtube" ? runAnalyzeTranscript : runAnalyzePastedText}
                 disabled={loading !== null}
-              />
+                className={cn(
+                  "w-full rounded-lg border px-3 py-1.5 text-[13px] font-medium disabled:opacity-40",
+                  exploreFallaciesOnly || inputSource === "paste"
+                    ? "border-border/50 bg-foreground text-background hover:opacity-90"
+                    : "border-border/45 bg-transparent font-normal text-foreground hover:bg-muted/35"
+                )}
+              >
+                {loading === "analyze"
+                  ? "Analyzing…"
+                  : exploreFallaciesOnly
+                    ? "Run fallacy analysis"
+                    : inputSource === "paste"
+                      ? "Run analysis"
+                      : "Analyze"}
+              </button>
             </div>
-          ) : (
-            <div className="space-y-2.5">
-              <div className="space-y-1">
-                <label htmlFor="paste-lang" className="text-[10px] text-muted-foreground">
-                  Language
-                </label>
-                <input
-                  id="paste-lang"
-                  type="text"
-                  value={pasteLanguage}
-                  onChange={(e) => setPasteLanguage(e.target.value)}
-                  placeholder="en"
-                  disabled={loading !== null}
-                  className="w-full rounded-lg border border-border/40 bg-muted/10 px-2.5 py-1 text-[12px] font-mono"
-                />
-              </div>
-              <div className="space-y-1">
-                <label htmlFor="paste-body" className="text-[10px] text-muted-foreground">
-                  Text
-                </label>
-                <textarea
-                  id="paste-body"
-                  value={pastedText}
-                  onChange={(e) => setPastedText(e.target.value)}
-                  rows={4}
-                  placeholder="Paste text…"
-                  disabled={loading !== null}
-                  className="w-full resize-y rounded-lg border border-border/40 bg-muted/10 px-2.5 py-2 text-[13px] leading-snug min-h-[88px] max-h-[200px] placeholder:text-muted-foreground/60"
-                />
-              </div>
-            </div>
-          )}
+          </div>
 
           {!exploreFallaciesOnly && (
             <div className="space-y-1">
@@ -876,7 +1072,10 @@ export function YouTubeTranscriptTester({
                 value={analyzeMode}
                 onChange={(e) => setAnalyzeMode(e.target.value as AnalyzeMode)}
                 disabled={loading !== null}
-                className="w-full rounded-lg border border-border/40 bg-muted/10 px-2 py-1.5 text-[13px]"
+                className={cn(
+                  "w-full rounded-lg bg-background px-2 py-1.5 text-[13px]",
+                  inputSurfaceClass
+                )}
               >
                 <option value="frames">frames</option>
                 <option value="fallacies">fallacies</option>
@@ -887,75 +1086,18 @@ export function YouTubeTranscriptTester({
           )}
 
           {!exploreFallaciesOnly && analyzeMode === "fallacies" && (
-            <div className="space-y-1.5">
-              <span className="text-[10px] text-muted-foreground">Fallacy method</span>
-              <div className="flex flex-wrap gap-1 rounded-lg border border-border/40 bg-muted/10 p-0.5">
-                {(["heuristic", "classifier", "llm"] as const).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setFallacyMethod(m)}
-                    disabled={loading !== null}
-                    className={cn(
-                      "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-40",
-                      fallacyMethod === m
-                        ? "bg-muted/80 text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {m === "heuristic" ? "Heuristic" : m === "classifier" ? "Classifier" : "LLM"}
-                  </button>
-                ))}
-              </div>
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/85">
+                Fallacy method
+              </p>
+              <FallacyMethodSegmented
+                value={fallacyMethod}
+                onChange={setFallacyMethod}
+                disabled={loading !== null}
+              />
               <TranscriptFallacyMethodNote method={fallacyMethod} />
             </div>
           )}
-
-          <div className="flex flex-col gap-1.5 pt-0.5">
-            {inputSource === "youtube" ? (
-              <>
-                {!exploreFallaciesOnly && (
-                  <button
-                    type="button"
-                    onClick={runFetchTranscript}
-                    disabled={loading !== null}
-                    className="w-full rounded-lg border border-border/50 bg-foreground px-3 py-1.5 text-[13px] font-medium text-background hover:opacity-90 disabled:opacity-40"
-                  >
-                    {loading === "transcript" ? "Fetching…" : "Fetch"}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={runAnalyzeTranscript}
-                  disabled={loading !== null}
-                  className={`w-full rounded-lg border px-3 py-1.5 text-[13px] font-medium disabled:opacity-40 ${
-                    exploreFallaciesOnly
-                      ? "border-border/50 bg-foreground text-background hover:opacity-90"
-                      : "border-border/45 bg-transparent text-foreground hover:bg-muted/35 font-normal"
-                  }`}
-                >
-                  {loading === "analyze"
-                    ? "Analyzing…"
-                    : exploreFallaciesOnly
-                      ? "Run fallacy analysis"
-                      : "Analyze"}
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={runAnalyzePastedText}
-                disabled={loading !== null}
-                className="w-full rounded-lg border border-border/50 bg-foreground px-3 py-1.5 text-[13px] font-medium text-background hover:opacity-90 disabled:opacity-40"
-              >
-                {loading === "analyze"
-                  ? "Analyzing…"
-                  : exploreFallaciesOnly
-                    ? "Run fallacy analysis"
-                    : "Run analysis"}
-              </button>
-            )}
-          </div>
 
           {loading && (
             <p className="text-[10px] text-muted-foreground">
@@ -991,35 +1133,42 @@ export function YouTubeTranscriptTester({
               </div>
             </div>
           )}
+          </div>
         </aside>
         )}
 
         {/* Center: chunk analysis + Reference (explore: only after analysis) */}
         {showExploreAnalysisLayout && (
           <>
+        {exploreFallaciesOnly && hasAnalysisResult ? (
+          <div
+            className="col-span-full -mt-2 mb-2 h-px w-full bg-border/25 sm:-mt-1 dark:bg-border/20"
+            aria-hidden
+          />
+        ) : null}
         <main
           className={cn(
             "min-w-0 space-y-6 sm:space-y-8",
-            exploreFallaciesOnly && "px-0.5 sm:px-0",
+            exploreFallaciesOnly &&
+              "rounded-xl border border-border/35 bg-muted/[0.04] px-4 py-5 sm:space-y-8 sm:px-6 sm:py-6 dark:border-border/30 dark:bg-muted/[0.05]",
+            !exploreFallaciesOnly &&
+              "rounded-xl border border-border/35 bg-muted/[0.04] px-4 py-5 sm:space-y-8 sm:px-6 sm:py-6 dark:border-border/30 dark:bg-muted/[0.04]",
             exploreFallaciesOnly ? "lg:min-h-0" : "xl:col-span-8 xl:min-h-[50vh]"
           )}
         >
           <div
             className={cn(
               "flex flex-wrap items-end justify-between gap-3 border-b pb-4 sm:gap-4 sm:pb-6",
-              exploreFallaciesOnly ? "border-border/15" : "border-border/25"
+              exploreFallaciesOnly ? "border-border/20" : "border-border/25"
             )}
           >
             <div className={cn("min-w-0", !exploreFallaciesOnly && "space-y-2")}>
+              {exploreFallaciesOnly ? (
+                <SectionHeading className="mb-3 sm:mb-4">Results</SectionHeading>
+              ) : (
+                <SectionHeading className="mb-3 sm:mb-4">Analysis</SectionHeading>
+              )}
               <div className="flex flex-wrap items-center gap-3">
-                <h2
-                  className={cn(
-                    "font-semibold tracking-tight text-foreground",
-                    exploreFallaciesOnly ? "text-xl sm:text-2xl" : "text-2xl"
-                  )}
-                >
-                  {exploreFallaciesOnly ? "Results" : "Analysis"}
-                </h2>
                 {analyzeResult && (
                   <span
                     className={`inline-flex shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-medium ${
@@ -1072,8 +1221,8 @@ export function YouTubeTranscriptTester({
           {analyzeResult && (
             <>
               <div className="flex min-w-0 flex-wrap items-end gap-3 sm:gap-5">
-                <div className="min-w-0 space-y-1">
-                  <label className="text-[9px] font-normal uppercase tracking-wider text-muted-foreground/60">
+                <div className="min-w-0 space-y-1.5">
+                  <label className="text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/75">
                     Filter
                   </label>
                   <select
@@ -1085,7 +1234,7 @@ export function YouTubeTranscriptTester({
                         setFilterByLabel(uniqueLabelsFromChunks[0]);
                       }
                     }}
-                    className="w-full min-w-0 max-w-[min(100%,20rem)] rounded-md border border-border/25 bg-muted/10 px-2 py-1 text-[11px] text-muted-foreground shadow-none outline-none transition-colors hover:border-border/35 hover:bg-muted/15 focus:border-border/40 focus:ring-0 focus-visible:border-border/45 focus-visible:ring-1 focus-visible:ring-muted-foreground/15 focus-visible:ring-offset-0"
+                    className="w-full min-w-0 max-w-[min(100%,20rem)] rounded-md border border-border/40 bg-background px-2 py-1.5 text-[11px] text-muted-foreground shadow-none outline-none transition-colors hover:border-border/50 hover:bg-muted/10 focus:border-border/55 focus:ring-2 focus:ring-ring/20 focus:ring-offset-0 focus-visible:outline-none"
                   >
                     <option value="all">All chunks</option>
                     <option value="labeled">Labeled only</option>
@@ -1093,14 +1242,14 @@ export function YouTubeTranscriptTester({
                   </select>
                 </div>
                 {chunkFilterMode === "by_label" && (
-                  <div className="min-w-0 flex-1 space-y-1 sm:flex-initial">
-                    <label className="text-[9px] font-normal uppercase tracking-wider text-muted-foreground/60">
+                  <div className="min-w-0 flex-1 space-y-1.5 sm:flex-initial">
+                    <label className="text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/75">
                       Label
                     </label>
                     <select
                       value={filterByLabel}
                       onChange={(e) => setFilterByLabel(e.target.value)}
-                      className="w-full min-w-0 max-w-full rounded-md border border-border/25 bg-muted/10 px-2 py-1 text-[11px] text-muted-foreground shadow-none outline-none transition-colors hover:border-border/35 hover:bg-muted/15 focus:ring-0 focus-visible:border-border/45 focus-visible:ring-1 focus-visible:ring-muted-foreground/15 focus-visible:ring-offset-0 sm:min-w-[160px] sm:max-w-[min(100%,24rem)]"
+                      className="w-full min-w-0 max-w-full rounded-md border border-border/40 bg-background px-2 py-1.5 text-[11px] text-muted-foreground shadow-none outline-none transition-colors hover:border-border/50 hover:bg-muted/10 focus:border-border/55 focus:ring-2 focus:ring-ring/20 focus:ring-offset-0 focus-visible:outline-none sm:min-w-[160px] sm:max-w-[min(100%,24rem)]"
                     >
                       {uniqueLabelsFromChunks.length === 0 ? (
                         <option value="">No labels</option>
@@ -1136,6 +1285,9 @@ export function YouTubeTranscriptTester({
                       ? formatChunkTimeRange(ch.start, ch.end)
                       : `Chunk ${chunkLabelIndex}`;
                     const matchedCuesLine = formatMatchedCuesLine(ch.label_matches);
+                    const showFallacyReasoning =
+                      lastAnalyzeMode === "fallacies" &&
+                      hasFallacyReasoningContent(ch.labels, ch.label_matches);
                     return (
                       <article
                         key={chunkKey}
@@ -1204,7 +1356,17 @@ export function YouTubeTranscriptTester({
                           </p>
                         </div>
 
-                        {matchedCuesLine.length > 0 && (
+                        {lastAnalyzeMode === "fallacies" &&
+                        (ch.labels?.length ?? 0) > 0 &&
+                        hasFallacyReasoningContent(ch.labels, ch.label_matches) ? (
+                          <FallacyChunkReasoning
+                            labels={ch.labels ?? []}
+                            labelMatches={ch.label_matches}
+                            labelStrengths={ch.label_strengths}
+                          />
+                        ) : null}
+
+                        {matchedCuesLine.length > 0 && !(lastAnalyzeMode === "fallacies" && showFallacyReasoning) && (
                           <div
                             className={cn(
                               "mt-5 border-t pt-4",
@@ -1218,7 +1380,7 @@ export function YouTubeTranscriptTester({
                               {matchedCuesLine}
                             </p>
                           </div>
-                        )}
+                          )}
                       </article>
                     );
                   })
@@ -1231,19 +1393,35 @@ export function YouTubeTranscriptTester({
         {/* Right: sticky summary */}
         <aside
           className={cn(
-            "min-w-0 space-y-3 sm:space-y-4",
+            "min-w-0",
             exploreFallaciesOnly &&
               "lg:sticky lg:top-24 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pl-0.5",
             !exploreFallaciesOnly &&
               "space-y-5 xl:sticky xl:top-6 xl:col-span-2 xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto xl:pl-1"
           )}
         >
-          <h2 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/90">
-            {exploreFallaciesOnly ? "Reference" : "Summary"}
-          </h2>
+          <div
+            className={cn(
+              "space-y-3 sm:space-y-4",
+              exploreFallaciesOnly &&
+                "rounded-xl border border-border/25 bg-muted/[0.03] p-4 sm:space-y-3.5 sm:p-5 dark:border-border/20 dark:bg-muted/[0.04]"
+            )}
+          >
+            <SectionHeading
+              className={cn(
+                "mb-0",
+                exploreFallaciesOnly && "text-muted-foreground/80"
+              )}
+            >
+              {exploreFallaciesOnly ? "Reference" : "Summary"}
+            </SectionHeading>
 
-          <div className={cn("space-y-3", exploreFallaciesOnly && "space-y-2.5")}>
-            <SummarySectionCard title="Source" dense={exploreFallaciesOnly}>
+          <div className={cn("space-y-3 pt-1", exploreFallaciesOnly && "space-y-2.5")}>
+            <SummarySectionCard
+              title="Source"
+              dense={exploreFallaciesOnly}
+              tone={exploreFallaciesOnly ? "sidebar" : "default"}
+            >
               {inputSource === "youtube" ? (
                 <dl className="space-y-2.5">
                   <div className="flex flex-col gap-0.5">
@@ -1310,7 +1488,11 @@ export function YouTubeTranscriptTester({
               )}
             </SummarySectionCard>
 
-            <SummarySectionCard title="Analysis" dense={exploreFallaciesOnly}>
+            <SummarySectionCard
+              title="Analysis"
+              dense={exploreFallaciesOnly}
+              tone={exploreFallaciesOnly ? "sidebar" : "default"}
+            >
               <dl className="space-y-2.5">
                 {analyzeResult ? (
                   <>
@@ -1368,7 +1550,11 @@ export function YouTubeTranscriptTester({
             </SummarySectionCard>
 
             {analyzeResult?.llm_summarize && (
-              <SummarySectionCard title="LLM summary" dense={exploreFallaciesOnly}>
+              <SummarySectionCard
+                title="LLM summary"
+                dense={exploreFallaciesOnly}
+                tone={exploreFallaciesOnly ? "sidebar" : "default"}
+              >
                 {analyzeResult.llm_summarize.summary_short ? (
                   <p className="mb-3 text-[12px] leading-relaxed text-foreground/90">
                     {analyzeResult.llm_summarize.summary_short}
@@ -1405,7 +1591,11 @@ export function YouTubeTranscriptTester({
             )}
 
             {analyzeResult?.speaker_blocks && analyzeResult.speaker_blocks.length > 0 && (
-              <SummarySectionCard title="Speaker blocks (approx.)" dense={exploreFallaciesOnly}>
+              <SummarySectionCard
+                title="Speaker blocks (approx.)"
+                dense={exploreFallaciesOnly}
+                tone={exploreFallaciesOnly ? "sidebar" : "default"}
+              >
                 <p className="mb-3 text-[10px] leading-relaxed text-muted-foreground">
                   Transcript-only inference; not diarization. Not ground truth.
                 </p>
@@ -1429,11 +1619,15 @@ export function YouTubeTranscriptTester({
             )}
 
             {analyzeResult && lastAnalyzeMode === "fallacies" && (
-              <SummarySectionCard title="Fallacy counts" dense={exploreFallaciesOnly}>
+              <SummarySectionCard
+                title="Fallacy counts"
+                dense={exploreFallaciesOnly}
+                tone={exploreFallaciesOnly ? "sidebar" : "default"}
+              >
                 {analyzeResult.analysis_supported === false ? (
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
                     {analyzeResult.analysis_note ??
-                      "Fallacies analysis is not available for this transcript language."}
+                      "This fallacy method and language combination is not supported (see API analysis_note)."}
                   </p>
                 ) : (
                   <>
@@ -1469,8 +1663,17 @@ export function YouTubeTranscriptTester({
             )}
 
             {analyzeResult && lastAnalyzeMode === "frames" && (
-              <SummarySectionCard title="Frame labels" dense={exploreFallaciesOnly}>
-                {labelSummary.length > 0 ? (
+              <SummarySectionCard
+                title="Frame labels"
+                dense={exploreFallaciesOnly}
+                tone={exploreFallaciesOnly ? "sidebar" : "default"}
+              >
+                {analyzeResult.analysis_supported === false ? (
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    {analyzeResult.analysis_note ??
+                      "Frame keyword analysis is not available for this transcript language."}
+                  </p>
+                ) : labelSummary.length > 0 ? (
                   <ul className="space-y-2">
                     {labelSummary.map(({ label, count }) => (
                       <li
@@ -1495,11 +1698,13 @@ export function YouTubeTranscriptTester({
             {(transcriptResult || analyzeResult) && (
               <div
                 className={cn(
-                  "rounded-xl border px-3 py-2.5",
-                  exploreFallaciesOnly ? "border-border/20 bg-transparent" : "border-border/35 bg-transparent"
+                  "rounded-xl border px-3 py-2.5 sm:px-3.5",
+                  exploreFallaciesOnly
+                    ? "border-border/15 bg-muted/[0.03] dark:bg-muted/[0.04]"
+                    : "border-border/35 bg-transparent"
                 )}
               >
-                <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                <h3 className="mb-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/80">
                   Export
                 </h3>
                 <div className="flex flex-col gap-1.5">
@@ -1551,6 +1756,7 @@ export function YouTubeTranscriptTester({
                 </div>
               </div>
             )}
+          </div>
           </div>
         </aside>
           </>

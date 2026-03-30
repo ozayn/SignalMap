@@ -57,16 +57,16 @@ export function TranscriptFallacyMethodNote({
         aria-controls={bodyId}
         id={toggleId}
         className={cn(
-          "group flex w-full min-w-0 items-center gap-2 rounded-lg border border-border/20 bg-transparent px-2 py-1 text-left",
-          "dark:border-border/15",
-          "transition-colors hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
+          "group flex w-full min-w-0 items-center gap-2 rounded-lg border border-border/35 bg-muted/15 px-2.5 py-2 text-left",
+          "dark:border-border/25 dark:bg-muted/10",
+          "transition-colors hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
           "motion-reduce:transition-none"
         )}
       >
         <span className="min-w-0 flex-1 truncate text-[13px] leading-snug">
-          <span className="text-muted-foreground">About this method</span>
-          <span className="text-muted-foreground"> — </span>
-          <span className="font-medium text-foreground/85">{note.title}</span>
+          <span className="font-semibold text-muted-foreground/90">About this method</span>
+          <span className="text-muted-foreground/80"> — </span>
+          <span className="font-semibold text-foreground/90">{note.title}</span>
         </span>
         <ChevronIcon
           className={cn(

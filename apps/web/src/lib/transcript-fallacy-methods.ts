@@ -15,8 +15,8 @@ export const FALLACY_METHOD_SHORT_NOTES: Record<
     bullets: [
       "What it is: A fixed set of English keyword and phrase rules tuned to flag candidate fallacy-like patterns in text.",
       "How it works: Each transcript chunk is scanned for matches; labels attach when rules fire (with optional strength cues).",
-      "Strength: Fast, deterministic, and easy to audit — you can see which rules matched.",
-      "Limitation: Not a full logical-fallacy detector; misses nuance, non-English speech, and can misfire on informal phrasing.",
+      "Language: English transcripts only today. Persian (and other) transcripts return unsupported with a clear note — no English rules are run on non-English text.",
+      "Limitation: Not a full logical-fallacy detector; misses nuance and can misfire on informal phrasing. Persian heuristic rules are planned but not wired yet.",
     ],
   },
   classifier: {
@@ -33,7 +33,7 @@ export const FALLACY_METHOD_SHORT_NOTES: Record<
     bullets: [
       "What it is: A prompt-based pass where a language model reads each chunk and returns structured labels and short rationales.",
       "How it works: The model reasons over wording in context; output is parsed and validated server-side.",
-      "Strength: Flexible wording coverage and explanations — useful for exploration and comparison with other methods.",
+      "Language: English and Persian use separate system prompts (same JSON label set). Other languages use the English prompt with a reliability caveat in the API note.",
       "Limitation: Can be inconsistent, over- or under-confident, and may hallucinate labels or quotes; needs human review.",
     ],
   },
@@ -54,7 +54,7 @@ export const TRANSCRIPT_FALLACY_LEARNING_CONCEPTS: TranscriptFallacyLearningConc
   {
     title: "Heuristic method (rule-based)",
     description:
-      "Uses hand-tuned keyword and phrase detectors with simple context guards. What it uses: explicit string patterns and lightweight rules over chunk text. Strengths: transparent, reproducible, and cheap to run; good for baseline coverage and debugging. Weaknesses: English-centric, brittle to paraphrase, and cannot capture full argument structure. When it may fail: sarcasm, code-switching, implicit premises, or valid rhetoric that resembles a pattern. It may disagree with the LLM because the LLM infers intent and paraphrase while heuristics only match surface cues.",
+      "Uses hand-tuned keyword and phrase detectors with simple context guards. What it uses: explicit string patterns and lightweight rules over chunk text. Strengths: transparent, reproducible, and cheap to run; good for baseline coverage and debugging. Weaknesses: English-centric, brittle to paraphrase, and cannot capture full argument structure. Language support: English only for now; Persian heuristics are scaffolded in the codebase but not executed, so Persian transcripts get analysis_supported=false with an explicit note. When it may fail: sarcasm, code-switching, implicit premises, or valid rhetoric that resembles a pattern. It may disagree with the LLM because the LLM infers intent and paraphrase while heuristics only match surface cues.",
   },
   {
     title: "Classifier method (NLP model)",
@@ -64,7 +64,7 @@ export const TRANSCRIPT_FALLACY_LEARNING_CONCEPTS: TranscriptFallacyLearningConc
   {
     title: "LLM method (prompt-based)",
     description:
-      "Uses a hosted large language model with structured JSON prompts to assign labels and short rationales per chunk. What it uses: semantic reasoning over the transcript text via the model’s weights (not audio diarization). Strengths: handles varied wording and can supply explanations. Weaknesses: non-deterministic across runs, possible hallucinations, and sensitivity to prompt wording; not a substitute for domain validation. When it may fail: subtle logic, unstated assumptions, or chunks where the model overfits to keywords. It may disagree with heuristics because it interprets meaning more freely, or with a future classifier because training objectives differ.",
+      "Uses a hosted large language model with structured JSON prompts to assign labels and short rationales per chunk. What it uses: semantic reasoning over the transcript text via the model’s weights (not audio diarization). Strengths: handles varied wording and can supply explanations. Language support: dedicated English and Persian system prompts (same JSON schema); other languages may use the English prompt with an API note. Weaknesses: non-deterministic across runs, possible hallucinations, and sensitivity to prompt wording; not a substitute for domain validation. When it may fail: subtle logic, unstated assumptions, or chunks where the model overfits to keywords. It may disagree with heuristics because it interprets meaning more freely, or with a future classifier because training objectives differ.",
   },
   {
     title: "Why methods may disagree",
