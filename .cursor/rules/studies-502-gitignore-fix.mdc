@@ -1,0 +1,38 @@
+---
+description: Studies 502 fix - signalmap.data.gold_annual missing in production
+globs: .gitignore,**/signalmap/data/**
+alwaysApply: false
+---
+
+# Studies 502: "No module named 'signalmap.data.gold_annual'"
+
+## Root cause
+
+`.gitignore` had `data/` which ignores **all** directories named `data` anywhere in the repo. That included `apps/api/src/signalmap/data/`, so `gold_annual.py` and other files were never committed. In production, the API Docker image lacked the data folder and imports failed.
+
+## Fix
+
+Change `.gitignore` from `data/` to `/data/` so only the **root-level** data folder is ignored:
+
+```
+# Before (bad - ignores all data/ folders)
+data/
+
+# After (good - only root /data/)
+/data/
+```
+
+This keeps `apps/api/src/signalmap/data/` tracked. Ensure `gold_annual.py`, `oil_annual.py`, `load_events.py`, etc. are committed.
+
+## Debugging steps that helped
+
+1. **Same-origin proxy** – Client fetches `/api/...` (same origin) instead of backend directly; avoids CORS with custom domain.
+2. **Forward backend error detail** – Proxy routes parse `res.text()` and forward `detail` from backend 502 responses so the real error is visible.
+3. **API main.py** – Include exception in 502: `detail=f"Signal fetch failed: {e}"` instead of generic "Signal fetch failed".
+4. **Direct API test** – Hit `https://api-url/api/signals/gold/global?...` to see backend response vs proxy.
+
+## Other changes made
+
+- User-Agent on FRED, World Bank fetches (avoids blocks in production)
+- FRED timeout 20s
+- fx/usd-toman proxy route (was missing)

@@ -16,11 +16,24 @@ export default function ExplorePage() {
         This section will host interactive visualizations and exploratory
         tools as additional studies and data become available.
       </p>
-      <p className="text-sm text-muted-foreground">
-        <Link href="/explore/wayback" className="border border-border rounded-md px-3 py-1.5 inline-block hover:text-foreground transition">
-          Wayback snapshots
-        </Link>
-      </p>
+      <ul className="text-sm text-muted-foreground flex flex-wrap gap-2 list-none p-0">
+        <li>
+          <Link
+            href="/explore/wayback"
+            className="border border-border rounded-md px-3 py-1.5 inline-block hover:text-foreground transition"
+          >
+            Wayback snapshots
+          </Link>
+        </li>
+        <li>
+          <Link
+            href="/explore/transcript-fallacy"
+            className="border border-border rounded-md px-3 py-1.5 inline-block hover:text-foreground transition"
+          >
+            Transcript fallacy analysis
+          </Link>
+        </li>
+      </ul>
     </div>
   );
 }

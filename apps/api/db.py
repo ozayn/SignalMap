@@ -7,7 +7,7 @@ import json
 import os
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Generator
+from typing import Any, Generator, Optional
 from zoneinfo import ZoneInfo
 
 import psycopg2
@@ -218,6 +218,54 @@ def init_tables() -> None:
                     last_updated TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS youtube_transcript_cache (
+                    id SERIAL PRIMARY KEY,
+                    video_id TEXT NOT NULL,
+                    source_url TEXT NOT NULL,
+                    title TEXT,
+                    language TEXT NOT NULL DEFAULT '',
+                    transcript_text TEXT NOT NULL,
+                    transcript_json JSONB NOT NULL,
+                    fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE (video_id, language)
+                )
+            """)
+            # Migrate older DBs: cache was keyed only by video_id; now (video_id, language).
+            try:
+                cur.execute(
+                    "UPDATE youtube_transcript_cache SET language = '' WHERE language IS NULL"
+                )
+            except Exception:
+                pass
+            try:
+                cur.execute(
+                    "ALTER TABLE youtube_transcript_cache ALTER COLUMN language SET DEFAULT ''"
+                )
+            except Exception:
+                pass
+            try:
+                cur.execute(
+                    "ALTER TABLE youtube_transcript_cache ALTER COLUMN language SET NOT NULL"
+                )
+            except Exception:
+                pass
+            try:
+                cur.execute(
+                    "ALTER TABLE youtube_transcript_cache "
+                    "DROP CONSTRAINT IF EXISTS youtube_transcript_cache_video_id_key"
+                )
+            except Exception:
+                pass
+            try:
+                cur.execute(
+                    "ALTER TABLE youtube_transcript_cache "
+                    "ADD CONSTRAINT youtube_transcript_cache_video_id_language_key "
+                    "UNIQUE (video_id, language)"
+                )
+            except Exception:
+                pass
     except Exception:
         pass  # DB may not be available; job endpoints will return 503
 
@@ -362,6 +410,176 @@ def record_youtube_quota_usage(units: int) -> None:
                     last_updated = NOW()
                 """,
                 (today, units),
+            )
+    except Exception:
+        pass
+
+
+def _cache_language_key(lang: Optional[str]) -> str:
+    """Normalize transcript language for cache key (column is NOT NULL)."""
+    if lang is None:
+        return ""
+    s = str(lang).strip().lower()
+    return s if s else ""
+
+
+def _row_to_transcript_cache_dict(row: dict) -> dict:
+    tj = row["transcript_json"]
+    if isinstance(tj, str):
+        tj = json.loads(tj)
+    segments = tj if isinstance(tj, list) else []
+    return {
+        "title": row["title"],
+        "language": row["language"],
+        "transcript_text": row["transcript_text"],
+        "segments": segments,
+    }
+
+
+def get_any_youtube_transcript_cache(video_id: str) -> Optional[dict]:
+    """
+    Return one cached transcript for ``video_id`` (any caption language), preferring the
+    most recently updated row. Used when language fallback is allowed and no row matches
+    the preferred language list.
+
+    Rows are keyed by (video_id, language); see ``get_youtube_transcript_cache``.
+    """
+    if not DATABASE_URL:
+        return None
+    try:
+        with cursor() as cur:
+            cur.execute(
+                """
+                SELECT title, language, transcript_text, transcript_json
+                FROM youtube_transcript_cache
+                WHERE video_id = %s
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                (video_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return _row_to_transcript_cache_dict(row)
+    except Exception:
+        return None
+
+
+def get_youtube_transcript_cache(
+    video_id: str,
+    language: Optional[str] = None,
+    requested_languages: Optional[tuple[str, ...]] = None,
+    *,
+    fallback_allowed: bool = True,
+) -> tuple[Optional[dict], bool]:
+    """
+    Look up a cached transcript row.
+
+    Cache is keyed by ``(video_id, transcript language)`` so one video can store multiple
+    caption languages (e.g. English and Persian) without overwriting.
+
+    Returns ``(cached_row, fallback_used)``. ``fallback_used`` is True when the row came
+    from language fallback (any cached language for the video) rather than a preferred
+    requested language. On cache miss, returns ``(None, False)``.
+
+    * If ``language`` is set, only an exact (video_id, language) row is returned.
+    * If ``requested_languages`` is set (and ``language`` is not), rows are tried in that
+      order; if none match and ``fallback_allowed``, see ``get_any_youtube_transcript_cache``.
+    * If both are None and ``fallback_allowed``, returns any row for the video.
+    """
+    if not DATABASE_URL:
+        return None, False
+
+    try:
+        with cursor() as cur:
+            if language is not None:
+                lk = _cache_language_key(language)
+                cur.execute(
+                    """
+                    SELECT title, language, transcript_text, transcript_json
+                    FROM youtube_transcript_cache
+                    WHERE video_id = %s AND language = %s
+                    """,
+                    (video_id, lk),
+                )
+                row = cur.fetchone()
+                if row:
+                    return _row_to_transcript_cache_dict(row), False
+                return None, False
+
+            if requested_languages:
+                for pref in requested_languages:
+                    lk = _cache_language_key(pref)
+                    cur.execute(
+                        """
+                        SELECT title, language, transcript_text, transcript_json
+                        FROM youtube_transcript_cache
+                        WHERE video_id = %s AND language = %s
+                        """,
+                        (video_id, lk),
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        return _row_to_transcript_cache_dict(row), False
+
+                if fallback_allowed:
+                    any_cached = get_any_youtube_transcript_cache(video_id)
+                    if any_cached:
+                        cached_lang = _cache_language_key(any_cached.get("language"))
+                        preferred_keys = {_cache_language_key(p) for p in requested_languages}
+                        fb = cached_lang not in preferred_keys
+                        return any_cached, fb
+                return None, False
+
+            if fallback_allowed:
+                any_cached = get_any_youtube_transcript_cache(video_id)
+                if any_cached:
+                    return any_cached, False
+            return None, False
+    except Exception:
+        return None, False
+
+
+def save_youtube_transcript_cache(
+    video_id: str,
+    source_url: str,
+    title: Optional[str],
+    language: Optional[str],
+    transcript_text: str,
+    segments: list[dict[str, Any]],
+) -> None:
+    """
+    Upsert transcript text and segments for ``(video_id, language)``.
+
+    Multiple languages per video are stored as separate rows; see ``get_youtube_transcript_cache``.
+    """
+    if not DATABASE_URL:
+        return
+    lang_key = _cache_language_key(language)
+    try:
+        with cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO youtube_transcript_cache (
+                    video_id, source_url, title, language, transcript_text, transcript_json, fetched_at, updated_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s::jsonb, NOW(), NOW())
+                ON CONFLICT (video_id, language) DO UPDATE SET
+                    source_url = EXCLUDED.source_url,
+                    title = EXCLUDED.title,
+                    transcript_text = EXCLUDED.transcript_text,
+                    transcript_json = EXCLUDED.transcript_json,
+                    updated_at = NOW()
+                """,
+                (
+                    video_id,
+                    source_url,
+                    title,
+                    lang_key,
+                    transcript_text,
+                    json.dumps(segments),
+                ),
             )
     except Exception:
         pass

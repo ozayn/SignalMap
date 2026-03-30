@@ -4,7 +4,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 
@@ -41,6 +41,11 @@ from signalmap.services.comment_analysis import (
     save_cached_snapshot,
 )
 from signalmap.sources.youtube_comments import get_channel_videos, get_video_comments
+from signalmap.services.transcript_analysis import run_transcript_analysis_from_text
+from signalmap.services.youtube_transcripts import (
+    get_transcript_for_url,
+    run_transcript_analysis_for_url,
+)
 from signalmap.utils.youtube_resolver import resolve_channel_id
 from signalmap.connectors.wayback_twitter import get_twitter_archival_metrics
 
@@ -162,6 +167,9 @@ def api_index():
             "wayback_instagram_jobs": "POST /api/wayback/instagram/jobs",
             "wayback_jobs_list": "GET /api/wayback/jobs/list",
             "wayback_job_status": "GET /api/wayback/jobs/{job_id}",
+            "youtube_transcript": "POST /api/youtube/transcript",
+            "youtube_transcript_analyze": "POST /api/youtube/transcript/analyze",
+            "transcript_analyze_text": "POST /api/transcript/analyze-text",
         },
         "docs": "/docs",
     }
@@ -1059,6 +1067,126 @@ def youtube_resolve(identifier: str = Query(..., description="Handle, URL, or ch
         return {"identifier": identifier, "channel_id": cid}
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+class YouTubeTranscriptRequestBody(BaseModel):
+    url: str = Field(..., min_length=5, description="YouTube video URL")
+
+
+class YouTubeTranscriptResponseBody(BaseModel):
+    video_id: str
+    title: Optional[str] = None
+    language: Optional[str] = None
+    transcript_text: str
+    segments: list[dict[str, Any]]
+    chunks: list[dict[str, Any]]
+    cached: bool
+    fallback_used: bool = Field(
+        default=False,
+        description="True when a non-requested caption language was used (see YOUTUBE_TRANSCRIPT_LANGUAGE_FALLBACK).",
+    )
+
+
+@app.post("/api/youtube/transcript", response_model=YouTubeTranscriptResponseBody)
+def api_youtube_transcript(body: YouTubeTranscriptRequestBody):
+    """
+    Fetch YouTube captions (joined text, raw segments, and time-window chunks). Cache-first by video_id in Postgres.
+    """
+    data = get_transcript_for_url(body.url)
+    return YouTubeTranscriptResponseBody(
+        video_id=data["video_id"],
+        title=data.get("title"),
+        language=data.get("language"),
+        transcript_text=data["transcript_text"],
+        segments=data["segments"],
+        chunks=data.get("chunks") or [],
+        cached=bool(data.get("_cached")),
+        fallback_used=bool(data.get("fallback_used")),
+    )
+
+
+class YouTubeTranscriptAnalyzeRequestBody(BaseModel):
+    url: str = Field(..., min_length=5, description="YouTube video URL")
+    mode: Literal["frames", "fallacies"] = Field(
+        ...,
+        description="Analysis mode: frames (discourse frames) or fallacies (prototype keyword fallacy tags)",
+    )
+
+
+class YouTubeTranscriptAnalyzeResponseBody(BaseModel):
+    video_id: str
+    title: Optional[str] = None
+    language: Optional[str] = None
+    cached: bool
+    chunks: list[dict[str, Any]]  # labels, label_matches; fallacies adds label_strengths
+    summary: dict[str, int] = Field(
+        default_factory=dict,
+        description="Fallacies mode: chunk counts per fallacy label (non-zero only); heuristic prototype; empty for frames.",
+    )
+    fallback_used: bool = Field(
+        default=False,
+        description="True when transcript used a non-requested caption language.",
+    )
+    analysis_supported: bool = Field(
+        default=True,
+        description="False when fallacies heuristics were skipped (non-English transcript).",
+    )
+    analysis_note: Optional[str] = Field(
+        default=None,
+        description="Set when analysis_supported is false (e.g. language not supported for fallacies).",
+    )
+
+
+@app.post("/api/youtube/transcript/analyze", response_model=YouTubeTranscriptAnalyzeResponseBody)
+def api_youtube_transcript_analyze(body: YouTubeTranscriptAnalyzeRequestBody):
+    """
+    Experimental chunk-level transcript analysis (playground). Reuses fetch + chunking;
+    mode ``frames`` or ``fallacies`` applies prototype keyword labels per chunk (not definitive).
+    """
+    data = run_transcript_analysis_for_url(body.url, body.mode)
+    return YouTubeTranscriptAnalyzeResponseBody(
+        video_id=data["video_id"],
+        title=data.get("title"),
+        language=data.get("language"),
+        cached=bool(data.get("cached")),
+        chunks=data.get("chunks") or [],
+        summary=data.get("summary") or {},
+        fallback_used=bool(data.get("fallback_used")),
+        analysis_supported=bool(data.get("analysis_supported", True)),
+        analysis_note=data.get("analysis_note"),
+    )
+
+
+class TranscriptAnalyzeTextRequestBody(BaseModel):
+    text: str = Field(..., min_length=1, description="Raw transcript text to analyze")
+    mode: Literal["fallacies", "frames"] = Field(
+        default="fallacies",
+        description="Analysis mode; fallacies uses English heuristic fallacy tags.",
+    )
+    language: str = Field(
+        default="en",
+        description="Transcript language hint (e.g. en); used to gate fallacies heuristics.",
+    )
+
+
+@app.post("/api/transcript/analyze-text", response_model=YouTubeTranscriptAnalyzeResponseBody)
+def api_transcript_analyze_text(body: TranscriptAnalyzeTextRequestBody):
+    """
+    Chunk pasted transcript text and run the same frames/fallacies analysis as
+    ``/api/youtube/transcript/analyze`` without fetching from YouTube.
+    """
+    data = run_transcript_analysis_from_text(body.text, body.mode, body.language)
+    return YouTubeTranscriptAnalyzeResponseBody(
+        video_id=data["video_id"],
+        title=data.get("title"),
+        language=data.get("language"),
+        cached=bool(data.get("cached")),
+        chunks=data.get("chunks") or [],
+        summary=data.get("summary") or {},
+        fallback_used=bool(data.get("fallback_used")),
+        analysis_supported=bool(data.get("analysis_supported", True)),
+        analysis_note=data.get("analysis_note"),
+    )
 
 
 @app.get("/api/youtube/channel/videos")
