@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from typing import Any, Optional
 
 import httpx
@@ -31,11 +32,27 @@ FALLACY_LLM_SYSTEM_PROMPT_EN = """You are a precise analyst of argumentation and
 Identify whether the given text contains any of the following fallacies:
 
 - ad_hominem
-- straw_man
-- false_dilemma
-- whataboutism
+- appeal_to_authority
 - appeal_to_fear
 - burden_shifting
+- false_dilemma
+- hasty_generalization
+- relative_privation
+- slippery_slope
+- straw_man
+- whataboutism
+
+Definitions (short):
+- ad_hominem: attacking a person instead of their argument.
+- appeal_to_authority: treating an authority’s say-so as sufficient proof, especially when relevance or expertise is unclear.
+- appeal_to_fear: manipulating through exaggerated or catastrophic fear (not calm risk analysis).
+- burden_shifting: unfairly demanding the other side bear the burden of proof.
+- false_dilemma: falsely limiting options to only two when more exist.
+- hasty_generalization: a broad claim from thin or anecdotal evidence.
+- relative_privation: dismissing a problem by pointing to someone who has it worse.
+- slippery_slope: claiming a small first step will inevitably cause a chain of extreme or disastrous outcomes without adequate support.
+- straw_man: misrepresenting or exaggerating an opponent’s position.
+- whataboutism: deflecting criticism by pointing to another issue.
 
 Return ONLY valid JSON in this format:
 {
@@ -51,6 +68,10 @@ Examples of clear cases (when the text is plainly like this, it usually warrants
 - redirecting criticism or changing the subject with "what about..." → whataboutism
 - exaggerated catastrophic predictions clearly meant to provoke fear (not calm risk analysis) → appeal_to_fear
 - demanding the other side prove your claim for you, or shifting the burden of proof unfairly → burden_shifting
+- comparing a problem to worse cases to dismiss or minimize the concern → relative_privation
+- making broad claims from limited or anecdotal evidence (e.g. sweeping "all of them" without support) → hasty_generalization
+- relying on authority ("experts say", "studies prove") instead of reasoning when the authority is not clearly relevant → appeal_to_authority
+- claiming that one step will inevitably trigger a chain leading to extreme or disastrous consequences → slippery_slope
 
 ad_hominem only when attacking people, not ideas:
 - Do not label criticism of an idea, policy, argument, or situation as ad_hominem.
@@ -63,9 +84,11 @@ If a chunk clearly matches one of these patterns, assign the label rather than d
 Rules:
 - Only assign a fallacy label if there is clear and explicit evidence in the text.
 - If the text is neutral, analytical, or ambiguous, return no labels.
+- For relative_privation, hasty_generalization, appeal_to_authority, and slippery_slope: assign only when the pattern is clearly present; if ambiguous, return no label for that category.
 - Do not over-interpret or infer intent beyond what is clearly stated.
 - Do not label general warnings, predictions, or risk discussions as appeal_to_fear unless they are exaggerated, emotionally manipulative, or clearly intended to provoke fear.
 - Do not label structured comparisons or policy framing as false_dilemma unless the text explicitly limits the situation to only two choices.
+- Do not label ordinary forecasting, cautious scenario analysis, or realistic policy-risk discussion as slippery_slope unless the text clearly claims an exaggerated inevitable escalation.
 - Only include labels that are clearly present
 - If none are present, return an empty list
 - Do not invent new labels
@@ -78,11 +101,15 @@ FALLACY_LLM_SYSTEM_PROMPT_FA = """شما تحلیل‌گر دقیق استدلا
 متن داده‌شده را بخوانید و بررسی کنید آیا هرکدام از این الگوهای مغالطه‌آمیز را دارد:
 
 - ad_hominem
-- straw_man
-- false_dilemma
-- whataboutism
+- appeal_to_authority
 - appeal_to_fear
 - burden_shifting
+- false_dilemma
+- hasty_generalization
+- relative_privation
+- slippery_slope
+- straw_man
+- whataboutism
 
 فقط JSON معتبر با این قالب برگردانید:
 {
@@ -93,14 +120,20 @@ FALLACY_LLM_SYSTEM_PROMPT_FA = """شما تحلیل‌گر دقیق استدلا
 
 راهنما:
 - ad_hominem: حمله به فرد یا گوینده به‌جای پاسخ به استدلال (نه انتقاد صرف از یک ایده یا سیاست).
-- straw_man: جاانداختن حرفی که طرف مقابل نگفته یا اغراق در موضع او.
-- false_dilemma: قالب‌بندی صریح دو گزینه‌ی تنها وقتی طیف گزینه‌ها وجود دارد.
-- whataboutism: منحرف کردن با «شما که دربارهٔ X چرا حرف نمی‌زنید» و امثال آن.
+- appeal_to_authority: تکیه بر «کارشناسان می‌گویند» یا «مطالعات ثابت می‌کند» به‌جای استدلال، وقتی صلاحیت یا ارتباط روشن نیست.
 - appeal_to_fear: برانگیختن ترس اغراق‌آمیز (نه تحلیل آرام خطر).
 - burden_shifting: منتقل کردن نادرست بار اثبات به طرف دیگر.
+- false_dilemma: قالب‌بندی صریح دو گزینه‌ی تنها وقتی طیف گزینه‌ها وجود دارد.
+- hasty_generalization: تعمیم سریع از شواهد محدود یا ناکافی.
+- relative_privation: کم‌اهمیت جلوه دادن یک مشکل با مقایسه به وضع بدتر دیگران («بعضی‌ها حتی … ندارند»).
+- slippery_slope: ادعای اینکه یک گام کوچک ناگزیر زنجیره‌ای از پیامدهای افراطی یا فاجعه‌بار را بدون استدلال کافی در پی دارد.
+- straw_man: جاانداختن حرفی که طرف مقابل نگفته یا اغراق در موضع او.
+- whataboutism: منحرف کردن با «شما که دربارهٔ X چرا حرف نمی‌زنید» و امثال آن.
 
 قواعد:
 - فقط در صورت وجود شواهد روشن در متن برچسب بزنید؛ اگر ابهام یا متن خنثی است، labels خالی باشد.
+- برای relative_privation، hasty_generalization، appeal_to_authority و slippery_slope: فقط وقتی الگو کاملاً روشن است؛ در ابهام، آن برچسب را نزنید.
+- پیش‌بینی معمولی یا تحلیل محتاطانهٔ ریسک را slippery_slope نزنید مگر اینکه اغراق در اجتناب‌ناپذیری و تشدید آشکار باشد.
 - برچسب جدید اختراع نکنید؛ فقط مقادیر مجاز بالا.
 - توضیح کوتاه و مشخص با ارجاع به عبارت یا دلیل در متن.
 - محافظه‌کار باشید و حدس نزنید."""
@@ -111,11 +144,15 @@ FALLACY_LLM_SYSTEM_PROMPT = FALLACY_LLM_SYSTEM_PROMPT_EN
 # Fallacies LLM: only these labels (subset of heuristic set; no "extra" labels).
 FALLACY_LLM_LABELS: tuple[str, ...] = (
     "ad_hominem",
-    "straw_man",
-    "false_dilemma",
-    "whataboutism",
+    "appeal_to_authority",
     "appeal_to_fear",
     "burden_shifting",
+    "false_dilemma",
+    "hasty_generalization",
+    "relative_privation",
+    "slippery_slope",
+    "straw_man",
+    "whataboutism",
 )
 FALLACY_LLM_LABEL_SET = frozenset(FALLACY_LLM_LABELS)
 
@@ -131,6 +168,32 @@ SPEAKER_ROLE_SET = frozenset(
 )
 
 CONFIDENCE_WORDS = frozenset({"low", "medium", "high"})
+
+_SPEAKER_TURN_LABEL_RE = re.compile(r"^Speaker\s*(\d+)\s*$", re.IGNORECASE)
+
+SPEAKERS_SYSTEM_EN = """You are a careful assistant for splitting transcript text into conversational turns by inferred speaker.
+Respond with a single JSON object only (no markdown, no prose outside JSON).
+Shape: { "turns": [ { "speaker": "Speaker 1", "text": "..." }, ... ] }
+
+Rules:
+- Split the text into conversational turns where the speaker changes or where a natural turn boundary occurs. Group consecutive lines from the same speaker into one turn when appropriate.
+- Use speaker labels exactly "Speaker 1", "Speaker 2", "Speaker 3", … as needed. Do not invent real names, titles, or roles (no HOST, GUEST, etc.).
+- Do not invent dialogue, Q&A structure, or content not present in the source; preserve wording and meaning faithfully.
+- If the text is a monologue, narration, article, or is not clearly multi-speaker conversation, return a single turn with speaker "Speaker 1" containing the full text (or the full provided portion).
+- Keep the same language as the input in each "text" field (English stays English; Persian stays Persian).
+- Do not add summaries or commentary outside the quoted text."""
+
+SPEAKERS_SYSTEM_FA = """شما دستیار دقیق برای تقسیم متن رونوشت به نوبت‌های گفت‌وگو بر اساس گویندهٔ فرضی هستید.
+فقط یک شیء JSON معتبر برگردانید (بدون مارک‌داون و بدون متن بیرون از JSON).
+قالب: { "turns": [ { "speaker": "Speaker 1", "text": "..." }, ... ] }
+
+قواعد:
+- متن را به نوبت‌های گفت‌وگو تقسیم کنید جایی که گوینده عوض می‌شود یا مرز طبیعی نوبت وجود دارد. خطوط پشت‌سرهم از یک گوینده را در صورت مناسب بودن در یک نوبت جمع کنید.
+- برچسب گوینده دقیقاً به صورت «Speaker 1»، «Speaker 2»، … باشد. نام واقعی، عنوان یا نقش اختراع نکنید.
+- دیالوگ یا ساختار پرسش‌وپاسخی که در متن نیست نسازید؛ معنا و عبارات را وفادارانه حفظ کنید.
+- اگر متن تک‌گوینده، روایت، یا گفت‌وگوی چندنفرهٔ روشن نیست، فقط یک نوبت با «Speaker 1» و تمام متن (یا تمام بخش داده‌شده) برگردانید.
+- زبان هر فیلد text همان زبان ورودی باشد.
+- خلاصه یا توضیح اضافه نگذارید."""
 
 # Rough transcript cap per request (chars) to stay within context limits; prototype only.
 _MAX_TRANSCRIPT_CHARS = 80_000
@@ -488,26 +551,6 @@ def _build_chunk_manifest(chunks: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def validate_summarize_output(obj: Any) -> dict[str, Any]:
-    """Return a dict with summary_short, summary_bullets, main_topics (safe defaults)."""
-    out: dict[str, Any] = {
-        "summary_short": "",
-        "summary_bullets": [],
-        "main_topics": [],
-    }
-    if not isinstance(obj, dict):
-        return out
-    ss = obj.get("summary_short")
-    out["summary_short"] = ss.strip() if isinstance(ss, str) else ""
-    bullets = obj.get("summary_bullets")
-    if isinstance(bullets, list):
-        out["summary_bullets"] = [str(x).strip() for x in bullets if str(x).strip()][:20]
-    topics = obj.get("main_topics")
-    if isinstance(topics, list):
-        out["main_topics"] = [str(x).strip() for x in topics if str(x).strip()][:20]
-    return out
-
-
 def _transcript_language_hint_for_llm(analysis_language: Optional[str]) -> str:
     """Short clause appended to user prompts when transcript locale is known."""
     al = (analysis_language or "").strip().lower()
@@ -518,36 +561,6 @@ def _transcript_language_hint_for_llm(analysis_language: Optional[str]) -> str:
     if al == "other":
         return "\n\nThe transcript language may not be English; stay faithful to the source wording."
     return ""
-
-
-def run_summarize_llm(
-    *,
-    full_text: str,
-    analysis_language: Optional[str] = None,
-) -> tuple[dict[str, Any], Optional[str]]:
-    """
-    Produce a short summary, bullets, and main topics. Returns ``(llm_summarize_dict, note_extra)``.
-    """
-    text, truncated = _truncate_for_llm(full_text)
-    note = None
-    if truncated:
-        note = "Transcript truncated for LLM context (prototype limit)."
-
-    system = (
-        "You are a careful assistant for internal transcript review. "
-        "Respond with a single JSON object only (no markdown, no prose outside JSON). "
-        "Keys: summary_short (string, 2-4 sentences), summary_bullets (array of 3-8 short strings), "
-        "main_topics (array of 3-8 short topic strings). "
-        "Be faithful to the transcript; do not invent facts."
-    )
-    user = (
-        "Summarize the following transcript text for internal analysis.\n\n"
-        f"TRANSCRIPT:\n{text}"
-        f"{_transcript_language_hint_for_llm(analysis_language)}"
-    )
-    raw = groq_chat_json(system=system, user=user, temperature=0.25, max_tokens=2048)
-    validated = validate_summarize_output(raw)
-    return validated, note
 
 
 def _validate_speaker_block(row: Any) -> Optional[dict[str, Any]]:
@@ -621,3 +634,181 @@ def run_speaker_guess_llm(
     raw = groq_chat_json(system=system, user=user, temperature=0.3, max_tokens=8192)
     blocks, note = validate_speaker_guess_output(raw)
     return blocks, note, trunc_note
+
+
+def _normalize_speaker_turn_label(raw: str) -> Optional[str]:
+    s = (raw or "").strip()
+    m = _SPEAKER_TURN_LABEL_RE.match(s)
+    if m:
+        return f"Speaker {int(m.group(1))}"
+    return None
+
+
+def normalize_speaker_turns_response(raw: Any, *, fallback_text: str) -> list[dict[str, Any]]:
+    """Validate Groq JSON into ``Speaker N`` turns; on empty/invalid, single-speaker fallback."""
+    rows: list[dict[str, Any]] = []
+    if isinstance(raw, dict):
+        arr = raw.get("turns")
+        if not isinstance(arr, list):
+            arr = raw.get("speaker_turns")
+        if isinstance(arr, list):
+            for row in arr[:500]:
+                if not isinstance(row, dict):
+                    continue
+                sp = row.get("speaker")
+                tx = row.get("text")
+                if not isinstance(sp, str) or not isinstance(tx, str):
+                    continue
+                label = _normalize_speaker_turn_label(sp)
+                t = tx.strip()
+                if not label or not t:
+                    continue
+                rows.append({"speaker": label, "text": t})
+    if not rows:
+        ft = (fallback_text or "").strip()
+        if ft:
+            return [{"speaker": "Speaker 1", "text": ft}]
+        return []
+    return rows
+
+
+def _speakers_system_for_language(analysis_language: str) -> str:
+    al = (analysis_language or "").strip().lower()
+    if al == "fa":
+        return SPEAKERS_SYSTEM_FA
+    return SPEAKERS_SYSTEM_EN
+
+
+def extract_speakers_llm(text: str, language: str) -> tuple[list[dict[str, Any]], Optional[str]]:
+    """
+    Infer conversational speaker turns from plain text via Groq JSON mode (``GROQ_API_KEY``).
+
+    ``language`` is a normalized analysis locale: ``en``, ``fa``, or ``other`` (English prompts for other).
+
+    Returns ``(turns, truncation_note)`` where each turn is ``{"speaker": "Speaker 1", "text": "..."}``.
+    """
+    t, truncated = _truncate_for_llm(text or "")
+    trunc_note = "Transcript truncated for LLM context (prototype limit)." if truncated else None
+    al = (language or "").strip().lower()
+    al_norm: str = al if al in ("en", "fa", "other") else "other"
+    system = _speakers_system_for_language(al)
+    if al == "fa":
+        user = (
+            "متن زیر را به نوبت‌های گوینده تقسیم کنید.\n\nمتن:\n"
+            + t
+            + _transcript_language_hint_for_llm("fa")
+        )
+    else:
+        user = (
+            "Split the following text into speaker turns per the rules.\n\nTEXT:\n"
+            + t
+            + _transcript_language_hint_for_llm(al_norm)
+        )
+    raw = groq_chat_json(system=system, user=user, temperature=0.15, max_tokens=8192)
+    turns = normalize_speaker_turns_response(raw, fallback_text=t)
+    return turns, trunc_note
+
+
+DISCUSSION_ANALYSIS_DISCLAIMER = (
+    "Speakers inferred from transcript text only; not audio diarization."
+)
+
+DISCUSSION_BULLETS_SYSTEM_EN = """You summarize what one speaker said in a discussion transcript excerpt.
+Return ONLY valid JSON: {"bullets": ["...", ...]}
+Rules:
+- 3–8 concise bullet points.
+- Use ONLY information explicitly present in the excerpt. Do not invent names, facts, or claims.
+- Match the excerpt language (English stays English).
+- If the excerpt is very short, use fewer bullets."""
+
+DISCUSSION_BULLETS_SYSTEM_FA = """شما بخشی از رونوشت را که مربوط به یک گوینده است خلاصه می‌کنید.
+فقط JSON معتبر برگردانید: {"bullets": ["...", ...]}
+قواعد:
+- ۳ تا ۸ نکتهٔ کوتاه.
+- فقط از خود متن؛ نام، واقعیت یا ادعای جدید اختراع نکنید.
+- زبان خروجی همان زبان متن باشد.
+- اگر متن بسیار کوتاه است، تعداد نکات را کم کنید."""
+
+
+def _discussion_bullets_system_for_language(analysis_language: str) -> str:
+    al = (analysis_language or "").strip().lower()
+    if al == "fa":
+        return DISCUSSION_BULLETS_SYSTEM_FA
+    return DISCUSSION_BULLETS_SYSTEM_EN
+
+
+def speaker_block_bullets_llm(speaker_text: str, *, analysis_language: str) -> list[str]:
+    """Groq JSON bullets for one speaker block (same language as excerpt)."""
+    t = (speaker_text or "").strip()
+    if not t:
+        return []
+    if len(t) > _MAX_FALLACY_CHUNK_CHARS:
+        t = t[:_MAX_FALLACY_CHUNK_CHARS]
+    al = (analysis_language or "").strip().lower()
+    al_norm = al if al in ("en", "fa", "other") else "other"
+    system = _discussion_bullets_system_for_language(al)
+    if al == "fa":
+        user = "بخش زیر از یک گوینده است. فقط بر اساس همین متن نکات را بنویسید.\n\nمتن:\n" + t + _transcript_language_hint_for_llm("fa")
+    else:
+        user = (
+            "The following is one speaker's contribution. Summarize with bullets per the rules.\n\nTEXT:\n"
+            + t
+            + _transcript_language_hint_for_llm(al_norm)
+        )
+    raw = groq_chat_json(system=system, user=user, temperature=0.2, max_tokens=2048)
+    bullets = raw.get("bullets")
+    if not isinstance(bullets, list):
+        return []
+    out: list[str] = []
+    for x in bullets[:12]:
+        if isinstance(x, str) and x.strip():
+            out.append(x.strip())
+    return out
+
+
+def run_discussion_analysis_llm(
+    full_text: str,
+    *,
+    analysis_language: str,
+    source_type: str,
+    language_display: Optional[str] = None,
+) -> tuple[dict[str, Any], Optional[str]]:
+    """
+    Pipeline: infer speaker turns, then per-speaker bullet summary + fallacy LLM labels.
+
+    Returns ``(payload, truncation_note)`` where ``payload`` matches the discussion-analysis
+    contract (``source_type``, ``language``, ``speakers``, ``analysis_note``).
+    """
+    st = source_type if source_type in ("youtube", "text") else "text"
+    turns, trunc_note = extract_speakers_llm(full_text, language=analysis_language)
+    speakers_out: list[dict[str, Any]] = []
+    for turn in turns:
+        if not isinstance(turn, dict):
+            continue
+        label = turn.get("speaker")
+        block = turn.get("text")
+        if not isinstance(label, str) or not isinstance(block, str):
+            continue
+        label = label.strip()
+        block = block.strip()
+        if not label or not block:
+            continue
+        bullets = speaker_block_bullets_llm(block, analysis_language=analysis_language)
+        raw_f = groq_fallacy_chunk_json(block, analysis_language=analysis_language)
+        labels, _, _ = normalize_fallacy_llm_response(raw_f)
+        speakers_out.append(
+            {
+                "speaker": label,
+                "text": block,
+                "summary_bullets": bullets,
+                "fallacies": labels,
+            }
+        )
+    lang_out = (language_display or "").strip() or analysis_language
+    payload: dict[str, Any] = {
+        "source_type": st,
+        "language": lang_out,
+        "speakers": speakers_out,
+        "analysis_note": DISCUSSION_ANALYSIS_DISCLAIMER,
+    }
+    return payload, trunc_note

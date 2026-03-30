@@ -1107,11 +1107,19 @@ def api_youtube_transcript(body: YouTubeTranscriptRequestBody):
 
 class YouTubeTranscriptAnalyzeRequestBody(BaseModel):
     url: str = Field(..., min_length=5, description="YouTube video URL")
-    mode: Literal["frames", "fallacies", "summarize_llm", "speaker_guess_llm"] = Field(
+    mode: Literal[
+        "frames",
+        "fallacies",
+        "summarize_llm",
+        "speaker_guess_llm",
+        "speakers",
+        "discussion_analysis",
+    ] = Field(
         ...,
         description=(
             "Analysis mode. For fallacies, use ``method`` to pick heuristic / classifier / llm. "
-            "summarize_llm and speaker_guess_llm require GROQ_API_KEY (experimental)."
+            "Groq LLM modes (summarize_llm, speaker_guess_llm, speakers, discussion_analysis) require "
+            "GROQ_API_KEY (experimental)."
         ),
     )
     method: Literal["heuristic", "classifier", "llm"] = Field(
@@ -1120,6 +1128,14 @@ class YouTubeTranscriptAnalyzeRequestBody(BaseModel):
             "When mode is fallacies: fallacy detection method (with transcript language). "
             "Heuristic: English only. LLM: English or Persian prompts. Ignored for other modes."
         ),
+    )
+    summary_format: Optional[Literal["bullets", "paragraphs"]] = Field(
+        default=None,
+        description="summarize_llm only: bullets (default) or paragraphs.",
+    )
+    summary_length: Optional[Literal["short", "medium", "long"]] = Field(
+        default=None,
+        description="summarize_llm only: short, medium (default), or long verbosity.",
     )
 
 
@@ -1150,15 +1166,38 @@ class YouTubeTranscriptAnalyzeResponseBody(BaseModel):
     )
     llm_summarize: Optional[dict[str, Any]] = Field(
         default=None,
-        description="summarize_llm only: summary_short, summary_bullets, main_topics.",
+        description=(
+            "summarize_llm only: summary_short, summary_bullets, summary_paragraphs, main_topics; "
+            "summary_format / summary_length (normalized request); input_truncated "
+            "and truncation_note when the source was clipped before the LLM call."
+        ),
     )
     speaker_blocks: Optional[list[dict[str, Any]]] = Field(
         default=None,
         description="speaker_guess_llm only: approximate speaker segments (not diarization).",
     )
+    speaker_turns: Optional[list[dict[str, Any]]] = Field(
+        default=None,
+        description='speakers mode only: LLM-inferred turns with "Speaker 1", "Speaker 2", … (text-only; not diarization).',
+    )
+    discussion_analysis: Optional[dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "discussion_analysis only: source_type, language, speakers (text, summary_bullets, fallacies), "
+            "analysis_note (transcript-based inference; not audio diarization)."
+        ),
+    )
     method: Optional[Literal["heuristic", "classifier", "llm"]] = Field(
         default=None,
         description="When the request used mode fallacies: which fallacy method was selected.",
+    )
+    transcript_text: str = Field(
+        default="",
+        description="Full transcript text when the request fetched from YouTube; empty for paste-only.",
+    )
+    segments: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Caption segments when fetched from YouTube; empty for paste-only.",
     )
 
 
@@ -1169,12 +1208,15 @@ def api_youtube_transcript_analyze(body: YouTubeTranscriptAnalyzeRequestBody):
     Language is taken from the fetched transcript; routing is mode × method × language
     (e.g. Persian heuristic fallacies are not run; LLM fallacies use a Persian prompt when applicable).
     For ``mode=fallacies``, ``method`` selects heuristic, classifier (placeholder), or llm (Groq).
-    ``summarize_llm`` and ``speaker_guess_llm`` require ``GROQ_API_KEY`` and are prototypes only.
+    ``summarize_llm``, ``speaker_guess_llm``, ``speakers``, and ``discussion_analysis`` require ``GROQ_API_KEY``
+    and are prototypes only.
     """
     data = run_transcript_analysis_for_url(
         body.url,
         body.mode,
         fallacy_method=body.method,
+        summary_format=body.summary_format,
+        summary_length=body.summary_length,
     )
     return YouTubeTranscriptAnalyzeResponseBody(
         video_id=data["video_id"],
@@ -1188,13 +1230,24 @@ def api_youtube_transcript_analyze(body: YouTubeTranscriptAnalyzeRequestBody):
         analysis_note=data.get("analysis_note"),
         llm_summarize=data.get("llm_summarize"),
         speaker_blocks=data.get("speaker_blocks"),
+        speaker_turns=data.get("speaker_turns"),
+        discussion_analysis=data.get("discussion_analysis"),
         method=data.get("method"),
+        transcript_text=str(data.get("transcript_text") or ""),
+        segments=data.get("segments") if isinstance(data.get("segments"), list) else [],
     )
 
 
 class TranscriptAnalyzeTextRequestBody(BaseModel):
     text: str = Field(..., min_length=1, description="Raw transcript text to analyze")
-    mode: Literal["fallacies", "frames", "summarize_llm", "speaker_guess_llm"] = Field(
+    mode: Literal[
+        "fallacies",
+        "frames",
+        "summarize_llm",
+        "speaker_guess_llm",
+        "speakers",
+        "discussion_analysis",
+    ] = Field(
         default="fallacies",
         description="Analysis mode; for fallacies use ``method``; LLM modes require GROQ_API_KEY.",
     )
@@ -1212,6 +1265,14 @@ class TranscriptAnalyzeTextRequestBody(BaseModel):
             "LLM fallacy mode uses English or Persian system prompts accordingly."
         ),
     )
+    summary_format: Optional[Literal["bullets", "paragraphs"]] = Field(
+        default=None,
+        description="summarize_llm only: bullets (default) or paragraphs.",
+    )
+    summary_length: Optional[Literal["short", "medium", "long"]] = Field(
+        default=None,
+        description="summarize_llm only: short, medium (default), or long verbosity.",
+    )
 
 
 @app.post("/api/transcript/analyze-text", response_model=YouTubeTranscriptAnalyzeResponseBody)
@@ -1225,6 +1286,8 @@ def api_transcript_analyze_text(body: TranscriptAnalyzeTextRequestBody):
         body.mode,
         body.language,
         fallacy_method=body.method,
+        summary_format=body.summary_format,
+        summary_length=body.summary_length,
     )
     return YouTubeTranscriptAnalyzeResponseBody(
         video_id=data["video_id"],
@@ -1238,7 +1301,11 @@ def api_transcript_analyze_text(body: TranscriptAnalyzeTextRequestBody):
         analysis_note=data.get("analysis_note"),
         llm_summarize=data.get("llm_summarize"),
         speaker_blocks=data.get("speaker_blocks"),
+        speaker_turns=data.get("speaker_turns"),
+        discussion_analysis=data.get("discussion_analysis"),
         method=data.get("method"),
+        transcript_text=str(data.get("transcript_text") or ""),
+        segments=data.get("segments") if isinstance(data.get("segments"), list) else [],
     )
 
 

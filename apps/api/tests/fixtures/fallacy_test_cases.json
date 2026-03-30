@@ -68,5 +68,35 @@
     "name": "borderline_fear",
     "text": "This is a serious threat and could become very dangerous.",
     "expected": ["appeal_to_fear"]
+  },
+  {
+    "name": "relative_privation_positive",
+    "text": "I'm under real pressure from rent.\nThat's nothing, some people don't even have homes.",
+    "expected": ["relative_privation"]
+  },
+  {
+    "name": "hasty_generalization_positive",
+    "text": "I met two corrupt officials, so they are all corrupt.",
+    "expected": ["hasty_generalization"]
+  },
+  {
+    "name": "appeal_to_authority_positive",
+    "text": "A famous actor said this treatment works, so it must be true.",
+    "expected": ["appeal_to_authority"]
+  },
+  {
+    "name": "slippery_slope_positive",
+    "text": "This may seem small, but if we allow it, soon everything will collapse and freedom will disappear.",
+    "expected": ["slippery_slope"]
+  },
+  {
+    "name": "hasty_generalization_negative_not_all",
+    "text": "Some officials were corrupt, but we should not assume they all are.",
+    "expected": []
+  },
+  {
+    "name": "slippery_slope_negative_risk_monitoring",
+    "text": "There are some long-term risks we should monitor carefully.",
+    "expected": []
   }
 ]

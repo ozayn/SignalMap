@@ -25,8 +25,10 @@ For ``mode="fallacies"``, use ``method`` to choose how fallacies are detected:
 - ``llm`` — Groq chat completion per chunk (English or Persian system prompt; default model
   aligns with ``GROQ_MODEL`` / ``GROQ_FALLACY_MODEL``; requires ``GROQ_API_KEY``; experimental).
 
-Modes ``summarize_llm`` and ``speaker_guess_llm`` call Groq (see ``GROQ_API_KEY``). They are
-**experimental prototypes** and not substitutes for manual review or validated classifiers.
+Modes ``summarize_llm``, ``speaker_guess_llm``, ``speakers``, and ``discussion_analysis`` call Groq
+(see ``GROQ_API_KEY``). They are **experimental prototypes** and not substitutes for manual review
+or validated classifiers. ``discussion_analysis`` combines speaker-turn inference with per-speaker
+summaries and fallacy labels (text-only; not audio diarization).
 Transcript fetch, chunking, and cache remain language-neutral; analysis applies language rules above.
 """
 
@@ -38,12 +40,14 @@ from typing import Any, Literal, Optional
 from fastapi import HTTPException
 
 from signalmap.services.llm_transcript_analysis import (
+    extract_speakers_llm,
     groq_fallacy_chunk_json,
     normalize_fallacy_llm_response,
     require_groq_api_key,
+    run_discussion_analysis_llm,
     run_speaker_guess_llm,
-    run_summarize_llm,
 )
+from signalmap.services.llm_transcript_summary import run_transcript_summary_llm as run_summarize_llm
 
 _LLM_MODE_NOTE = (
     "Groq LLM mode (experimental prototype); not validated for research or moderation decisions."
@@ -215,9 +219,13 @@ FRAME_KEYWORDS_FA: dict[str, tuple[str, ...]] = {}
 # --- "fallacies" mode: guarded phrase + cue heuristics (see module docstring) ---
 _FALLACY_LABEL_ORDER: tuple[str, ...] = (
     "ad_hominem",
+    "appeal_to_authority",
     "appeal_to_fear",
     "burden_shifting",
     "false_dilemma",
+    "hasty_generalization",
+    "relative_privation",
+    "slippery_slope",
     "straw_man",
     "whataboutism",
 )
@@ -460,13 +468,136 @@ def _det_burden_shifting(low: str) -> Optional[tuple[list[str], str]]:
     return ms, st
 
 
+# Hasty generalization: exact phrases + ``they're all`` + pejorative (avoids bare ``everyone``).
+_HASTY_THEY_ALL_PEJORATIVE = re.compile(
+    r"\b(they'?re all|they are all)\s+("
+    r"bad|corrupt|crooks?|evil|fake|idiots?|incompetent|"
+    r"liars?|lazy|stupid|the same|wrong"
+    r")\b",
+    re.I,
+)
+
+
+def _det_hasty_generalization(low: str) -> Optional[tuple[list[str], str]]:
+    """Broad claims from thin evidence — conservative phrase list + guarded ``they're all`` + slur."""
+    phrases = (
+        "they're all corrupt",
+        "they are all corrupt",
+        "they're all liars",
+        "they are all liars",
+        "they're all the same",
+        "they are all the same",
+    )
+    ms = [f"phrase:{p}" for p in phrases if p in low]
+    if _HASTY_THEY_ALL_PEJORATIVE.search(low):
+        ms.append("regex:they_are_all_pejorative")
+    if not ms:
+        return None
+    ms = sorted(set(ms))
+    st = "strong" if len(ms) >= 2 else "weak"
+    return ms, st
+
+
+def _det_relative_privation(low: str) -> Optional[tuple[list[str], str]]:
+    """Dismissing a concern by comparing to worse-off others — phrase-led only."""
+    phrases = (
+        "others have it worse",
+        "other people have it worse",
+        "some people don't even",
+        "some people dont even",
+        "some people do not even",
+        "at least you have",
+        "people have it worse",
+        "think of those who",
+    )
+    ms = [f"phrase:{p}" for p in phrases if p in low]
+    if not ms:
+        return None
+    st = "strong" if len(ms) >= 2 else "weak"
+    return ms, st
+
+
+def _det_appeal_to_authority(low: str) -> Optional[tuple[list[str], str]]:
+    """Authority / study cited as proof — short explicit phrases only."""
+    phrases = (
+        "experts say",
+        "scientists say",
+        "studies prove",
+        "according to experts",
+        "research proves",
+    )
+    ms = [f"phrase:{p}" for p in phrases if p in low]
+    # Non-expert authority + proof-by-assertion (conservative; pairs with fixture cases).
+    if re.search(r"\b(actor|celebrity|athlete)\s+said\b", low) and "must be true" in low:
+        ms.append("regex:celebrity_said_must_be_true")
+    if not ms:
+        return None
+    st = "strong" if len(ms) >= 2 else "weak"
+    return ms, st
+
+
+_SLIPPERY_EXTREME = re.compile(
+    r"\b(dictatorship|disaster|collapse|tyranny|totalitarian|catastrophe|chaos)\b",
+    re.I,
+)
+
+
+def _det_slippery_slope(low: str) -> Optional[tuple[list[str], str]]:
+    """
+    Inevitable escalation from a small step — explicit idioms, or ``if we allow`` + escalation cue,
+    or ``inevitably`` + ``lead to`` + extreme noun (avoids lone ``soon`` / bare risk talk).
+    """
+    ms: list[str] = []
+    for p in (
+        "slippery slope",
+        "next thing you know",
+        "this is how it starts",
+        "it will spiral into",
+    ):
+        if p in low:
+            ms.append(f"phrase:{p}")
+
+    allow_open = (
+        "if we allow" in low
+        or "if you allow" in low
+        or "if they allow" in low
+    )
+    escalation = (
+        "soon" in low
+        or "before long" in low
+        or "inevitably" in low
+        or "will lead to" in low
+        or "will end in" in low
+        or "everything will collapse" in low
+        or "freedom will disappear" in low
+        or "dictatorship" in low
+        or "total disaster" in low
+        or "spiral into" in low
+    )
+    if allow_open and escalation:
+        ms.append("combo:if_allow+escalation")
+
+    if "inevitably" in low and "lead to" in low and _SLIPPERY_EXTREME.search(low):
+        ms.append("regex:inevitably_lead_to_extreme")
+
+    if not ms:
+        return None
+    ms = sorted(set(ms))
+    st = "strong" if len(ms) >= 2 else "weak"
+    return ms, st
+
+
 _FALLACY_DETECTORS: dict[str, Any] = {
     "ad_hominem": _det_ad_hominem,
+    "appeal_to_authority": _det_appeal_to_authority,
     "straw_man": _det_straw_man,
     "false_dilemma": _det_false_dilemma,
     "whataboutism": _det_whataboutism,
     "appeal_to_fear": _det_appeal_to_fear,
     "burden_shifting": _det_burden_shifting,
+    "hasty_generalization": _det_hasty_generalization,
+    "relative_privation": _det_relative_privation,
+    "slippery_slope": _det_slippery_slope,
 }
 
 # Aggregated English cue phrases per label (documentation + future parity with FA scaffolding).
@@ -520,6 +651,44 @@ FALLACY_KEYWORDS_EN: dict[str, tuple[str, ...]] = {
         "you have to prove",
         "you have to show",
         "onus is on",
+    ),
+    "hasty_generalization": (
+        "they're all corrupt",
+        "they are all corrupt",
+        "they're all liars",
+        "they are all liars",
+        "they're all the same",
+        "they are all the same",
+    ),
+    "relative_privation": (
+        "others have it worse",
+        "other people have it worse",
+        "some people don't even",
+        "some people dont even",
+        "some people do not even",
+        "at least you have",
+        "people have it worse",
+        "think of those who",
+    ),
+    "appeal_to_authority": (
+        "experts say",
+        "scientists say",
+        "studies prove",
+        "according to experts",
+        "research proves",
+    ),
+    "slippery_slope": (
+        "slippery slope",
+        "next thing you know",
+        "this is how it starts",
+        "it will spiral into",
+        "if we allow",
+        "if you allow",
+        "before long",
+        "inevitably",
+        "will lead to",
+        "will end in",
+        "everything will collapse",
     ),
 }
 
@@ -794,6 +963,10 @@ def _execute_transcript_analysis(
     chunks_in: list[dict[str, Any]],
     full_transcript_text: str,
     fallacy_method: Optional[str],
+    discussion_source_type: Optional[str] = None,
+    discussion_language_display: Optional[str] = None,
+    summary_format: Optional[str] = None,
+    summary_length: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Core dispatch on ``mode`` × fallacy ``method`` × ``analysis_lang`` (``en`` / ``fa`` / ``other``).
@@ -803,6 +976,8 @@ def _execute_transcript_analysis(
     analysis_note: Optional[str] = None
     llm_summarize: Optional[dict[str, Any]] = None
     speaker_blocks: Optional[list[dict[str, Any]]] = None
+    speaker_turns: Optional[list[dict[str, Any]]] = None
+    discussion_analysis: Optional[dict[str, Any]] = None
     method_effective: Optional[str] = None
     chunks_out: list[dict[str, Any]]
     summary: dict[str, int]
@@ -855,6 +1030,8 @@ def _execute_transcript_analysis(
         llm_summarize, trunc_note = run_summarize_llm(
             full_text=full_transcript_text,
             analysis_language=analysis_lang,
+            summary_format=summary_format,
+            summary_length=summary_length,
         )
         chunks_out = _chunks_passthrough_basic(chunks_in)
         summary = {}
@@ -867,12 +1044,43 @@ def _execute_transcript_analysis(
         chunks_out = _chunks_passthrough_basic(chunks_in)
         summary = {}
         analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, sp_note, trunc_note)
+    elif mode == "speakers":
+        require_groq_api_key()
+        speaker_turns, trunc_note = extract_speakers_llm(
+            full_transcript_text,
+            language=analysis_lang,
+        )
+        chunks_out = _chunks_passthrough_basic(chunks_in)
+        summary = {}
+        analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, trunc_note)
+    elif mode == "discussion_analysis":
+        require_groq_api_key()
+        st = (
+            discussion_source_type
+            if discussion_source_type in ("youtube", "text")
+            else "text"
+        )
+        discussion_analysis, trunc_note = run_discussion_analysis_llm(
+            full_transcript_text,
+            analysis_language=analysis_lang,
+            source_type=st,
+            language_display=discussion_language_display,
+        )
+        chunks_out = _chunks_passthrough_basic(chunks_in)
+        summary = {}
+        disc_note: Optional[str] = None
+        if isinstance(discussion_analysis, dict):
+            dn = discussion_analysis.get("analysis_note")
+            if isinstance(dn, str) and dn.strip():
+                disc_note = dn.strip()
+        extra = _LLM_FALLACY_OTHER_LANG_NOTE if analysis_lang == "other" else None
+        analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, trunc_note, disc_note, extra)
     else:
         raise HTTPException(
             status_code=422,
             detail=(
                 f"Unsupported analysis mode: {mode!r}. Supported: 'frames', 'fallacies', "
-                "'summarize_llm', 'speaker_guess_llm'."
+                "'summarize_llm', 'speaker_guess_llm', 'speakers', 'discussion_analysis'."
             ),
         )
 
@@ -883,6 +1091,8 @@ def _execute_transcript_analysis(
         "analysis_note": analysis_note,
         "llm_summarize": llm_summarize,
         "speaker_blocks": speaker_blocks,
+        "speaker_turns": speaker_turns,
+        "discussion_analysis": discussion_analysis,
         "method": method_effective,
     }
 
@@ -892,6 +1102,8 @@ def run_transcript_analysis(
     mode: str,
     *,
     fallacy_method: Optional[str] = None,
+    summary_format: Optional[str] = None,
+    summary_length: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Fetch transcript (cache-first), chunk, and run the requested analysis mode.
@@ -922,7 +1134,15 @@ def run_transcript_analysis(
         chunks_in=chunks_in,
         full_transcript_text=str(data.get("transcript_text") or ""),
         fallacy_method=fallacy_method,
+        discussion_source_type="youtube",
+        discussion_language_display=transcript_lang,
+        summary_format=summary_format,
+        summary_length=summary_length,
     )
+
+    segs = data.get("segments")
+    if not isinstance(segs, list):
+        segs = []
 
     return {
         "video_id": data["video_id"],
@@ -936,7 +1156,11 @@ def run_transcript_analysis(
         "analysis_note": exec_result["analysis_note"],
         "llm_summarize": exec_result["llm_summarize"],
         "speaker_blocks": exec_result["speaker_blocks"],
+        "speaker_turns": exec_result["speaker_turns"],
+        "discussion_analysis": exec_result["discussion_analysis"],
         "method": exec_result["method"],
+        "transcript_text": str(data.get("transcript_text") or ""),
+        "segments": segs,
     }
 
 
@@ -946,6 +1170,8 @@ def run_transcript_analysis_from_text(
     language: Optional[str],
     *,
     fallacy_method: Optional[str] = None,
+    summary_format: Optional[str] = None,
+    summary_length: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Analyze pasted transcript text: chunk with ``plain_text_to_analysis_chunks``, then the same
@@ -976,6 +1202,10 @@ def run_transcript_analysis_from_text(
         chunks_in=chunks_in,
         full_transcript_text=raw,
         fallacy_method=fallacy_method,
+        discussion_source_type="text",
+        discussion_language_display=lang,
+        summary_format=summary_format,
+        summary_length=summary_length,
     )
 
     return {
@@ -990,5 +1220,9 @@ def run_transcript_analysis_from_text(
         "analysis_note": exec_result["analysis_note"],
         "llm_summarize": exec_result["llm_summarize"],
         "speaker_blocks": exec_result["speaker_blocks"],
+        "speaker_turns": exec_result["speaker_turns"],
+        "discussion_analysis": exec_result["discussion_analysis"],
         "method": exec_result["method"],
+        "transcript_text": raw,
+        "segments": [],
     }

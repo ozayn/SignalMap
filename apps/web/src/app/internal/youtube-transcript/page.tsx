@@ -9,12 +9,14 @@ export default function InternalYouTubeTranscriptPage() {
         <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Internal</p>
         <h1 className="text-2xl font-medium tracking-tight text-foreground">Transcript analysis</h1>
         <p className="text-sm text-muted-foreground max-w-2xl leading-relaxed">
-          YouTube fetch and analyze, or paste plain text. Modes:{" "}
+          One input: paste a YouTube link or plain transcript text (auto-detected). Modes:{" "}
           <span className="font-mono text-[13px]">frames</span>,{" "}
           <span className="font-mono text-[13px]">fallacies</span> (with{" "}
-          <span className="font-mono text-[13px]">method</span>: heuristic, classifier, or LLM),{" "}
+          <span className="font-mono text-[13px]">method</span>: heuristic or LLM),{" "}
           <span className="font-mono text-[13px]">summarize_llm</span>,{" "}
-          <span className="font-mono text-[13px]">speaker_guess_llm</span>. Groq-backed modes need{" "}
+          <span className="font-mono text-[13px]">speaker_guess_llm</span>,{" "}
+          <span className="font-mono text-[13px]">speakers</span>,{" "}
+          <span className="font-mono text-[13px]">discussion_analysis</span>. Groq-backed modes need{" "}
           <span className="font-mono text-[13px]">GROQ_API_KEY</span> on the API. Proxied to the API; not in public
           navigation.{" "}
           <Link

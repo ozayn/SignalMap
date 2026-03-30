@@ -42,7 +42,8 @@ export function TranscriptFallacyMethodNote({
   learnMoreHref = "/learning#transcript-fallacy-analysis",
   className,
 }: TranscriptFallacyMethodNoteProps) {
-  const note = FALLACY_METHOD_SHORT_NOTES[method];
+  const resolved: FallacyMethodKey = method === "classifier" ? "heuristic" : method;
+  const note = FALLACY_METHOD_SHORT_NOTES[resolved];
   const [open, setOpen] = useState(false);
   const uid = useId();
   const bodyId = `transcript-fallacy-method-note-body-${uid}`;
@@ -57,9 +58,9 @@ export function TranscriptFallacyMethodNote({
         aria-controls={bodyId}
         id={toggleId}
         className={cn(
-          "group flex w-full min-w-0 items-center gap-2 rounded-lg border border-border/35 bg-muted/15 px-2.5 py-2 text-left",
-          "dark:border-border/25 dark:bg-muted/10",
-          "transition-colors hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
+          "group flex w-full min-w-0 items-center gap-2 rounded-lg border border-border/25 bg-muted/10 px-2.5 py-1.5 text-left",
+          "dark:border-border/20 dark:bg-muted/[0.08]",
+          "transition-colors hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
           "motion-reduce:transition-none"
         )}
       >

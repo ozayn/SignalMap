@@ -1,7 +1,9 @@
 """
 Heuristic transcript fallacy regression tests.
 
-Uses tests/fixtures/fallacy_test_cases.json. Each case mirrors a request to
+Uses tests/fixtures/fallacy_test_cases.json, including positives and negatives for
+relative_privation, hasty_generalization, appeal_to_authority, slippery_slope, and other labels.
+Each case mirrors a request to
 POST /api/transcript/analyze-text with mode=fallacies, language=en, method=heuristic
 by calling the same underlying function (run_transcript_analysis_from_text).
 

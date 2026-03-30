@@ -33,7 +33,7 @@ export const FALLACY_METHOD_SHORT_NOTES: Record<
     bullets: [
       "What it is: A prompt-based pass where a language model reads each chunk and returns structured labels and short rationales.",
       "How it works: The model reasons over wording in context; output is parsed and validated server-side.",
-      "Language: English and Persian use separate system prompts (same JSON label set). Other languages use the English prompt with a reliability caveat in the API note.",
+      "Language: For pasted transcripts, choose English or Farsi in the language control. The LLM uses separate English and Persian prompts (same JSON label set). YouTube captions supply language automatically. Other languages use the English prompt with a reliability caveat in the API note.",
       "Limitation: Can be inconsistent, over- or under-confident, and may hallucinate labels or quotes; needs human review.",
     ],
   },
@@ -64,7 +64,7 @@ export const TRANSCRIPT_FALLACY_LEARNING_CONCEPTS: TranscriptFallacyLearningConc
   {
     title: "LLM method (prompt-based)",
     description:
-      "Uses a hosted large language model with structured JSON prompts to assign labels and short rationales per chunk. What it uses: semantic reasoning over the transcript text via the model’s weights (not audio diarization). Strengths: handles varied wording and can supply explanations. Language support: dedicated English and Persian system prompts (same JSON schema); other languages may use the English prompt with an API note. Weaknesses: non-deterministic across runs, possible hallucinations, and sensitivity to prompt wording; not a substitute for domain validation. When it may fail: subtle logic, unstated assumptions, or chunks where the model overfits to keywords. It may disagree with heuristics because it interprets meaning more freely, or with a future classifier because training objectives differ.",
+      "Uses a hosted large language model with structured JSON prompts to assign labels and short rationales per chunk. What it uses: semantic reasoning over the transcript text via the model’s weights (not audio diarization). Strengths: handles varied wording and can supply explanations. Language support: for pasted transcripts, pick English or Farsi in the language control; the model uses dedicated English and Persian system prompts (same JSON schema). YouTube captions supply language automatically. Other languages may use the English prompt with an API note. Weaknesses: non-deterministic across runs, possible hallucinations, and sensitivity to prompt wording; not a substitute for domain validation. When it may fail: subtle logic, unstated assumptions, or chunks where the model overfits to keywords. It may disagree with heuristics because it interprets meaning more freely, or with a future classifier because training objectives differ.",
   },
   {
     title: "Why methods may disagree",

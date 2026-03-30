@@ -1,7 +1,9 @@
 """
 LLM fallacy detection tests (Groq, method=llm).
 
-Uses tests/fixtures/fallacy_test_cases.json. Assertions are intentionally soft:
+Uses the same fixture as the heuristic tests, including positives and negatives for
+relative_privation, hasty_generalization, appeal_to_authority, slippery_slope, and other labels.
+Assertions are intentionally soft:
 positive cases require each expected label to appear somewhere in chunk labels (extras allowed).
 Negative cases require no labels.
 
