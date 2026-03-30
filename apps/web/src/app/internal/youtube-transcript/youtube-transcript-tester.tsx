@@ -30,10 +30,6 @@ type AnalyzeChunk = {
   labels?: string[];
   label_matches?: Record<string, string[]>;
   label_strengths?: Record<string, string>;
-  /** fallacies + method llm */
-  reasoning?: string;
-  evidence_spans?: string[];
-  confidence?: string | number;
 };
 
 type AnalyzePayload = {
@@ -257,7 +253,16 @@ function FallacyLabelChip({ label }: { label: string }) {
   );
 }
 
-/** Fallacy label + strength as one bordered unit; strength is small and muted on the right */
+/** Heuristic: weak/strong · LLM: low/medium/high — shown as a small badge on the right */
+function formatStrengthBadge(strength: string): string {
+  const s = strength.trim().toLowerCase();
+  if (s === "low" || s === "medium" || s === "high") {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  return strength;
+}
+
+/** Fallacy label + strength/confidence as one bordered unit; strength is small and muted on the right */
 function LabelStrengthGroup({ label, strength }: { label: string; strength: string }) {
   return (
     <span className="inline-flex max-w-full min-w-0 items-stretch overflow-hidden rounded-md border border-border/45 bg-muted/35">
@@ -265,7 +270,7 @@ function LabelStrengthGroup({ label, strength }: { label: string; strength: stri
         {label}
       </span>
       <span className="inline-flex shrink-0 items-center border-l border-border/25 bg-muted/25 px-1 py-0.5 text-[9px] font-medium tabular-nums leading-none text-muted-foreground/55">
-        {strength}
+        {formatStrengthBadge(strength)}
       </span>
     </span>
   );
@@ -1174,12 +1179,6 @@ export function YouTubeTranscriptTester({
                           </p>
                         )}
 
-                        {lastAnalyzeMode === "fallacies" && analyzeResult?.method === "llm" && (ch.labels?.length ?? 0) === 0 && (
-                          <p className="pt-3 text-[11px] leading-snug text-muted-foreground/65">
-                            No fallacy labels for this chunk (LLM).
-                          </p>
-                        )}
-
                         {(ch.labels?.length ?? 0) > 0 && (
                           <div className="pt-4">
                             <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/65">
@@ -1199,45 +1198,13 @@ export function YouTubeTranscriptTester({
                           </div>
                         )}
 
-                        {lastAnalyzeMode === "fallacies" && analyzeResult?.method === "llm" && (ch.reasoning || ch.evidence_spans?.length) ? (
-                          <div className="mt-4 space-y-2 border-t border-border/10 pt-4">
-                            {ch.reasoning ? (
-                              <div>
-                                <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/65">
-                                  Reasoning
-                                </p>
-                                <p className="text-[12px] leading-relaxed text-muted-foreground/90">{ch.reasoning}</p>
-                              </div>
-                            ) : null}
-                            {ch.evidence_spans && ch.evidence_spans.length > 0 ? (
-                              <div>
-                                <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/65">
-                                  Evidence spans
-                                </p>
-                                <ul className="list-disc space-y-1 pl-4 text-[12px] leading-relaxed text-muted-foreground/90">
-                                  {ch.evidence_spans.map((ev, ei) => (
-                                    <li key={ei}>{ev}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            ) : null}
-                            {ch.confidence !== undefined && ch.confidence !== null && ch.confidence !== "" ? (
-                              <p className="text-[11px] text-muted-foreground/75">
-                                <span className="font-medium text-muted-foreground/85">Confidence:</span>{" "}
-                                {String(ch.confidence)}
-                              </p>
-                            ) : null}
-                          </div>
-                        ) : null}
-
                         <div className="mt-5 border-t border-border/10 pt-6">
                           <p className="text-[15px] leading-[1.75] text-foreground/95 break-words whitespace-pre-wrap sm:text-[16px] sm:leading-[1.8]">
                             {ch.text ?? ""}
                           </p>
                         </div>
 
-                        {matchedCuesLine.length > 0 &&
-                          !(lastAnalyzeMode === "fallacies" && analyzeResult?.method === "llm") && (
+                        {matchedCuesLine.length > 0 && (
                           <div
                             className={cn(
                               "mt-5 border-t pt-4",
@@ -1245,7 +1212,7 @@ export function YouTubeTranscriptTester({
                             )}
                           >
                             <p className="mb-1.5 text-[10px] font-medium tracking-wide text-muted-foreground/65">
-                              Matched cues
+                              {lastAnalyzeMode === "fallacies" ? "Details" : "Matched cues"}
                             </p>
                             <p className="break-words text-[12px] leading-relaxed text-muted-foreground/85">
                               {matchedCuesLine}
@@ -1471,11 +1438,9 @@ export function YouTubeTranscriptTester({
                 ) : (
                   <>
                     <p className="mb-3 text-[10px] text-muted-foreground">
-                      {analyzeResult.method === "llm"
-                        ? "Chunks per label (LLM prototype)."
-                        : analyzeResult.method === "classifier"
-                          ? "Classifier not implemented."
-                          : "Chunks per label (heuristic)."}
+                      {analyzeResult.method === "classifier"
+                        ? "Classifier not implemented."
+                        : "Chunk count per fallacy label (heuristic or LLM)."}
                     </p>
                     {fallacySummaryEntries.length > 0 ? (
                       <ul className="space-y-2">

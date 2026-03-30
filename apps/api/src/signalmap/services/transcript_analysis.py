@@ -17,7 +17,7 @@ For ``mode="fallacies"``, use ``method`` to choose how fallacies are detected:
 
 - ``heuristic`` — rule-based (English-only; see below).
 - ``classifier`` — reserved; returns ``analysis_supported: false`` until implemented.
-- ``llm`` — Groq-backed structured output (requires ``GROQ_API_KEY``; experimental).
+- ``llm`` — Groq chat completion per chunk (``llama-3.1-70b-versatile`` by default; requires ``GROQ_API_KEY``; experimental).
 
 Modes ``summarize_llm`` and ``speaker_guess_llm`` call Groq (see ``GROQ_API_KEY``). They are
 **experimental prototypes** and not substitutes for manual review or validated classifiers.
@@ -31,8 +31,9 @@ from typing import Any, Optional
 from fastapi import HTTPException
 
 from signalmap.services.llm_transcript_analysis import (
+    groq_fallacy_chunk_json,
+    normalize_fallacy_llm_response,
     require_groq_api_key,
-    run_fallacies_llm,
     run_speaker_guess_llm,
     run_summarize_llm,
 )
@@ -605,6 +606,72 @@ def annotate_chunks_fallacies(chunks: list[dict[str, Any]]) -> list[dict[str, An
     return out
 
 
+def annotate_chunks_fallacies_llm(
+    chunks: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], Optional[str]]:
+    """
+    Per-chunk Groq LLM fallacy detection. Chunk shape matches ``annotate_chunks_fallacies``:
+    ``labels``, ``label_matches`` (explanation text per label), ``label_strengths`` (low / medium / high).
+
+    On API or parse failure for a chunk, that chunk gets empty labels and an optional top-level note
+    aggregates failures.
+    """
+    out: list[dict[str, Any]] = []
+    failed = 0
+    for ch in chunks:
+        if not isinstance(ch, dict):
+            continue
+        text = str(ch.get("text", "") or "")
+        base = {
+            "start": ch.get("start"),
+            "end": ch.get("end"),
+            "text": text,
+            "segment_count": ch.get("segment_count", 0),
+        }
+        if not text.strip():
+            out.append(
+                {
+                    **base,
+                    "labels": [],
+                    "label_matches": {},
+                    "label_strengths": {},
+                }
+            )
+            continue
+        raw = groq_fallacy_chunk_json(text)
+        if not raw:
+            failed += 1
+            out.append(
+                {
+                    **base,
+                    "labels": [],
+                    "label_matches": {},
+                    "label_strengths": {},
+                }
+            )
+            continue
+        labels, explanation, conf = normalize_fallacy_llm_response(raw)
+        label_matches: dict[str, list[str]] = {}
+        for lab in labels:
+            label_matches[lab] = [explanation] if explanation else []
+        label_strengths = {lab: conf for lab in labels}
+        out.append(
+            {
+                **base,
+                "labels": labels,
+                "label_matches": label_matches,
+                "label_strengths": label_strengths,
+            }
+        )
+
+    note: Optional[str] = None
+    if failed:
+        note = (
+            f"LLM request failed for {failed} chunk(s); those chunks have empty labels."
+        )
+    return out, note
+
+
 def run_transcript_analysis(
     url: str,
     mode: str,
@@ -659,8 +726,9 @@ def run_transcript_analysis(
                 )
         elif fm == FALLACY_METHOD_LLM:
             require_groq_api_key()
-            chunks_out, summary, trunc_note = run_fallacies_llm(chunks_in)
-            analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, trunc_note)
+            chunks_out, llm_note = annotate_chunks_fallacies_llm(chunks_in)
+            summary = _fallacy_summary_from_chunks(chunks_out)
+            analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, llm_note)
         elif fm == FALLACY_METHOD_CLASSIFIER:
             chunks_out = annotate_chunks_fallacies_skipped(chunks_in)
             summary = {}
@@ -759,8 +827,9 @@ def run_transcript_analysis_from_text(
                 )
         elif fm == FALLACY_METHOD_LLM:
             require_groq_api_key()
-            chunks_out, summary, trunc_note = run_fallacies_llm(chunks_in)
-            analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, trunc_note)
+            chunks_out, llm_note = annotate_chunks_fallacies_llm(chunks_in)
+            summary = _fallacy_summary_from_chunks(chunks_out)
+            analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, llm_note)
         elif fm == FALLACY_METHOD_CLASSIFIER:
             chunks_out = annotate_chunks_fallacies_skipped(chunks_in)
             summary = {}

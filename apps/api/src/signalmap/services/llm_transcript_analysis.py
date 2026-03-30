@@ -22,6 +22,48 @@ log = logging.getLogger(__name__)
 
 GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+# Per-chunk fallacy detection (explicit product default; override with GROQ_FALLACY_MODEL).
+FALLACY_GROQ_MODEL = (os.getenv("GROQ_FALLACY_MODEL") or "llama-3.1-70b-versatile").strip() or "llama-3.1-70b-versatile"
+
+FALLACY_LLM_SYSTEM_PROMPT = """You are a precise analyst of argumentation and logical fallacies.
+Identify whether the given text contains any of the following fallacies:
+
+- ad_hominem
+- straw_man
+- false_dilemma
+- whataboutism
+- appeal_to_fear
+- burden_shifting
+
+Return ONLY valid JSON in this format:
+{
+  "labels": ["..."],
+  "explanation": "...",
+  "confidence": "low" | "medium" | "high"
+}
+
+Examples of clear cases (when the text is plainly like this, it usually warrants a label):
+- direct personal attacks on someone instead of engaging their argument → ad_hominem
+- "so you're saying..." style reframing that exaggerates or misstates an opponent's position → straw_man
+- explicit either/or framing that limits the situation to only two options → false_dilemma
+- redirecting criticism or changing the subject with "what about..." → whataboutism
+- exaggerated catastrophic predictions clearly meant to provoke fear (not calm risk analysis) → appeal_to_fear
+- demanding the other side prove your claim for you, or shifting the burden of proof unfairly → burden_shifting
+
+If a chunk clearly matches one of these patterns, assign the label rather than defaulting to no labels.
+
+Rules:
+- Only assign a fallacy label if there is clear and explicit evidence in the text.
+- If the text is neutral, analytical, or ambiguous, return no labels.
+- Do not over-interpret or infer intent beyond what is clearly stated.
+- Do not label general warnings, predictions, or risk discussions as appeal_to_fear unless they are exaggerated, emotionally manipulative, or clearly intended to provoke fear.
+- Do not label structured comparisons or policy framing as false_dilemma unless the text explicitly limits the situation to only two choices.
+- Only include labels that are clearly present
+- If none are present, return an empty list
+- Do not invent new labels
+- For each label, provide a short, specific explanation referencing the exact phrase or reasoning in the text that triggered the label.
+- Avoid generic explanations such as 'this is a fallacy' — instead explain what in the text makes it a fallacy.
+- Be conservative"""
 
 # Fallacies LLM: only these labels (subset of heuristic set; no "extra" labels).
 FALLACY_LLM_LABELS: tuple[str, ...] = (
@@ -49,6 +91,13 @@ CONFIDENCE_WORDS = frozenset({"low", "medium", "high"})
 
 # Rough transcript cap per request (chars) to stay within context limits; prototype only.
 _MAX_TRANSCRIPT_CHARS = 80_000
+
+# --- Temporary LLM fallacy debug (set GROQ_FALLACY_LLM_DEBUG=1). Remove when no longer needed. ---
+def _fallacy_llm_debug_enabled() -> bool:
+    return (os.getenv("GROQ_FALLACY_LLM_DEBUG") or "").strip().lower() in ("1", "true", "yes")
+
+
+_fallacy_debug_chunk_seq = 0
 
 
 def require_groq_api_key() -> str:
@@ -94,15 +143,19 @@ def groq_chat_json(
     user: str,
     temperature: float = 0.2,
     max_tokens: int = 8192,
+    model: Optional[str] = None,
+    fallacy_debug: bool = False,
 ) -> dict[str, Any]:
     """
     Call Groq chat completions and parse a JSON object from the assistant message.
     On HTTP/parse error, returns ``{}`` (caller should treat as empty/safe default).
+
+    ``fallacy_debug``: when True, log raw assistant text and parse outcome (see GROQ_FALLACY_LLM_DEBUG).
     """
     key = require_groq_api_key()
-    model = _groq_model()
+    model_name = (model or "").strip() or _groq_model()
     payload: dict[str, Any] = {
-        "model": model,
+        "model": model_name,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -122,6 +175,12 @@ def groq_chat_json(
                 json=payload,
             )
     except httpx.RequestError as e:
+        if fallacy_debug:
+            log.warning(
+                "[GROQ_FALLACY_LLM_DEBUG] httpx.RequestError: %s: %s",
+                type(e).__name__,
+                e,
+            )
         log.warning("Groq request failed: %s", e)
         raise HTTPException(
             status_code=502,
@@ -135,6 +194,12 @@ def groq_chat_json(
         except Exception:
             msg = None
         detail = msg or r.text[:500] or f"HTTP {r.status_code}"
+        if fallacy_debug:
+            log.warning(
+                "[GROQ_FALLACY_LLM_DEBUG] Groq HTTP error %s: %s",
+                r.status_code,
+                detail,
+            )
         log.warning("Groq API error %s: %s", r.status_code, detail)
         raise HTTPException(status_code=502, detail=f"Groq API error: {detail}")
 
@@ -142,16 +207,166 @@ def groq_chat_json(
         body = r.json()
         choices = body.get("choices") or []
         if not choices:
+            if fallacy_debug:
+                log.warning("[GROQ_FALLACY_LLM_DEBUG] empty choices[] in Groq response body")
             return {}
         msg = (choices[0] or {}).get("message") or {}
         content = msg.get("content")
         if not isinstance(content, str):
+            if fallacy_debug:
+                log.warning(
+                    "[GROQ_FALLACY_LLM_DEBUG] assistant content missing or not str (type=%s)",
+                    type(content).__name__,
+                )
             return {}
+        if fallacy_debug:
+            log.warning(
+                "[GROQ_FALLACY_LLM_DEBUG] raw assistant content (%s chars):\n%s",
+                len(content),
+                content,
+            )
         parsed = _parse_json_object(content)
+        if fallacy_debug:
+            if parsed is None or not isinstance(parsed, dict):
+                log.warning(
+                    "[GROQ_FALLACY_LLM_DEBUG] _parse_json_object failed or non-dict; got %r",
+                    parsed,
+                )
+            else:
+                log.warning("[GROQ_FALLACY_LLM_DEBUG] parsed JSON object: %s", parsed)
         return parsed if isinstance(parsed, dict) else {}
     except (ValueError, KeyError, TypeError, json.JSONDecodeError) as e:
+        if fallacy_debug:
+            log.warning(
+                "[GROQ_FALLACY_LLM_DEBUG] exception reading/parsing Groq response: %s: %s",
+                type(e).__name__,
+                e,
+            )
         log.warning("Groq response parse failed: %s", e)
         return {}
+
+
+def groq_chat_json_safe(
+    *,
+    system: str,
+    user: str,
+    temperature: float = 0.2,
+    max_tokens: int = 1024,
+    model: Optional[str] = None,
+    fallacy_debug: bool = False,
+) -> dict[str, Any]:
+    """
+    Like ``groq_chat_json`` but never raises: returns ``{}`` on HTTP errors or ``HTTPException``.
+    """
+    try:
+        return groq_chat_json(
+            system=system,
+            user=user,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            model=model,
+            fallacy_debug=fallacy_debug,
+        )
+    except HTTPException as e:
+        if fallacy_debug:
+            log.warning(
+                "[GROQ_FALLACY_LLM_DEBUG] groq_chat_json_safe caught HTTPException: %s: %s",
+                type(e).__name__,
+                e.detail,
+            )
+        log.warning("Groq safe-mode failure: %s", e.detail)
+        return {}
+    except Exception as e:
+        if fallacy_debug:
+            log.warning(
+                "[GROQ_FALLACY_LLM_DEBUG] groq_chat_json_safe caught unexpected: %s: %s",
+                type(e).__name__,
+                e,
+            )
+        log.warning("Groq safe-mode unexpected failure: %s", e)
+        return {}
+
+
+# Per-chunk fallacy prompt; keep under Groq context limits.
+_MAX_FALLACY_CHUNK_CHARS = 12_000
+
+
+def groq_fallacy_chunk_json(chunk_text: str) -> dict[str, Any]:
+    """
+    One Groq chat completion per chunk using ``FALLACY_LLM_SYSTEM_PROMPT``.
+    Returns parsed JSON object or ``{}`` on failure / empty input.
+
+    Set env ``GROQ_FALLACY_LLM_DEBUG=1`` for verbose logging (temporary; see module header).
+    """
+    global _fallacy_debug_chunk_seq
+    t = (chunk_text or "").strip()
+    if not t:
+        return {}
+    if len(t) > _MAX_FALLACY_CHUNK_CHARS:
+        t = t[:_MAX_FALLACY_CHUNK_CHARS]
+    user = f"Text:\n{t}"
+
+    dbg = _fallacy_llm_debug_enabled()
+    if dbg:
+        _fallacy_debug_chunk_seq += 1
+        if _fallacy_debug_chunk_seq == 1:
+            log.warning("[GROQ_FALLACY_LLM_DEBUG] --- first chunk INPUT text ---\n%s", t)
+
+    raw = groq_chat_json_safe(
+        system=FALLACY_LLM_SYSTEM_PROMPT,
+        user=user,
+        temperature=0.2,
+        max_tokens=1024,
+        model=FALLACY_GROQ_MODEL,
+        fallacy_debug=dbg,
+    )
+
+    if dbg:
+        labels, explanation, conf = normalize_fallacy_llm_response(raw)
+        if _fallacy_debug_chunk_seq == 1:
+            log.warning(
+                "[GROQ_FALLACY_LLM_DEBUG] --- first chunk NORMALIZED --- labels=%s confidence=%s explanation_len=%s",
+                labels,
+                conf,
+                len(explanation),
+            )
+            if explanation:
+                log.warning("[GROQ_FALLACY_LLM_DEBUG] normalized explanation: %s", explanation)
+        else:
+            log.warning(
+                "[GROQ_FALLACY_LLM_DEBUG] chunk #%s normalized labels=%s",
+                _fallacy_debug_chunk_seq,
+                labels,
+            )
+
+    return raw
+
+
+def normalize_fallacy_llm_response(raw: dict[str, Any]) -> tuple[list[str], str, str]:
+    """
+    Map model JSON to ``labels`` (allowed set only), ``explanation`` string, and
+    ``confidence`` in ``low`` | ``medium`` | ``high``.
+    """
+    labels: list[str] = []
+    for x in raw.get("labels") or []:
+        if isinstance(x, str):
+            lab = x.strip()
+            if lab in FALLACY_LLM_LABEL_SET and lab not in labels:
+                labels.append(lab)
+    labels.sort()
+    exp_raw = raw.get("explanation")
+    if isinstance(exp_raw, list):
+        explanation = " ".join(str(x).strip() for x in exp_raw if str(x).strip())
+    elif isinstance(exp_raw, str):
+        explanation = exp_raw.strip()
+    else:
+        explanation = str(exp_raw or "").strip()
+    c = raw.get("confidence")
+    if isinstance(c, str) and c.strip().lower() in CONFIDENCE_WORDS:
+        conf = c.strip().lower()
+    else:
+        conf = "low"
+    return labels, explanation, conf
 
 
 def _truncate_for_llm(text: str) -> tuple[str, bool]:
@@ -219,127 +434,6 @@ def run_summarize_llm(
     raw = groq_chat_json(system=system, user=user, temperature=0.25, max_tokens=2048)
     validated = validate_summarize_output(raw)
     return validated, note
-
-
-def _normalize_confidence(val: Any) -> dict[str, Any]:
-    """Return a small object for JSON: prefer float 0-1, else string label."""
-    if isinstance(val, (int, float)):
-        c = float(val)
-        if 0.0 <= c <= 1.0:
-            return {"confidence": round(c, 4)}
-    if isinstance(val, str):
-        s = val.strip().lower()
-        if s in CONFIDENCE_WORDS:
-            return {"confidence": s}
-        return {"confidence": s}
-    return {"confidence": 0.0}
-
-
-def _validate_evidence_spans(val: Any) -> list[str]:
-    if not isinstance(val, list):
-        return []
-    out: list[str] = []
-    for x in val[:12]:
-        if isinstance(x, str) and x.strip():
-            out.append(x.strip()[:2000])
-    return out
-
-
-def validate_fallacy_chunk_row(row: Any) -> dict[str, Any]:
-    """Normalize one chunk's LLM fallacy output."""
-    out: dict[str, Any] = {
-        "labels": [],
-        "reasoning": "",
-        "evidence_spans": [],
-        "confidence": 0.0,
-    }
-    if not isinstance(row, dict):
-        return out
-    labels = row.get("labels")
-    if isinstance(labels, list):
-        clean: list[str] = []
-        for x in labels:
-            if not isinstance(x, str):
-                continue
-            lab = x.strip()
-            if lab in FALLACY_LLM_LABEL_SET and lab not in clean:
-                clean.append(lab)
-        clean.sort()
-        out["labels"] = clean
-    r = row.get("reasoning")
-    out["reasoning"] = r.strip() if isinstance(r, str) else ""
-    out["evidence_spans"] = _validate_evidence_spans(row.get("evidence_spans"))
-    conf = _normalize_confidence(row.get("confidence"))
-    out["confidence"] = conf.get("confidence", 0.0)
-    return out
-
-
-def run_fallacies_llm(chunks: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, int], Optional[str]]:
-    """
-    Per-chunk fallacy labels via LLM. Returns annotated chunks (merged with timing/text),
-    summary counts per label, and optional note if truncated.
-    """
-    manifest = _build_chunk_manifest(chunks)
-    manifest, truncated = _truncate_for_llm(manifest)
-    note = "Transcript truncated for LLM context (prototype limit)." if truncated else None
-
-    allowed = ", ".join(FALLACY_LLM_LABELS)
-    system = (
-        "You are an assistant for experimental rhetorical tagging on transcripts (internal prototype only). "
-        "Classify each chunk using ONLY these labels when clearly supported by the chunk text: "
-        f"{allowed}. "
-        "Use an empty labels array when none apply. Do not invent fallacies. "
-        "Respond with a single JSON object: "
-        '{"chunks": [ {"chunk_index": <int>, "labels": [...], "reasoning": "<short string>", '
-        '"evidence_spans": ["<short quote from chunk>", ...], "confidence": <number 0-1> } ] } '
-        "chunk_index must match the chunk index provided. "
-        "evidence_spans must be short fragments copied from that chunk only."
-    )
-    user = (
-        "Analyze each chunk below. Return JSON only.\n\n" + manifest
-    )
-    raw = groq_chat_json(system=system, user=user, temperature=0.15, max_tokens=8192)
-    rows_out: list[dict[str, Any]] = []
-    by_index: dict[int, dict[str, Any]] = {}
-
-    chunks_arr = raw.get("chunks") if isinstance(raw, dict) else None
-    if isinstance(chunks_arr, list):
-        for row in chunks_arr:
-            if not isinstance(row, dict):
-                continue
-            idx = row.get("chunk_index")
-            if isinstance(idx, float) and idx == int(idx):
-                idx = int(idx)
-            if isinstance(idx, int) and 0 <= idx < len(chunks):
-                by_index[idx] = validate_fallacy_chunk_row(row)
-
-    for i, ch in enumerate(chunks):
-        if not isinstance(ch, dict):
-            continue
-        base = {
-            "start": ch.get("start"),
-            "end": ch.get("end"),
-            "text": str(ch.get("text", "") or ""),
-            "segment_count": ch.get("segment_count", 0),
-        }
-        extra = by_index.get(i) or validate_fallacy_chunk_row({})
-        merged = {
-            **base,
-            "labels": extra["labels"],
-            "reasoning": extra["reasoning"],
-            "evidence_spans": extra["evidence_spans"],
-            "confidence": extra["confidence"],
-        }
-        rows_out.append(merged)
-
-    summary: dict[str, int] = {}
-    for ch in rows_out:
-        for lab in ch.get("labels") or []:
-            if isinstance(lab, str):
-                summary[lab] = summary.get(lab, 0) + 1
-    summary = dict(sorted((k, v) for k, v in summary.items() if v > 0))
-
-    return rows_out, summary, note
 
 
 def _validate_speaker_block(row: Any) -> Optional[dict[str, Any]]:
