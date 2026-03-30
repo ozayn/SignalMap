@@ -1,3 +1,5 @@
+import { TRANSCRIPT_FALLACY_LEARNING_CONCEPTS } from "@/lib/transcript-fallacy-methods";
+
 type LearnMoreLink = { label: string; url: string; type?: "video" | "article" };
 
 type Concept = {
@@ -193,6 +195,10 @@ const CONCEPTS: Record<string, Concept[]> = {
       description: "Economic data are estimates and approximations. They may miss informal activity, be revised, or reflect different definitions. What we measure is not always exactly what happens in reality.",
     },
   ],
+  "Transcript fallacy analysis": TRANSCRIPT_FALLACY_LEARNING_CONCEPTS.map((c) => ({
+    title: c.title,
+    description: c.description,
+  })),
 };
 
 function ConceptEntry({ concept }: { concept: Concept }) {
@@ -227,7 +233,10 @@ export default function LearningPage() {
         <p>Concepts and explanations used throughout SignalMap.</p>
 
         {Object.entries(CONCEPTS).map(([sectionTitle, concepts]) => (
-          <section key={sectionTitle}>
+          <section
+            key={sectionTitle}
+            id={sectionTitle === "Transcript fallacy analysis" ? "transcript-fallacy-analysis" : undefined}
+          >
             <h2>{sectionTitle}</h2>
             <div>
               {concepts.map((concept) => (

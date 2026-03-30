@@ -1107,9 +1107,16 @@ def api_youtube_transcript(body: YouTubeTranscriptRequestBody):
 
 class YouTubeTranscriptAnalyzeRequestBody(BaseModel):
     url: str = Field(..., min_length=5, description="YouTube video URL")
-    mode: Literal["frames", "fallacies"] = Field(
+    mode: Literal["frames", "fallacies", "summarize_llm", "speaker_guess_llm"] = Field(
         ...,
-        description="Analysis mode: frames (discourse frames) or fallacies (prototype keyword fallacy tags)",
+        description=(
+            "Analysis mode. For fallacies, use ``method`` to pick heuristic / classifier / llm. "
+            "summarize_llm and speaker_guess_llm require GROQ_API_KEY (experimental)."
+        ),
+    )
+    method: Literal["heuristic", "classifier", "llm"] = Field(
+        default="heuristic",
+        description="When mode is fallacies: fallacy detection method. Ignored for other modes.",
     )
 
 
@@ -1121,7 +1128,7 @@ class YouTubeTranscriptAnalyzeResponseBody(BaseModel):
     chunks: list[dict[str, Any]]  # labels, label_matches; fallacies adds label_strengths
     summary: dict[str, int] = Field(
         default_factory=dict,
-        description="Fallacies mode: chunk counts per fallacy label (non-zero only); heuristic prototype; empty for frames.",
+        description="Fallacies modes: chunk counts per fallacy label (non-zero only); empty for other modes.",
     )
     fallback_used: bool = Field(
         default=False,
@@ -1135,15 +1142,32 @@ class YouTubeTranscriptAnalyzeResponseBody(BaseModel):
         default=None,
         description="Set when analysis_supported is false (e.g. language not supported for fallacies).",
     )
+    llm_summarize: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="summarize_llm only: summary_short, summary_bullets, main_topics.",
+    )
+    speaker_blocks: Optional[list[dict[str, Any]]] = Field(
+        default=None,
+        description="speaker_guess_llm only: approximate speaker segments (not diarization).",
+    )
+    method: Optional[Literal["heuristic", "classifier", "llm"]] = Field(
+        default=None,
+        description="When the request used mode fallacies: which fallacy method ran.",
+    )
 
 
 @app.post("/api/youtube/transcript/analyze", response_model=YouTubeTranscriptAnalyzeResponseBody)
 def api_youtube_transcript_analyze(body: YouTubeTranscriptAnalyzeRequestBody):
     """
-    Experimental chunk-level transcript analysis (playground). Reuses fetch + chunking;
-    mode ``frames`` or ``fallacies`` applies prototype keyword labels per chunk (not definitive).
+    Experimental chunk-level transcript analysis (playground). Reuses fetch + chunking.
+    For ``mode=fallacies``, ``method`` selects heuristic, classifier (placeholder), or llm (Groq).
+    ``summarize_llm`` and ``speaker_guess_llm`` require ``GROQ_API_KEY`` and are prototypes only.
     """
-    data = run_transcript_analysis_for_url(body.url, body.mode)
+    data = run_transcript_analysis_for_url(
+        body.url,
+        body.mode,
+        fallacy_method=body.method,
+    )
     return YouTubeTranscriptAnalyzeResponseBody(
         video_id=data["video_id"],
         title=data.get("title"),
@@ -1154,14 +1178,21 @@ def api_youtube_transcript_analyze(body: YouTubeTranscriptAnalyzeRequestBody):
         fallback_used=bool(data.get("fallback_used")),
         analysis_supported=bool(data.get("analysis_supported", True)),
         analysis_note=data.get("analysis_note"),
+        llm_summarize=data.get("llm_summarize"),
+        speaker_blocks=data.get("speaker_blocks"),
+        method=data.get("method"),
     )
 
 
 class TranscriptAnalyzeTextRequestBody(BaseModel):
     text: str = Field(..., min_length=1, description="Raw transcript text to analyze")
-    mode: Literal["fallacies", "frames"] = Field(
+    mode: Literal["fallacies", "frames", "summarize_llm", "speaker_guess_llm"] = Field(
         default="fallacies",
-        description="Analysis mode; fallacies uses English heuristic fallacy tags.",
+        description="Analysis mode; for fallacies use ``method``; LLM modes require GROQ_API_KEY.",
+    )
+    method: Literal["heuristic", "classifier", "llm"] = Field(
+        default="heuristic",
+        description="When mode is fallacies: fallacy detection method. Ignored for other modes.",
     )
     language: str = Field(
         default="en",
@@ -1172,10 +1203,15 @@ class TranscriptAnalyzeTextRequestBody(BaseModel):
 @app.post("/api/transcript/analyze-text", response_model=YouTubeTranscriptAnalyzeResponseBody)
 def api_transcript_analyze_text(body: TranscriptAnalyzeTextRequestBody):
     """
-    Chunk pasted transcript text and run the same frames/fallacies analysis as
+    Chunk pasted transcript text and run the same analysis modes as
     ``/api/youtube/transcript/analyze`` without fetching from YouTube.
     """
-    data = run_transcript_analysis_from_text(body.text, body.mode, body.language)
+    data = run_transcript_analysis_from_text(
+        body.text,
+        body.mode,
+        body.language,
+        fallacy_method=body.method,
+    )
     return YouTubeTranscriptAnalyzeResponseBody(
         video_id=data["video_id"],
         title=data.get("title"),
@@ -1186,6 +1222,9 @@ def api_transcript_analyze_text(body: TranscriptAnalyzeTextRequestBody):
         fallback_used=bool(data.get("fallback_used")),
         analysis_supported=bool(data.get("analysis_supported", True)),
         analysis_note=data.get("analysis_note"),
+        llm_summarize=data.get("llm_summarize"),
+        speaker_blocks=data.get("speaker_blocks"),
+        method=data.get("method"),
     )
 
 

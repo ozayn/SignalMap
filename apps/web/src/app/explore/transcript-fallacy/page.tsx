@@ -10,7 +10,15 @@ export default function TranscriptFallacyExplorePage() {
           Transcript fallacy analysis
         </h1>
         <p className="mt-3 text-pretty text-sm leading-relaxed text-muted-foreground">
-          Experimental heuristic tags on transcript chunks — not validated for real-world claims.
+          Compare fallacy-style tags on transcript chunks using heuristic rules, a future classifier, or an LLM — all
+          experimental. Choose a method below; short explanations update with your selection.{" "}
+          <Link
+            href="/learning#transcript-fallacy-analysis"
+            className="underline underline-offset-4 transition-colors hover:text-foreground"
+          >
+            Learning: transcript fallacy analysis
+          </Link>{" "}
+          has longer notes on strengths, limits, and why methods disagree.
         </p>
         <p className="mt-4 text-xs text-muted-foreground">
           <Link href="/explore" className="underline underline-offset-4 transition-colors hover:text-foreground">

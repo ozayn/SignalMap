@@ -1,0 +1,72 @@
+[
+  {
+    "name": "ad_hominem_positive",
+    "text": "You shouldn’t listen to him about foreign policy. He’s an idiot and a clown.",
+    "expected": ["ad_hominem"]
+  },
+  {
+    "name": "straw_man_positive",
+    "text": "So you’re saying we should just let the country collapse and do nothing.",
+    "expected": ["straw_man"]
+  },
+  {
+    "name": "false_dilemma_positive",
+    "text": "Either we go to war now, or we lose the entire region forever.",
+    "expected": ["false_dilemma", "appeal_to_fear"]
+  },
+  {
+    "name": "whataboutism_positive",
+    "text": "What about what America did in Iraq? Why don’t you talk about that instead?",
+    "expected": ["whataboutism"]
+  },
+  {
+    "name": "appeal_to_fear_positive",
+    "text": "If we don’t stop this now, millions will die, the country will be destroyed, and your family will never be safe again.",
+    "expected": ["appeal_to_fear"]
+  },
+  {
+    "name": "burden_shifting_positive",
+    "text": "No, you prove that I’m wrong. Show me the evidence first.",
+    "expected": ["burden_shifting"]
+  },
+  {
+    "name": "negative_control_argument",
+    "text": "I disagree with his foreign policy because the sanctions failed and oil exports increased.",
+    "expected": []
+  },
+  {
+    "name": "negative_control_options",
+    "text": "There are several options: diplomacy, sanctions, deterrence, or military action.",
+    "expected": []
+  },
+  {
+    "name": "negative_control_comparison",
+    "text": "Iraq is a useful historical comparison, but let’s return to the current case.",
+    "expected": []
+  },
+  {
+    "name": "negative_control_burden",
+    "text": "I made the claim, so I should provide the evidence for it.",
+    "expected": []
+  },
+  {
+    "name": "mixed_case",
+    "text": "Either you support this war or you support terrorists.",
+    "expected": ["false_dilemma"]
+  },
+  {
+    "name": "insult_without_target",
+    "text": "This whole thing is stupid and insane, but I'm not attacking any person in particular.",
+    "expected": []
+  },
+  {
+    "name": "stronger_ad_hominem",
+    "text": "You’re a complete idiot, a clown, and nobody should take you seriously.",
+    "expected": ["ad_hominem"]
+  },
+  {
+    "name": "borderline_fear",
+    "text": "This is a serious threat and could become very dangerous.",
+    "expected": ["appeal_to_fear"]
+  }
+]

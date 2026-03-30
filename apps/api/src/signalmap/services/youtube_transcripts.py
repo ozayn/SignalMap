@@ -454,11 +454,15 @@ def get_transcript_for_url(url: str) -> dict[str, Any]:
     }
 
 
-def run_transcript_analysis_for_url(url: str, mode: str) -> dict[str, Any]:
+def run_transcript_analysis_for_url(
+    url: str,
+    mode: str,
+    fallacy_method: Optional[str] = None,
+) -> dict[str, Any]:
     """
     Experimental chunk-level analysis on top of the transcript pipeline.
     Delegates to ``transcript_analysis.run_transcript_analysis``.
     """
     from signalmap.services.transcript_analysis import run_transcript_analysis
 
-    return run_transcript_analysis(url, mode)
+    return run_transcript_analysis(url, mode, fallacy_method=fallacy_method)

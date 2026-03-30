@@ -12,6 +12,15 @@ prototypes, not definitive classifiers, and are unsuitable for research claims w
 ``fallacies`` mode uses English-only, hand-tuned pattern checks with context guards. It is a
 heuristic prototype (not a validated logical-fallacy classifier) and will miss real fallacies
 and occasionally misfire; use ``label_matches`` for internal rule debugging only.
+
+For ``mode="fallacies"``, use ``method`` to choose how fallacies are detected:
+
+- ``heuristic`` — rule-based (English-only; see below).
+- ``classifier`` — reserved; returns ``analysis_supported: false`` until implemented.
+- ``llm`` — Groq-backed structured output (requires ``GROQ_API_KEY``; experimental).
+
+Modes ``summarize_llm`` and ``speaker_guess_llm`` call Groq (see ``GROQ_API_KEY``). They are
+**experimental prototypes** and not substitutes for manual review or validated classifiers.
 """
 
 from __future__ import annotations
@@ -20,6 +29,61 @@ import re
 from typing import Any, Optional
 
 from fastapi import HTTPException
+
+from signalmap.services.llm_transcript_analysis import (
+    require_groq_api_key,
+    run_fallacies_llm,
+    run_speaker_guess_llm,
+    run_summarize_llm,
+)
+
+_LLM_MODE_NOTE = (
+    "Groq LLM mode (experimental prototype); not validated for research or moderation decisions."
+)
+
+# Fallacy detection backend when mode == "fallacies"
+FALLACY_METHOD_HEURISTIC = "heuristic"
+FALLACY_METHOD_CLASSIFIER = "classifier"
+FALLACY_METHOD_LLM = "llm"
+FALLACY_METHODS = frozenset(
+    {FALLACY_METHOD_HEURISTIC, FALLACY_METHOD_CLASSIFIER, FALLACY_METHOD_LLM}
+)
+
+
+def _normalize_fallacy_method(method: Optional[str]) -> str:
+    m = (method or FALLACY_METHOD_HEURISTIC).strip().lower()
+    if m not in FALLACY_METHODS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Unsupported fallacy method: {method!r}. "
+                f"Use one of: {', '.join(sorted(FALLACY_METHODS))}."
+            ),
+        )
+    return m
+
+
+def _chunks_passthrough_basic(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Echo chunks with timing and text only (no heuristic labels)."""
+    out: list[dict[str, Any]] = []
+    for ch in chunks:
+        if not isinstance(ch, dict):
+            continue
+        out.append(
+            {
+                "start": ch.get("start"),
+                "end": ch.get("end"),
+                "text": str(ch.get("text", "") or ""),
+                "segment_count": ch.get("segment_count", 0),
+            }
+        )
+    return out
+
+
+def _merge_analysis_notes(*parts: Optional[str]) -> Optional[str]:
+    bits = [p.strip() for p in parts if p and str(p).strip()]
+    return " ".join(bits) if bits else None
+
 
 # --- "frames" mode: simple substring triggers (English, case-insensitive) ---
 _FRAME_KEYWORDS: dict[str, tuple[str, ...]] = {
@@ -257,8 +321,14 @@ def _det_false_dilemma(low: str) -> Optional[tuple[list[str], str]]:
         "must pick",
     )
     ms = [f"phrase:{p}" for p in phrases if p in low]
+    # Binary framing: either we … or we … / either you … or you … (common false-dilemma surface form)
+    if re.search(r"\beither\s+we\b.{0,160}?\bor\s+we\b", low):
+        ms.append("regex:either_we_or_we")
+    if re.search(r"\beither\s+you\b.{0,160}?\bor\s+you\b", low):
+        ms.append("regex:either_you_or_you")
     if not ms:
         return None
+    ms = sorted(set(ms))
     st = "strong" if len(ms) >= 2 else "weak"
     return ms, st
 
@@ -292,9 +362,18 @@ def _det_appeal_to_fear(low: str) -> Optional[tuple[list[str], str]]:
         "existential threat",
         "wake up before it's too late",
         "wake up before it is too late",
+        "millions will die",
+        "lose the entire region",
+        "never be safe",
+        "will be destroyed",
     ):
         if p in low:
             ms.append(f"phrase:{p}")
+    # "will die" only with mass-casualty or conditional framing (narrower than bare "die")
+    if "will die" in low and (
+        "million" in low or "thousand" in low or "if we" in low or "if you" in low or "don't stop" in low
+    ):
+        ms.append("phrase:will_die_conditional_or_mass")
     if "catastrophic" in low:
         ms.append("cue:catastrophic")
     if re.search(r"\bdanger\b", low) and re.search(
@@ -305,8 +384,8 @@ def _det_appeal_to_fear(low: str) -> Optional[tuple[list[str], str]]:
         r"\b(imminent|existential|grave|serious)\b", low
     ):
         ms.append("combo:threat+severity")
-    if re.search(r"\bdestroy\b", low) and re.search(
-        r"\b(us|our|country|world|future|planet|america|democracy|nation)\b", low
+    if re.search(r"\bdestroy(ed)?\b", low) and re.search(
+        r"\b(us|our|country|world|future|planet|america|democracy|nation|family)\b", low
     ):
         ms.append("combo:destroy+scope")
     if not ms:
@@ -526,13 +605,20 @@ def annotate_chunks_fallacies(chunks: list[dict[str, Any]]) -> list[dict[str, An
     return out
 
 
-def run_transcript_analysis(url: str, mode: str) -> dict[str, Any]:
+def run_transcript_analysis(
+    url: str,
+    mode: str,
+    *,
+    fallacy_method: Optional[str] = None,
+) -> dict[str, Any]:
     """
     Fetch transcript (cache-first), chunk, and run the requested analysis mode.
 
-    Fallacies mode also adds per-chunk ``label_strengths`` and top-level ``summary`` (chunk counts
-    per fallacy label, non-zero counts only).
-    English-only fallacy heuristics are skipped for non-English transcripts (see ``analysis_supported``).
+    When ``mode`` is ``fallacies``, ``fallacy_method`` selects ``heuristic``, ``classifier``, or
+    ``llm`` (see module docstring). Ignored for other modes.
+
+    Heuristic fallacies add per-chunk ``label_strengths`` and top-level ``summary`` (chunk counts
+    per fallacy label). English-only heuristics are skipped for non-English transcripts.
     """
     from signalmap.services.youtube_transcripts import get_transcript_for_url
 
@@ -550,24 +636,56 @@ def run_transcript_analysis(url: str, mode: str) -> dict[str, Any]:
     analysis_supported = True
     analysis_note: Optional[str] = None
 
+    llm_summarize: Optional[dict[str, Any]] = None
+    speaker_blocks: Optional[list[dict[str, Any]]] = None
+    method_effective: Optional[str] = None
+
     if mode == "frames":
         chunks_out = annotate_chunks_frames(chunks_in)
         summary: dict[str, int] = {}
     elif mode == "fallacies":
-        if _language_is_english_for_fallacy_analysis(transcript_lang):
-            chunks_out = annotate_chunks_fallacies(chunks_in)
-            summary = _fallacy_summary_from_chunks(chunks_out)
-        else:
+        fm = _normalize_fallacy_method(fallacy_method)
+        method_effective = fm
+        if fm == FALLACY_METHOD_HEURISTIC:
+            if _language_is_english_for_fallacy_analysis(transcript_lang):
+                chunks_out = annotate_chunks_fallacies(chunks_in)
+                summary = _fallacy_summary_from_chunks(chunks_out)
+            else:
+                chunks_out = annotate_chunks_fallacies_skipped(chunks_in)
+                summary = {}
+                analysis_supported = False
+                analysis_note = (
+                    "Fallacies mode is currently implemented only for English transcripts."
+                )
+        elif fm == FALLACY_METHOD_LLM:
+            require_groq_api_key()
+            chunks_out, summary, trunc_note = run_fallacies_llm(chunks_in)
+            analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, trunc_note)
+        elif fm == FALLACY_METHOD_CLASSIFIER:
             chunks_out = annotate_chunks_fallacies_skipped(chunks_in)
             summary = {}
             analysis_supported = False
-            analysis_note = (
-                "Fallacies mode is currently implemented only for English transcripts."
-            )
+            analysis_note = "Classifier method is not implemented yet."
+    elif mode == "summarize_llm":
+        require_groq_api_key()
+        full_text = str(data.get("transcript_text") or "")
+        llm_summarize, trunc_note = run_summarize_llm(full_text=full_text)
+        chunks_out = _chunks_passthrough_basic(chunks_in)
+        summary = {}
+        analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, trunc_note)
+    elif mode == "speaker_guess_llm":
+        require_groq_api_key()
+        speaker_blocks, sp_note, trunc_note = run_speaker_guess_llm(chunks_in)
+        chunks_out = _chunks_passthrough_basic(chunks_in)
+        summary = {}
+        analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, sp_note, trunc_note)
     else:
         raise HTTPException(
             status_code=422,
-            detail=f"Unsupported analysis mode: {mode!r}. Supported: 'frames', 'fallacies'.",
+            detail=(
+                f"Unsupported analysis mode: {mode!r}. Supported: 'frames', 'fallacies', "
+                "'summarize_llm', 'speaker_guess_llm'."
+            ),
         )
 
     return {
@@ -580,6 +698,9 @@ def run_transcript_analysis(url: str, mode: str) -> dict[str, Any]:
         "fallback_used": bool(data.get("fallback_used")),
         "analysis_supported": analysis_supported,
         "analysis_note": analysis_note,
+        "llm_summarize": llm_summarize,
+        "speaker_blocks": speaker_blocks,
+        "method": method_effective,
     }
 
 
@@ -587,11 +708,13 @@ def run_transcript_analysis_from_text(
     text: str,
     mode: str,
     language: Optional[str],
+    *,
+    fallacy_method: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Analyze pasted transcript text: chunk with ``plain_text_to_analysis_chunks``, then the same
-    frames/fallacies heuristics as ``run_transcript_analysis``. No YouTube fetch; ``video_id``
-    is empty and ``cached`` is false.
+    logic as ``run_transcript_analysis``. No YouTube fetch; ``video_id`` is empty and ``cached``
+    is false.
     """
     from signalmap.services.transcript_chunks import plain_text_to_analysis_chunks
 
@@ -613,24 +736,55 @@ def run_transcript_analysis_from_text(
     analysis_supported = True
     analysis_note: Optional[str] = None
 
+    llm_summarize: Optional[dict[str, Any]] = None
+    speaker_blocks: Optional[list[dict[str, Any]]] = None
+    method_effective: Optional[str] = None
+
     if mode == "frames":
         chunks_out = annotate_chunks_frames(chunks_in)
         summary: dict[str, int] = {}
     elif mode == "fallacies":
-        if _language_is_english_for_fallacy_analysis(lang):
-            chunks_out = annotate_chunks_fallacies(chunks_in)
-            summary = _fallacy_summary_from_chunks(chunks_out)
-        else:
+        fm = _normalize_fallacy_method(fallacy_method)
+        method_effective = fm
+        if fm == FALLACY_METHOD_HEURISTIC:
+            if _language_is_english_for_fallacy_analysis(lang):
+                chunks_out = annotate_chunks_fallacies(chunks_in)
+                summary = _fallacy_summary_from_chunks(chunks_out)
+            else:
+                chunks_out = annotate_chunks_fallacies_skipped(chunks_in)
+                summary = {}
+                analysis_supported = False
+                analysis_note = (
+                    "Fallacies mode is currently implemented only for English transcripts."
+                )
+        elif fm == FALLACY_METHOD_LLM:
+            require_groq_api_key()
+            chunks_out, summary, trunc_note = run_fallacies_llm(chunks_in)
+            analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, trunc_note)
+        elif fm == FALLACY_METHOD_CLASSIFIER:
             chunks_out = annotate_chunks_fallacies_skipped(chunks_in)
             summary = {}
             analysis_supported = False
-            analysis_note = (
-                "Fallacies mode is currently implemented only for English transcripts."
-            )
+            analysis_note = "Classifier method is not implemented yet."
+    elif mode == "summarize_llm":
+        require_groq_api_key()
+        llm_summarize, trunc_note = run_summarize_llm(full_text=raw)
+        chunks_out = _chunks_passthrough_basic(chunks_in)
+        summary = {}
+        analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, trunc_note)
+    elif mode == "speaker_guess_llm":
+        require_groq_api_key()
+        speaker_blocks, sp_note, trunc_note = run_speaker_guess_llm(chunks_in)
+        chunks_out = _chunks_passthrough_basic(chunks_in)
+        summary = {}
+        analysis_note = _merge_analysis_notes(_LLM_MODE_NOTE, sp_note, trunc_note)
     else:
         raise HTTPException(
             status_code=422,
-            detail=f"Unsupported analysis mode: {mode!r}. Supported: 'frames', 'fallacies'.",
+            detail=(
+                f"Unsupported analysis mode: {mode!r}. Supported: 'frames', 'fallacies', "
+                "'summarize_llm', 'speaker_guess_llm'."
+            ),
         )
 
     return {
@@ -643,4 +797,7 @@ def run_transcript_analysis_from_text(
         "fallback_used": False,
         "analysis_supported": analysis_supported,
         "analysis_note": analysis_note,
+        "llm_summarize": llm_summarize,
+        "speaker_blocks": speaker_blocks,
+        "method": method_effective,
     }

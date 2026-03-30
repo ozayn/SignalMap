@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { TranscriptFallacyMethodNote } from "@/components/transcript-fallacy-method-note";
 import { cn } from "@/lib/utils";
 
 type Segment = {
@@ -29,6 +30,10 @@ type AnalyzeChunk = {
   labels?: string[];
   label_matches?: Record<string, string[]>;
   label_strengths?: Record<string, string>;
+  /** fallacies + method llm */
+  reasoning?: string;
+  evidence_spans?: string[];
+  confidence?: string | number;
 };
 
 type AnalyzePayload = {
@@ -41,6 +46,14 @@ type AnalyzePayload = {
   fallback_used?: boolean;
   analysis_supported?: boolean;
   analysis_note?: string | null;
+  llm_summarize?: {
+    summary_short?: string;
+    summary_bullets?: string[];
+    main_topics?: string[];
+  } | null;
+  speaker_blocks?: Array<{ speaker?: string; text?: string; confidence?: string | number }> | null;
+  /** Present when mode was fallacies: which detection method ran */
+  method?: "heuristic" | "classifier" | "llm" | null;
 };
 
 type InputSource = "youtube" | "paste";
@@ -130,6 +143,11 @@ function formatSecondsAsClock(totalSeconds: number): string {
 function formatChunkTimeRange(start: number | undefined, end: number | undefined): string {
   if (start == null || end == null || Number.isNaN(start) || Number.isNaN(end)) return "—";
   return `${formatSecondsAsClock(start)}–${formatSecondsAsClock(end)}`;
+}
+
+/** Non-empty string after trim — use to omit summary rows with no real value. */
+function meaningfulString(v: string | null | undefined): boolean {
+  return typeof v === "string" && v.trim().length > 0;
 }
 
 function downloadBlob(filename: string, data: BlobPart, mimeType: string) {
@@ -224,6 +242,9 @@ function buildAnalysisJsonExport(a: AnalyzePayload, mode: AnalyzeMode): Record<s
   if (a.analysis_note) {
     out.analysis_note = a.analysis_note;
   }
+  if (a.llm_summarize != null) out.llm_summarize = a.llm_summarize;
+  if (a.speaker_blocks != null) out.speaker_blocks = a.speaker_blocks;
+  if (a.method != null) out.method = a.method;
   return out;
 }
 
@@ -281,11 +302,25 @@ function SummarySectionCard({
   );
 }
 
-type AnalyzeMode = "frames" | "fallacies";
+type AnalyzeMode = "frames" | "fallacies" | "summarize_llm" | "speaker_guess_llm";
+type FallacyMethod = "heuristic" | "classifier" | "llm";
 type ChunkFilterMode = "all" | "labeled" | "by_label";
 
-function formatResultsStatusLine(mode: AnalyzeMode, labeledChunksInView: number): string {
+function formatResultsStatusLine(
+  mode: AnalyzeMode,
+  labeledChunksInView: number,
+  fallacyMethod: FallacyMethod | null | undefined
+): string {
+  if (mode === "summarize_llm") return "LLM summary (experimental)";
+  if (mode === "speaker_guess_llm") return "Speaker guess — transcript only (experimental)";
   if (mode === "fallacies") {
+    const fm = fallacyMethod ?? "heuristic";
+    if (fm === "classifier") return "Classifier not available (placeholder)";
+    if (fm === "llm") {
+      if (labeledChunksInView === 0) return "No fallacy labels (LLM)";
+      if (labeledChunksInView === 1) return "1 chunk with fallacy labels (LLM)";
+      return `${labeledChunksInView} chunks with fallacy labels (LLM)`;
+    }
     if (labeledChunksInView === 0) return "No fallacies detected";
     if (labeledChunksInView === 1) return "1 fallacy detected";
     return `${labeledChunksInView} fallacies detected`;
@@ -316,6 +351,7 @@ export function YouTubeTranscriptTester({
   const [lastAnalyzeMode, setLastAnalyzeMode] = useState<AnalyzeMode>(
     exploreFallaciesOnly ? "fallacies" : "frames"
   );
+  const [fallacyMethod, setFallacyMethod] = useState<FallacyMethod>("heuristic");
   const [loading, setLoading] = useState<null | "transcript" | "analyze">(null);
   const [error, setError] = useState<string | null>(null);
   const [copiedChunkKey, setCopiedChunkKey] = useState<string | null>(null);
@@ -368,6 +404,10 @@ export function YouTubeTranscriptTester({
     [filteredChunks]
   );
 
+  /** Effective fallacy method for labels: API result when present, else current tab selection. */
+  const statusFallacyMethod: FallacyMethod | null =
+    lastAnalyzeMode === "fallacies" ? (analyzeResult?.method ?? fallacyMethod) : null;
+
   const displayTitle = analyzeResult?.title ?? transcriptResult?.title ?? null;
   const displayVideoId = analyzeResult?.video_id ?? transcriptResult?.video_id ?? "";
   const displayLanguage = analyzeResult?.language ?? transcriptResult?.language ?? null;
@@ -402,6 +442,20 @@ export function YouTubeTranscriptTester({
       rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
         ? (rawSummary as Record<string, number>)
         : {};
+    const ls = data.llm_summarize;
+    const llm_summarize =
+      ls && typeof ls === "object" && !Array.isArray(ls)
+        ? (ls as AnalyzePayload["llm_summarize"])
+        : null;
+    const sb = data.speaker_blocks;
+    const speaker_blocks = Array.isArray(sb) ? (sb as NonNullable<AnalyzePayload["speaker_blocks"]>) : null;
+
+    const rawMethod = data.method;
+    const method =
+      rawMethod === "heuristic" || rawMethod === "classifier" || rawMethod === "llm"
+        ? rawMethod
+        : null;
+
     return {
       video_id: String(data.video_id ?? ""),
       title: (data.title as string | null | undefined) ?? null,
@@ -413,6 +467,9 @@ export function YouTubeTranscriptTester({
       analysis_supported:
         typeof data.analysis_supported === "boolean" ? data.analysis_supported : true,
       analysis_note: typeof data.analysis_note === "string" ? data.analysis_note : null,
+      llm_summarize,
+      speaker_blocks,
+      method,
     };
   }
 
@@ -469,7 +526,7 @@ export function YouTubeTranscriptTester({
       const res = await fetch("/api/youtube/transcript/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ url: trimmed, mode: analyzeMode }),
+        body: JSON.stringify({ url: trimmed, mode: analyzeMode, method: fallacyMethod }),
       });
       const data = (await res.json()) as Record<string, unknown>;
 
@@ -504,6 +561,7 @@ export function YouTubeTranscriptTester({
           text: pastedText,
           mode: analyzeMode,
           language: pasteLanguage.trim() || "en",
+          method: fallacyMethod,
         }),
       });
       const data = (await res.json()) as Record<string, unknown>;
@@ -603,6 +661,29 @@ export function YouTubeTranscriptTester({
                 >
                   Paste
                 </button>
+              </div>
+
+              <div className="mt-3 space-y-2">
+                <span className="text-[10px] text-muted-foreground">Fallacy method</span>
+                <div className="flex flex-wrap gap-1 rounded-lg border border-border/40 bg-muted/10 p-0.5">
+                  {(["heuristic", "classifier", "llm"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setFallacyMethod(m)}
+                      disabled={loading !== null}
+                      className={cn(
+                        "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-40",
+                        fallacyMethod === m
+                          ? "bg-muted/80 text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {m === "heuristic" ? "Heuristic" : m === "classifier" ? "Classifier" : "LLM"}
+                    </button>
+                  ))}
+                </div>
+                <TranscriptFallacyMethodNote method={fallacyMethod} className="mt-2" />
               </div>
 
               <div className="mt-3 space-y-3">
@@ -794,7 +875,34 @@ export function YouTubeTranscriptTester({
               >
                 <option value="frames">frames</option>
                 <option value="fallacies">fallacies</option>
+                <option value="summarize_llm">summarize_llm (Groq)</option>
+                <option value="speaker_guess_llm">speaker_guess_llm (Groq)</option>
               </select>
+            </div>
+          )}
+
+          {!exploreFallaciesOnly && analyzeMode === "fallacies" && (
+            <div className="space-y-1.5">
+              <span className="text-[10px] text-muted-foreground">Fallacy method</span>
+              <div className="flex flex-wrap gap-1 rounded-lg border border-border/40 bg-muted/10 p-0.5">
+                {(["heuristic", "classifier", "llm"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setFallacyMethod(m)}
+                    disabled={loading !== null}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-40",
+                      fallacyMethod === m
+                        ? "bg-muted/80 text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {m === "heuristic" ? "Heuristic" : m === "classifier" ? "Classifier" : "LLM"}
+                  </button>
+                ))}
+              </div>
+              <TranscriptFallacyMethodNote method={fallacyMethod} />
             </div>
           )}
 
@@ -934,7 +1042,7 @@ export function YouTubeTranscriptTester({
             </div>
             {analyzeResult && (
               <span className="shrink-0 max-w-[min(100%,20rem)] text-right text-[11px] leading-snug text-muted-foreground/75">
-                {formatResultsStatusLine(lastAnalyzeMode, labeledChunksInView)}
+                {formatResultsStatusLine(lastAnalyzeMode, labeledChunksInView, statusFallacyMethod)}
               </span>
             )}
           </div>
@@ -1066,6 +1174,12 @@ export function YouTubeTranscriptTester({
                           </p>
                         )}
 
+                        {lastAnalyzeMode === "fallacies" && analyzeResult?.method === "llm" && (ch.labels?.length ?? 0) === 0 && (
+                          <p className="pt-3 text-[11px] leading-snug text-muted-foreground/65">
+                            No fallacy labels for this chunk (LLM).
+                          </p>
+                        )}
+
                         {(ch.labels?.length ?? 0) > 0 && (
                           <div className="pt-4">
                             <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/65">
@@ -1085,13 +1199,45 @@ export function YouTubeTranscriptTester({
                           </div>
                         )}
 
+                        {lastAnalyzeMode === "fallacies" && analyzeResult?.method === "llm" && (ch.reasoning || ch.evidence_spans?.length) ? (
+                          <div className="mt-4 space-y-2 border-t border-border/10 pt-4">
+                            {ch.reasoning ? (
+                              <div>
+                                <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/65">
+                                  Reasoning
+                                </p>
+                                <p className="text-[12px] leading-relaxed text-muted-foreground/90">{ch.reasoning}</p>
+                              </div>
+                            ) : null}
+                            {ch.evidence_spans && ch.evidence_spans.length > 0 ? (
+                              <div>
+                                <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/65">
+                                  Evidence spans
+                                </p>
+                                <ul className="list-disc space-y-1 pl-4 text-[12px] leading-relaxed text-muted-foreground/90">
+                                  {ch.evidence_spans.map((ev, ei) => (
+                                    <li key={ei}>{ev}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ) : null}
+                            {ch.confidence !== undefined && ch.confidence !== null && ch.confidence !== "" ? (
+                              <p className="text-[11px] text-muted-foreground/75">
+                                <span className="font-medium text-muted-foreground/85">Confidence:</span>{" "}
+                                {String(ch.confidence)}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+
                         <div className="mt-5 border-t border-border/10 pt-6">
                           <p className="text-[15px] leading-[1.75] text-foreground/95 break-words whitespace-pre-wrap sm:text-[16px] sm:leading-[1.8]">
                             {ch.text ?? ""}
                           </p>
                         </div>
 
-                        {matchedCuesLine.length > 0 && (
+                        {matchedCuesLine.length > 0 &&
+                          !(lastAnalyzeMode === "fallacies" && analyzeResult?.method === "llm") && (
                           <div
                             className={cn(
                               "mt-5 border-t pt-4",
@@ -1131,77 +1277,189 @@ export function YouTubeTranscriptTester({
 
           <div className={cn("space-y-3", exploreFallaciesOnly && "space-y-2.5")}>
             <SummarySectionCard title="Source" dense={exploreFallaciesOnly}>
-              <dl className="space-y-2.5">
-                <div className="flex flex-col gap-0.5">
-                  <dt className="text-[10px] text-muted-foreground">Input</dt>
-                  <dd>
-                    {chunksUseMediaTiming ? "YouTube" : analyzeResult ? "Pasted text" : "—"}
-                  </dd>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <dt className="text-[10px] text-muted-foreground">Title</dt>
-                  <dd className="break-words text-[12px] leading-snug">{displayTitle ?? "—"}</dd>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <dt className="text-[10px] text-muted-foreground">video_id</dt>
-                  <dd className="break-all font-mono text-[10px] text-foreground/80">{displayVideoId || "—"}</dd>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <dt className="text-[10px] text-muted-foreground">Language</dt>
-                  <dd className="text-[12px]">{displayLanguage ?? "—"}</dd>
+              {inputSource === "youtube" ? (
+                <dl className="space-y-2.5">
+                  <div className="flex flex-col gap-0.5">
+                    <dt className="text-[10px] text-muted-foreground">Input</dt>
+                    <dd className="text-[12px]">YouTube</dd>
+                  </div>
+                  {meaningfulString(displayTitle) ? (
+                    <div className="flex flex-col gap-0.5">
+                      <dt className="text-[10px] text-muted-foreground">Title</dt>
+                      <dd className="break-words text-[12px] leading-snug">{displayTitle}</dd>
+                    </div>
+                  ) : null}
+                  {meaningfulString(displayVideoId) ? (
+                    <div className="flex flex-col gap-0.5">
+                      <dt className="text-[10px] text-muted-foreground">video_id</dt>
+                      <dd className="break-all font-mono text-[10px] text-foreground/80">{displayVideoId}</dd>
+                    </div>
+                  ) : null}
+                  {meaningfulString(displayLanguage) ? (
+                    <div className="flex flex-col gap-0.5">
+                      <dt className="text-[10px] text-muted-foreground">Language</dt>
+                      <dd className="text-[12px]">{displayLanguage}</dd>
+                    </div>
+                  ) : null}
                   {displayFallbackUsed === true ? (
                     <p className="text-[10px] leading-snug text-muted-foreground">
                       Fell back to available track.
                     </p>
                   ) : null}
-                </div>
-                <div className="flex justify-between gap-2 text-[12px]">
-                  <span className="text-muted-foreground">Cached</span>
-                  <span className="tabular-nums">{displayCached ? "yes" : "no"}</span>
-                </div>
-                <div className="flex justify-between gap-2 text-[12px]">
-                  <span className="text-muted-foreground">Fallback</span>
-                  <span className="tabular-nums">
-                    {displayFallbackUsed === null ? "—" : displayFallbackUsed ? "yes" : "no"}
-                  </span>
-                </div>
-              </dl>
+                  {transcriptResult != null || analyzeResult != null ? (
+                    <>
+                      <div className="flex justify-between gap-2 text-[12px]">
+                        <span className="text-muted-foreground">Cached</span>
+                        <span className="tabular-nums">{displayCached ? "yes" : "no"}</span>
+                      </div>
+                      {displayFallbackUsed !== null ? (
+                        <div className="flex justify-between gap-2 text-[12px]">
+                          <span className="text-muted-foreground">Fallback</span>
+                          <span className="tabular-nums">{displayFallbackUsed ? "yes" : "no"}</span>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+                </dl>
+              ) : (
+                <dl className="space-y-2.5">
+                  <div className="flex flex-col gap-0.5">
+                    <dt className="text-[10px] text-muted-foreground">Input type</dt>
+                    <dd className="text-[12px]">Pasted transcript</dd>
+                  </div>
+                  {meaningfulString(displayTitle) ? (
+                    <div className="flex flex-col gap-0.5">
+                      <dt className="text-[10px] text-muted-foreground">Title</dt>
+                      <dd className="break-words text-[12px] leading-snug">{displayTitle}</dd>
+                    </div>
+                  ) : null}
+                  {meaningfulString(displayLanguage) ? (
+                    <div className="flex flex-col gap-0.5">
+                      <dt className="text-[10px] text-muted-foreground">Language</dt>
+                      <dd className="text-[12px]">{displayLanguage}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              )}
             </SummarySectionCard>
 
             <SummarySectionCard title="Analysis" dense={exploreFallaciesOnly}>
               <dl className="space-y-2.5">
-                <div className="flex justify-between gap-2">
-                  <dt className="text-muted-foreground">Mode</dt>
-                  <dd className="font-mono text-[12px]">{analyzeResult ? lastAnalyzeMode : "—"}</dd>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <dt className="text-muted-foreground">Chunks</dt>
-                  <dd className="tabular-nums font-mono text-[12px]">
-                    {analyzeResult ? analyzeResult.chunks.length : "—"}
-                  </dd>
-                </div>
-                <div className="flex flex-col gap-0.5 border-t border-border/20 pt-2">
-                  <dt className="text-[10px] text-muted-foreground">Length</dt>
-                  <dd className="font-mono text-[11px] tabular-nums">
+                {analyzeResult ? (
+                  <>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-muted-foreground">
+                        {inputSource === "paste" || exploreFallaciesOnly ? "Analysis mode" : "Mode"}
+                      </dt>
+                      <dd className="font-mono text-[12px]">{lastAnalyzeMode}</dd>
+                    </div>
+                    {lastAnalyzeMode === "fallacies" && statusFallacyMethod ? (
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">Method</dt>
+                        <dd className="font-mono text-[12px]">{statusFallacyMethod}</dd>
+                      </div>
+                    ) : null}
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-muted-foreground">
+                        {inputSource === "paste" || exploreFallaciesOnly ? "Chunk count" : "Chunks"}
+                      </dt>
+                      <dd className="tabular-nums font-mono text-[12px]">{analyzeResult.chunks.length}</dd>
+                    </div>
                     {transcriptLengthChars ? (
-                      <>
-                        {transcriptLengthChars.value}
-                        <span className="ml-1 font-sans text-[10px] font-normal text-muted-foreground">
-                          chars
-                          {transcriptLengthChars.source === "chunks"
-                            ? " · chunks"
-                            : transcriptLengthChars.source === "paste"
-                              ? " · pasted"
-                              : ""}
-                        </span>
-                      </>
-                    ) : (
-                      "—"
-                    )}
-                  </dd>
-                </div>
+                      <div className="flex flex-col gap-0.5 border-t border-border/20 pt-2">
+                        <dt className="text-[10px] text-muted-foreground">
+                          {inputSource === "paste" || exploreFallaciesOnly ? "Transcript length" : "Length"}
+                        </dt>
+                        <dd className="font-mono text-[11px] tabular-nums">
+                          {transcriptLengthChars.value}
+                          <span className="ml-1 font-sans text-[10px] font-normal text-muted-foreground">
+                            chars
+                            {transcriptLengthChars.source === "chunks"
+                              ? " · chunks"
+                              : transcriptLengthChars.source === "paste"
+                                ? " · pasted"
+                                : ""}
+                          </span>
+                        </dd>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">Run analysis to see mode and chunk stats.</p>
+                )}
+                {analyzeResult?.analysis_note &&
+                (lastAnalyzeMode.endsWith("_llm") ||
+                  (lastAnalyzeMode === "fallacies" && analyzeResult?.method === "llm")) ? (
+                  <div className="flex flex-col gap-0.5 border-t border-border/20 pt-2">
+                    <dt className="text-[10px] text-muted-foreground">Note</dt>
+                    <dd className="text-[10px] leading-relaxed text-muted-foreground">
+                      {analyzeResult.analysis_note}
+                    </dd>
+                  </div>
+                ) : null}
               </dl>
             </SummarySectionCard>
+
+            {analyzeResult?.llm_summarize && (
+              <SummarySectionCard title="LLM summary" dense={exploreFallaciesOnly}>
+                {analyzeResult.llm_summarize.summary_short ? (
+                  <p className="mb-3 text-[12px] leading-relaxed text-foreground/90">
+                    {analyzeResult.llm_summarize.summary_short}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">No short summary returned.</p>
+                )}
+                {analyzeResult.llm_summarize.main_topics && analyzeResult.llm_summarize.main_topics.length > 0 ? (
+                  <div className="mb-3">
+                    <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/65">
+                      Main topics
+                    </p>
+                    <ul className="list-disc space-y-1 pl-4 text-[11px] leading-snug text-muted-foreground/90">
+                      {analyzeResult.llm_summarize.main_topics.map((t, ti) => (
+                        <li key={ti}>{t}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {analyzeResult.llm_summarize.summary_bullets &&
+                analyzeResult.llm_summarize.summary_bullets.length > 0 ? (
+                  <div>
+                    <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/65">
+                      Bullets
+                    </p>
+                    <ul className="list-disc space-y-1 pl-4 text-[11px] leading-snug text-muted-foreground/90">
+                      {analyzeResult.llm_summarize.summary_bullets.map((t, ti) => (
+                        <li key={ti}>{t}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </SummarySectionCard>
+            )}
+
+            {analyzeResult?.speaker_blocks && analyzeResult.speaker_blocks.length > 0 && (
+              <SummarySectionCard title="Speaker blocks (approx.)" dense={exploreFallaciesOnly}>
+                <p className="mb-3 text-[10px] leading-relaxed text-muted-foreground">
+                  Transcript-only inference; not diarization. Not ground truth.
+                </p>
+                <ul className="space-y-3">
+                  {analyzeResult.speaker_blocks.map((b, bi) => (
+                    <li
+                      key={bi}
+                      className="rounded-lg border border-border/30 bg-background/40 px-2.5 py-2 text-[11px] leading-snug"
+                    >
+                      <span className="font-mono text-[10px] text-foreground/90">{b.speaker ?? "—"}</span>
+                      {b.confidence !== undefined && b.confidence !== null && b.confidence !== "" ? (
+                        <span className="ml-2 text-[10px] text-muted-foreground">
+                          ({String(b.confidence)})
+                        </span>
+                      ) : null}
+                      <p className="mt-1.5 whitespace-pre-wrap text-muted-foreground/90">{b.text ?? ""}</p>
+                    </li>
+                  ))}
+                </ul>
+              </SummarySectionCard>
+            )}
 
             {analyzeResult && lastAnalyzeMode === "fallacies" && (
               <SummarySectionCard title="Fallacy counts" dense={exploreFallaciesOnly}>
@@ -1212,7 +1470,13 @@ export function YouTubeTranscriptTester({
                   </p>
                 ) : (
                   <>
-                    <p className="mb-3 text-[10px] text-muted-foreground">Chunks per label (heuristic).</p>
+                    <p className="mb-3 text-[10px] text-muted-foreground">
+                      {analyzeResult.method === "llm"
+                        ? "Chunks per label (LLM prototype)."
+                        : analyzeResult.method === "classifier"
+                          ? "Classifier not implemented."
+                          : "Chunks per label (heuristic)."}
+                    </p>
                     {fallacySummaryEntries.length > 0 ? (
                       <ul className="space-y-2">
                         {fallacySummaryEntries.map(({ label, count }) => (
