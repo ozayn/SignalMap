@@ -101,9 +101,10 @@ function detectYouTubeUrl(raw: string): string | null {
     return `https://www.youtube.com/watch?v=${line}`;
   }
   const candidate = /^https?:\/\//i.test(line) ? line : `https://${line}`;
-  const fromPattern = candidate.match(
-    /(?:youtube\.com\/watch\?.*v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/|youtube\.com\/live\/)([a-zA-Z0-9_-]{11})/
-  );
+  const fromPattern =
+    candidate.match(
+      /(?:youtube\.com\/watch\?.*v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/
+    ) || candidate.match(/youtube\.com\/live\/([a-zA-Z0-9_-]{11})(?=\?|\/|#|$)/);
   if (fromPattern) return candidate;
   try {
     const u = new URL(candidate);
@@ -117,6 +118,8 @@ function detectYouTubeUrl(raw: string): string | null {
     if (!yt) return null;
     const v = u.searchParams.get("v");
     if (v && /^[a-zA-Z0-9_-]{11}$/.test(v)) return candidate;
+    const livePath = u.pathname.match(/^\/live\/([a-zA-Z0-9_-]{11})(?:\/|$)/);
+    if (livePath) return candidate;
     if (h === "youtu.be" && u.pathname.replace(/^\//, "").length >= 11) return candidate;
   } catch {
     return null;
@@ -731,67 +734,80 @@ function SummaryLengthSegmented({
   );
 }
 
-/** Explore page: primary summary output in the main column (sidebar stays compact). */
+/** Plain text for clipboard export (explore summary). */
+function buildSummaryPlainText(llm: NonNullable<AnalyzePayload["llm_summarize"]>): string {
+  const parts: string[] = [];
+  if (llm.summary_short?.trim()) parts.push(llm.summary_short.trim());
+  if (llm.summary_paragraphs?.length) {
+    for (const p of llm.summary_paragraphs) {
+      if (p?.trim()) parts.push(p.trim());
+    }
+  }
+  if (llm.summary_bullets?.length) {
+    parts.push("Key points");
+    for (const b of llm.summary_bullets) parts.push(`• ${b}`);
+  }
+  if (llm.main_topics?.length) {
+    parts.push("Topics");
+    parts.push(llm.main_topics.join(", "));
+  }
+  return parts.join("\n\n");
+}
+
+/** Explore page: primary summary output (card title + experimental line live in parent). */
 function ExploreSummaryResultsMain({
   llm,
 }: {
   llm: NonNullable<AnalyzePayload["llm_summarize"]>;
 }) {
+  const hasLead =
+    Boolean(llm.summary_short?.trim()) || (llm.summary_paragraphs?.length ?? 0) > 0;
+  const bullets = llm.summary_bullets ?? [];
+  const topics = llm.main_topics ?? [];
+
   return (
-    <div className="space-y-8">
-      {llm.input_truncated && typeof llm.truncation_note === "string" && llm.truncation_note.trim() ? (
-        <p className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-          {llm.truncation_note}
-        </p>
+    <div className="space-y-5 sm:space-y-6">
+      {hasLead ? (
+        <div className="space-y-2 text-[15px] leading-relaxed text-foreground/95 sm:text-[16px] sm:leading-[1.65]">
+          {llm.summary_short?.trim() ? (
+            <p className="whitespace-pre-wrap">{llm.summary_short}</p>
+          ) : null}
+          {llm.summary_paragraphs?.map((p, pi) =>
+            p?.trim() ? (
+              <p key={pi} className="whitespace-pre-wrap">
+                {p}
+              </p>
+            ) : null
+          )}
+        </div>
+      ) : !bullets.length && !topics.length ? (
+        <p className="text-[13px] text-muted-foreground">No summary text returned.</p>
       ) : null}
-      {llm.summary_short ? (
-        <section>
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/85">
-            Overview
-          </h3>
-          <p className="text-[15px] leading-relaxed text-foreground/95 sm:text-[16px] sm:leading-relaxed">
-            {llm.summary_short}
-          </p>
-        </section>
-      ) : (
-        <p className="text-[13px] text-muted-foreground">No short summary returned.</p>
-      )}
-      {llm.summary_bullets && llm.summary_bullets.length > 0 ? (
-        <section>
-          <h3 className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/85">
-            Bullets
-          </h3>
-          <ul className="list-disc space-y-2 pl-5 text-[14px] leading-relaxed text-foreground/90">
-            {llm.summary_bullets.map((t, ti) => (
-              <li key={ti}>{t}</li>
+
+      {bullets.length > 0 ? (
+        <section className="space-y-2">
+          <h3 className="text-[13px] font-semibold tracking-tight text-foreground">Key points</h3>
+          <ul className="space-y-1.5 text-[14px] leading-relaxed text-foreground/90">
+            {bullets.map((t, ti) => (
+              <li key={ti} className="flex gap-2.5">
+                <span className="shrink-0 text-muted-foreground/70" aria-hidden>
+                  •
+                </span>
+                <span className="min-w-0">{t}</span>
+              </li>
             ))}
           </ul>
         </section>
       ) : null}
-      {llm.summary_paragraphs && llm.summary_paragraphs.length > 0 ? (
-        <section>
-          <h3 className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/85">
-            Paragraphs
-          </h3>
-          <div className="space-y-4">
-            {llm.summary_paragraphs.map((p, pi) => (
-              <p key={pi} className="whitespace-pre-wrap text-[14px] leading-relaxed text-foreground/90">
-                {p}
-              </p>
-            ))}
-          </div>
-        </section>
-      ) : null}
-      {llm.main_topics && llm.main_topics.length > 0 ? (
-        <section>
-          <h3 className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/85">
-            Main topics
-          </h3>
-          <ul className="flex flex-wrap gap-2">
-            {llm.main_topics.map((t, ti) => (
+
+      {topics.length > 0 ? (
+        <section className="space-y-2">
+          <h3 className="text-[13px] font-semibold tracking-tight text-foreground">Topics</h3>
+          <ul className="flex flex-wrap gap-1.5">
+            {topics.map((t, ti) => (
               <li
                 key={ti}
-                className="rounded-full border border-border/35 bg-muted/20 px-3 py-1 text-[12px] leading-snug text-foreground/90"
+                className="rounded-md border border-border/30 bg-muted/15 px-2.5 py-1 text-[12px] leading-snug text-foreground/90"
               >
                 {t}
               </li>

@@ -53,7 +53,12 @@ _YT_PATTERNS = [
     re.compile(
         r"(?:youtube\.com/watch\?.*v=|youtu\.be/|youtube\.com/embed/|youtube\.com/v/|youtube\.com/shorts/)([a-zA-Z0-9_-]{11})"
     ),
+    # Live URLs: require delimiter after 11-char id (reject /live/notavalididatall-style paths)
+    re.compile(r"youtube\.com/live/([a-zA-Z0-9_-]{11})(?=\?|/|#|$)"),
 ]
+
+# /live/VIDEO_ID on youtube.com hosts (m.youtube.com, etc.)
+_LIVE_PATH = re.compile(r"^/live/([a-zA-Z0-9_-]{11})(?:/|$)")
 
 _proxy_loaded = False
 _proxy_config: Any = None
@@ -106,6 +111,10 @@ def extract_video_id(url: str) -> Optional[str]:
         v = qs.get("v")
         if v and len(v[0]) == 11:
             return v[0]
+        path = parsed.path or ""
+        live_m = _LIVE_PATH.match(path)
+        if live_m:
+            return live_m.group(1)
     return None
 
 
