@@ -57,9 +57,27 @@ Definitions (short):
 Return ONLY valid JSON in this format:
 {
   "labels": ["..."],
-  "explanation": "...",
+  "trigger_text": "short quote or span from the text that illustrates the pattern (or empty string)",
+  "reasoning": "why these labels apply (specific; avoid generic boilerplate)",
   "confidence": "low" | "medium" | "high"
 }
+
+You may also use "explanation" instead of "reasoning" (same meaning). Optional: a number between 0 and 1 for "confidence" (e.g. 0.82) meaning model certainty.
+
+Optional advanced shape (one object per detected fallacy; use when multiple distinct patterns appear):
+{
+  "fallacies": [
+    {
+      "fallacy_key": "straw_man",
+      "fallacy_name": "optional human-readable name",
+      "trigger_text": "...",
+      "reasoning": "...",
+      "confidence": "low" | "medium" | "high"
+    }
+  ]
+}
+
+If "fallacies" is present and non-empty, "labels" should list the same keys; the app merges both.
 
 Examples of clear cases (when the text is plainly like this, it usually warrants a label):
 - direct personal attacks on a person, speaker, or group instead of engaging their argument → ad_hominem (not attacks on ideas alone — see below)
@@ -114,9 +132,12 @@ FALLACY_LLM_SYSTEM_PROMPT_FA = """شما تحلیل‌گر دقیق استدلا
 فقط JSON معتبر با این قالب برگردانید:
 {
   "labels": ["..."],
-  "explanation": "...",
+  "trigger_text": "نقل‌قول کوتاه از متن یا خالی",
+  "reasoning": "چرا این برچسب‌ها را می‌زنید",
   "confidence": "low" | "medium" | "high"
 }
+
+می‌توانید به‌جای reasoning از explanation استفاده کنید. می‌توانید confidence را عدد بین 0 و 1 بدهید.
 
 راهنما:
 - ad_hominem: حمله به فرد یا گوینده به‌جای پاسخ به استدلال (نه انتقاد صرف از یک ایده یا سیاست).
@@ -505,6 +526,29 @@ def groq_fallacy_chunk_json(chunk_text: str, *, analysis_language: str = "en") -
     return raw
 
 
+def _confidence_band_from_value(conf: Any) -> tuple[str, Optional[float]]:
+    """
+    Map ``confidence`` to ``low`` | ``medium`` | ``high`` and optional numeric score in [0, 1].
+    Numeric scores: >= 0.85 → high, >= 0.65 → medium, else low.
+    """
+    if isinstance(conf, (int, float)) and not isinstance(conf, bool):
+        v = float(conf)
+        if 0 <= v <= 1:
+            if v >= 0.85:
+                return "high", v
+            if v >= 0.65:
+                return "medium", v
+            return "low", v
+    if isinstance(conf, str) and conf.strip().lower() in CONFIDENCE_WORDS:
+        return conf.strip().lower(), None
+    return "low", None
+
+
+def _confidence_band_from_row(row: dict[str, Any]) -> tuple[str, Optional[float]]:
+    c = row.get("confidence")
+    return _confidence_band_from_value(c)
+
+
 def normalize_fallacy_llm_response(raw: dict[str, Any]) -> tuple[list[str], str, str]:
     """
     Map model JSON to ``labels`` (allowed set only), ``explanation`` string, and
@@ -524,12 +568,100 @@ def normalize_fallacy_llm_response(raw: dict[str, Any]) -> tuple[list[str], str,
         explanation = exp_raw.strip()
     else:
         explanation = str(exp_raw or "").strip()
-    c = raw.get("confidence")
-    if isinstance(c, str) and c.strip().lower() in CONFIDENCE_WORDS:
-        conf = c.strip().lower()
+    reasoning = str(raw.get("reasoning") or "").strip()
+    if not reasoning:
+        reasoning = explanation
     else:
-        conf = "low"
+        explanation = reasoning
+    conf, _ = _confidence_band_from_value(raw.get("confidence"))
     return labels, explanation, conf
+
+
+def chunk_payload_from_fallacy_llm_raw(
+    raw: dict[str, Any],
+) -> tuple[list[str], dict[str, list[str]], dict[str, str], list[dict[str, Any]]]:
+    """
+    Build chunk fields for ``annotate_chunks_fallacies_llm``: ``labels``, ``label_matches``,
+    ``label_strengths``, and structured ``fallacies`` for UI (trigger / reasoning / confidence).
+
+    Supports legacy single-block JSON, optional ``trigger_text`` / ``reasoning``, numeric
+    ``confidence`` in [0,1], and optional ``fallacies`` array of per-label instances.
+    """
+    labels: list[str] = []
+    for x in raw.get("labels") or []:
+        if isinstance(x, str):
+            lab = x.strip()
+            if lab in FALLACY_LLM_LABEL_SET and lab not in labels:
+                labels.append(lab)
+    labels.sort()
+
+    exp_raw = raw.get("explanation")
+    if isinstance(exp_raw, list):
+        explanation = " ".join(str(x).strip() for x in exp_raw if str(x).strip())
+    elif isinstance(exp_raw, str):
+        explanation = exp_raw.strip()
+    else:
+        explanation = str(exp_raw or "").strip()
+    reasoning = str(raw.get("reasoning") or "").strip()
+    if not reasoning:
+        reasoning = explanation
+    trigger = str(raw.get("trigger_text") or raw.get("trigger") or "").strip()
+    top_conf, top_score = _confidence_band_from_value(raw.get("confidence"))
+
+    fallacies_out: list[dict[str, Any]] = []
+    label_matches: dict[str, list[str]] = {}
+    label_strengths: dict[str, str] = {}
+
+    raw_fallacies = raw.get("fallacies")
+    if isinstance(raw_fallacies, list) and len(raw_fallacies) > 0:
+        seen_keys: set[str] = set()
+        for row in raw_fallacies:
+            if not isinstance(row, dict):
+                continue
+            fk = row.get("fallacy_key") or row.get("key")
+            if not isinstance(fk, str):
+                continue
+            fk = fk.strip()
+            if fk not in FALLACY_LLM_LABEL_SET:
+                continue
+            tr = str(row.get("trigger_text") or row.get("trigger") or "").strip()
+            rs = str(row.get("reasoning") or row.get("explanation") or "").strip()
+            name_raw = row.get("fallacy_name")
+            fn = str(name_raw).strip() if isinstance(name_raw, str) and str(name_raw).strip() else None
+            band, sc = _confidence_band_from_row(row)
+            fallacies_out.append(
+                {
+                    "fallacy_key": fk,
+                    "fallacy_name": fn,
+                    "trigger_text": tr,
+                    "reasoning": rs,
+                    "confidence": band,
+                    "confidence_score": sc,
+                }
+            )
+            seen_keys.add(fk)
+            if fk not in label_matches:
+                label_matches[fk] = []
+            if rs:
+                label_matches[fk].append(rs)
+            label_strengths[fk] = band
+        labels = sorted(seen_keys)
+    else:
+        for lab in labels:
+            label_matches[lab] = [reasoning] if reasoning else []
+            label_strengths[lab] = top_conf
+            fallacies_out.append(
+                {
+                    "fallacy_key": lab,
+                    "fallacy_name": None,
+                    "trigger_text": trigger,
+                    "reasoning": reasoning,
+                    "confidence": top_conf,
+                    "confidence_score": top_score,
+                }
+            )
+
+    return labels, label_matches, label_strengths, fallacies_out
 
 
 def _truncate_for_llm(text: str) -> tuple[str, bool]:

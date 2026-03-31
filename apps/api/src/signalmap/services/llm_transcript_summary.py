@@ -3,15 +3,35 @@ Groq-backed transcript summarization (short text, bullets, main topics).
 
 Uses ``GROQ_API_KEY`` via ``groq_chat_json`` from ``llm_transcript_analysis``.
 Output is validated JSON only; English vs Persian prompts match transcript language hints.
+
+Summarize uses a **stricter** input cap than other LLM transcript modes (see ``_MAX_SUMMARY_INPUT_CHARS``)
+so the combined system + user prompt stays within Groq token / TPM limits. The old 80k-style cap was
+too large for a single chat completion.
+
+TODO (follow-up): hierarchical summarization for very long transcripts — (1) split transcript into
+overlapping or sequential chunks, (2) summarize each chunk with the same JSON schema or intermediate
+bullets, (3) merge in a second pass into one ``summary_short`` / topics list, with bounded total tokens.
 """
 
 from __future__ import annotations
 
+import os
+import re
 from typing import Any, Literal, Optional
 
-# Must match ``_truncate_for_llm`` / ``_MAX_TRANSCRIPT_CHARS`` in ``llm_transcript_analysis`` (80k).
+from fastapi import HTTPException
+
+# Groq chat: keep user transcript portion small; system prompt + max_tokens + TPM headroom.
+# Override with GROQ_SUMMARY_MAX_INPUT_CHARS if your model tier allows more.
+_DEFAULT_SUMMARY_INPUT_CHARS = 12_000
+_MAX_SUMMARY_INPUT_CHARS = max(
+    4_000,
+    int((os.getenv("GROQ_SUMMARY_MAX_INPUT_CHARS") or str(_DEFAULT_SUMMARY_INPUT_CHARS)).strip() or "0")
+    or _DEFAULT_SUMMARY_INPUT_CHARS,
+)
+
 LLM_SUMMARY_TRUNCATION_NOTE = (
-    "Input was truncated to the first 80,000 characters before summarization (prototype limit)."
+    "Input was shortened before summarization due to model token limits."
 )
 
 SummaryFormat = Literal["bullets", "paragraphs"]
@@ -56,6 +76,30 @@ def validate_summarize_output(obj: Any) -> dict[str, Any]:
     if isinstance(topics, list):
         out["main_topics"] = [str(x).strip() for x in topics if str(x).strip()][:20]
     return out
+
+
+def _truncate_for_summarize(full_text: str) -> tuple[str, bool]:
+    """Cap transcript body for a single Groq completion; returns (text, was_truncated)."""
+    s = full_text or ""
+    if len(s) <= _MAX_SUMMARY_INPUT_CHARS:
+        return s, False
+    return s[:_MAX_SUMMARY_INPUT_CHARS], True
+
+
+def _groq_error_is_token_or_size_limit(detail: str) -> bool:
+    """True when Groq/HTTP detail suggests input TPM, context, or request-size limits."""
+    d = (detail or "").lower()
+    if "request too large" in d:
+        return True
+    if "tpm" in d and "limit" in d:
+        return True
+    if "token" in d and "limit" in d and ("exceed" in d or "context" in d or "requested" in d):
+        return True
+    if "context length" in d or "maximum context" in d:
+        return True
+    if re.search(r"requested\s+\d+", d):
+        return True
+    return False
 
 
 def _length_instructions_en(fmt: SummaryFormat, length: SummaryLength) -> str:
@@ -227,12 +271,12 @@ def run_transcript_summary_llm(
     ``None`` when nothing was truncated).
     """
     # Lazy import avoids circular import with llm_transcript_analysis.
-    from signalmap.services.llm_transcript_analysis import _truncate_for_llm, groq_chat_json
+    from signalmap.services.llm_transcript_analysis import groq_chat_json
 
     fmt_norm = normalize_summary_format(summary_format)
     len_norm = normalize_summary_length(summary_length)
 
-    text, truncated = _truncate_for_llm(full_text)
+    text, truncated = _truncate_for_summarize(full_text)
     trunc_note: Optional[str] = LLM_SUMMARY_TRUNCATION_NOTE if truncated else None
 
     al = (analysis_language or "").strip().lower()
@@ -244,7 +288,19 @@ def run_transcript_summary_llm(
         user = _summary_user_en(text, is_short=len(text.strip()) < 200)
 
     max_tokens = 6144 if len_norm == "long" else 4096
-    raw = groq_chat_json(system=system, user=user, temperature=0.2, max_tokens=max_tokens)
+    try:
+        raw = groq_chat_json(system=system, user=user, temperature=0.2, max_tokens=max_tokens)
+    except HTTPException as exc:
+        detail_s = str(exc.detail) if exc.detail is not None else ""
+        if _groq_error_is_token_or_size_limit(detail_s):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "This transcript is too long to summarize in one request right now. "
+                    "Try a shorter input, or use chunked summarization once available."
+                ),
+            ) from exc
+        raise
     validated = validate_summarize_output(raw)
     validated["input_truncated"] = truncated
     validated["truncation_note"] = trunc_note

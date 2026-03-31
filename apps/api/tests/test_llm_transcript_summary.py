@@ -16,6 +16,8 @@ if _SRC.is_dir() and str(_SRC) not in sys.path:
 import signalmap.services.llm_transcript_analysis as _lta  # noqa: E402
 import signalmap.services.transcript_analysis as _ta  # noqa: E402
 
+from fastapi import HTTPException  # noqa: E402
+
 from signalmap.services.llm_transcript_summary import (  # noqa: E402
     LLM_SUMMARY_TRUNCATION_NOTE,
     run_transcript_summary_llm,
@@ -123,16 +125,35 @@ def test_run_transcript_summary_llm_truncation_sets_metadata_and_note(mock_groq:
         "summary_paragraphs": [],
         "main_topics": [],
     }
-    long_text = "x" * 80_001
+    from signalmap.services import llm_transcript_summary as _sum
+
+    cap = _sum._MAX_SUMMARY_INPUT_CHARS
+    long_text = "x" * (cap + 1)
     out, note = run_transcript_summary_llm(full_text=long_text, analysis_language="en")
     mock_groq.assert_called_once()
     user = mock_groq.call_args.kwargs["user"]
     marker = "TEXT:\n"
     body = user[user.index(marker) + len(marker) :]
-    assert body == "x" * 80_000
+    assert body == "x" * cap
     assert out["input_truncated"] is True
     assert out["truncation_note"] == LLM_SUMMARY_TRUNCATION_NOTE
     assert note == LLM_SUMMARY_TRUNCATION_NOTE
+
+
+@patch.object(_lta, "groq_chat_json")
+def test_run_transcript_summary_llm_maps_groq_token_limit_to_friendly_422(mock_groq: MagicMock) -> None:
+    mock_groq.side_effect = HTTPException(
+        status_code=502,
+        detail=(
+            "Groq API error: Request too large for model `llama-3.3-70b-versatile` "
+            "TPM limit 12000, Requested 28504"
+        ),
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        run_transcript_summary_llm(full_text="hello " * 100, analysis_language="en")
+    assert exc_info.value.status_code == 422
+    assert "too long" in str(exc_info.value.detail).lower()
+    assert "chunked" in str(exc_info.value.detail).lower()
 
 
 @patch.object(_lta, "groq_chat_json")

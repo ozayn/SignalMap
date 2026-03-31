@@ -41,6 +41,7 @@ from fastapi import HTTPException
 
 from signalmap.services.llm_transcript_analysis import (
     extract_speakers_llm,
+    chunk_payload_from_fallacy_llm_raw,
     groq_fallacy_chunk_json,
     normalize_fallacy_llm_response,
     require_groq_api_key,
@@ -842,6 +843,9 @@ def annotate_chunks_frames_skipped(chunks: list[dict[str, Any]]) -> list[dict[st
 def annotate_chunks_fallacies_skipped(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Same chunk shape as fallacies mode, but no English rules run (unsupported language).
+
+    Each chunk always includes ``fallacies`` (empty list) for a uniform payload with
+    heuristic/LLM fallacy runs.
     """
     out: list[dict[str, Any]] = []
     for ch in chunks:
@@ -857,6 +861,7 @@ def annotate_chunks_fallacies_skipped(chunks: list[dict[str, Any]]) -> list[dict
                 "labels": [],
                 "label_matches": {},
                 "label_strengths": {},
+                "fallacies": [],
             }
         )
     return out
@@ -873,6 +878,25 @@ def annotate_chunks_fallacies(chunks: list[dict[str, Any]]) -> list[dict[str, An
             continue
         text = str(ch.get("text", "") or "")
         labels, label_matches, label_strengths = _fallacy_analysis_for_text_en(text)
+        fallacies: list[dict[str, Any]] = []
+        for lab in labels:
+            matches = label_matches.get(lab) or []
+            trigger = ", ".join(matches[:8]) if matches else ""
+            rs = (
+                "Heuristic cues matched in this chunk: " + ", ".join(matches)
+                if matches
+                else f"Rule-based pattern matched for {lab}."
+            )
+            fallacies.append(
+                {
+                    "fallacy_key": lab,
+                    "fallacy_name": None,
+                    "trigger_text": trigger,
+                    "reasoning": rs,
+                    "confidence": label_strengths.get(lab),
+                    "confidence_score": None,
+                }
+            )
         row = {
             "start": ch.get("start"),
             "end": ch.get("end"),
@@ -881,6 +905,7 @@ def annotate_chunks_fallacies(chunks: list[dict[str, Any]]) -> list[dict[str, An
             "labels": labels,
             "label_matches": label_matches,
             "label_strengths": label_strengths,
+            "fallacies": fallacies,
         }
         out.append(row)
     return out
@@ -919,6 +944,7 @@ def annotate_chunks_fallacies_llm(
                     "labels": [],
                     "label_matches": {},
                     "label_strengths": {},
+                    "fallacies": [],
                 }
             )
             continue
@@ -931,20 +957,18 @@ def annotate_chunks_fallacies_llm(
                     "labels": [],
                     "label_matches": {},
                     "label_strengths": {},
+                    "fallacies": [],
                 }
             )
             continue
-        labels, explanation, conf = normalize_fallacy_llm_response(raw)
-        label_matches: dict[str, list[str]] = {}
-        for lab in labels:
-            label_matches[lab] = [explanation] if explanation else []
-        label_strengths = {lab: conf for lab in labels}
+        labels, label_matches, label_strengths, fallacies = chunk_payload_from_fallacy_llm_raw(raw)
         out.append(
             {
                 **base,
                 "labels": labels,
                 "label_matches": label_matches,
                 "label_strengths": label_strengths,
+                "fallacies": fallacies,
             }
         )
 
