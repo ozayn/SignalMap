@@ -66,3 +66,29 @@ def test_heuristic_fallacy_matches_fixture(case: dict) -> None:
     )
     actual = _labels_from_result(result)
     assert actual == expected
+
+
+def test_heuristic_long_paragraph_sentence_level_labels() -> None:
+    """
+    Multi-sentence pasted text (one paragraph) should yield multiple chunks so different
+    fallacies attach to the sentences that contain them, not only to toy single-sentence inputs.
+    """
+    text = (
+        "I disagree with his foreign policy because the sanctions failed and oil exports increased. "
+        "So you're saying we should just let the country collapse and do nothing. "
+        "You shouldn't listen to him; he's an idiot and a clown."
+    )
+    assert len(text) >= 50
+    result = run_transcript_analysis_from_text(
+        text,
+        "fallacies",
+        "en",
+        fallacy_method="heuristic",
+    )
+    chunks = result.get("chunks") or []
+    assert len(chunks) >= 3
+    assert result.get("summary") == {"ad_hominem": 1, "straw_man": 1}
+    labels_by_chunk = [sorted(ch.get("labels") or []) for ch in chunks if isinstance(ch, dict)]
+    assert [] in labels_by_chunk
+    assert ["ad_hominem"] in labels_by_chunk
+    assert ["straw_man"] in labels_by_chunk

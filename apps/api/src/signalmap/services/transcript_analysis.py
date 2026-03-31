@@ -1198,11 +1198,17 @@ def run_transcript_analysis_from_text(
     summary_length: Optional[str] = None,
 ) -> dict[str, Any]:
     """
-    Analyze pasted transcript text: chunk with ``plain_text_to_analysis_chunks``, then the same
-    logic as ``run_transcript_analysis``. No YouTube fetch; ``video_id`` is empty and ``cached``
-    is false.
+    Analyze pasted transcript text: chunk (see ``plain_text_to_analysis_chunks`` or, for English
+    heuristic fallacies, ``plain_text_to_fallacy_heuristic_chunks``), then the same logic as
+    ``run_transcript_analysis``. No YouTube fetch; ``video_id`` is empty and ``cached`` is false.
+
+    For ``mode=fallacies`` with ``method=heuristic``, sentence-sized units are used so cues are not
+    diluted inside long pasted paragraphs.
     """
-    from signalmap.services.transcript_chunks import plain_text_to_analysis_chunks
+    from signalmap.services.transcript_chunks import (
+        plain_text_to_analysis_chunks,
+        plain_text_to_fallacy_heuristic_chunks,
+    )
 
     raw = (text or "").strip()
     if len(raw) < 50:
@@ -1212,7 +1218,10 @@ def run_transcript_analysis_from_text(
         )
 
     lang = (language or "").strip() or None
-    chunks_in = plain_text_to_analysis_chunks(raw)
+    if mode == "fallacies" and _normalize_fallacy_method(fallacy_method) == FALLACY_METHOD_HEURISTIC:
+        chunks_in = plain_text_to_fallacy_heuristic_chunks(raw)
+    else:
+        chunks_in = plain_text_to_analysis_chunks(raw)
     if not chunks_in:
         raise HTTPException(
             status_code=422,

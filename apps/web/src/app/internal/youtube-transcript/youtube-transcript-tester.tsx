@@ -3,8 +3,14 @@
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 
 import { TranscriptFallacyMethodNote } from "@/components/transcript-fallacy-method-note";
+import { formatFallacyConfidenceDisplay, formatFallacyKey } from "@/lib/format-fallacy";
 import { getTextDir } from "@/lib/text-direction";
 import { cn } from "@/lib/utils";
+import {
+  detectYouTubeUrl,
+  extractYoutubeVideoIdFromUrl,
+  normalizeYouTubeUrlInput,
+} from "@/lib/youtube-url";
 
 type Segment = {
   text?: string;
@@ -23,6 +29,16 @@ type TranscriptPayload = {
   chunks?: Record<string, unknown>[];
 };
 
+/** Structured fallacy hit from API (heuristic + LLM); optional on older responses. */
+type ChunkFallacyInstance = {
+  fallacy_key?: string;
+  fallacy_name?: string | null;
+  trigger_text?: string | null;
+  reasoning?: string | null;
+  confidence?: string | number | null;
+  confidence_score?: number | null;
+};
+
 type AnalyzeChunk = {
   start?: number;
   end?: number;
@@ -32,6 +48,8 @@ type AnalyzeChunk = {
   /** Per label: heuristic cue strings or LLM explanation (string or one-element array). */
   label_matches?: Record<string, string[] | string>;
   label_strengths?: Record<string, string>;
+  /** Per-detection rows when backend provides them; prefer over labels-only when present. */
+  fallacies?: ChunkFallacyInstance[];
 };
 
 type AnalyzePayload = {
@@ -87,46 +105,6 @@ type SummaryFormatOption = "bullets" | "paragraphs";
 type SummaryLengthOption = "short" | "medium" | "long";
 
 type DetectedInputKind = "youtube" | "text";
-
-/**
- * Single-line input only: if it looks like a YouTube URL or bare 11-char video id, return a URL string
- * for the API; otherwise null (treat input as plain transcript text). Multiline input is always text.
- */
-function detectYouTubeUrl(raw: string): string | null {
-  const t = raw.trim();
-  if (!t) return null;
-  const lines = t.split(/\r?\n/);
-  if (lines.slice(1).some((line) => line.trim().length > 0)) return null;
-  const line = lines[0].trim();
-  if (/^[a-zA-Z0-9_-]{11}$/.test(line)) {
-    return `https://www.youtube.com/watch?v=${line}`;
-  }
-  const candidate = /^https?:\/\//i.test(line) ? line : `https://${line}`;
-  const fromPattern =
-    candidate.match(
-      /(?:youtube\.com\/watch\?.*v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/
-    ) || candidate.match(/youtube\.com\/live\/([a-zA-Z0-9_-]{11})(?=\?|\/|#|$)/);
-  if (fromPattern) return candidate;
-  try {
-    const u = new URL(candidate);
-    const h = u.hostname.replace(/^www\./, "").toLowerCase();
-    const yt =
-      h === "youtube.com" ||
-      h === "m.youtube.com" ||
-      h === "music.youtube.com" ||
-      h === "youtu.be" ||
-      h.endsWith(".youtube.com");
-    if (!yt) return null;
-    const v = u.searchParams.get("v");
-    if (v && /^[a-zA-Z0-9_-]{11}$/.test(v)) return candidate;
-    const livePath = u.pathname.match(/^\/live\/([a-zA-Z0-9_-]{11})(?:\/|$)/);
-    if (livePath) return candidate;
-    if (h === "youtu.be" && u.pathname.replace(/^\//, "").length >= 11) return candidate;
-  } catch {
-    return null;
-  }
-  return null;
-}
 
 function formatApiError(status: number, data: Record<string, unknown>): string {
   const detail = data.detail;
@@ -206,14 +184,6 @@ function transcriptPayloadFromAnalyzePayload(a: AnalyzePayload): TranscriptPaylo
     cached: a.cached,
     fallback_used: a.fallback_used ?? false,
   };
-}
-
-/** 11-char video id from a normalized YouTube URL (watch, youtu.be, live, shorts, embed). */
-function extractYoutubeVideoIdFromUrl(url: string): string | null {
-  const m = url.match(
-    /(?:[?&]v=|youtu\.be\/|youtube\.com\/(?:embed\/|v\/|shorts\/|live\/))([a-zA-Z0-9_-]{11})/
-  );
-  return m?.[1] ?? null;
 }
 
 function languageHintFromTranscriptLanguage(lang: string | null | undefined): PasteAnalysisLanguage {
@@ -309,19 +279,27 @@ function truncateExcerptForFallacy(text: string, max: number): string {
 type FallacyGroupedItem = {
   key: string;
   timeOrChunk: string;
+  /** Single preview line (truncated chunk text). */
   excerpt: string;
-  fullText: string;
-  strength?: string;
-  reasoning: string;
-  hasReasoning: boolean;
+  triggerText: string;
+  whyText: string;
+  confidenceDisplay: string | null;
+  /** True if expanded panel has Trigger and/or Why content to show. */
+  hasExpandableDetail: boolean;
 };
 
-/** Group labeled chunks by fallacy label for list-style results (one section per label). */
+/** Group findings by fallacy key; prefer `chunk.fallacies` when non-empty, else labels + label_matches. */
 function groupFallacyFindingsByLabel(
   chunks: AnalyzeChunk[],
   chunksUseMediaTiming: boolean,
 ): { label: string; items: FallacyGroupedItem[] }[] {
   const map = new Map<string, FallacyGroupedItem[]>();
+
+  function pushItem(fk: string, item: FallacyGroupedItem) {
+    if (!map.has(fk)) map.set(fk, []);
+    map.get(fk)!.push(item);
+  }
+
   chunks.forEach((ch, i) => {
     const chunkNum = i + 1;
     const timeOrChunk = chunksUseMediaTiming
@@ -329,21 +307,52 @@ function groupFallacyFindingsByLabel(
       : `Chunk ${chunkNum}`;
     const full = (ch.text ?? "").trim();
     const excerpt = truncateExcerptForFallacy(full, FALLACY_EXCERPT_MAX);
+
+    const instances = ch.fallacies;
+    if (instances && instances.length > 0) {
+      instances.forEach((inst, j) => {
+        const fk = (inst.fallacy_key ?? "").trim();
+        if (!fk) return;
+        const triggerText = (inst.trigger_text ?? "").trim();
+        const reasoning = (inst.reasoning ?? "").trim();
+        const whyFallback = textFromLabelMatchEntry(fk, ch.label_matches);
+        const whyText = reasoning || whyFallback;
+        const confidenceDisplay = formatFallacyConfidenceDisplay(
+          inst.confidence,
+          inst.confidence_score ?? null,
+        );
+        const excerptTrim = excerpt.trim();
+        const showTrigger = Boolean(triggerText) && triggerText !== excerptTrim;
+        const showWhy = Boolean(whyText.trim());
+        const hasExpandableDetail = showTrigger || showWhy;
+        pushItem(fk, {
+          key: `${fk}-${chunkNum}-${i}-${j}`,
+          timeOrChunk,
+          excerpt,
+          triggerText: showTrigger ? triggerText : "",
+          whyText: showWhy ? whyText : "",
+          confidenceDisplay,
+          hasExpandableDetail,
+        });
+      });
+      return;
+    }
+
     const uniqueLabels = [...new Set(ch.labels ?? [])];
     for (const lab of uniqueLabels) {
       const reasoning = textFromLabelMatchEntry(lab, ch.label_matches);
-      const hasReasoning = Boolean(reasoning.trim());
-      const item: FallacyGroupedItem = {
+      const whyText = reasoning.trim();
+      const confidenceDisplay = formatFallacyConfidenceDisplay(ch.label_strengths?.[lab], null);
+      const hasExpandableDetail = Boolean(whyText);
+      pushItem(lab, {
         key: `${lab}-${chunkNum}-${i}-${String(ch.start)}-${String(ch.end)}`,
         timeOrChunk,
         excerpt,
-        fullText: ch.text ?? "",
-        strength: ch.label_strengths?.[lab],
-        reasoning,
-        hasReasoning,
-      };
-      if (!map.has(lab)) map.set(lab, []);
-      map.get(lab)!.push(item);
+        triggerText: "",
+        whyText,
+        confidenceDisplay,
+        hasExpandableDetail,
+      });
     }
   });
   return Array.from(map.entries())
@@ -479,16 +488,7 @@ function FallacyLabelChip({ label }: { label: string }) {
   );
 }
 
-/** Heuristic: weak/strong · LLM: low/medium/high — shown as a small badge on the right */
-function formatStrengthBadge(strength: string): string {
-  const s = strength.trim().toLowerCase();
-  if (s === "low" || s === "medium" || s === "high") {
-    return s.charAt(0).toUpperCase() + s.slice(1);
-  }
-  return strength;
-}
-
-/** Fallacy mode: grouped findings list (label → excerpts), expandable for full chunk + reasoning. */
+/** Fallacy mode: grouped findings (readable titles); collapsed = one excerpt; expanded = Trigger + Why only. */
 function FallacyFindingsGroupedView({
   groups,
   contentTextDir,
@@ -502,42 +502,74 @@ function FallacyFindingsGroupedView({
     <div className={cn("space-y-6", !exploreFallaciesOnly && "max-w-3xl")}>
       {groups.map(({ label, items }) => (
         <section key={label} className="min-w-0 space-y-2">
-          <h3 className="text-[11px] font-semibold tracking-tight text-foreground/90">{label}</h3>
+          <h3 className="text-[11px] font-semibold tracking-tight text-foreground/90">
+            {formatFallacyKey(label)}
+          </h3>
           <ul className="space-y-1.5">
-            {items.map((item) => (
-              <li key={item.key}>
-                <details className="group rounded-lg border border-border/20 bg-muted/[0.03] dark:border-border/15 dark:bg-muted/[0.04]">
-                  <summary className="flex cursor-pointer list-none items-start gap-2 px-2.5 py-2 marker:content-none [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0 flex-1 text-[13px] leading-snug text-foreground/90">
-                      {item.excerpt}
-                    </span>
-                    <span className="flex shrink-0 flex-col items-end gap-0.5 text-end">
-                      {item.strength ? (
-                        <span className="rounded bg-muted/40 px-1.5 py-px text-[9px] font-medium tabular-nums text-muted-foreground/75">
-                          {formatStrengthBadge(item.strength)}
-                        </span>
-                      ) : null}
-                      <span className="font-mono text-[9px] tabular-nums text-muted-foreground/55">
-                        {item.timeOrChunk}
+            {items.map((item) => {
+              const row = (
+                <div className="flex min-w-0 items-start gap-2">
+                  <span
+                    className="min-w-0 flex-1 text-[13px] leading-snug text-foreground/90"
+                    dir={contentTextDir}
+                  >
+                    {item.excerpt}
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end gap-0.5 text-end">
+                    {item.confidenceDisplay ? (
+                      <span className="rounded bg-muted/40 px-1.5 py-px text-[9px] font-medium tabular-nums text-muted-foreground/75">
+                        {item.confidenceDisplay}
                       </span>
-                    </span>
-                  </summary>
-                  <div className="border-t border-border/10 px-2.5 pb-2.5 pt-2" dir={contentTextDir}>
-                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground/90">
-                      {item.fullText}
-                    </p>
-                    {item.hasReasoning ? (
-                      <details className="mt-2.5 rounded-md border border-border/15 bg-muted/[0.04] px-2 py-1.5 dark:border-border/10">
-                        <summary className="cursor-pointer list-none text-[11px] font-medium text-muted-foreground marker:content-none [&::-webkit-details-marker]:hidden">
-                          Reasoning
-                        </summary>
-                        <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground/85">{item.reasoning}</p>
-                      </details>
                     ) : null}
-                  </div>
-                </details>
-              </li>
-            ))}
+                    <span className="font-mono text-[9px] tabular-nums text-muted-foreground/50">
+                      {item.timeOrChunk}
+                    </span>
+                  </span>
+                </div>
+              );
+
+              if (!item.hasExpandableDetail) {
+                return (
+                  <li key={item.key}>
+                    <div className="rounded-lg border border-border/20 bg-muted/[0.03] px-2.5 py-2 dark:border-border/15 dark:bg-muted/[0.04]">
+                      {row}
+                    </div>
+                  </li>
+                );
+              }
+
+              return (
+                <li key={item.key}>
+                  <details className="rounded-lg border border-border/20 bg-muted/[0.03] dark:border-border/15 dark:bg-muted/[0.04]">
+                    <summary className="cursor-pointer list-none px-2.5 py-2 marker:content-none [&::-webkit-details-marker]:hidden">
+                      {row}
+                    </summary>
+                    <div className="space-y-3 border-t border-border/10 px-2.5 pb-2.5 pt-2.5" dir={contentTextDir}>
+                      {item.triggerText ? (
+                        <div>
+                          <p className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                            Trigger
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-foreground/90">
+                            {item.triggerText}
+                          </p>
+                        </div>
+                      ) : null}
+                      {item.whyText ? (
+                        <div>
+                          <p className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                            Why
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-muted-foreground/85">
+                            {item.whyText}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  </details>
+                </li>
+              );
+            })}
           </ul>
         </section>
       ))}
@@ -904,6 +936,8 @@ function DownloadsGrouped({
   lastAnalyzeMode,
   analysisDownloadSlug,
   chipClassName,
+  /** Per-segment timestamps (YouTube fetch). Hide for plain pasted text. */
+  includeTranscriptTimestampedDownload,
 }: {
   transcriptExportPayload: TranscriptPayload | null;
   analyzeResult: AnalyzePayload | null;
@@ -911,6 +945,7 @@ function DownloadsGrouped({
   analysisDownloadSlug: string;
   /** Optional; e.g. smaller chips in the explore sidebar. */
   chipClassName?: string;
+  includeTranscriptTimestampedDownload: boolean;
 }) {
   const chip = cn(downloadChipClass, chipClassName);
   const transcript = transcriptExportPayload;
@@ -925,21 +960,23 @@ function DownloadsGrouped({
         <div className="min-w-0" role="group" aria-label="Transcript downloads">
           <p className={downloadGroupLabelClass}>Transcript</p>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                const t = transcript;
-                const slug = transcriptExportFileSlug(t);
-                downloadBlob(
-                  `youtube-transcript-timestamps-${slug}.txt`,
-                  buildTranscriptTimestampedTxt(t),
-                  "text/plain;charset=utf-8"
-                );
-              }}
-              className={chip}
-            >
-              With timestamps
-            </button>
+            {includeTranscriptTimestampedDownload ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const t = transcript;
+                  const slug = transcriptExportFileSlug(t);
+                  downloadBlob(
+                    `youtube-transcript-timestamps-${slug}.txt`,
+                    buildTranscriptTimestampedTxt(t),
+                    "text/plain;charset=utf-8"
+                  );
+                }}
+                className={chip}
+              >
+                With timestamps
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => {
@@ -1294,14 +1331,24 @@ export function YouTubeTranscriptTester({
   const contentTextDir = useMemo(() => getTextDir(contentLanguage), [contentLanguage]);
 
   function onUnifiedInputChange(next: string) {
-    setUnifiedInput(next);
+    const normalized = normalizeYouTubeUrlInput(next);
+    const toSet = normalized !== null ? normalized : next;
+    setUnifiedInput(toSet);
     setError(null);
     setAnalysisError(null);
-    const nextUrl = detectYouTubeUrl(next);
+    const nextUrl = detectYouTubeUrl(toSet);
     const nextVid = nextUrl ? extractYoutubeVideoIdFromUrl(nextUrl) : null;
     if (transcriptResult && nextVid !== transcriptResult.video_id) {
       setTranscriptResult(null);
       setAnalyzeResult(null);
+    }
+  }
+
+  /** Canonicalize YouTube URL on blur if the field still has a messy or non-canonical form. */
+  function onUnifiedInputBlur() {
+    const n = normalizeYouTubeUrlInput(unifiedInput);
+    if (n !== null && n !== unifiedInput.trim()) {
+      onUnifiedInputChange(n);
     }
   }
 
@@ -1572,6 +1619,16 @@ export function YouTubeTranscriptTester({
     return null;
   }, [transcriptResult, analyzeResult]);
 
+  /**
+   * Timestamps download only when we have a real media transcript fetch (e.g. YouTube captions).
+   * Plain pasted text / analyze-only payloads do not expose per-segment media timing here.
+   */
+  const transcriptHasTimedMediaExport = useMemo(() => {
+    const segs = transcriptResult?.segments;
+    if (!segs?.length) return false;
+    return segs.some((s) => s.start != null && !Number.isNaN(Number(s.start)));
+  }, [transcriptResult]);
+
   /** Explore: show Results + Reference once transcript is fetched or analysis exists */
   const hasAnalysisResult = analyzeResult != null;
   const showExploreAnalysisLayout =
@@ -1671,6 +1728,7 @@ export function YouTubeTranscriptTester({
                     id="unified-input-explore"
                     value={unifiedInput}
                     onChange={(e) => onUnifiedInputChange(e.target.value)}
+                    onBlur={onUnifiedInputBlur}
                     rows={5}
                     placeholder="Paste a YouTube URL on one line, or paste transcript text…"
                     disabled={loading !== null}
@@ -1799,6 +1857,7 @@ export function YouTubeTranscriptTester({
                 id="unified-input-internal"
                 value={unifiedInput}
                 onChange={(e) => onUnifiedInputChange(e.target.value)}
+                onBlur={onUnifiedInputBlur}
                 rows={5}
                 placeholder="YouTube URL on one line, or paste transcript text…"
                 disabled={loading !== null}
@@ -2686,6 +2745,7 @@ export function YouTubeTranscriptTester({
                   lastAnalyzeMode={lastAnalyzeMode}
                   analysisDownloadSlug={analysisDownloadSlug}
                   chipClassName="text-[10px] px-2 py-1"
+                  includeTranscriptTimestampedDownload={transcriptHasTimedMediaExport}
                 />
               </div>
             ) : null}
@@ -2987,7 +3047,7 @@ export function YouTubeTranscriptTester({
                             className="flex items-center justify-between gap-2 rounded-lg border border-border/30 bg-background/40 px-2.5 py-2"
                           >
                             <span className="min-w-0 flex-1 break-words text-[11px] leading-snug text-foreground/90">
-                              {label}
+                              {formatFallacyKey(label)}
                             </span>
                             <span className="shrink-0 rounded-md bg-muted/50 px-2 py-0.5 font-mono text-sm font-semibold tabular-nums text-foreground">
                               {count}
@@ -3048,6 +3108,7 @@ export function YouTubeTranscriptTester({
                   analyzeResult={analyzeResult}
                   lastAnalyzeMode={lastAnalyzeMode}
                   analysisDownloadSlug={analysisDownloadSlug}
+                  includeTranscriptTimestampedDownload={transcriptHasTimedMediaExport}
                 />
               </div>
             )}
