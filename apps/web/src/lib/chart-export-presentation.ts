@@ -1,3 +1,5 @@
+import { localizeChartNumericDisplayString } from "@/lib/chart-numerals-fa";
+
 /**
  * Presentation (slide-ready) layout for PNG export.
  * Final image is 16:9 at base size × pixelRatio (e.g. 1920×1080 @2× for crisp slides).
@@ -28,6 +30,8 @@ export type PresentationEchartsExportContext = {
   chartTitle: string;
   sourceFooter?: string;
   direction?: "ltr" | "rtl";
+  /** Matches live chart `chartLocale` (Persian digits in title/source when `fa`). */
+  chartLocale?: "en" | "fa";
 };
 
 /** Slide chrome in base (logical) pixels before `pixelRatio` scaling. */
@@ -181,20 +185,22 @@ const PRESENTATION_EXPORT_GRID = {
   containLabel: true as const,
 };
 
-function formatExportSourceGraphicText(footer?: string): string | undefined {
+function formatExportSourceGraphicText(footer: string | undefined, chartLocale: "en" | "fa"): string | undefined {
   const t = footer?.trim();
   if (!t) return undefined;
-  return t.toLowerCase().startsWith("source") ? t : `Source: ${t}`;
+  const body = t.toLowerCase().startsWith("source") ? t : `Source: ${t}`;
+  return localizeChartNumericDisplayString(body, chartLocale);
 }
 
-function buildPresentationTitlePatch(opt: Record<string, unknown>, chartTitle: string): Record<string, unknown> {
+function buildPresentationTitlePatch(opt: Record<string, unknown>, ctx: PresentationEchartsExportContext): Record<string, unknown> {
   const rawTitle = opt.title;
   const title0 = (Array.isArray(rawTitle) ? rawTitle[0] : rawTitle) as Record<string, unknown> | undefined;
   const prevTs = (title0?.textStyle ?? {}) as Record<string, unknown>;
+  const displayTitle = localizeChartNumericDisplayString(ctx.chartTitle.trim(), ctx.chartLocale ?? "en");
   return {
     ...(title0 ?? {}),
     show: true,
-    text: chartTitle,
+    text: displayTitle,
     left: "center",
     top: 10,
     textStyle: {
@@ -308,7 +314,8 @@ export function buildPresentationEchartsPatch(
   });
 
   const dir = ctx.direction ?? "ltr";
-  const sourceText = formatExportSourceGraphicText(ctx.sourceFooter);
+  const chartLocale = ctx.chartLocale ?? "en";
+  const sourceText = formatExportSourceGraphicText(ctx.sourceFooter, chartLocale);
   const sourceGraphic = sourceText
     ? [
         {
@@ -343,7 +350,7 @@ export function buildPresentationEchartsPatch(
       : null;
 
   const out: Record<string, unknown> = {
-    title: buildPresentationTitlePatch(opt, ctx.chartTitle),
+    title: buildPresentationTitlePatch(opt, ctx),
     animation: false,
     grid: gridPatch,
     graphic: [...prevGraphics, ...sourceGraphic],

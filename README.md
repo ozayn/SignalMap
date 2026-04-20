@@ -68,7 +68,9 @@ The study page shows "Last updated" after a successful run.
 
 Add a **Postgres** database and link it to the API service for Wayback jobs (cache + job queue).
 
-Use **two Railway services** in the same project. Each service sets **Root Directory** to its app folder so the Docker build context is only that app (no root-level `railway.json` / `railway.web.json` — those were removed to avoid the wrong service building).
+Use **two Railway services** in the same project. Each service sets **Root Directory** to its app folder so the Docker build context is only that app. Per-service configs live as **`railway.json`** inside `apps/api` and `apps/web` only (no root-level Railway config).
+
+**Step-by-step + troubleshooting:** see **`docs/RAILWAY_DEPLOY.md`** (includes fixing errors that still reference removed `railway.web.json`).
 
 ### API service
 - **Root Directory:** `apps/api`
@@ -78,10 +80,12 @@ Use **two Railway services** in the same project. Each service sets **Root Direc
 
 ### Web service
 - **Root Directory:** `apps/web`
-- **Config file (repo):** `apps/web/railway.json` — in the UI, **`railway.json`** relative to the service root.
-- **Dockerfile:** `apps/web/Dockerfile` (context is only `apps/web`; install is **`npm install`** from `apps/web/package.json`, no repo-root `pnpm-lock.yaml` required)
+- **Config file (repo):** `apps/web/railway.json` — in the Railway UI, with Root Directory = `apps/web`, set the config file to **`railway.json`** (not `railway.web.json`, not `/railway.web.json`).
+- **Dockerfile:** `apps/web/Dockerfile` (referenced by `dockerfilePath` in `apps/web/railway.json`; build context is `apps/web`; install is **`npm install`** from `apps/web/package.json`, no repo-root `pnpm-lock.yaml` required)
 - Settings → Networking → ensure target port matches `PORT` (Railway auto-sets this)
 - **Do not set a deploy `startCommand` that uses `cd`** — use the Dockerfile `CMD` (via `sh -c`). Both configs rely on Docker `CMD` / `railway.json` `startCommand` only where a plain executable is valid (API).
+
+**Deploy error `service config at '/railway.web.json' not found`:** the platform is still pointed at the old file. Update the web service to Root **`apps/web`** and config **`railway.json`** as above, or see **`docs/RAILWAY_DEPLOY.md`**.
 
 **Environment variables:**
 

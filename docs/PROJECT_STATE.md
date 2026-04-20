@@ -31,7 +31,7 @@ Snapshot of the current repository state for development continuity.
 | | Uvicorn | ≥0.32.0 |
 | | Python | (see requirements.txt) |
 | **Database** | PostgreSQL | (via DATABASE_URL) |
-| **Deployment** | Railway | (web + API + optional cron) |
+| **Deployment** | Railway | Web + API: **`docs/RAILWAY_DEPLOY.md`**; cron: **`docs/RAILWAY_CRON_SETUP.md`** |
 
 **Backend dependencies (requirements.txt):**
 - fastapi>=0.115.0

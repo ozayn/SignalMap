@@ -618,7 +618,8 @@ export function TimelineChart({
             exportSourceFooter: exportSourceFooter?.trim(),
             exportSourceFooterColor: footerColor,
             exportPresentationTitle: resolvedTitle,
-            exportPresentationDirection: chartLocale === "fa" ? "rtl" : "ltr",
+            exportPresentationDirection: (chartLocale ?? "en") === "fa" ? "rtl" : "ltr",
+            exportPresentationLocale: (chartLocale ?? "en") === "fa" ? "fa" : "en",
             exportPresentationTitleColor: titleColor,
           };
           downloadEchartsRaster(chart, "png", stem, backgroundColor, exportOpts);

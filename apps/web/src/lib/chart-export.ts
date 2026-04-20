@@ -56,6 +56,40 @@ function cloneOptionBranch<T>(value: T): T {
   }
 }
 
+/**
+ * Deep-clone ECharts option objects while keeping function references (formatters, etc.).
+ * `structuredClone` / JSON cannot copy functions, which breaks offscreen export vs the live chart
+ * (FA numerals, dual-year axis, tooltips). Used only for presentation PNG export.
+ */
+function cloneEchartsOptionPreservingFunctions<T>(value: T, seen?: WeakMap<object, unknown>): T {
+  const s = seen ?? new WeakMap<object, unknown>();
+
+  if (value === null || value === undefined) return value;
+  const typ = typeof value;
+  if (typ === "function" || typ === "bigint" || typ === "symbol") return value;
+  if (typ !== "object") return value;
+
+  if (value instanceof Date) return new Date(value.getTime()) as unknown as T;
+
+  if (Array.isArray(value)) {
+    if (s.has(value)) return s.get(value) as T;
+    const arr: unknown[] = [];
+    s.set(value, arr);
+    for (let i = 0; i < value.length; i++) {
+      arr.push(cloneEchartsOptionPreservingFunctions(value[i], s));
+    }
+    return arr as unknown as T;
+  }
+
+  if (s.has(value as object)) return s.get(value as object) as T;
+  const copy: Record<string, unknown> = {};
+  s.set(value as object, copy);
+  for (const key of Object.keys(value as Record<string, unknown>)) {
+    copy[key] = cloneEchartsOptionPreservingFunctions((value as Record<string, unknown>)[key], s);
+  }
+  return copy as T;
+}
+
 function collectLegendControlledNames(legends: LegendLike[], selected: Record<string, boolean>): Set<string> {
   const names = new Set<string>();
   for (const key of Object.keys(selected)) {
@@ -168,6 +202,8 @@ export type DownloadEchartsRasterOptions = {
   exportPresentationTitle?: string;
   /** Canvas `direction` for title/source text (e.g. `rtl` for FA charts). */
   exportPresentationDirection?: "ltr" | "rtl";
+  /** Chart UI locale: Persian digits in export title/source when `fa`. */
+  exportPresentationLocale?: "en" | "fa";
   /** Title text color (CSS). */
   exportPresentationTitleColor?: string;
 };
@@ -542,13 +578,16 @@ async function exportPresentationPngFromLiveChart(
       height: layout.chartSlotBaseH,
       renderer: "canvas",
     });
-    const baseOpt = cloneOptionBranch(liveChart.getOption() as Record<string, unknown>);
+    const baseOpt = cloneEchartsOptionPreservingFunctions(
+      liveChart.getOption() as Record<string, unknown>
+    ) as Record<string, unknown>;
     exportChart.setOption(baseOpt as never, { notMerge: true });
-    const merged = exportChart.getOption() as Record<string, unknown>;
-    const presentationPatch = buildPresentationEchartsPatch(merged, {
+    /** Patch from the same cloned option — do not use `exportChart.getOption()` here; ECharts can omit function-valued fields when read back. */
+    const presentationPatch = buildPresentationEchartsPatch(baseOpt, {
       chartTitle: compactTitle,
       sourceFooter: opts.exportSourceFooter?.trim(),
       direction: opts.exportPresentationDirection ?? "ltr",
+      chartLocale: opts.exportPresentationLocale ?? "en",
     });
     exportChart.setOption(presentationPatch as never, false);
     exportChart.resize({
@@ -597,7 +636,9 @@ async function exportPresentationPngFromLiveChart(
         }
         console.log("[export PNG] typography check", {
           titleFont: titleTs.fontSize,
+          titleText: titleBlock?.text,
           xAxisLabelFont: xAl.fontSize,
+          xAxisFormatter: typeof xAl.formatter,
           yAxisLabelFont: yAl.fontSize,
           legendFont: lts.fontSize,
           tooltipFont: tipTs.fontSize,

@@ -245,8 +245,8 @@ STUDIES: StudyMeta[] = [
 
 | Method | Config | Trigger |
 |--------|--------|---------|
-| Railway Cron (Python) | `railway.cron.json` | Runs `cron_daily_update.py` on schedule |
-| Railway Cron (HTTP) | `railway.cron-http.json` | `curl -X POST $CRON_API_URL/api/cron/update-all` |
+| Railway Cron (Python) | `apps/api/railway.cron.json` | Runs `cron_daily_update.py` on schedule |
+| Railway Cron (HTTP) | `apps/api/railway.cron-http.json` | `curl -X POST $CRON_API_URL/api/cron/update-all` |
 | GitHub Actions | `.github/workflows/cron-update-data.yml` | Daily POST to `CRON_API_URL` |
 | cron-job.org | Manual | POST to `/api/cron/update-all` |
 
