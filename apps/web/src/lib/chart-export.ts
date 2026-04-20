@@ -579,17 +579,21 @@ async function exportPresentationPngFromLiveChart(
       height: layout.chartSlotBaseH,
       renderer: "canvas",
     });
-    const baseOpt = cloneEchartsOptionPreservingFunctions(
+    /** Snapshot live option once; never pass live `getOption()` objects into `setOption` before patching (ECharts may mutate merged input). */
+    const exportSnapshot = cloneEchartsOptionPreservingFunctions(
       liveChart.getOption() as Record<string, unknown>
     ) as Record<string, unknown>;
-    exportChart.setOption(baseOpt as never, { notMerge: true });
-    /** Patch from the same cloned option — do not use `exportChart.getOption()` here; ECharts can omit function-valued fields when read back. */
-    const presentationPatch = buildPresentationEchartsPatch(baseOpt, {
+    // Presentation title is export-only; dropping any `title` from the snapshot avoids inheriting or leaking title state.
+    delete exportSnapshot.title;
+
+    /** Build patch from the snapshot before any `setOption` so the snapshot cannot be altered by the export instance merge. */
+    const presentationPatch = buildPresentationEchartsPatch(exportSnapshot, {
       chartTitle: compactTitle,
       sourceFooter: opts.exportSourceFooter?.trim(),
       direction: opts.exportPresentationDirection ?? "ltr",
       chartLocale: opts.exportPresentationLocale ?? "en",
     });
+    exportChart.setOption(exportSnapshot as never, { notMerge: true });
     exportChart.setOption(presentationPatch as never, false);
     exportChart.resize({
       width: PRESENTATION_EXPORT_CHART_WIDTH,

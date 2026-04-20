@@ -322,7 +322,7 @@ function formatDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Publisher line(s) for PNG export only (no prefix). `buildPresentationEchartsPatch` adds `Source:` vs `داده‌ها:` from `chartLocale`. */
+/** Publisher line(s) for PNG export (no prefix); `formatStudyExportSourceLine` always adds English `Source:`. */
 function studyChartExportSource(_isFa: boolean, parts: Array<string | null | undefined>): string | undefined {
   return joinExportSourceNames(parts);
 }

@@ -187,7 +187,7 @@ const PRESENTATION_EXPORT_GRID = {
   containLabel: true as const,
 };
 
-/** Strip any existing EN/FA source labels so export can apply a single locale-appropriate prefix. */
+/** Strip any existing source prefixes so we can apply a single English `Source:` label. */
 function stripExportSourcePrefixes(raw: string): string {
   return raw
     .trim()
@@ -198,20 +198,13 @@ function stripExportSourcePrefixes(raw: string): string {
 }
 
 /**
- * One line for the in-chart source `graphic`: English uses `Source: …`, Persian uses `داده‌ها: …` only (no mixed prefixes).
+ * Publisher line with English **Source:** prefix for PNGs and under-chart copy.
+ * Prefix is never translated; with `chartLocale === "fa"` only digits (etc.) are localized.
  */
-function formatExportSourceGraphicText(footer: string | undefined, chartLocale: "en" | "fa"): string | undefined {
-  const body = stripExportSourcePrefixes(footer ?? "");
-  if (!body) return undefined;
-  if (chartLocale === "fa") {
-    return localizeChartNumericDisplayString(`داده‌ها: ${body}`, "fa");
-  }
-  return localizeChartNumericDisplayString(`Source: ${body}`, "en");
-}
-
-/** Localized source line for under-chart UI and PNG graphic (same prefix rules as export). */
 export function formatStudyExportSourceLine(footer: string | undefined, chartLocale: "en" | "fa"): string {
-  return formatExportSourceGraphicText(footer, chartLocale) ?? "";
+  const body = stripExportSourcePrefixes(footer ?? "");
+  if (!body) return "";
+  return localizeChartNumericDisplayString(`Source: ${body}`, chartLocale === "fa" ? "fa" : "en");
 }
 
 function buildPresentationTitlePatch(opt: Record<string, unknown>, ctx: PresentationEchartsExportContext): Record<string, unknown> {
@@ -362,7 +355,7 @@ export function buildPresentationEchartsPatch(
 
   const dir = ctx.direction ?? "ltr";
   const chartLocale = ctx.chartLocale ?? "en";
-  const sourceText = formatExportSourceGraphicText(ctx.sourceFooter, chartLocale);
+  const sourceText = formatStudyExportSourceLine(ctx.sourceFooter ?? "", chartLocale) || undefined;
   const sourceGraphic = sourceText
     ? [
         {
