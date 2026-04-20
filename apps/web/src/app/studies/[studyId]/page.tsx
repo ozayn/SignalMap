@@ -52,6 +52,11 @@ import {
   indexSeriesAtBaseYear,
   resolveIndexedBaseYear,
 } from "@/lib/gdp-levels-indexed";
+import {
+  annualMeanPointsByGregorianYear,
+  indexSeriesTo100,
+  resolveCommonIndexBaseYear,
+} from "@/lib/dutch-disease-overview-index";
 import { fetchJson } from "@/lib/api";
 import { enrichOilPointsWithVolatility } from "@/lib/oil-volatility";
 import { filterForNetwork, filterForSankey } from "@/lib/oil-trade-network-filter";
@@ -845,6 +850,84 @@ export default function StudyDetailPage() {
     if (!isDutchDiseaseDiagnostics) return events;
     return events.filter((e) => isStudyEventLayerVisible(e.layer, chartEventToggleState));
   }, [isDutchDiseaseDiagnostics, events, chartEventToggleState]);
+
+  /** Indexed overlay (100 = value in base year): WDI shares + optional annual-mean open-market FX. */
+  const dutchOverviewIndexed = useMemo(() => {
+    if (!isDutchDiseaseDiagnostics) return null;
+    const annualFx = annualMeanPointsByGregorianYear(dutchFxPoints);
+    const wdiBlocks = [
+      { key: "oil", points: dutchOilRentsPoints },
+      { key: "mfg", points: dutchManufacturingPoints },
+      { key: "imp", points: dutchImportsPoints },
+    ].filter((b) => b.points.length > 0);
+    if (wdiBlocks.length < 2) return null;
+    const forBase = [...wdiBlocks, ...(annualFx.length > 0 ? [{ key: "fx", points: annualFx }] : [])];
+    const baseYear = resolveCommonIndexBaseYear(forBase, 2000);
+    if (baseYear == null) return null;
+
+    const multi: ChartSeries[] = [];
+    const pushIfFinite = (
+      key: string,
+      label: string,
+      points: { date: string; value: number }[],
+      color: string,
+      symbol: ChartSeries["symbol"]
+    ) => {
+      if (points.length === 0) return;
+      const idxPts = indexSeriesTo100(points, baseYear);
+      if (!idxPts.some((p) => Number.isFinite(p.value))) return;
+      multi.push({
+        key,
+        label,
+        yAxisIndex: 0,
+        unit: "",
+        points: idxPts,
+        color,
+        symbol,
+        showSymbol: false,
+        lineWidth: 2.25,
+      });
+    };
+    pushIfFinite(
+      "dutch_ov_oil",
+      L(isFa, "Oil rents (% of GDP), indexed", "اجاره نفت (٪ GDP)، شاخص‌شده"),
+      dutchOilRentsPoints,
+      "#2563eb",
+      "circle"
+    );
+    pushIfFinite(
+      "dutch_ov_mfg",
+      L(isFa, "Manufacturing (% of GDP), indexed", "تولیدات کارخانه‌ای (٪ GDP)، شاخص‌شده"),
+      dutchManufacturingPoints,
+      "#16a34a",
+      "rect"
+    );
+    pushIfFinite(
+      "dutch_ov_imp",
+      L(isFa, "Imports (% of GDP), indexed", "واردات (٪ GDP)، شاخص‌شده"),
+      dutchImportsPoints,
+      "#a855f7",
+      "diamond"
+    );
+    if (annualFx.length > 0) {
+      pushIfFinite(
+        "dutch_ov_fx",
+        L(isFa, "Open-market toman/USD (annual mean), indexed", "تومان/دلار بازار (میانگین سال)، شاخص‌شده"),
+        annualFx,
+        "#64748b",
+        "triangle"
+      );
+    }
+    if (multi.length < 2) return null;
+    return { baseYear, multiSeries: multi };
+  }, [
+    isDutchDiseaseDiagnostics,
+    isFa,
+    dutchOilRentsPoints,
+    dutchManufacturingPoints,
+    dutchImportsPoints,
+    dutchFxPoints,
+  ]);
 
   const gdpCompositionChartTimeRange = useMemo((): [string, string] | null => {
     if (!isGdpMacroNationalAccounts) return null;
@@ -7056,6 +7139,51 @@ export default function StudyDetailPage() {
             </>
           ) : isDutchDiseaseDiagnostics ? (
             <>
+              {dutchOverviewIndexed ? (
+                <div className="space-y-2 mb-8 pb-8 border-b border-border">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {L(isFa, "Overview — indexed pattern comparison", "نمای کلی — مقایسهٔ الگو (شاخص‌شده)")}
+                  </h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
+                    {L(
+                      isFa,
+                      `Each series is indexed to 100 in ${dutchOverviewIndexed.baseYear} (or the earliest calendar year where every line shown here has a valid value, if ${dutchOverviewIndexed.baseYear} is unavailable). Units differ (% of GDP vs toman/USD); this view is for visual pattern comparison only, not direct level comparison.`,
+                      `هر سری به شاخص ۱۰۰ در سال ${localizeChartNumericDisplayString(String(dutchOverviewIndexed.baseYear), "fa")} نرمال شده است (اگر آن سال داده نباشد، نزدیک‌ترین سالی که همهٔ خطوط مقدار معتبر دارند). واحدها متفاوت‌اند (٪ از GDP در برابر تومان/دلار)؛ این نما فقط برای مقایسهٔ الگوی بصری است، نه سطح مطلق.`
+                    )}
+                  </p>
+                  <TimelineChart
+                    chartLocale={chartLocaleForCharts}
+                    exportPresentationStudyHeading={displayStudy.title}
+                    exportPresentationTitle={L(
+                      isFa,
+                      `${displayStudy.title} — ${"Overview (indexed)"}`,
+                      `${displayStudy.title} — ${"نمای کلی (شاخص‌شده)"}`
+                    )}
+                    exportSourceFooter={studyChartExportSource(isFa, [
+                      dutchWdiSource?.name ?? "World Bank WDI",
+                      dutchFxSource?.name,
+                    ])}
+                    data={[]}
+                    valueKey="value"
+                    label={L(isFa, "Indexed overview (100 = base year)", "نمای شاخص‌شده (۱۰۰ = سال مبنا)")}
+                    events={[]}
+                    anchorEventId={anchorEventId || undefined}
+                    multiSeries={dutchOverviewIndexed.multiSeries}
+                    timeRange={dutchTimeRange ?? study.timeRange}
+                    chartRangeGranularity="year"
+                    xAxisYearLabel={chartYearAxisLabel}
+                    multiSeriesYAxisNameOverrides={{
+                      0: isFa
+                        ? `شاخص (${localizeChartNumericDisplayString(String(dutchOverviewIndexed.baseYear), "fa")} = ۱۰۰)`
+                        : `Index (${dutchOverviewIndexed.baseYear} = 100)`,
+                    }}
+                    exportFileStem="dutch-disease-overview-indexed"
+                    showChartControls={false}
+                    mutedEventLines
+                    chartHeight="h-80 md:h-96"
+                  />
+                </div>
+              ) : null}
               <div className="space-y-8">
                 <div className="space-y-2">
                   <h3 className="text-sm font-semibold text-foreground">
