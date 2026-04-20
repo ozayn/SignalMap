@@ -232,7 +232,7 @@ function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
         countries: ["iran", "us", "global"],
         themes: ["inequality", "macro"],
         tags: [],
-        keywords: ["gini", "income distribution", "germany", "turkey", "world bank", "survey"],
+        keywords: ["gini", "income distribution", "germany", "turkey", "china", "saudi arabia", "world bank", "survey"],
       };
     case "inflation_cpi_yoy":
       return {
@@ -248,6 +248,8 @@ function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
           "world bank",
           "germany",
           "turkey",
+          "china",
+          "saudi arabia",
         ],
       };
     case "poverty_headcount_iran":

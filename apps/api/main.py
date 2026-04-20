@@ -470,7 +470,7 @@ def get_wdi_gini_comparison_signal(
     start: str | None = Query(None, description="Start date YYYY-MM-DD (year from first 4 chars)"),
     end: str | None = Query(None, description="End date YYYY-MM-DD"),
 ):
-    """Return World Bank Gini coefficient time series for Iran, US, Germany, Turkey (annual, 0–100 scale)."""
+    """Return World Bank Gini coefficient time series for Iran, US, Germany, Turkey, China, and Saudi Arabia (annual, 0–100 scale)."""
     if start is None:
         start = "1960-01-01"
     if end is None:
@@ -492,7 +492,7 @@ def get_wdi_cpi_inflation_yoy_signal(
     start: str | None = Query(None, description="Start date YYYY-MM-DD"),
     end: str | None = Query(None, description="End date YYYY-MM-DD"),
 ):
-    """Return World Bank annual CPI inflation (% YoY) for Iran and the United States (WDI FP.CPI.TOTL.ZG)."""
+    """Return World Bank annual CPI inflation (% YoY) for Iran, US, Germany, Turkey, China, and Saudi Arabia (WDI FP.CPI.TOTL.ZG)."""
     if start is None:
         start = "1960-01-01"
     if end is None:

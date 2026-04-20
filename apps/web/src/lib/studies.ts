@@ -451,7 +451,7 @@ export const STUDIES: StudyMeta[] = [
     subtitle: "World Bank annual estimates (Iran, United States, and comparators)",
     timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
     description:
-      "The Gini coefficient summarizes how unequally income is distributed in a country. This study plots World Bank estimates over time for Iran and the United States, with Germany and Turkey as additional reference countries.",
+      "The Gini coefficient summarizes how unequally income is distributed in a country. This study plots World Bank estimates over time for Iran, the United States, Germany, Turkey, China, and Saudi Arabia using the same indicator (SI.POV.GINI).",
     status: "active",
     countries: ["iran", "us", "global"],
     themes: ["inequality", "macro"],
@@ -471,10 +471,10 @@ export const STUDIES: StudyMeta[] = [
     id: "inflation-rate",
     number: 30,
     title: "Annual inflation rate",
-    subtitle: "Inflation (CPI, % YoY) — Iran, United States, Germany, and Turkey",
+    subtitle: "Inflation (CPI, % YoY) — Iran, United States, Germany, Turkey, China, and Saudi Arabia",
     timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
     description:
-      "Year-on-year change in consumer prices (annual %) from the World Bank. Iran, the United States, Germany, and Turkey use the same indicator (FP.CPI.TOTL.ZG) for comparability; levels still differ by methodology and shocks.",
+      "Year-on-year change in consumer prices (annual %) from the World Bank. Iran, the United States, Germany, Turkey, China, and Saudi Arabia use the same indicator (FP.CPI.TOTL.ZG) for comparability; levels still differ by methodology and shocks.",
     status: "active",
     countries: ["iran", "us", "global"],
     themes: ["macro"],

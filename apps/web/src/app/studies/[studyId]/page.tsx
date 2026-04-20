@@ -395,11 +395,15 @@ export default function StudyDetailPage() {
   const [giniUsPoints, setGiniUsPoints] = useState<{ date: string; value: number }[]>([]);
   const [giniGermanyPoints, setGiniGermanyPoints] = useState<{ date: string; value: number }[]>([]);
   const [giniTurkeyPoints, setGiniTurkeyPoints] = useState<{ date: string; value: number }[]>([]);
+  const [giniChinaPoints, setGiniChinaPoints] = useState<{ date: string; value: number }[]>([]);
+  const [giniSaudiArabiaPoints, setGiniSaudiArabiaPoints] = useState<{ date: string; value: number }[]>([]);
   const [giniSource, setGiniSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(null);
   const [inflationIranPoints, setInflationIranPoints] = useState<{ date: string; value: number }[]>([]);
   const [inflationUsPoints, setInflationUsPoints] = useState<{ date: string; value: number }[]>([]);
   const [inflationGermanyPoints, setInflationGermanyPoints] = useState<{ date: string; value: number }[]>([]);
   const [inflationTurkeyPoints, setInflationTurkeyPoints] = useState<{ date: string; value: number }[]>([]);
+  const [inflationChinaPoints, setInflationChinaPoints] = useState<{ date: string; value: number }[]>([]);
+  const [inflationSaudiArabiaPoints, setInflationSaudiArabiaPoints] = useState<{ date: string; value: number }[]>([]);
   const [inflationSource, setInflationSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(null);
   const [povertyDdayPoints, setPovertyDdayPoints] = useState<{ date: string; value: number }[]>([]);
   const [povertyLmicPoints, setPovertyLmicPoints] = useState<{ date: string; value: number }[]>([]);
@@ -2071,6 +2075,8 @@ export default function StudyDetailPage() {
         setGiniUsPoints([]);
         setGiniGermanyPoints([]);
         setGiniTurkeyPoints([]);
+        setGiniChinaPoints([]);
+        setGiniSaudiArabiaPoints([]);
         setGiniSource(null);
       }
       return;
@@ -2085,6 +2091,8 @@ export default function StudyDetailPage() {
         united_states: { date: string; value: number }[];
         germany: { date: string; value: number }[];
         turkey: { date: string; value: number }[];
+        china: { date: string; value: number }[];
+        saudi_arabia: { date: string; value: number }[];
       };
       source?: { name: string; url?: string; publisher?: string };
     }>(`/api/signals/wdi/gini-comparison?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
@@ -2094,6 +2102,8 @@ export default function StudyDetailPage() {
           setGiniUsPoints(res.series?.united_states ?? []);
           setGiniGermanyPoints(res.series?.germany ?? []);
           setGiniTurkeyPoints(res.series?.turkey ?? []);
+          setGiniChinaPoints(res.series?.china ?? []);
+          setGiniSaudiArabiaPoints(res.series?.saudi_arabia ?? []);
           setGiniSource(res.source ?? null);
         }
       })
@@ -2103,6 +2113,8 @@ export default function StudyDetailPage() {
           setGiniUsPoints([]);
           setGiniGermanyPoints([]);
           setGiniTurkeyPoints([]);
+          setGiniChinaPoints([]);
+          setGiniSaudiArabiaPoints([]);
           setGiniSource(null);
           setError(e instanceof Error ? e.message : "Signal fetch failed");
         }
@@ -2120,6 +2132,8 @@ export default function StudyDetailPage() {
         setInflationUsPoints([]);
         setInflationGermanyPoints([]);
         setInflationTurkeyPoints([]);
+        setInflationChinaPoints([]);
+        setInflationSaudiArabiaPoints([]);
         setInflationSource(null);
       }
       return;
@@ -2134,6 +2148,8 @@ export default function StudyDetailPage() {
         united_states: { date: string; value: number }[];
         germany: { date: string; value: number }[];
         turkey: { date: string; value: number }[];
+        china: { date: string; value: number }[];
+        saudi_arabia: { date: string; value: number }[];
       };
       source?: { name: string; url?: string; publisher?: string };
     }>(`/api/signals/wdi/cpi-inflation-yoy?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
@@ -2143,6 +2159,8 @@ export default function StudyDetailPage() {
           setInflationUsPoints(res.series?.united_states ?? []);
           setInflationGermanyPoints(res.series?.germany ?? []);
           setInflationTurkeyPoints(res.series?.turkey ?? []);
+          setInflationChinaPoints(res.series?.china ?? []);
+          setInflationSaudiArabiaPoints(res.series?.saudi_arabia ?? []);
           setInflationSource(res.source ?? null);
         }
       })
@@ -2152,6 +2170,8 @@ export default function StudyDetailPage() {
           setInflationUsPoints([]);
           setInflationGermanyPoints([]);
           setInflationTurkeyPoints([]);
+          setInflationChinaPoints([]);
+          setInflationSaudiArabiaPoints([]);
           setInflationSource(null);
           setError(e instanceof Error ? e.message : "Signal fetch failed");
         }
@@ -2514,12 +2534,16 @@ export default function StudyDetailPage() {
                     ? giniIranPoints.length > 0 ||
                       giniUsPoints.length > 0 ||
                       giniGermanyPoints.length > 0 ||
-                      giniTurkeyPoints.length > 0
+                      giniTurkeyPoints.length > 0 ||
+                      giniChinaPoints.length > 0 ||
+                      giniSaudiArabiaPoints.length > 0
                     : isInflationCpiYoy
                       ? inflationIranPoints.length > 0 ||
                         inflationUsPoints.length > 0 ||
                         inflationGermanyPoints.length > 0 ||
-                        inflationTurkeyPoints.length > 0
+                        inflationTurkeyPoints.length > 0 ||
+                        inflationChinaPoints.length > 0 ||
+                        inflationSaudiArabiaPoints.length > 0
                       : isPovertyHeadcountIran
                         ? povertyDdayPoints.length > 0 || povertyLmicPoints.length > 0
                         : isDutchDiseaseDiagnostics
@@ -2611,12 +2635,16 @@ export default function StudyDetailPage() {
       if (giniUsPoints.length > 0) allDates.push(...collect(giniUsPoints));
       if (giniGermanyPoints.length > 0) allDates.push(...collect(giniGermanyPoints));
       if (giniTurkeyPoints.length > 0) allDates.push(...collect(giniTurkeyPoints));
+      if (giniChinaPoints.length > 0) allDates.push(...collect(giniChinaPoints));
+      if (giniSaudiArabiaPoints.length > 0) allDates.push(...collect(giniSaudiArabiaPoints));
     }
     if (isInflationCpiYoy) {
       if (inflationIranPoints.length > 0) allDates.push(...collect(inflationIranPoints));
       if (inflationUsPoints.length > 0) allDates.push(...collect(inflationUsPoints));
       if (inflationGermanyPoints.length > 0) allDates.push(...collect(inflationGermanyPoints));
       if (inflationTurkeyPoints.length > 0) allDates.push(...collect(inflationTurkeyPoints));
+      if (inflationChinaPoints.length > 0) allDates.push(...collect(inflationChinaPoints));
+      if (inflationSaudiArabiaPoints.length > 0) allDates.push(...collect(inflationSaudiArabiaPoints));
     }
     if (isPovertyHeadcountIran) {
       if (povertyDdayPoints.length > 0) allDates.push(...collect(povertyDdayPoints));
@@ -2782,12 +2810,16 @@ export default function StudyDetailPage() {
         if (giniUsPoints.length > 0) arrays.push(giniUsPoints);
         if (giniGermanyPoints.length > 0) arrays.push(giniGermanyPoints);
         if (giniTurkeyPoints.length > 0) arrays.push(giniTurkeyPoints);
+        if (giniChinaPoints.length > 0) arrays.push(giniChinaPoints);
+        if (giniSaudiArabiaPoints.length > 0) arrays.push(giniSaudiArabiaPoints);
       }
       if (isInflationCpiYoy) {
         if (inflationIranPoints.length > 0) arrays.push(inflationIranPoints);
         if (inflationUsPoints.length > 0) arrays.push(inflationUsPoints);
         if (inflationGermanyPoints.length > 0) arrays.push(inflationGermanyPoints);
         if (inflationTurkeyPoints.length > 0) arrays.push(inflationTurkeyPoints);
+        if (inflationChinaPoints.length > 0) arrays.push(inflationChinaPoints);
+        if (inflationSaudiArabiaPoints.length > 0) arrays.push(inflationSaudiArabiaPoints);
       }
       if (isPovertyHeadcountIran) {
         if (povertyDdayPoints.length > 0) arrays.push(povertyDdayPoints);
@@ -6164,6 +6196,16 @@ export default function StudyDetailPage() {
                     unit: L(isFa, "Gini (0–100)", "ضریب جینی (۰–۱۰۰)"),
                     points: giniTurkeyPoints,
                   },
+                  {
+                    label: L(isFa, "China", "چین"),
+                    unit: L(isFa, "Gini (0–100)", "ضریب جینی (۰–۱۰۰)"),
+                    points: giniChinaPoints,
+                  },
+                  {
+                    label: L(isFa, "Saudi Arabia", "عربستان سعودی"),
+                    unit: L(isFa, "Gini (0–100)", "ضریب جینی (۰–۱۰۰)"),
+                    points: giniSaudiArabiaPoints,
+                  },
                 ]}
                 timeRange={giniTimeRange ?? undefined}
               />
@@ -6215,6 +6257,24 @@ export default function StudyDetailPage() {
                     symbol: COUNTRY_COMPARATOR_STYLES.turkey.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
+                  {
+                    key: "china",
+                    label: L(isFa, "China", "چین"),
+                    yAxisIndex: 0,
+                    unit: L(isFa, "Gini coefficient (0–100)", "ضریب جینی (۰–۱۰۰)"),
+                    points: giniChinaPoints,
+                    symbol: COUNTRY_COMPARATOR_STYLES.china.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
+                  {
+                    key: "saudi_arabia",
+                    label: L(isFa, "Saudi Arabia", "عربستان سعودی"),
+                    yAxisIndex: 0,
+                    unit: L(isFa, "Gini coefficient (0–100)", "ضریب جینی (۰–۱۰۰)"),
+                    points: giniSaudiArabiaPoints,
+                    symbol: COUNTRY_COMPARATOR_STYLES.saudi_arabia.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
                 ]}
                 timeRange={giniTimeRange ?? study.timeRange}
                 yAxisMin={0}
@@ -6260,8 +6320,8 @@ export default function StudyDetailPage() {
                       equal.
                     </p>
                     <p>
-                      This page compares a few countries using the same statistical definition from the World Bank so you can
-                      see long-run changes side by side. Event markers are optional context only—they do not explain changes by
+                      This page compares six economies using the same statistical definition from the World Bank so you can see
+                      long-run changes side by side. Event markers are optional context only—they do not explain changes by
                       themselves.
                     </p>
                   </>
@@ -6292,6 +6352,16 @@ export default function StudyDetailPage() {
                     label: L(isFa, "Turkey", "ترکیه"),
                     unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
                     points: inflationTurkeyPoints,
+                  },
+                  {
+                    label: L(isFa, "China", "چین"),
+                    unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
+                    points: inflationChinaPoints,
+                  },
+                  {
+                    label: L(isFa, "Saudi Arabia", "عربستان سعودی"),
+                    unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
+                    points: inflationSaudiArabiaPoints,
                   },
                 ]}
                 timeRange={inflationTimeRange ?? undefined}
@@ -6344,6 +6414,24 @@ export default function StudyDetailPage() {
                     symbol: COUNTRY_COMPARATOR_STYLES.turkey.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
+                  {
+                    key: "china",
+                    label: L(isFa, "China", "چین"),
+                    yAxisIndex: 0,
+                    unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
+                    points: inflationChinaPoints,
+                    symbol: COUNTRY_COMPARATOR_STYLES.china.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
+                  {
+                    key: "saudi_arabia",
+                    label: L(isFa, "Saudi Arabia", "عربستان سعودی"),
+                    yAxisIndex: 0,
+                    unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
+                    points: inflationSaudiArabiaPoints,
+                    symbol: COUNTRY_COMPARATOR_STYLES.saudi_arabia.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
                 ]}
                 timeRange={inflationTimeRange ?? study.timeRange}
                 chartRangeGranularity="year"
@@ -6386,8 +6474,8 @@ export default function StudyDetailPage() {
                       that year; when it is below zero, average prices fell compared with the year before.
                     </p>
                     <p>
-                      Comparing several countries on one chart highlights different inflation regimes over time; it does not
-                      by itself explain causes (energy shocks, policy, exchange rates, etc.).
+                      Comparing six economies on one chart highlights different inflation regimes over time; it does not by
+                      itself explain causes (energy shocks, policy, exchange rates, etc.).
                     </p>
                   </>
                 )}

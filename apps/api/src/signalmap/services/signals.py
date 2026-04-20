@@ -757,12 +757,13 @@ GINI_INEQUALITY_SOURCE = {
 
 def get_gini_inequality_comparison(start: str, end: str) -> dict:
     """
-    Annual Gini coefficient (income inequality) for Iran, United States, Germany, and Turkey.
+    Annual Gini coefficient (income inequality) for Iran, United States, Germany, Turkey,
+    China, and Saudi Arabia.
     Values on a 0–100 scale (World Bank convention); 0 = perfect equality, 100 = maximum inequality.
     """
     from signalmap.sources.world_bank_gini import WDI_GINI_COEFFICIENT, fetch_gini_series_for_countries
 
-    ck = f"signal:gini_inequality:{start}:{end}"
+    ck = f"signal:gini_inequality:v2:{start}:{end}"
     cached = cache_get(ck)
     if cached is not None:
         return cached
@@ -774,6 +775,8 @@ def get_gini_inequality_comparison(start: str, end: str) -> dict:
         "USA": "united_states",
         "DEU": "germany",
         "TUR": "turkey",
+        "CHN": "china",
+        "SAU": "saudi_arabia",
     }
     series = fetch_gini_series_for_countries(iso3_to_key, start_year, end_year)
     result = {
@@ -797,11 +800,11 @@ CPI_INFLATION_YOY_SOURCE = {
 def get_cpi_inflation_yoy_comparison(start: str, end: str) -> dict:
     """
     Annual consumer price inflation (% change from a year earlier) for Iran, United States,
-    Germany, and Turkey. WDI indicator FP.CPI.TOTL.ZG (same source as Gini comparator studies).
+    Germany, Turkey, China, and Saudi Arabia. WDI indicator FP.CPI.TOTL.ZG (same source as Gini comparator studies).
     """
     from signalmap.sources.world_bank_cpi_inflation import WDI_CPI_INFLATION_ANNUAL_PCT, fetch_cpi_inflation_yoy_for_countries
 
-    ck = f"signal:cpi_inflation_yoy:{start}:{end}"
+    ck = f"signal:cpi_inflation_yoy:v2:{start}:{end}"
     cached = cache_get(ck)
     if cached is not None:
         return cached
@@ -813,6 +816,8 @@ def get_cpi_inflation_yoy_comparison(start: str, end: str) -> dict:
         "USA": "united_states",
         "DEU": "germany",
         "TUR": "turkey",
+        "CHN": "china",
+        "SAU": "saudi_arabia",
     }
     series = fetch_cpi_inflation_yoy_for_countries(iso3_to_key, start_year, end_year)
     result = {

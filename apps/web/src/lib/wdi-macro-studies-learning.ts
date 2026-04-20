@@ -5,7 +5,7 @@ const GINI_EN: LearningNoteSection[] = [
     heading: "What this shows",
     bullets: [
       "The Gini coefficient measures income inequality. Higher values mean more inequality in the distribution of income.",
-      "This chart uses World Bank World Development Indicators (SI.POV.GINI), typically from household surveys; years without estimates appear as gaps.",
+      "This chart uses World Bank World Development Indicators (SI.POV.GINI), typically from household surveys; years without estimates appear as gaps. Series include Iran, the United States, Germany, Turkey, China, and Saudi Arabia where WDI publishes values.",
     ],
   },
   {
@@ -30,7 +30,7 @@ const GINI_FA: LearningNoteSection[] = [
     heading: "What this shows",
     bullets: [
       "ضریب جینی نابرابری درآمد را خلاصه می‌کند؛ مقادیر بالاتر به‌معنای توزیع نابرابرتر درآمد است.",
-      "این نمودار از شاخص‌های توسعهٔ جهانی بانک جهانی (SI.POV.GINI) استفاده می‌کند؛ معمولاً بر پایهٔ نظرسنجی‌های خانوار؛ سال‌های بدون برآورد به‌صورت شکاف دیده می‌شوند.",
+      "این نمودار از شاخص‌های توسعهٔ جهانی بانک جهانی (SI.POV.GINI) برای ایران، ایالات متحده، آلمان، ترکیه، چین و عربستان سعودی استفاده می‌کند؛ معمولاً بر پایهٔ نظرسنجی‌های خانوار؛ سال‌های بدون برآورد برای هر کشور به‌صورت شکاف دیده می‌شوند.",
     ],
   },
   {
@@ -55,7 +55,7 @@ const INFLATION_EN: LearningNoteSection[] = [
     heading: "What this shows",
     bullets: [
       "Inflation rate measures how quickly consumer prices rise each year, expressed as the percentage change from the same period a year earlier (year-on-year, YoY).",
-      "This chart uses the World Bank’s annual series (FP.CPI.TOTL.ZG) for Iran, the United States, Germany, and Turkey.",
+      "This chart uses the World Bank’s annual series (FP.CPI.TOTL.ZG) for Iran, the United States, Germany, Turkey, China, and Saudi Arabia.",
     ],
   },
   {
@@ -80,7 +80,7 @@ const INFLATION_FA: LearningNoteSection[] = [
     heading: "What this shows",
     bullets: [
       "نرخ تورم نشان می‌دهد قیمت‌های مصرف‌کننده در هر سال نسبت به همان دورهٔ سال قبل چه مقدار تغییر کرده‌اند (درصد تغییر سال‌به‌سال، YoY).",
-      "این نمودار از سری سالانهٔ بانک جهانی (FP.CPI.TOTL.ZG) برای ایران، ایالات متحده، آلمان و ترکیه استفاده می‌کند.",
+      "این نمودار از سری سالانهٔ بانک جهانی (FP.CPI.TOTL.ZG) برای ایران، ایالات متحده، آلمان، ترکیه، چین و عربستان سعودی استفاده می‌کند.",
     ],
   },
   {

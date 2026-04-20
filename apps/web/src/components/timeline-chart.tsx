@@ -37,6 +37,7 @@ import {
 } from "@/lib/format-compact-decimal";
 import { globalMacroOilMarkLineShortLabel } from "@/lib/timeline-global-macro-oil-labels";
 import {
+  type ComparatorLineSymbol,
   COUNTRY_COMPARATOR_SERIES_COLORS,
   countryComparatorSeriesColor,
   countryComparatorSeriesStyle,
@@ -56,7 +57,7 @@ const MULTI_SERIES_FALLBACK_LEGEND_ICONS: Array<"circle" | "diamond" | "triangle
   "rect",
 ];
 
-type LegendEndShape = "circle" | "rect" | "diamond" | "triangle" | "roundRect";
+type LegendEndShape = ComparatorLineSymbol;
 
 /**
  * Legend entry icon: short line segment + small end marker (same geometry as series symbol),
@@ -80,6 +81,10 @@ function multiSeriesLegendLineMarkerPath(shape: LegendEndShape): string {
       break;
     case "roundRect":
       glyph = "M14.1,4.1H18.9A1.05,1.05,0,0,1,19.95,5.15V6.85A1.05,1.05,0,0,1,18.9,7.9H14.1A1.05,1.05,0,0,1,13.05,6.85V5.15A1.05,1.05,0,0,1,14.1,4.1Z";
+      break;
+    case "arrow":
+      // Small right-pointing chevron (same visual weight as other end glyphs).
+      glyph = "M13.35,4.15L18.85,6L13.35,7.85V6.72L16.55,6L13.35,5.28Z";
       break;
     default:
       glyph = "M16.2,6m-2.35,0a2.35,2.35,0,1,1,4.71,0a2.35,2.35,0,1,1,-4.71,0";
@@ -723,6 +728,7 @@ export function TimelineChart({
     /** Many country/series names: scrollable legend + extra bottom margin to reduce overlap. */
     const legendUseScroll = hasMultiSeries && multiSeriesCount >= 4;
     const legendTextFontSize = legendUseScroll ? 12 : 11;
+    const multiSeriesLegendItemGap = legendUseScroll ? (multiSeriesCount >= 6 ? 22 : 20) : 16;
     const comparatorResolved = comparatorSeries
       ? {
           ...comparatorSeries,
@@ -1263,7 +1269,7 @@ export function TimelineChart({
                 width: "88%",
                 itemWidth: 26,
                 itemHeight: 10,
-                itemGap: legendUseScroll ? 20 : 16,
+                itemGap: multiSeriesLegendItemGap,
                 textStyle: { color: mutedFg, fontSize: legendTextFontSize },
                 pageTextStyle: { color: mutedFg, fontSize: 11 },
                 pageIconSize: legendUseScroll ? 12 : 10,
@@ -1528,7 +1534,9 @@ export function TimelineChart({
             ? "18%"
             : (comparatorResolved && comparatorValuesForChart && hasOil) || (hasMultiSeries && multiSeries) || (hasOil && secondSeries && !comparatorResolved)
               ? legendUseScroll
-                ? "17%"
+                ? multiSeriesCount >= 6
+                  ? "20%"
+                  : "17%"
                 : "12%"
               : "3%"
         ),
