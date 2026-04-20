@@ -141,6 +141,22 @@ export function formatMultiSeriesEconomicTooltipValue(value: number, unit: strin
   return formatEconomicDisplay(rounded2, { maximumFractionDigits: maxFrac, minimumFractionDigits: 0 });
 }
 
+/** Y-axis tick for indexed GDP levels (ratio vs base year; display only). */
+export function formatGdpIndexedAxisTick(value: number): string {
+  if (!Number.isFinite(value)) return "";
+  const r = Math.round(value * 10) / 10;
+  if (Math.abs(r - Math.round(r)) < 1e-9) return String(Math.round(r));
+  return r.toFixed(1);
+}
+
+/** Tooltip line for indexed GDP levels, e.g. ``2.4× vs 2015`` or ``2.4× vs 1354`` (display only). */
+export function formatGdpIndexedTooltipValue(value: number, baseLabel: string): string {
+  if (!Number.isFinite(value)) return "—";
+  const r = Math.round(value * 10) / 10;
+  const body = Math.abs(r - Math.round(r)) < 1e-9 ? String(Math.round(r)) : r.toFixed(1);
+  return `${body}× vs ${baseLabel}`;
+}
+
 /** Default y-axis tick for linear economic scales (display only). */
 export function formatEconomicAxisTick(value: number): string {
   if (!Number.isFinite(value)) return "";

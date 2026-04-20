@@ -11,15 +11,17 @@ import {
 import {
   formatEconomicAxisTick,
   formatEconomicDisplay,
+  formatGdpIndexedAxisTick,
+  formatGdpIndexedTooltipValue,
   formatGdpLevelsAxisTick,
   formatGdpLevelsTooltipValue,
   formatMultiSeriesEconomicTooltipValue,
 } from "@/lib/format-compact-decimal";
 import { globalMacroOilMarkLineShortLabel } from "@/lib/timeline-global-macro-oil-labels";
 
-/** GDP study: compact absolute values (levels + nominal); `gdp_levels` kept as alias. */
+/** GDP study: compact absolute values, indexed ratios, or nominal; `gdp_levels` kept as alias. */
 function isGdpCompactMultiSeriesFormat(fmt?: string): boolean {
-  return fmt === "gdp_levels" || fmt === "gdp_absolute";
+  return fmt === "gdp_levels" || fmt === "gdp_absolute" || fmt === "gdp_indexed";
 }
 
 type DataPoint = { date: string; value: number; confidence?: number };
@@ -129,7 +131,9 @@ type TimelineChartProps = {
   /** When set with dense category axes, show a year label about every N calendar years (Gregorian year index; Jalali label still applies). */
   categoryYearTickStep?: number;
   /** Compact USD / bn-toman tooltips and y-axis ticks (GDP composition absolute-value charts). */
-  multiSeriesValueFormat?: "gdp_levels" | "gdp_absolute";
+  multiSeriesValueFormat?: "gdp_levels" | "gdp_absolute" | "gdp_indexed";
+  /** When ``multiSeriesValueFormat`` is ``gdp_indexed``, label for tooltips (e.g. Gregorian ``2015`` or Solar year). */
+  indexedTooltipBaseLabel?: string;
   /** Override multi-series y-axis titles (key = ``yAxisIndex``), e.g. dual-axis reference layouts. */
   multiSeriesYAxisNameOverrides?: Partial<Record<number, string>>;
 };
@@ -346,6 +350,7 @@ export function TimelineChart({
   xAxisYearLabel,
   categoryYearTickStep,
   multiSeriesValueFormat,
+  indexedTooltipBaseLabel,
   multiSeriesYAxisNameOverrides,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
@@ -938,7 +943,9 @@ export function TimelineChart({
               const formatted =
                 val != null
                   ? isGdpCompactMultiSeriesFormat(multiSeriesValueFormat)
-                    ? formatGdpLevelsTooltipValue(Number(val), s.unit)
+                    ? multiSeriesValueFormat === "gdp_indexed" && indexedTooltipBaseLabel
+                      ? formatGdpIndexedTooltipValue(Number(val), indexedTooltipBaseLabel)
+                      : formatGdpLevelsTooltipValue(Number(val), s.unit)
                     : `${formatMultiSeriesEconomicTooltipValue(Number(val), s.unit)} ${s.unit}`
                   : "—";
               lines.push(`${s.label}: ${formatted}`);
@@ -1129,9 +1136,11 @@ export function TimelineChart({
               const fixedRange =
                 yAxisMin != null && yAxisMax != null && isLeft
                   ? { min: yAxisMin, max: yAxisMax }
-                  : isGoldLogAxis
-                    ? { min: 10, max: 3000 }
-                    : {};
+                  : multiSeriesValueFormat === "gdp_indexed" && yAxisMin != null
+                    ? { min: yAxisMin }
+                    : isGoldLogAxis
+                      ? { min: 10, max: 3000 }
+                      : {};
               return {
                 type: (useLog ? "log" : "value") as "value" | "log",
                 ...fixedRange,
@@ -1146,11 +1155,14 @@ export function TimelineChart({
                 axisLabel: {
                   color: mutedFg,
                   fontSize: 11,
-                  ...(isGdpCompactMultiSeriesFormat(multiSeriesValueFormat) && first.unit
+                  ...(isGdpCompactMultiSeriesFormat(multiSeriesValueFormat) &&
+                  (first.unit || multiSeriesValueFormat === "gdp_indexed")
                     ? {
                         formatter: (v: number | string) => {
                           const n = typeof v === "number" ? v : Number(v);
-                          return Number.isFinite(n) ? formatGdpLevelsAxisTick(n, first.unit) : String(v);
+                          if (!Number.isFinite(n)) return String(v);
+                          if (multiSeriesValueFormat === "gdp_indexed") return formatGdpIndexedAxisTick(n);
+                          return formatGdpLevelsAxisTick(n, first.unit);
                         },
                       }
                     : first.unit?.includes("toman") &&
@@ -1635,7 +1647,7 @@ export function TimelineChart({
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
     };
-  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, multiSeriesValueFormat, multiSeriesYAxisNameOverrides, categoryYearTickStep, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods, oilShockDates, showOilShocks, gridRightOverride, xLabelRotate, extendedDates, lastOfficialDateForExtension, forceTimeRangeAxis, yAxisMin, yAxisMax, xAxisYearLabel]);
+  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, multiSeriesValueFormat, indexedTooltipBaseLabel, multiSeriesYAxisNameOverrides, categoryYearTickStep, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods, oilShockDates, showOilShocks, gridRightOverride, xLabelRotate, extendedDates, lastOfficialDateForExtension, forceTimeRangeAxis, yAxisMin, yAxisMax, xAxisYearLabel]);
 
   useEffect(() => {
     return () => {

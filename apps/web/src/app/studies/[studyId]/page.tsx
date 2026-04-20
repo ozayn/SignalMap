@@ -28,6 +28,12 @@ import {
   YOUTUBE_DISCOURSE_COMMENTS_PER_VIDEO,
 } from "@/lib/studies";
 import { iranGdpMacroEventsToTimeline } from "@/lib/gdp-composition-macro-events";
+import {
+  baseYearToIsoDate,
+  indexSeriesAtBaseYear,
+  persianYearLabelFromIsoDate,
+  resolveIndexedBaseYear,
+} from "@/lib/gdp-levels-indexed";
 import { fetchJson } from "@/lib/api";
 import { enrichOilPointsWithVolatility } from "@/lib/oil-volatility";
 import { filterForNetwork, filterForSankey } from "@/lib/oil-trade-network-filter";
@@ -405,6 +411,8 @@ export default function StudyDetailPage() {
   /** Optional reference-style dual-axis levels chart (consumption + investment left; GDP right). */
   const [gdpLevelsShowDualAxisComparison, setGdpLevelsShowDualAxisComparison] = useState(false);
   const [gdpLevelsValueType, setGdpLevelsValueType] = useState<"real" | "usd" | "toman">("real");
+  /** Display-only: levels chart as raw units vs indexed to first common year (each series ÷ its value that year). */
+  const [gdpLevelsDisplayMode, setGdpLevelsDisplayMode] = useState<"absolute" | "indexed">("absolute");
   const [gdpLevelsDisplayNote, setGdpLevelsDisplayNote] = useState<string | null>(null);
   const [gdpCalendarMode, setGdpCalendarMode] = useState<"gregorian" | "jalali">("gregorian");
   const [gdpLevelsConversionMeta, setGdpLevelsConversionMeta] = useState<{
@@ -629,15 +637,81 @@ export default function StudyDetailPage() {
     gdpCompositionChartTimeRange,
   ]);
 
+  /** Same Gregorian base year for all three series; each line is ÷ its own level that year (display only). */
+  const gdpLevelsIndexedBaseYear = useMemo(
+    () =>
+      isGdpComposition
+        ? resolveIndexedBaseYear(gdpLevelConsumptionPoints, gdpLevelGdpPoints, gdpLevelInvestmentPoints, {
+            /** ~Solar 1355; used when all three series have non-zero data that year (IRN WDI bundle). */
+            preferredGregorianYears: [1976],
+          })
+        : null,
+    [isGdpComposition, gdpLevelConsumptionPoints, gdpLevelGdpPoints, gdpLevelInvestmentPoints],
+  );
+
+  const gdpLevelsIndexedBaseIsoDate = useMemo(
+    () => (gdpLevelsIndexedBaseYear != null ? baseYearToIsoDate(gdpLevelsIndexedBaseYear) : null),
+    [gdpLevelsIndexedBaseYear],
+  );
+
+  const gdpLevelsIndexedBaseYearLabel = useMemo(() => {
+    if (gdpLevelsIndexedBaseYear == null || !gdpLevelsIndexedBaseIsoDate) return "";
+    if (isGdpIranLocal && gdpStudyView === "levels" && gdpCalendarMode === "jalali") {
+      return persianYearLabelFromIsoDate(gdpLevelsIndexedBaseIsoDate);
+    }
+    return String(gdpLevelsIndexedBaseYear);
+  }, [gdpLevelsIndexedBaseYear, gdpLevelsIndexedBaseIsoDate, isGdpIranLocal, gdpStudyView, gdpCalendarMode]);
+
+  const gdpLevelsDisplaySeries = useMemo(() => {
+    if (!isGdpComposition) {
+      return {
+        consumption: gdpLevelConsumptionPoints,
+        gdp: gdpLevelGdpPoints,
+        investment: gdpLevelInvestmentPoints,
+      };
+    }
+    if (gdpLevelsDisplayMode !== "indexed" || gdpLevelsIndexedBaseYear == null) {
+      return {
+        consumption: gdpLevelConsumptionPoints,
+        gdp: gdpLevelGdpPoints,
+        investment: gdpLevelInvestmentPoints,
+      };
+    }
+    return {
+      consumption: indexSeriesAtBaseYear(gdpLevelConsumptionPoints, gdpLevelsIndexedBaseYear),
+      gdp: indexSeriesAtBaseYear(gdpLevelGdpPoints, gdpLevelsIndexedBaseYear),
+      investment: indexSeriesAtBaseYear(gdpLevelInvestmentPoints, gdpLevelsIndexedBaseYear),
+    };
+  }, [
+    isGdpComposition,
+    gdpLevelsDisplayMode,
+    gdpLevelsIndexedBaseYear,
+    gdpLevelConsumptionPoints,
+    gdpLevelGdpPoints,
+    gdpLevelInvestmentPoints,
+  ]);
+
   /** Reference-style dual-axis: left = consumption + investment; right = GDP (same unit basis as levels view). */
   const gdpLevelsDualAxisYAxisNameOverrides = useMemo((): Partial<Record<number, string>> | undefined => {
     if (!isGdpComposition) return undefined;
+    if (gdpLevelsDisplayMode === "indexed" && gdpLevelsIndexedBaseYearLabel) {
+      return {
+        0: `Consumption & investment (× vs ${gdpLevelsIndexedBaseYearLabel})`,
+        1: `GDP (× vs ${gdpLevelsIndexedBaseYearLabel})`,
+      };
+    }
     const u = (gdpLevelsUnit ?? "US$").trim() || "US$";
     return {
       0: `Consumption & investment (${u})`,
       1: `GDP (${u})`,
     };
-  }, [isGdpComposition, gdpLevelsUnit]);
+  }, [isGdpComposition, gdpLevelsUnit, gdpLevelsDisplayMode, gdpLevelsIndexedBaseYearLabel]);
+
+  useEffect(() => {
+    if (gdpLevelsDisplayMode === "indexed" && gdpLevelsIndexedBaseYear == null) {
+      setGdpLevelsDisplayMode("absolute");
+    }
+  }, [gdpLevelsDisplayMode, gdpLevelsIndexedBaseYear]);
 
   /** Extend annual production series to current year for display; synthetic points flagged for tooltip. */
   const {
@@ -4223,7 +4297,11 @@ export default function StudyDetailPage() {
                     categoryYearTickStep={5}
                     multiSeriesValueFormat="gdp_absolute"
                   />
-                  <p className="text-xs font-medium text-muted-foreground mb-1.5 mt-6">Levels (absolute size)</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5 mt-6">
+                    {gdpLevelsDisplayMode === "indexed"
+                      ? "Levels (indexed to base year)"
+                      : "Levels (absolute size)"}
+                  </p>
                   {gdpLevelsDisplayNote ? (
                     <p className="text-xs text-amber-700 dark:text-amber-500/90 mb-2">{gdpLevelsDisplayNote}</p>
                   ) : null}
@@ -4237,7 +4315,49 @@ export default function StudyDetailPage() {
                           : "current US dollars (NE.CON.TOTL.CD, NY.GDP.MKTP.CD, NE.GDI.TOTL.CD): headline international dollars, including inflation and exchange-rate moves in the WDI construction"}
                     </span>
                     . Value type applies to this chart only (not the % composition chart). Linear scale.
+                    {gdpLevelsDisplayMode === "indexed" && gdpLevelsIndexedBaseYearLabel ? (
+                      <>
+                        {" "}
+                        Indexed view divides each series by its own level in the base year{" "}
+                        <span className="text-foreground font-medium">{gdpLevelsIndexedBaseYearLabel}</span>{" "}
+                        (1976 Gregorian when all three are non-zero there—about Solar 1355—otherwise the earliest
+                        such year); axis shows ratios (1 = base).
+                      </>
+                    ) : null}
                   </p>
+                  <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-muted-foreground shrink-0">Scale</span>
+                    <div className="inline-flex rounded-md border border-border overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setGdpLevelsDisplayMode("absolute")}
+                        className={`px-2 py-1.5 font-medium transition-colors ${
+                          gdpLevelsDisplayMode === "absolute"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                        }`}
+                      >
+                        Absolute
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGdpLevelsDisplayMode("indexed")}
+                        disabled={gdpLevelsIndexedBaseYear == null}
+                        title={
+                          gdpLevelsIndexedBaseYear == null
+                            ? "Indexed scale needs at least one calendar year where consumption, GDP, and investment are all non-zero."
+                            : undefined
+                        }
+                        className={`px-2 py-1.5 font-medium transition-colors ${
+                          gdpLevelsDisplayMode === "indexed"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                        } disabled:opacity-50 disabled:pointer-events-none`}
+                      >
+                        Indexed
+                      </button>
+                    </div>
+                  </div>
                   <TimelineChart
                     data={[]}
                     valueKey="value"
@@ -4250,7 +4370,7 @@ export default function StudyDetailPage() {
                         label: "Consumption",
                         yAxisIndex: 0,
                         unit: gdpLevelsUnit ?? "US$",
-                        points: gdpLevelConsumptionPoints,
+                        points: gdpLevelsDisplaySeries.consumption,
                         color: "#2563eb",
                       },
                       {
@@ -4258,7 +4378,7 @@ export default function StudyDetailPage() {
                         label: "GDP",
                         yAxisIndex: 0,
                         unit: gdpLevelsUnit ?? "US$",
-                        points: gdpLevelGdpPoints,
+                        points: gdpLevelsDisplaySeries.gdp,
                         color: "#dc2626",
                       },
                       {
@@ -4266,7 +4386,7 @@ export default function StudyDetailPage() {
                         label: "Investment",
                         yAxisIndex: 0,
                         unit: gdpLevelsUnit ?? "US$",
-                        points: gdpLevelInvestmentPoints,
+                        points: gdpLevelsDisplaySeries.investment,
                         color: "#16a34a",
                       },
                     ]}
@@ -4276,7 +4396,13 @@ export default function StudyDetailPage() {
                     mutedEventLines
                     xAxisYearLabel={gdpLevelsXAxisYearLabel}
                     categoryYearTickStep={5}
-                    multiSeriesValueFormat="gdp_absolute"
+                    multiSeriesValueFormat={gdpLevelsDisplayMode === "indexed" ? "gdp_indexed" : "gdp_absolute"}
+                    indexedTooltipBaseLabel={
+                      gdpLevelsDisplayMode === "indexed" && gdpLevelsIndexedBaseYearLabel
+                        ? gdpLevelsIndexedBaseYearLabel
+                        : undefined
+                    }
+                    yAxisMin={gdpLevelsDisplayMode === "indexed" ? 0 : undefined}
                   />
                   <div className="mt-6 border-t border-border pt-4 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
@@ -4318,7 +4444,7 @@ export default function StudyDetailPage() {
                               label: "Consumption",
                               yAxisIndex: 0,
                               unit: gdpLevelsUnit ?? "US$",
-                              points: gdpLevelConsumptionPoints,
+                              points: gdpLevelsDisplaySeries.consumption,
                               color: "#2563eb",
                             },
                             {
@@ -4326,7 +4452,7 @@ export default function StudyDetailPage() {
                               label: "Investment",
                               yAxisIndex: 0,
                               unit: gdpLevelsUnit ?? "US$",
-                              points: gdpLevelInvestmentPoints,
+                              points: gdpLevelsDisplaySeries.investment,
                               color: "#16a34a",
                             },
                             {
@@ -4334,7 +4460,7 @@ export default function StudyDetailPage() {
                               label: "GDP",
                               yAxisIndex: 1,
                               unit: gdpLevelsUnit ?? "US$",
-                              points: gdpLevelGdpPoints,
+                              points: gdpLevelsDisplaySeries.gdp,
                               color: "#dc2626",
                             },
                           ]}
@@ -4345,7 +4471,13 @@ export default function StudyDetailPage() {
                           mutedEventLines
                           xAxisYearLabel={gdpLevelsXAxisYearLabel}
                           categoryYearTickStep={5}
-                          multiSeriesValueFormat="gdp_absolute"
+                          multiSeriesValueFormat={gdpLevelsDisplayMode === "indexed" ? "gdp_indexed" : "gdp_absolute"}
+                          indexedTooltipBaseLabel={
+                            gdpLevelsDisplayMode === "indexed" && gdpLevelsIndexedBaseYearLabel
+                              ? gdpLevelsIndexedBaseYearLabel
+                              : undefined
+                          }
+                          yAxisMin={gdpLevelsDisplayMode === "indexed" ? 0 : undefined}
                           gridRight="14%"
                         />
                       </>
@@ -4362,6 +4494,7 @@ export default function StudyDetailPage() {
                       "Nominal GDP: current US$ with a log scale—headline dollar size including inflation and exchange-rate moves.",
                       "Levels value type (Iran): Real = constant 2015 US$ (*KD) aggregates—domestic real scale without market FX. USD = current US$ (*CD)—headline international dollars. Toman = current US$ × per-year mean open-market toman/USD (merged Bonbast + archive + FRED pre-2012; not official)—mixes economics with depreciation.",
                       "Optional dual-axis comparison (Levels view): consumption and investment on the left axis, GDP on the right—same unit basis as the main levels chart; values across axes are not directly comparable.",
+                      "Scale toggle (Absolute / Indexed): indexed mode rescales each levels line by its own value in a common base calendar year—1976 when all three are non-zero there, else the earliest such year (display-only); tooltips show multipliers (e.g. 2.4× vs that year).",
                       "Shares can move even when dollar levels all rise; use Composition vs Levels to separate structure from scale.",
                       "Iran: Iranian year relabels x-axis tick years to Solar Hijri (UTC date mapping via Intl); underlying points stay Gregorian.",
                       "Show events: subtle vertical markers for a fixed Iran macro timeline (hover for notes). Show Iran event layers: separate timeline data from the study’s event feed. Global oil/macro (curated): optional small set of world oil-market anchors from the API (off by default).",
