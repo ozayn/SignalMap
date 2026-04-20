@@ -748,6 +748,109 @@ def get_oil_production_exporters_series(start: str, end: str, nocache: bool = Fa
     return result
 
 
+GINI_INEQUALITY_SOURCE = {
+    "name": "World Bank World Development Indicators",
+    "publisher": "World Bank",
+    "url": "https://data.worldbank.org/indicator/SI.POV.GINI",
+}
+
+
+def get_gini_inequality_comparison(start: str, end: str) -> dict:
+    """
+    Annual Gini coefficient (income inequality) for Iran, United States, Germany, and Turkey.
+    Values on a 0–100 scale (World Bank convention); 0 = perfect equality, 100 = maximum inequality.
+    """
+    from signalmap.sources.world_bank_gini import WDI_GINI_COEFFICIENT, fetch_gini_series_for_countries
+
+    ck = f"signal:gini_inequality:{start}:{end}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    iso3_to_key = {
+        "IRN": "iran",
+        "USA": "united_states",
+        "DEU": "germany",
+        "TUR": "turkey",
+    }
+    series = fetch_gini_series_for_countries(iso3_to_key, start_year, end_year)
+    result = {
+        "series": series,
+        "source": GINI_INEQUALITY_SOURCE,
+        "indicator_id": WDI_GINI_COEFFICIENT,
+        "value_scale": "0-100",
+        "resolution": "annual",
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
+
+
+CPI_INFLATION_YOY_SOURCE = {
+    "name": "World Bank World Development Indicators",
+    "publisher": "World Bank",
+    "url": "https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG",
+}
+
+
+def get_cpi_inflation_yoy_comparison(start: str, end: str) -> dict:
+    """
+    Annual consumer price inflation (% change from a year earlier) for Iran and the United States.
+    WDI indicator FP.CPI.TOTL.ZG.
+    """
+    from signalmap.sources.world_bank_cpi_inflation import WDI_CPI_INFLATION_ANNUAL_PCT, fetch_cpi_inflation_yoy_for_countries
+
+    ck = f"signal:cpi_inflation_yoy:{start}:{end}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    iso3_to_key = {"IRN": "iran", "USA": "united_states"}
+    series = fetch_cpi_inflation_yoy_for_countries(iso3_to_key, start_year, end_year)
+    result = {
+        "series": series,
+        "source": CPI_INFLATION_YOY_SOURCE,
+        "indicator_id": WDI_CPI_INFLATION_ANNUAL_PCT,
+        "resolution": "annual",
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
+
+
+POVERTY_HEADCOUNT_IRAN_SOURCE = {
+    "name": "World Bank World Development Indicators",
+    "publisher": "World Bank",
+    "url": "https://data.worldbank.org/indicator/SI.POV.DDAY",
+}
+
+
+def get_poverty_headcount_iran(start: str, end: str) -> dict:
+    """
+    Iran: poverty headcount ratio (% of population) at two WDI international lines.
+    Series SI.POV.DDAY and SI.POV.LMIC; dollar thresholds follow World Bank metadata (PPP revisions).
+    """
+    from signalmap.sources.world_bank_poverty import build_iran_poverty_headcount_bundle
+
+    ck = f"signal:poverty_headcount_iran:{start}:{end}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    bundle = build_iran_poverty_headcount_bundle(start_year, end_year)
+    result = {
+        **bundle,
+        "source": POVERTY_HEADCOUNT_IRAN_SOURCE,
+        "resolution": "annual",
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
+
+
 def get_iran_wage_cpi_series(start: str, end: str) -> dict:
     """
     Return Iran nominal minimum wage and CPI (annual) for real wage study.

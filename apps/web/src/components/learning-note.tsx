@@ -1,3 +1,5 @@
+import { learningNoteTitle, localizeLearningSections } from "@/lib/iran-study-fa-learning-headings";
+
 export type LearningNoteSection = {
   heading: string;
   bullets: string[];
@@ -12,22 +14,34 @@ type LearningNoteProps = {
   title?: string;
   sections: LearningNoteSection[];
   links?: LearningNoteLink[];
+  /** When ``fa``, section headings (and matching main titles) use Persian; bullets stay English unless supplied in FA. */
+  locale?: "en" | "fa";
 };
 
 export function LearningNote({
   title = "How to read this chart",
   sections,
   links = [],
+  locale = "en",
 }: LearningNoteProps) {
+  const isFa = locale === "fa";
+  const displayTitle = learningNoteTitle(isFa, title);
+  const displaySections = localizeLearningSections(isFa, sections);
   return (
-    <div className="study-panel">
-      <p className="snapshot-style-title mb-2">
-        {title}
-      </p>
-        <div className="flex flex-col gap-6 min-w-0">
-          {sections.map((section) => (
+    <details className="study-interpretation">
+      <summary>
+        <span>{displayTitle}</span>
+        <span className="study-interpretation-chevron" aria-hidden>
+          ▾
+        </span>
+      </summary>
+      <div className="study-interpretation-body">
+        <div className="flex flex-col gap-5 min-w-0">
+          {displaySections.map((section) => (
             <div key={section.heading} className="space-y-2 min-w-0 break-words">
-              <p className="mt-3 text-sm font-medium text-muted-foreground">{section.heading}</p>
+              <p className="text-sm font-medium text-muted-foreground">
+                {section.heading}
+              </p>
               <ul className="list-inside list-disc space-y-1 text-sm text-muted-foreground break-words">
                 {section.bullets.map((bullet, i) => (
                   <li key={i}>{bullet}</li>
@@ -37,7 +51,7 @@ export function LearningNote({
           ))}
         </div>
         {links.length > 0 && (
-          <p className="mt-3 text-xs text-muted-foreground break-words">
+          <p className="mt-4 text-xs text-muted-foreground break-words">
             {links.map((link, i) => (
               <span key={link.href}>
                 {i > 0 && " · "}
@@ -53,6 +67,7 @@ export function LearningNote({
             ))}
           </p>
         )}
-    </div>
+      </div>
+    </details>
   );
 }

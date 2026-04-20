@@ -13,6 +13,7 @@ type MultiSeriesStatsProps = {
   series: SeriesStatInput[];
   /** Optional time range to filter points (start, end) - same as chart. */
   timeRange?: [string, string];
+  locale?: "en" | "fa";
 };
 
 function formatStatValue(value: number, unit: string): string {
@@ -53,13 +54,15 @@ function computeStats(points: Array<{ date: string; value: number }>, timeRange?
   };
 }
 
-export function MultiSeriesStats({ series, timeRange }: MultiSeriesStatsProps) {
-  if (!series || series.length < 2 || series.length >= 3) return null;
+export function MultiSeriesStats({ series, timeRange, locale = "en" }: MultiSeriesStatsProps) {
+  if (!series || series.length < 2) return null;
 
+  const isFa = locale === "fa";
+  const t = (en: string, fa: string) => (isFa ? fa : en);
   const showDates = true;
 
   return (
-    <div className="flex flex-wrap gap-4 mb-4 min-w-0">
+    <div className="flex flex-wrap gap-3 mb-3 min-w-0">
       {series.map((s) => {
         const stats = computeStats(s.points, timeRange);
         const hasAny =
@@ -89,7 +92,7 @@ export function MultiSeriesStats({ series, timeRange }: MultiSeriesStatsProps) {
         return (
           <div
             key={s.label}
-            className="rounded-lg border border-border bg-card px-4 py-3 min-w-0 flex-1 min-w-[200px] sm:flex-none sm:w-fit"
+            className="rounded-md border border-border/70 bg-muted/15 px-3 py-2.5 min-w-0 flex-1 min-w-[200px] sm:flex-none sm:w-fit"
             style={{
               display: "grid",
               gridTemplateColumns: "auto auto",
@@ -100,15 +103,15 @@ export function MultiSeriesStats({ series, timeRange }: MultiSeriesStatsProps) {
             <div className="col-span-2 font-medium text-foreground text-sm mb-0.5">
               {s.label} ({s.unit})
             </div>
-            <span className="text-xs text-muted-foreground">Latest</span>
+            <span className="text-xs text-muted-foreground">{t("Latest", "آخرین")}</span>
             <StatCell value={stats.latestValue} date={stats.latestDate} />
-            <span className="text-xs text-muted-foreground">Avg</span>
+            <span className="text-xs text-muted-foreground">{t("Avg", "میانگین")}</span>
             <span className="font-medium tabular-nums text-right">
               {stats.avgValue != null ? formatStatValue(stats.avgValue, s.unit) : "—"}
             </span>
-            <span className="text-xs text-muted-foreground">Min</span>
+            <span className="text-xs text-muted-foreground">{t("Min", "کمینه")}</span>
             <StatCell value={stats.minValue} date={stats.minDate} />
-            <span className="text-xs text-muted-foreground">Max</span>
+            <span className="text-xs text-muted-foreground">{t("Max", "بیشینه")}</span>
             <StatCell value={stats.maxValue} date={stats.maxDate} />
           </div>
         );

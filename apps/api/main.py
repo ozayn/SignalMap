@@ -465,6 +465,72 @@ def get_oil_ppp_turkey_signal(
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
+@app.get("/api/signals/wdi/gini-comparison")
+def get_wdi_gini_comparison_signal(
+    start: str | None = Query(None, description="Start date YYYY-MM-DD (year from first 4 chars)"),
+    end: str | None = Query(None, description="End date YYYY-MM-DD"),
+):
+    """Return World Bank Gini coefficient time series for Iran, US, Germany, Turkey (annual, 0–100 scale)."""
+    if start is None:
+        start = "1960-01-01"
+    if end is None:
+        end = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    try:
+        from signalmap.services.signals import get_gini_inequality_comparison
+
+        return get_gini_inequality_comparison(start, end)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
+
+
+@app.get("/api/signals/wdi/cpi-inflation-yoy")
+def get_wdi_cpi_inflation_yoy_signal(
+    start: str | None = Query(None, description="Start date YYYY-MM-DD"),
+    end: str | None = Query(None, description="End date YYYY-MM-DD"),
+):
+    """Return World Bank annual CPI inflation (% YoY) for Iran and the United States (WDI FP.CPI.TOTL.ZG)."""
+    if start is None:
+        start = "1960-01-01"
+    if end is None:
+        end = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    try:
+        from signalmap.services.signals import get_cpi_inflation_yoy_comparison
+
+        return get_cpi_inflation_yoy_comparison(start, end)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
+
+
+@app.get("/api/signals/wdi/poverty-headcount-iran")
+def get_wdi_poverty_headcount_iran_signal(
+    start: str | None = Query(None, description="Start date YYYY-MM-DD"),
+    end: str | None = Query(None, description="End date YYYY-MM-DD"),
+):
+    """Return World Bank poverty headcount ratios for Iran (annual % of population) at two international WDI lines."""
+    if start is None:
+        start = "1960-01-01"
+    if end is None:
+        end = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    try:
+        from signalmap.services.signals import get_poverty_headcount_iran
+
+        return get_poverty_headcount_iran(start, end)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
+
+
 @app.get("/api/signals/oil/production-exporters")
 def get_oil_production_exporters_signal(
     start: str | None = Query(None, description="Start date YYYY-MM-DD"),

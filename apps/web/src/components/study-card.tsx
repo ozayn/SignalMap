@@ -26,6 +26,14 @@ export function StudyCard({ study, signalTags }: StudyCardProps) {
         >
           {study.title}
         </h3>
+        {study.subtitle ? (
+          <p
+            className="text-[#6b7280] dark:text-[#9ca3af] mt-1 line-clamp-2"
+            style={{ fontSize: "clamp(11px, 1.1vw, 13px)" }}
+          >
+            {study.subtitle}
+          </p>
+        ) : null}
         <p
           className="text-[#6b7280] dark:text-[#9ca3af] mt-1.5 line-clamp-3"
           style={{ fontSize: "clamp(12px, 1.2vw, 14px)" }}
@@ -46,6 +54,33 @@ export function StudyCard({ study, signalTags }: StudyCardProps) {
           ))}
         </div>
       )}
+    </Link>
+  );
+}
+
+/** Compact row for list view on the studies index. */
+export function StudyListRow({ study, signalTags }: StudyCardProps) {
+  return (
+    <Link
+      href={`/studies/${study.id}`}
+      tabIndex={0}
+      className="study-list-row"
+    >
+      <div className="study-list-row__main">
+        <span className="study-list-row__num">Study {study.number}</span>
+        <h3 className="study-list-row__title">{study.title}</h3>
+        {study.subtitle ? <p className="study-list-row__subtitle">{study.subtitle}</p> : null}
+        <p className="study-list-row__desc">{study.description}</p>
+      </div>
+      {signalTags.length > 0 ? (
+        <div className="study-list-row__tags">
+          {signalTags.map((tag) => (
+            <span key={tag} className="study-list-row__tag">
+              {tag}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </Link>
   );
 }

@@ -20,10 +20,14 @@ export function SourceInfo({
   note,
 }: SourceInfoProps) {
   return (
-    <div className="study-panel">
-      <p className="snapshot-style-title mb-2">
-        {title}
-      </p>
+    <details className="study-interpretation">
+      <summary>
+        <span>{title}</span>
+        <span className="study-interpretation-chevron" aria-hidden>
+          ▾
+        </span>
+      </summary>
+      <div className="study-interpretation-body">
         <div className="grid gap-4 sm:grid-cols-2 min-w-0">
           {items.map((item) => (
             <div key={item.label} className="space-y-0.5 min-w-0 break-words">
@@ -56,9 +60,10 @@ export function SourceInfo({
             </div>
           ))}
         </div>
-      {note && (
-        <p className="mt-3 text-xs text-muted-foreground/80 break-words">{note}</p>
-      )}
-    </div>
+        {note && (
+          <p className="mt-3 text-xs text-muted-foreground/80 break-words">{note}</p>
+        )}
+      </div>
+    </details>
   );
 }

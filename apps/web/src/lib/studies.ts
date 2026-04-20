@@ -18,9 +18,18 @@ export type PrimarySignal =
   | { kind: "oil_geopolitical_reaction" }
   | { kind: "youtube_comment_analysis" }
   | { kind: "gdp_composition" }
-  | { kind: "iran_gdp_accounts_dual" };
+  | { kind: "iran_gdp_accounts_dual" }
+  | { kind: "gini_inequality" }
+  | { kind: "inflation_cpi_yoy" }
+  | { kind: "poverty_headcount_iran" };
 
 import type { ConceptKey } from "./concepts";
+
+/** Browse / filter: geographic emphasis (a study may span several). */
+export type StudyCountry = "iran" | "us" | "global";
+
+/** Browse / filter: coarse theme. */
+export type StudyTheme = "macro" | "oil" | "fx" | "inequality" | "social";
 
 /** YouTube discourse: videos and comments per video. Set here; all discourse studies use these. */
 export const YOUTUBE_DISCOURSE_VIDEOS_LIMIT = 10;
@@ -53,6 +62,14 @@ export type StudyMeta = {
   youtubeLanguage?: "English" | "Persian";
   /** GDP composition (Iran): show local view toggles (levels currency, calendar). */
   gdpCompositionIranLocalOptions?: boolean;
+  /** Browse: country tags (search + filter). When omitted, derived from `primarySignal` in `study-browse`. */
+  countries?: StudyCountry[];
+  /** Browse: theme tags (search + filter). When omitted, derived from `primarySignal`. */
+  themes?: StudyTheme[];
+  /** Browse: extra labels for search and optional display. */
+  tags?: string[];
+  /** Browse: extra searchable tokens (not shown unless also in `tags`). */
+  keywords?: string[];
 };
 
 export const STUDIES: StudyMeta[] = [
@@ -424,6 +441,128 @@ export const STUDIES: StudyMeta[] = [
       "Lines use the same WDI indicators and value-type bundle as Study 27 levels (NE.CON.*, NY.GDP.MKTP.*, NE.GDI.TOTL.*).",
       "Because the vertical scales differ, you cannot read a gap between a left-axis line and the GDP line as a fixed economic magnitude.",
       "Annual data; missing FX years omit Toman points when that value type is selected.",
+    ],
+  },
+  {
+    id: "gini-inequality",
+    number: 29,
+    title: "Income inequality: Gini coefficient",
+    subtitle: "World Bank annual estimates (Iran, United States, and comparators)",
+    timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "The Gini coefficient summarizes how unequally income is distributed in a country. This study plots World Bank estimates over time for Iran and the United States, with Germany and Turkey as additional reference countries.",
+    status: "active",
+    countries: ["iran", "us", "global"],
+    themes: ["inequality", "macro"],
+    tags: ["Gini", "World Bank", "Cross-country"],
+    keywords: ["si.pov.gini", "survey", "household income"],
+    primarySignal: { kind: "gini_inequality" },
+    eventLayers: ["iran_core", "world_core", "sanctions"],
+    concepts: ["event_overlay", "measurement_vs_reality"],
+    unitLabel: "Gini coefficient (0–100)",
+    observations: [
+      "Gini is observed at irregular intervals in the World Bank series; lines connect available survey-based estimates.",
+      "Cross-country levels are not directly comparable without attention to survey design and coverage.",
+      "Higher Gini means more inequality in this dataset’s definition (income distribution).",
+    ],
+  },
+  {
+    id: "inflation-rate",
+    number: 30,
+    title: "Annual inflation rate",
+    subtitle: "Inflation (CPI, % YoY) — Iran and United States",
+    timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "Year-on-year change in consumer prices (annual %) from the World Bank. Iran and the United States are shown on the same chart for context; levels differ by country methodology and shocks.",
+    status: "active",
+    countries: ["iran", "us"],
+    themes: ["macro"],
+    tags: ["CPI", "Consumer prices", "YoY"],
+    keywords: ["fp.cpi.totl.zg", "prices"],
+    primarySignal: { kind: "inflation_cpi_yoy" },
+    eventLayers: ["iran_core", "world_core", "sanctions"],
+    concepts: ["cpi", "event_overlay", "measurement_vs_reality"],
+    unitLabel: "Annual % change (CPI)",
+    observations: [
+      "Annual frequency: one observation per calendar year where the World Bank publishes FP.CPI.TOTL.ZG.",
+      "Positive values mean prices rose on average versus the prior year; negative values mean they fell.",
+      "Cross-country comparison is descriptive; CPI baskets and methods differ.",
+    ],
+  },
+  {
+    id: "poverty-rate",
+    number: 31,
+    title: "Poverty headcount ratio",
+    subtitle: "Iran — share of population below international poverty lines (World Bank WDI)",
+    timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "The poverty headcount ratio is the percentage of the population living below a defined international poverty line. This study plots two World Bank WDI series for Iran (SI.POV.DDAY and SI.POV.LMIC); the exact dollar thresholds follow the Bank’s published indicator definitions and change when PPP bases are revised.",
+    status: "active",
+    countries: ["iran"],
+    themes: ["inequality", "macro"],
+    tags: ["WDI", "Poverty lines", "Headcount"],
+    keywords: ["si.pov.dday", "si.pov.lmic", "international poverty line", "ppp"],
+    primarySignal: { kind: "poverty_headcount_iran" },
+    eventLayers: ["iran_core", "world_core", "sanctions"],
+    concepts: ["event_overlay", "measurement_vs_reality"],
+    unitLabel: "% of population",
+    observations: [
+      "Annual data where the World Bank publishes estimates; years without values appear as gaps.",
+      "Two lines use different international thresholds; the higher threshold line is not a sum of the lower.",
+      "International lines differ from national poverty statistics and survey timing.",
+    ],
+  },
+];
+
+/** Studies page grouped sections (order + copy). Study ids must exist in `STUDIES`. */
+export const STUDY_SECTIONS: { title: string; description: string; studyIds: string[] }[] = [
+  {
+    title: "Foundations (signals)",
+    description: "Core price and exchange-rate series that anchor later analysis.",
+    studyIds: ["iran", "usd-toman", "oil-and-fx", "iran-gdp-composition", "iran-gdp-accounts-dual"],
+  },
+  {
+    title: "Context (timelines)",
+    description: "Reference timelines for events and long-range price context.",
+    studyIds: ["events_timeline", "global_oil_1900", "oil_geopolitical_reaction"],
+  },
+  {
+    title: "Burden & adjustment (methods)",
+    description: "Inflation-adjusted and PPP-based measures of economic burden.",
+    studyIds: ["real_oil_price", "iran_oil_ppp", "iran_real_wage_cpi"],
+  },
+  {
+    title: "Comparisons & constraints",
+    description: "Cross-country comparisons and capacity under constraints.",
+    studyIds: [
+      "iran_oil_ppp_turkey",
+      "iran_oil_export_capacity",
+      "oil_major_exporters",
+      "iran_fx_spread",
+      "gini-inequality",
+      "inflation-rate",
+      "poverty-rate",
+    ],
+  },
+  {
+    title: "Audience dynamics (growth & networks)",
+    description: "Follower growth, simple growth models, and network prototypes.",
+    studyIds: ["follower_growth_dynamics", "oil_trade_network", "oil_exporter_timeseries"],
+  },
+  {
+    title: "Media discourse",
+    description:
+      "Language, narrative, and audience discourse extracted from YouTube comment sections.",
+    studyIds: [
+      "bplus-discourse",
+      "bbc_persian_discourse",
+      "iran_international_discourse",
+      "breaking_points_discourse",
+      "tucker_carlson_discourse",
+      "cnn_discourse",
+      "fox_news_discourse",
+      "bbc_discourse",
+      "rest_is_politics_discourse",
     ],
   },
 ];

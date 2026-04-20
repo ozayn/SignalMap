@@ -1,82 +1,81 @@
-import { getStudyById } from "@/lib/studies";
-import type { StudyMeta } from "@/lib/studies";
-import { StudyCard } from "@/components/study-card";
+"use client";
 
-/** Map primarySignal.kind to display tags for the Signals row. */
-function getSignalTags(study: StudyMeta): string[] {
-  const tags: string[] = [];
-  const kind = study.primarySignal.kind;
-  if (
-    kind === "oil_brent" ||
-    kind === "oil_and_fx" ||
-    kind === "gold_and_oil" ||
-    kind === "real_oil" ||
-    kind === "oil_ppp_iran" ||
-    kind === "oil_export_capacity" ||
-    kind === "oil_production_major_exporters" ||
-    kind === "oil_trade_network" ||
-    kind === "oil_exporter_timeseries" ||
-    kind === "oil_geopolitical_reaction"
-  ) {
-    tags.push("Oil");
-  }
-  if (kind === "fx_usd_toman" || kind === "oil_and_fx" || kind === "fx_usd_irr_dual") {
-    tags.push("FX");
-  }
-  if (kind === "gold_and_oil") tags.push("Gold");
-  if (kind === "events_timeline") tags.push("Events");
-  if (kind === "follower_growth_dynamics") tags.push("Growth");
-  if (kind === "youtube_comment_analysis") {
-    tags.push("Discourse");
-    if (study.youtubeLanguage !== "English") tags.push("Persian");
-  }
-  if (kind === "wage_cpi_real") tags.push("Wage");
-  if (kind === "gdp_composition" || kind === "iran_gdp_accounts_dual") tags.push("GDP");
-  if (kind === "oil_trade_network" || kind === "oil_exporter_timeseries") tags.push("Trade");
-  if (study.eventLayers && study.eventLayers.length > 0 && !tags.includes("Events")) {
-    tags.push("Events");
-  }
-  return [...new Set(tags)];
-}
+import { useMemo, useState } from "react";
+import { getStudyById, getVisibleStudies, STUDY_SECTIONS, type StudyCountry, type StudyTheme } from "@/lib/studies";
+import { StudyCard, StudyListRow } from "@/components/study-card";
+import {
+  getSignalTags,
+  getStudySearchHaystack,
+  studyMatchesBrowseFilters,
+  STUDY_COUNTRY_OPTIONS,
+  STUDY_THEME_OPTIONS,
+} from "@/lib/study-browse";
 
-const SECTIONS: { title: string; description: string; studyIds: string[] }[] = [
-  {
-    title: "Foundations (signals)",
-    description: "Core price and exchange-rate series that anchor later analysis.",
-    studyIds: ["iran", "usd-toman", "oil-and-fx", "iran-gdp-composition", "iran-gdp-accounts-dual"],
-  },
-  {
-    title: "Context (timelines)",
-    description: "Reference timelines for events and long-range price context.",
-    studyIds: ["events_timeline", "global_oil_1900", "oil_geopolitical_reaction"],
-  },
-  {
-    title: "Burden & adjustment (methods)",
-    description: "Inflation-adjusted and PPP-based measures of economic burden.",
-    studyIds: ["real_oil_price", "iran_oil_ppp", "iran_real_wage_cpi"],
-  },
-  {
-    title: "Comparisons & constraints",
-    description: "Cross-country comparisons and capacity under constraints.",
-    studyIds: ["iran_oil_ppp_turkey", "iran_oil_export_capacity", "oil_major_exporters", "iran_fx_spread"],
-  },
-  {
-    title: "Audience dynamics (growth & networks)",
-    description: "Follower growth, simple growth models, and network prototypes.",
-    studyIds: ["follower_growth_dynamics", "oil_trade_network", "oil_exporter_timeseries"],
-  },
-  {
-    title: "Media discourse",
-    description:
-      "Language, narrative, and audience discourse extracted from YouTube comment sections.",
-    studyIds: ["bplus-discourse", "bbc_persian_discourse", "iran_international_discourse", "breaking_points_discourse", "tucker_carlson_discourse", "cnn_discourse", "fox_news_discourse", "bbc_discourse", "rest_is_politics_discourse"],
-  },
+type ViewMode = "grouped" | "grid" | "list";
+
+const VIEW_OPTIONS: { id: ViewMode; label: string }[] = [
+  { id: "grouped", label: "Grouped" },
+  { id: "grid", label: "Grid" },
+  { id: "list", label: "List" },
 ];
 
 export default function StudiesPage() {
+  const [viewMode, setViewMode] = useState<ViewMode>("grouped");
+  const [search, setSearch] = useState("");
+  const [countryFilter, setCountryFilter] = useState<Set<StudyCountry>>(() => new Set());
+  const [themeFilter, setThemeFilter] = useState<Set<StudyTheme>>(() => new Set());
+
+  const indexed = useMemo(() => {
+    return getVisibleStudies().map((study) => ({
+      study,
+      haystack: getStudySearchHaystack(study),
+      signalTags: getSignalTags(study),
+    }));
+  }, []);
+
+  const filtered = useMemo(() => {
+    return indexed.filter(({ study, haystack }) =>
+      studyMatchesBrowseFilters(study, {
+        search,
+        haystack,
+        countries: countryFilter,
+        themes: themeFilter,
+      })
+    );
+  }, [indexed, search, countryFilter, themeFilter]);
+
+  const filteredIds = useMemo(() => new Set(filtered.map((x) => x.study.id)), [filtered]);
+
+  const hasActiveFilters =
+    search.trim().length > 0 || countryFilter.size > 0 || themeFilter.size > 0;
+
+  const toggleCountry = (id: StudyCountry) => {
+    setCountryFilter((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  };
+
+  const toggleTheme = (id: StudyTheme) => {
+    setThemeFilter((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setCountryFilter(new Set());
+    setThemeFilter(new Set());
+  };
+
   return (
     <div className="studies-container py-12">
-      <header className="mb-8">
+      <header className="mb-6">
         <h1
           className="font-semibold tracking-[-0.01em] text-[#111827] dark:text-[#e5e7eb]"
           style={{ fontSize: "clamp(22px, 2.5vw, 30px)" }}
@@ -84,50 +83,174 @@ export default function StudiesPage() {
           Studies
         </h1>
         <p
-          className="mt-1 text-[#6b7280] dark:text-[#9ca3af]"
+          className="mt-1 text-[#6b7280] dark:text-[#9ca3af] max-w-2xl"
           style={{ fontSize: "clamp(12px, 1.2vw, 14px)" }}
         >
-          Longitudinal research on emotion, language, and interaction in public discourse.
+          Longitudinal research on macro signals, national accounts, oil and FX, inequality measures, and public
+          discourse—organized for scanning or targeted lookup.
         </p>
       </header>
 
-      <div>
-        {SECTIONS.map((section, sectionIndex) => {
-          const studies = section.studyIds
-            .map((id) => getStudyById(id))
-            .filter((s): s is NonNullable<typeof s> => s != null && s.visible !== false);
-          if (studies.length === 0) return null;
-          return (
-            <section key={section.title} className={sectionIndex === 0 ? "" : "section-block"}>
-              <div
-                className={`${sectionIndex === 0 ? "mt-9 " : ""}border-b border-[#f1f5f9] dark:border-[#1f2937] pb-1.5 mb-3.5`}
+      <div className="mb-8 space-y-4 border-b border-[#f1f5f9] dark:border-[#1f2937] pb-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-[#9ca3af] w-full sm:w-auto sm:mr-1">
+            View
+          </span>
+          <div
+            className="inline-flex rounded-lg border border-[#e5e7eb] dark:border-[#374151] p-0.5 bg-[#fafafa] dark:bg-[#0f172a]"
+            role="group"
+            aria-label="Studies layout"
+          >
+            {VIEW_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setViewMode(opt.id)}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  viewMode === opt.id
+                    ? "bg-white dark:bg-[#1e293b] text-[#111827] dark:text-[#e5e7eb] shadow-sm"
+                    : "text-[#6b7280] dark:text-[#9ca3af] hover:text-[#111827] dark:hover:text-[#e5e7eb]"
+                }`}
               >
-                <h2
-                  className="font-semibold text-[#111827] dark:text-[#e5e7eb]"
-                  style={{ fontSize: "clamp(16px, 1.8vw, 18px)" }}
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="max-w-xl">
+          <label htmlFor="studies-search" className="sr-only">
+            Search studies
+          </label>
+          <input
+            id="studies-search"
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search titles, topics, countries…"
+            className="w-full rounded-lg border border-[#e5e7eb] dark:border-[#374151] bg-white dark:bg-[#111827] px-3 py-2 text-sm text-[#111827] dark:text-[#e5e7eb] placeholder:text-[#9ca3af] outline-none focus:ring-2 focus:ring-[#111827]/15 dark:focus:ring-[#e5e7eb]/20"
+          />
+          <p className="mt-1.5 text-[11px] leading-snug text-[#9ca3af]">
+            Matches study title, subtitle, description, concepts, signal tags, browse themes/countries, and section
+            labels. Use several words to narrow (all words must match).
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-y-2 gap-x-4 items-start">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-[#9ca3af] mr-1">Country</span>
+            {STUDY_COUNTRY_OPTIONS.map(({ id, label }) => {
+              const on = countryFilter.has(id);
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => toggleCountry(id)}
+                  className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                    on
+                      ? "border-[#111827] dark:border-[#e5e7eb] bg-[#f3f4f6] dark:bg-[#1f2937] text-[#111827] dark:text-[#e5e7eb]"
+                      : "border-[#e5e7eb] dark:border-[#374151] text-[#6b7280] dark:text-[#9ca3af] hover:border-[#cbd5e1] dark:hover:border-[#64748b]"
+                  }`}
                 >
-                  {section.title}
-                </h2>
-                <p
-                  className="mt-0.5 text-[#6b7280] dark:text-[#9ca3af]"
-                  style={{ fontSize: "clamp(12px, 1.2vw, 14px)" }}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-[#9ca3af] mr-1">Theme</span>
+            {STUDY_THEME_OPTIONS.map(({ id, label }) => {
+              const on = themeFilter.has(id);
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => toggleTheme(id)}
+                  className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                    on
+                      ? "border-[#111827] dark:border-[#e5e7eb] bg-[#f3f4f6] dark:bg-[#1f2937] text-[#111827] dark:text-[#e5e7eb]"
+                      : "border-[#e5e7eb] dark:border-[#374151] text-[#6b7280] dark:text-[#9ca3af] hover:border-[#cbd5e1] dark:hover:border-[#64748b]"
+                  }`}
                 >
-                  {section.description}
-                </p>
-              </div>
-              <div className="studies-grid">
-                {studies.map((study) => (
-                  <StudyCard
-                    key={study.id}
-                    study={study}
-                    signalTags={getSignalTags(study)}
-                  />
-                ))}
-              </div>
-            </section>
-          );
-        })}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          {hasActiveFilters ? (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-xs text-[#6b7280] dark:text-[#9ca3af] underline underline-offset-2 hover:text-[#111827] dark:hover:text-[#e5e7eb]"
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
+
+        <p className="text-xs text-[#6b7280] dark:text-[#9ca3af] tabular-nums">
+          Showing {filtered.length} of {indexed.length} studies
+        </p>
       </div>
+
+      {filtered.length === 0 ? (
+        <p className="text-sm text-[#6b7280] dark:text-[#9ca3af] py-8">
+          No studies match these filters. Try clearing search or toggling fewer filters.
+        </p>
+      ) : viewMode === "grid" ? (
+        <div className="studies-grid">
+          {filtered.map(({ study, signalTags }) => (
+            <StudyCard key={study.id} study={study} signalTags={signalTags} />
+          ))}
+        </div>
+      ) : viewMode === "list" ? (
+        <div className="studies-study-list">
+          {filtered.map(({ study, signalTags }) => (
+            <StudyListRow key={study.id} study={study} signalTags={signalTags} />
+          ))}
+        </div>
+      ) : (
+        <div>
+          {STUDY_SECTIONS.map((section, sectionIndex) => {
+            const studies = section.studyIds
+              .map((id) => getStudyById(id))
+              .filter(
+                (s): s is NonNullable<typeof s> =>
+                  s != null && s.visible !== false && filteredIds.has(s.id)
+              );
+            if (studies.length === 0) return null;
+            const rows = studies.map((study) => {
+              const row = indexed.find((x) => x.study.id === study.id);
+              return { study, signalTags: row?.signalTags ?? getSignalTags(study) };
+            });
+            return (
+              <section key={section.title} className={sectionIndex === 0 ? "" : "section-block"}>
+                <div
+                  className={`${sectionIndex === 0 ? "mt-0 " : ""}border-b border-[#f1f5f9] dark:border-[#1f2937] pb-1.5 mb-3.5`}
+                >
+                  <h2
+                    className="font-semibold text-[#111827] dark:text-[#e5e7eb]"
+                    style={{ fontSize: "clamp(16px, 1.8vw, 18px)" }}
+                  >
+                    {section.title}
+                  </h2>
+                  <p
+                    className="mt-0.5 text-[#6b7280] dark:text-[#9ca3af]"
+                    style={{ fontSize: "clamp(12px, 1.2vw, 14px)" }}
+                  >
+                    {section.description}
+                  </p>
+                </div>
+                <div className="studies-grid">
+                  {rows.map(({ study, signalTags }) => (
+                    <StudyCard key={study.id} study={study} signalTags={signalTags} />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -1646,12 +1646,13 @@ def get_youtube_channel_cache_first(
 
 def update_macro_signals() -> dict:
     """
-    Refresh GDP composition (World Bank WDI) in the per-country TTL cache.
+    Refresh slow-moving World Bank WDI-backed caches (weekly, Sunday UTC only).
+
+    - GDP composition: ``get_gdp_composition_series(..., force_refresh=True)`` for IRN.
+    - Gini, CPI inflation YoY, poverty headcount: in-memory TTL entries invalidated so the
+      next API request refetches WDI (same weekly cadence; no daily churn for annual series).
 
     Callers: unified cron via ``signalmap.services.daily_updates`` (``macro_signals`` key).
-    Runs only on **Sunday UTC** so daily cron stays lightweight; other days return immediately
-    with ``skipped: true``. Uses ``get_gdp_composition_series(..., force_refresh=True)`` once
-    per country so the shared ``full_v3`` cache blob is replaced, not duplicated.
     """
     from datetime import datetime, timezone
 
@@ -1686,5 +1687,16 @@ def update_macro_signals() -> dict:
             out["countries"][iso] = {"ok": False, "error": str(e)}
             if out["error"] is None:
                 out["error"] = str(e)
+
+    try:
+        from signalmap.utils.ttl_cache import invalidate_prefix
+
+        out["wdi_signal_cache_invalidated"] = {
+            "gini_inequality": invalidate_prefix("signal:gini_inequality:"),
+            "cpi_inflation_yoy": invalidate_prefix("signal:cpi_inflation_yoy:"),
+            "poverty_headcount_iran": invalidate_prefix("signal:poverty_headcount_iran:"),
+        }
+    except Exception as e:
+        out["wdi_signal_cache_invalidated"] = {"error": str(e)}
 
     return out

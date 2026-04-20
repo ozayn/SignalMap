@@ -20,3 +20,11 @@ def get(key: str) -> Optional[Any]:
 def set(key: str, value: Any, ttl_seconds: float) -> None:
     """Store value with TTL."""
     _cache[key] = (value, time.time() + ttl_seconds)
+
+
+def invalidate_prefix(prefix: str) -> int:
+    """Remove all keys starting with ``prefix``. Returns number of entries removed."""
+    to_del = [k for k in list(_cache.keys()) if k.startswith(prefix)]
+    for k in to_del:
+        del _cache[k]
+    return len(to_del)
