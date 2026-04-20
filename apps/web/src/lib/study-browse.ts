@@ -51,7 +51,7 @@ export function getSignalTags(study: StudyMeta): string[] {
     if (study.youtubeLanguage !== "English") tags.push("Persian");
   }
   if (kind === "wage_cpi_real") tags.push("Wage");
-  if (kind === "gdp_composition" || kind === "iran_gdp_accounts_dual") tags.push("GDP");
+  if (kind === "gdp_composition" || kind === "iran_gdp_accounts_dual" || kind === "gdp_global_comparison") tags.push("GDP");
   if (kind === "gini_inequality") tags.push("Inequality");
   if (kind === "inflation_cpi_yoy") tags.push("Inflation");
   if (kind === "poverty_headcount_iran") tags.push("Poverty");
@@ -250,6 +250,24 @@ function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
           "turkey",
           "china",
           "saudi arabia",
+        ],
+      };
+    case "gdp_global_comparison":
+      return {
+        countries: ["iran", "us", "global"],
+        themes: ["macro"],
+        tags: [],
+        keywords: [
+          "gdp",
+          "ny.gdp.mktp.kd",
+          "ny.gdp.mktp.cd",
+          "world bank",
+          "wdi",
+          "china",
+          "turkey",
+          "saudi arabia",
+          "world aggregate",
+          "indexed",
         ],
       };
     case "poverty_headcount_iran":

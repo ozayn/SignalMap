@@ -1,4 +1,10 @@
 import { localizeChartNumericDisplayString } from "@/lib/chart-numerals-fa";
+import {
+  type ChartAxisNumeralLocale,
+  type ChartAxisYearMode,
+  formatChartYearBothInlineCompact,
+  getChartAxisYearDisplayParts,
+} from "@/lib/chart-axis-year";
 
 /**
  * Presentation (slide-ready) layout for PNG export.
@@ -80,6 +86,10 @@ export type PresentationExportTitleParts = {
   metricLabel: string;
   /** Active chart range for year span in title. */
   timeRange?: [string, string];
+  /** Matches live chart `chartLocale` (Persian digits in year span when `fa`). */
+  chartLocale?: ChartAxisNumeralLocale;
+  /** Matches live chart x-axis year mode (Gregorian / Solar Hijri / both). */
+  yearAxisMode?: ChartAxisYearMode;
 };
 
 /** True when study-style heading and metric label repeat the same idea (e.g. “Annual inflation…” vs “Inflation rate”). */
@@ -110,16 +120,165 @@ export function exportTitlesShareMetricRedundancy(heading: string, metric: strin
   return false;
 }
 
+/** Strip noisy “reference” / dual-axis boilerplate so heading vs metric can be compared and merged cleanly. */
+export function simplifyExportTitleText(raw: string): string {
+  let t = raw.trim();
+  if (!t) return t;
+  t = t.replace(/\(\s*dual-?\s*axis\s*,?\s*reference\s*\)/gi, " — dual-axis");
+  t = t.replace(/\(\s*dual-?\s*axis\s*\)/gi, " — dual-axis");
+  t = t.replace(/\(\s*reference\s*\)/gi, "");
+  t = t.replace(/[（(]\s*مرجع\s*دو\s*محوره\s*[)）]/gu, " — دو محوره");
+  t = t.replace(/[（(]\s*مرجع\s*[)）]/gu, "");
+  t = t.replace(/\s*[—–]\s*dual-?\s*axis\s*,?\s*reference\s*$/i, "");
+  t = t.replace(/\s*[—–]\s*نمودار\s*دو\s*محوره\s*$/u, "");
+  t = t.replace(/\s*[—–]\s*dual-?\s*axis\s*$/i, "");
+  t = t.replace(/\s+/g, " ");
+  t = t.replace(/\s*[—–]\s*[—–]\s*/g, " — ");
+  t = t.replace(/\(\s*\)/g, "").trim();
+  return t.trim();
+}
+
+const EXPORT_TITLE_STOPWORDS = new Set([
+  "the",
+  "a",
+  "an",
+  "of",
+  "and",
+  "or",
+  "for",
+  "to",
+  "in",
+  "on",
+  "at",
+  "per",
+  "vs",
+  "این",
+  "از",
+  "در",
+  "به",
+  "که",
+  "با",
+  "یا",
+  "بر",
+]);
+
+function tokenizeExportTitleWords(s: string): string[] {
+  const normalized = s.normalize("NFKC").replace(/[\u064B-\u065F\u0670]/g, "");
+  const out: string[] = [];
+  for (const m of normalized.matchAll(/[\p{L}\p{M}\p{N}]+(?:[-'][\p{L}\p{M}\p{N}]+)*/gu)) {
+    const w = m[0]!.toLowerCase();
+    if (w.length < 2 && !/[\u0600-\u06FF]/u.test(w)) continue;
+    if (EXPORT_TITLE_STOPWORDS.has(w)) continue;
+    out.push(w);
+  }
+  return out;
+}
+
+/** Jaccard similarity on word tokens (Unicode letters); used to avoid stacking near-duplicate study + chart titles. */
+export function exportTitleTokenJaccard(a: string, b: string): number {
+  const A = new Set(tokenizeExportTitleWords(a));
+  const B = new Set(tokenizeExportTitleWords(b));
+  if (A.size === 0 && B.size === 0) return 1;
+  if (A.size === 0 || B.size === 0) return 0;
+  let inter = 0;
+  for (const t of A) {
+    if (B.has(t)) inter++;
+  }
+  return inter / (A.size + B.size - inter);
+}
+
+function headingTokensSubsetOfMetric(heading: string, metric: string): boolean {
+  const M = new Set(tokenizeExportTitleWords(metric));
+  const ht = tokenizeExportTitleWords(heading);
+  if (ht.length === 0) return false;
+  return ht.every((t) => M.has(t));
+}
+
+function metricTokensSubsetOfHeading(heading: string, metric: string): boolean {
+  const H = new Set(tokenizeExportTitleWords(heading));
+  const mt = tokenizeExportTitleWords(metric);
+  if (mt.length === 0) return false;
+  return mt.every((t) => H.has(t));
+}
+
+const EXPORT_TITLE_JACCARD_PREFER_METRIC = 0.34;
+const EXPORT_TITLE_JOIN_MAX_CHARS = 92;
+
+/**
+ * Builds a single-line study export title **core** (no year span): short, avoids repeating study + chart labels,
+ * and drops low-value “reference” phrasing already normalized via {@link simplifyExportTitleText}.
+ */
+export function mergeConciseStudyExportTitleCore(studyHeading: string, metricLabel: string): string {
+  const mh = simplifyExportTitleText(studyHeading.trim());
+  const mm = simplifyExportTitleText(metricLabel.trim());
+
+  if (!mh && !mm) return "Chart";
+  if (!mh) return mm || "Chart";
+  if (!mm) return mh;
+  if (mh === mm) return mm;
+  if (exportTitlesShareMetricRedundancy(mh, mm)) return mm;
+
+  if (headingTokensSubsetOfMetric(mh, mm)) return mm;
+  if (metricTokensSubsetOfHeading(mh, mm)) return mm;
+
+  const j = exportTitleTokenJaccard(mh, mm);
+  if (j >= EXPORT_TITLE_JACCARD_PREFER_METRIC) return mm;
+
+  const joined = `${mh} — ${mm}`.replace(/\s+/g, " ").trim();
+  if (joined.length > EXPORT_TITLE_JOIN_MAX_CHARS && mm.length >= 6) return mm;
+
+  return joined;
+}
+
+/** Last balanced `(…)` at end of string (e.g. year span in ASCII or Persian digits). */
+function extractTrailingParenGroup(s: string): { before: string; paren: string } | null {
+  const t = s.trimEnd();
+  if (!t.endsWith(")")) return null;
+  let depth = 0;
+  let openIdx = -1;
+  for (let j = t.length - 1; j >= 0; j--) {
+    const c = t[j]!;
+    if (c === ")") depth++;
+    else if (c === "(") {
+      depth--;
+      if (depth === 0) {
+        openIdx = j;
+        break;
+      }
+    }
+  }
+  if (openIdx < 0) return null;
+  const paren = t.slice(openIdx);
+  const before = t.slice(0, openIdx).trimEnd();
+  return { before, paren };
+}
+
+/** Trailing `(…)` is treated as the year span only if it looks like a range (has digits + dash), not e.g. `(CPI)`. */
+function isPlausibleYearRangeParen(paren: string): boolean {
+  if (!paren.startsWith("(") || !paren.endsWith(")")) return false;
+  const inner = paren.slice(1, -1);
+  if (!/[–-]/.test(inner)) return false;
+  if (!/[0-9۰-۹]/.test(inner)) return false;
+  return true;
+}
+
+function extractTrailingYearParenGroup(s: string): { before: string; paren: string } | null {
+  const ext = extractTrailingParenGroup(s);
+  if (!ext || !isPlausibleYearRangeParen(ext.paren)) return null;
+  return ext;
+}
+
 /**
  * Shortens explicit slide titles like `Annual inflation rate — Inflation rate (1960–2026)`
  * to `Inflation rate (1960–2026)` when the em-dash parts are redundant.
+ * Trailing year `(…)` uses balanced parentheses so Persian-digit ranges still compact.
  */
 export function compactExportSlideTitleString(fullTitle: string): string {
   const t = fullTitle.trim();
   if (!t) return t;
-  const yrMatch = t.match(/\s*(\([12]\d{3}[–-][12]\d{3}\))\s*$/);
-  const yr = yrMatch ? yrMatch[1] : "";
-  const body = yrMatch ? t.slice(0, yrMatch.index).trim() : t;
+  const ext = extractTrailingYearParenGroup(t);
+  const yr = ext?.paren ?? "";
+  const body = ext ? ext.before : t;
   const parts = body.split(/\s*[—–]\s*/);
   if (parts.length >= 2) {
     const left = parts[0]!.trim();
@@ -131,25 +290,70 @@ export function compactExportSlideTitleString(fullTitle: string): string {
   return t;
 }
 
+function isoStartDateForYearLabel(iso: string): string {
+  const s = iso.trim();
+  if (s.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  if (/^\d{4}/.test(s)) return `${s.slice(0, 4)}-01-01`;
+  return "";
+}
+
 /**
- * Slide title: prefer `Metric (years)` when heading is redundant with the metric; otherwise `Heading — Metric (years)`.
+ * Parenthesized year span for export / slide titles, aligned with x-axis calendar mode and digit locale.
+ */
+export function formatExportTitleYearSpan(
+  timeRange: [string, string],
+  yearAxisMode: ChartAxisYearMode,
+  chartLocale: ChartAxisNumeralLocale
+): string {
+  const loc = chartLocale ?? "en";
+  const a = isoStartDateForYearLabel(timeRange[0]);
+  const b = isoStartDateForYearLabel(timeRange[1]);
+  if (!a || !b) return "";
+
+  if (yearAxisMode === "both") {
+    const left = formatChartYearBothInlineCompact(a, loc);
+    const right = formatChartYearBothInlineCompact(b, loc);
+    const raw = `(${left}–${right})`;
+    return localizeChartNumericDisplayString(raw, loc);
+  }
+  if (yearAxisMode === "jalali") {
+    const pa = getChartAxisYearDisplayParts(a);
+    const pb = getChartAxisYearDisplayParts(b);
+    const js = (pa.jalali ?? pa.gregorian).trim();
+    const je = (pb.jalali ?? pb.gregorian).trim();
+    const raw = `(${js}–${je})`;
+    return localizeChartNumericDisplayString(raw, loc);
+  }
+  const pa = getChartAxisYearDisplayParts(a);
+  const pb = getChartAxisYearDisplayParts(b);
+  const raw = `(${pa.gregorian}–${pb.gregorian})`;
+  return localizeChartNumericDisplayString(raw, loc);
+}
+
+/**
+ * Slide export title: concise merge of study heading + chart label (see {@link mergeConciseStudyExportTitleCore}),
+ * then a compact localized year span. Digits follow the live chart axis (`yearAxisMode`, `chartLocale`).
  */
 export function buildPresentationExportTitle(parts: PresentationExportTitleParts): string {
   const m = parts.metricLabel.trim();
   const h = parts.studyHeading?.trim() ?? "";
-  const a = parts.timeRange?.[0]?.trim().slice(0, 4);
-  const b = parts.timeRange?.[1]?.trim().slice(0, 4);
-  const yr = a && b && a.length === 4 && b.length === 4 ? `(${a}–${b})` : "";
+  const locale = parts.chartLocale ?? "en";
+  const mode = parts.yearAxisMode ?? "gregorian";
+  const yrSpan =
+    parts.timeRange && parts.timeRange[0] && parts.timeRange[1]
+      ? formatExportTitleYearSpan(parts.timeRange, mode, locale)
+      : "";
   let core: string;
-  if (h && m && h !== m) {
-    core = exportTitlesShareMetricRedundancy(h, m) ? m : `${h} — ${m}`;
+  if (h && m) {
+    core = mergeConciseStudyExportTitleCore(h, m);
   } else if (h) {
-    core = h;
+    core = simplifyExportTitleText(h);
   } else {
-    core = m || "Chart";
+    core = simplifyExportTitleText(m) || "Chart";
   }
-  const built = yr ? `${core} ${yr}`.replace(/\s+/g, " ").trim() : core;
-  return compactExportSlideTitleString(built);
+  core = localizeChartNumericDisplayString(core, locale);
+  const built = yrSpan ? `${core} ${yrSpan}`.replace(/\s+/g, " ").trim() : core;
+  return localizeChartNumericDisplayString(compactExportSlideTitleString(built), locale);
 }
 
 function asArray<T>(v: T | T[] | undefined): T[] {
@@ -239,6 +443,222 @@ function normalizePresentationGridPatch(opt: Record<string, unknown>): unknown {
     return raw.map(() => ({ ...tight }));
   }
   return tight;
+}
+
+// --- Export-only axis auto-fit (PNG export instances + brief live-chart fallback) ---
+
+const EXPORT_X_PAD_FRACTION = 0.015;
+const EXPORT_Y_PAD_FRACTION = 0.05;
+const EXPORT_Y_MIN_SPAN_RATIO = 0.06;
+const EXPORT_LOG_PAD_FRACTION = 0.05;
+
+function isFiniteNum(n: unknown): n is number {
+  return typeof n === "number" && Number.isFinite(n);
+}
+
+function parseSeriesPoint(
+  pt: unknown,
+  xAxisType: string,
+  categoryLabels: string[] | undefined,
+  dataIndex: number
+): { x: number; y: number } | null {
+  if (pt == null) return null;
+  if (typeof pt === "number") {
+    if (!isFiniteNum(pt)) return null;
+    if (xAxisType === "category" && categoryLabels && categoryLabels[dataIndex] != null) {
+      const lab = String(categoryLabels[dataIndex]);
+      const t = Date.parse(lab.slice(0, 10));
+      if (!Number.isFinite(t)) return null;
+      return { x: t, y: pt };
+    }
+    return null;
+  }
+  if (Array.isArray(pt)) {
+    const xv = pt[0];
+    const yv = pt[1];
+    if (!isFiniteNum(yv)) return null;
+    if (typeof xv === "number" && Number.isFinite(xv)) {
+      return { x: xv, y: yv };
+    }
+    if (typeof xv === "string") {
+      const t = Date.parse(xv.slice(0, 10));
+      if (!Number.isFinite(t)) return null;
+      return { x: t, y: yv };
+    }
+    return null;
+  }
+  if (typeof pt === "object" && pt !== null && "value" in pt) {
+    const v = (pt as { value: unknown }).value;
+    if (Array.isArray(v) && v.length >= 2) {
+      return parseSeriesPoint(v, xAxisType, categoryLabels, dataIndex);
+    }
+  }
+  return null;
+}
+
+function yAxisUsesLog(yAxis: Record<string, unknown> | undefined): boolean {
+  return yAxis?.type === "log";
+}
+
+/**
+ * Builds `{ xAxis, yAxis }` overrides so the export canvas uses only the visible data window
+ * (legend-hidden series excluded via `show: false` on the export instance) with small padding.
+ * Returns `null` when there is no usable numeric range.
+ */
+export function buildExportDataFitAxisPatch(opt: Record<string, unknown>): Record<string, unknown> | null {
+  const seriesList = asArray(opt.series).filter((s) => s != null) as Record<string, unknown>[];
+  const xAxes = asArray(opt.xAxis) as Record<string, unknown>[];
+  const yAxes = asArray(opt.yAxis) as Record<string, unknown>[];
+  const x0 = xAxes[0];
+  const xType = typeof x0?.type === "string" ? x0.type : "category";
+  const categoryData =
+    xType === "category" && Array.isArray(x0?.data) ? (x0!.data as unknown[]).map((c) => String(c)) : undefined;
+
+  let xMin = Infinity;
+  let xMax = -Infinity;
+  let catIdxMin = Infinity;
+  let catIdxMax = -Infinity;
+  const yMinByAxis = new Map<number, number>();
+  const yMaxByAxis = new Map<number, number>();
+
+  const bumpY = (axisIdx: number, y: number) => {
+    const lo = yMinByAxis.get(axisIdx) ?? Infinity;
+    const hi = yMaxByAxis.get(axisIdx) ?? -Infinity;
+    yMinByAxis.set(axisIdx, Math.min(lo, y));
+    yMaxByAxis.set(axisIdx, Math.max(hi, y));
+  };
+
+  for (const s of seriesList) {
+    if (s.show === false) continue;
+    const st = s.type;
+    if (st !== "line" && st !== "bar" && st !== "scatter") continue;
+    const yAxisIndex = typeof s.yAxisIndex === "number" && Number.isFinite(s.yAxisIndex) ? Math.floor(s.yAxisIndex) : 0;
+    const data = s.data;
+    if (!Array.isArray(data)) continue;
+
+    if (xType === "category" && categoryData) {
+      for (let i = 0; i < data.length; i++) {
+        const p = parseSeriesPoint(data[i], xType, categoryData, i);
+        if (!p) continue;
+        xMin = Math.min(xMin, p.x);
+        xMax = Math.max(xMax, p.x);
+        catIdxMin = Math.min(catIdxMin, i);
+        catIdxMax = Math.max(catIdxMax, i);
+        bumpY(yAxisIndex, p.y);
+      }
+    } else if (xType === "time" || xType === "value") {
+      for (let i = 0; i < data.length; i++) {
+        const p = parseSeriesPoint(data[i], "time", undefined, i);
+        if (!p) continue;
+        xMin = Math.min(xMin, p.x);
+        xMax = Math.max(xMax, p.x);
+        bumpY(yAxisIndex, p.y);
+      }
+    }
+  }
+
+  if (yMinByAxis.size === 0) return null;
+
+  if (xType === "category" && categoryData) {
+    if (!Number.isFinite(catIdxMin) || !Number.isFinite(catIdxMax) || catIdxMax < catIdxMin) return null;
+  } else {
+    if (!Number.isFinite(xMin) || !Number.isFinite(xMax) || xMax < xMin) return null;
+  }
+
+  const dataAxisMax = Math.max(0, ...yMinByAxis.keys(), ...yMaxByAxis.keys());
+  const axisCount = Math.max(yAxes.length, dataAxisMax + 1);
+  const yPatches: Record<string, unknown>[] = [];
+
+  for (let ai = 0; ai < axisCount; ai++) {
+    const yAx = yAxes[ai];
+    let lo = yMinByAxis.get(ai);
+    let hi = yMaxByAxis.get(ai);
+    if (lo == null || hi == null || !Number.isFinite(lo) || !Number.isFinite(hi)) {
+      yPatches.push({});
+      continue;
+    }
+    if (hi < lo) [lo, hi] = [hi, lo];
+
+    const logAxis = yAxisUsesLog(yAx);
+    let nymin: number;
+    let nymax: number;
+
+    if (logAxis) {
+      const pos = (v: number) => v > 0 && Number.isFinite(v);
+      if (!pos(lo) || !pos(hi)) {
+        yPatches.push({});
+        continue;
+      }
+      const logLo = Math.log(lo);
+      const logHi = Math.log(hi);
+      let logSpan = logHi - logLo;
+      if (logSpan <= 0 || !Number.isFinite(logSpan)) {
+        logSpan = EXPORT_Y_MIN_SPAN_RATIO;
+      }
+      const logPad = Math.max(logSpan * EXPORT_LOG_PAD_FRACTION, 1e-6);
+      nymin = Math.exp(logLo - logPad);
+      nymax = Math.exp(logHi + logPad);
+      if (nymin <= 0 || !Number.isFinite(nymin)) nymin = lo * 0.92;
+      if (nymax <= nymin || !Number.isFinite(nymax)) nymax = hi * 1.08;
+    } else {
+      const span = hi - lo;
+      if (span <= 0 || !Number.isFinite(span)) {
+        const mid = lo;
+        const absPad = Math.max(Math.abs(mid) * EXPORT_Y_MIN_SPAN_RATIO, 1e-12);
+        nymin = mid - absPad;
+        nymax = mid + absPad;
+      } else {
+        const pad = span * EXPORT_Y_PAD_FRACTION;
+        nymin = lo - pad;
+        nymax = hi + pad;
+        const minSpan = Math.max(span * EXPORT_Y_MIN_SPAN_RATIO, 1e-12);
+        if (nymax - nymin < minSpan) {
+          const mid = (lo + hi) / 2;
+          nymin = mid - minSpan / 2;
+          nymax = mid + minSpan / 2;
+        }
+      }
+    }
+
+    yPatches.push({
+      min: nymin,
+      max: nymax,
+      scale: false,
+    });
+  }
+
+  const yOut = yPatches.length === 1 ? yPatches[0]! : yPatches;
+
+  if (xType === "category" && categoryData && categoryData.length > 0) {
+    const idxSpan = Math.max(catIdxMax - catIdxMin, 0);
+    const idxPad = Math.max(1, Math.ceil(Math.max(idxSpan, 1) * EXPORT_X_PAD_FRACTION));
+    const minIdx = Math.max(0, catIdxMin - idxPad);
+    const maxIdx = Math.min(categoryData.length - 1, catIdxMax + idxPad);
+    const xCatPatch = { min: minIdx, max: maxIdx, minInterval: 0 };
+    if (xAxes.length <= 1) return { xAxis: xCatPatch, yAxis: yOut };
+    return {
+      xAxis: xAxes.map((_, i) => (i === 0 ? xCatPatch : {})),
+      yAxis: yOut,
+    };
+  }
+
+  const xSpan = Math.max(xMax - xMin, 1);
+  const xPad = xSpan * EXPORT_X_PAD_FRACTION;
+  const nxMin = xMin - xPad;
+  const nxMax = xMax + xPad;
+  const xTimePatch: Record<string, unknown> = {
+    min: nxMin,
+    max: nxMax,
+    minInterval: xType === "time" ? 0 : x0?.minInterval,
+  };
+
+  if (xAxes.length <= 1) {
+    return { xAxis: xTimePatch, yAxis: yOut };
+  }
+  return {
+    xAxis: xAxes.map((_, i) => (i === 0 ? xTimePatch : {})),
+    yAxis: yOut,
+  };
 }
 
 /**

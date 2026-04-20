@@ -100,6 +100,56 @@ const INFLATION_FA: LearningNoteSection[] = [
   },
 ];
 
+const GDP_GLOBAL_COMPARISON_EN: LearningNoteSection[] = [
+  {
+    heading: "What this shows",
+    bullets: [
+      "Gross domestic product (GDP) is the total value of finished goods and services produced in an economy over a period. Here it is shown as World Bank WDI totals for six geographies: the United States, China, Iran, Turkey, Saudi Arabia, and the published world aggregate (WLD).",
+      "Default view is indexed so lines show relative change from a common base style (100 in calendar year 2000 when available for that series). Absolute levels use the Bank’s preferred constant-price series where present, with current US$ as a fallback per economy when needed.",
+    ],
+  },
+  {
+    heading: "How to read",
+    bullets: [
+      "Horizontal axis: year (Gregorian calendar; optional Solar Hijri / both labels when Persian UI is on). Vertical axis: index (100 = base year) or GDP in US dollars, depending on the toggle.",
+      "Indexed lines answer “how much larger or smaller is GDP versus the base year?” for each country separately; they do not rank total dollar size on one scale.",
+      "Log scale (absolute view only) compresses very large gaps—useful when one economy’s dollar total would otherwise flatten the rest.",
+    ],
+  },
+  {
+    heading: "Why comparisons need care",
+    bullets: [
+      "Population, prices, and measurement revisions differ; dollar totals reflect exchange rates and definitions, not welfare per person.",
+      "The WLD aggregate follows World Bank methodology; it is not the sum of the five countries on the chart.",
+    ],
+  },
+];
+
+const GDP_GLOBAL_COMPARISON_FA: LearningNoteSection[] = [
+  {
+    heading: "What this shows",
+    bullets: [
+      "تولید ناخالص داخلی (GDP) جمع ارزش کالاها و خدمات نهایی تولیدشده در یک اقتصاد در یک دوره است. اینجا از WDI بانک جهانی برای ایالات متحده، چین، ایران، ترکیه، عربستان سعودی و مجموع جهانی منتشرشده (WLD) نمایش داده می‌شود.",
+      "نمای پیش‌فرض شاخص‌شده است تا تغییر نسبی نسبت به سال پایه (۱۰۰ در سال ۲۰۰۰ میلادی هر جا برای آن سری موجود باشد) خوانا بماند. سطح مطلق ترجیحاً به دلار ثابت ۲۰۱۵ و در صورت نبود داده به دلار جاری برای هر اقتصاد است.",
+    ],
+  },
+  {
+    heading: "How to read",
+    bullets: [
+      "محور افقی: سال (میلادی؛ در رابط فارسی می‌توان برچسب شمسی یا هر دو را دید). محور عمودی: شاخص (۱۰۰ = سال پایه) یا GDP به دلار بسته به حالت نمایش.",
+      "خطوط شاخص‌شده برای هر کشور جدا پاسخ می‌دهند GDP نسبت به سال پایه چقدر بزرگ‌تر یا کوچک‌تر شده؛ رتبه‌بندی مطلق دلاری روی یک مقیاس نیست.",
+      "مقیاس لگاریتمی فقط در نمای مطلق است و فاصلهٔ بسیار بزرگ دلاری را فشرده می‌کند.",
+    ],
+  },
+  {
+    heading: "Why comparisons need care",
+    bullets: [
+      "جمعیت، قیمت‌ها و تجدیدنظرها فرق می‌کنند؛ جمع دلاری نرخ ارز و تعاریف را منعکس می‌کند، نه رفاه به ازای هر نفر.",
+      "مجموع WLD طبق روش بانک جهانی است؛ جمع پنج کشور نمودار نیست.",
+    ],
+  },
+];
+
 const POVERTY_EN: LearningNoteSection[] = [
   {
     heading: "What this shows",
@@ -156,6 +206,10 @@ export function giniLearningSections(isFa: boolean): LearningNoteSection[] {
 
 export function inflationLearningSections(isFa: boolean): LearningNoteSection[] {
   return isFa ? INFLATION_FA : INFLATION_EN;
+}
+
+export function gdpGlobalComparisonLearningSections(isFa: boolean): LearningNoteSection[] {
+  return isFa ? GDP_GLOBAL_COMPARISON_FA : GDP_GLOBAL_COMPARISON_EN;
 }
 
 export function povertyLearningSections(isFa: boolean): LearningNoteSection[] {

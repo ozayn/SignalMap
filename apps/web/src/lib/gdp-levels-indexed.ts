@@ -112,6 +112,25 @@ export function indexSeriesAtBaseYear(points: GdpLevelPoint[], baseYear: number)
   });
 }
 
+/**
+ * Cross-country GDP comparison: index = 100 × (value / value in base year).
+ * Tries calendar year 2000 first, then earliest year with a usable base value for that series.
+ */
+export function indexGdpComparisonTo100Base2000(points: GdpLevelPoint[]): GdpLevelPoint[] {
+  const years = [...new Set(points.map((p) => yearFromIsoDate(p.date)))]
+    .filter((y) => Number.isFinite(y))
+    .sort((a, b) => a - b);
+  const tryYears = years.includes(2000) ? [2000, ...years.filter((y) => y !== 2000)] : [2000, ...years];
+  for (const y of tryYears) {
+    const scaled = indexSeriesAtBaseYear(points, y).map((p) => ({
+      ...p,
+      value: Number.isFinite(p.value) ? 100 * p.value : Number.NaN,
+    }));
+    if (scaled.some((p) => Number.isFinite(p.value))) return scaled;
+  }
+  return points.map((p) => ({ ...p, value: Number.NaN }));
+}
+
 export function baseYearToIsoDate(year: number): string {
   return `${year}-01-01`;
 }

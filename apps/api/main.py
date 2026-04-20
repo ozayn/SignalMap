@@ -509,6 +509,28 @@ def get_wdi_cpi_inflation_yoy_signal(
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
+@app.get("/api/signals/wdi/gdp-global-comparison")
+def get_wdi_gdp_global_comparison_signal(
+    start: str | None = Query(None, description="Start date YYYY-MM-DD"),
+    end: str | None = Query(None, description="End date YYYY-MM-DD"),
+):
+    """Return World Bank annual GDP (levels) for US, China, Iran, Turkey, Saudi Arabia, and world (WLD)."""
+    if start is None:
+        start = "1960-01-01"
+    if end is None:
+        end = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    try:
+        from signalmap.services.signals import get_gdp_global_comparison
+
+        return get_gdp_global_comparison(start, end)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
+
+
 @app.get("/api/signals/wdi/poverty-headcount-iran")
 def get_wdi_poverty_headcount_iran_signal(
     start: str | None = Query(None, description="Start date YYYY-MM-DD"),

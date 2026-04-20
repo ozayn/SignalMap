@@ -30,6 +30,12 @@ const CONCEPTS: Record<string, Concept[]> = {
       learnMore: [{ label: "GDP (Wikipedia)", url: "https://en.wikipedia.org/wiki/Gross_domestic_product" }],
     },
     {
+      title: "Comparing GDP across countries",
+      description:
+        "Total GDP in dollars mixes real output, prices, and exchange rates, and larger populations mechanically raise many totals. Indexed charts (base year = 100) make relative growth easier to read on one axis; they do not replace per-capita or welfare measures when you care about living standards.",
+      learnMore: [{ label: "GDP (Wikipedia)", url: "https://en.wikipedia.org/wiki/Gross_domestic_product" }],
+    },
+    {
       title: "Consumption and investment (shares of GDP)",
       description:
         "Final consumption is spending by households and government on goods and services. Gross capital formation is investment in capacity (equipment, construction, inventories). Charts that show each as a percent of GDP describe how the economy is split—not dollar size on the same scale as GDP in levels view.",

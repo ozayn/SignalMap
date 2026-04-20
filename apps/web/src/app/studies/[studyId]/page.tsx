@@ -41,12 +41,14 @@ import {
 import { iranGdpMacroEventsToTimeline } from "@/lib/gdp-composition-macro-events";
 import {
   dutchDiseaseDiagnosticsLearningSections,
+  gdpGlobalComparisonLearningSections,
   giniLearningSections,
   inflationLearningSections,
   povertyLearningSections,
 } from "@/lib/wdi-macro-studies-learning";
 import {
   baseYearToIsoDate,
+  indexGdpComparisonTo100Base2000,
   indexSeriesAtBaseYear,
   resolveIndexedBaseYear,
 } from "@/lib/gdp-levels-indexed";
@@ -404,6 +406,19 @@ export default function StudyDetailPage() {
   const [inflationChinaPoints, setInflationChinaPoints] = useState<{ date: string; value: number }[]>([]);
   const [inflationSaudiArabiaPoints, setInflationSaudiArabiaPoints] = useState<{ date: string; value: number }[]>([]);
   const [inflationSource, setInflationSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(null);
+  const [gdpGlobalUnitedStatesPoints, setGdpGlobalUnitedStatesPoints] = useState<{ date: string; value: number }[]>([]);
+  const [gdpGlobalChinaPoints, setGdpGlobalChinaPoints] = useState<{ date: string; value: number }[]>([]);
+  const [gdpGlobalIranPoints, setGdpGlobalIranPoints] = useState<{ date: string; value: number }[]>([]);
+  const [gdpGlobalTurkeyPoints, setGdpGlobalTurkeyPoints] = useState<{ date: string; value: number }[]>([]);
+  const [gdpGlobalSaudiArabiaPoints, setGdpGlobalSaudiArabiaPoints] = useState<{ date: string; value: number }[]>([]);
+  const [gdpGlobalWorldPoints, setGdpGlobalWorldPoints] = useState<{ date: string; value: number }[]>([]);
+  const [gdpGlobalSource, setGdpGlobalSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(null);
+  const [gdpGlobalPerCountryBasis, setGdpGlobalPerCountryBasis] = useState<Record<string, string> | null>(null);
+  const [gdpGlobalPerCountryIndicatorId, setGdpGlobalPerCountryIndicatorId] = useState<Record<string, string> | null>(
+    null
+  );
+  const [gdpGlobalDisplayMode, setGdpGlobalDisplayMode] = useState<"absolute" | "indexed">("indexed");
+  const [gdpGlobalAbsoluteLog, setGdpGlobalAbsoluteLog] = useState(false);
   const [povertyDdayPoints, setPovertyDdayPoints] = useState<{ date: string; value: number }[]>([]);
   const [povertyLmicPoints, setPovertyLmicPoints] = useState<{ date: string; value: number }[]>([]);
   const [povertyDdayLineLabel, setPovertyDdayLineLabel] = useState("");
@@ -574,6 +589,7 @@ export default function StudyDetailPage() {
   const isGdpIranAccountsDual = study?.primarySignal.kind === "iran_gdp_accounts_dual";
   const isGiniInequality = study?.primarySignal.kind === "gini_inequality";
   const isInflationCpiYoy = study?.primarySignal.kind === "inflation_cpi_yoy";
+  const isGdpGlobalComparison = study?.primarySignal.kind === "gdp_global_comparison";
   const isPovertyHeadcountIran = study?.primarySignal.kind === "poverty_headcount_iran";
   const isDutchDiseaseDiagnostics = study?.primarySignal.kind === "dutch_disease_diagnostics_iran";
   /** WDI national-accounts levels bundle (composition study or dual-axis reference study). */
@@ -671,6 +687,20 @@ export default function StudyDetailPage() {
     const resolvedEnd = end === "today" ? new Date().toISOString().slice(0, 10) : end;
     return [start, resolvedEnd];
   }, [study, isInflationCpiYoy, anchorEventId, events, effectiveWindowYears]);
+
+  const gdpGlobalTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isGdpGlobalComparison) return null;
+    if (anchorEventId) {
+      const ev = events.find((e) => e.id === anchorEventId);
+      if (ev) {
+        const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
+        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowYears);
+      }
+    }
+    const [start, end] = study.timeRange;
+    const resolvedEnd = end === "today" ? new Date().toISOString().slice(0, 10) : end;
+    return [start, resolvedEnd];
+  }, [study, isGdpGlobalComparison, anchorEventId, events, effectiveWindowYears]);
 
   const povertyTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isPovertyHeadcountIran) return null;
@@ -770,6 +800,41 @@ export default function StudyDetailPage() {
     if (!isInflationCpiYoy) return events;
     return events.filter((e) => isStudyEventLayerVisible(e.layer, chartEventToggleState));
   }, [isInflationCpiYoy, events, chartEventToggleState]);
+
+  const gdpGlobalFilteredEvents = useMemo(() => {
+    if (!isGdpGlobalComparison) return events;
+    return events.filter((e) => isStudyEventLayerVisible(e.layer, chartEventToggleState));
+  }, [isGdpGlobalComparison, events, chartEventToggleState]);
+
+  const gdpGlobalDisplayed = useMemo(() => {
+    if (!isGdpGlobalComparison) return null;
+    const raw = {
+      us: gdpGlobalUnitedStatesPoints,
+      china: gdpGlobalChinaPoints,
+      iran: gdpGlobalIranPoints,
+      turkey: gdpGlobalTurkeyPoints,
+      saudi_arabia: gdpGlobalSaudiArabiaPoints,
+      world: gdpGlobalWorldPoints,
+    };
+    if (gdpGlobalDisplayMode !== "indexed") return raw;
+    return {
+      us: indexGdpComparisonTo100Base2000(raw.us),
+      china: indexGdpComparisonTo100Base2000(raw.china),
+      iran: indexGdpComparisonTo100Base2000(raw.iran),
+      turkey: indexGdpComparisonTo100Base2000(raw.turkey),
+      saudi_arabia: indexGdpComparisonTo100Base2000(raw.saudi_arabia),
+      world: indexGdpComparisonTo100Base2000(raw.world),
+    };
+  }, [
+    isGdpGlobalComparison,
+    gdpGlobalDisplayMode,
+    gdpGlobalUnitedStatesPoints,
+    gdpGlobalChinaPoints,
+    gdpGlobalIranPoints,
+    gdpGlobalTurkeyPoints,
+    gdpGlobalSaudiArabiaPoints,
+    gdpGlobalWorldPoints,
+  ]);
 
   const povertyFilteredEvents = useMemo(() => {
     if (!isPovertyHeadcountIran) return events;
@@ -1351,6 +1416,7 @@ export default function StudyDetailPage() {
       isGdpIranAccountsDual ||
       isGiniInequality ||
       isInflationCpiYoy ||
+      isGdpGlobalComparison ||
       isPovertyHeadcountIran ||
       isDutchDiseaseDiagnostics;
     if (hasEventLayers && !isEventsTimeline) {
@@ -1367,6 +1433,7 @@ export default function StudyDetailPage() {
           isGdpIranAccountsDual ||
           isGiniInequality ||
           isInflationCpiYoy ||
+          isGdpGlobalComparison ||
           isPovertyHeadcountIran ||
           isDutchDiseaseDiagnostics) &&
           studyLayersLen > 0) ||
@@ -1398,6 +1465,7 @@ export default function StudyDetailPage() {
         } else if (
           isGiniInequality ||
           isInflationCpiYoy ||
+          isGdpGlobalComparison ||
           isPovertyHeadcountIran ||
           isDutchDiseaseDiagnostics
         ) {
@@ -1456,6 +1524,7 @@ export default function StudyDetailPage() {
     isGdpIranAccountsDual,
     isGiniInequality,
     isInflationCpiYoy,
+    isGdpGlobalComparison,
     isPovertyHeadcountIran,
     isDutchDiseaseDiagnostics,
     hasTurkeyComparator,
@@ -2182,6 +2251,71 @@ export default function StudyDetailPage() {
   }, [inflationTimeRange, isInflationCpiYoy]);
 
   useEffect(() => {
+    if (!gdpGlobalTimeRange || !isGdpGlobalComparison) {
+      if (isGdpGlobalComparison) {
+        setGdpGlobalUnitedStatesPoints([]);
+        setGdpGlobalChinaPoints([]);
+        setGdpGlobalIranPoints([]);
+        setGdpGlobalTurkeyPoints([]);
+        setGdpGlobalSaudiArabiaPoints([]);
+        setGdpGlobalWorldPoints([]);
+        setGdpGlobalSource(null);
+        setGdpGlobalPerCountryBasis(null);
+        setGdpGlobalPerCountryIndicatorId(null);
+      }
+      return;
+    }
+    const [start, end] = gdpGlobalTimeRange;
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+    fetchJson<{
+      series: {
+        united_states: { date: string; value: number }[];
+        china: { date: string; value: number }[];
+        iran: { date: string; value: number }[];
+        turkey: { date: string; value: number }[];
+        saudi_arabia: { date: string; value: number }[];
+        world: { date: string; value: number }[];
+      };
+      per_country_price_basis?: Record<string, string>;
+      per_country_indicator_id?: Record<string, string>;
+      source?: { name: string; url?: string; publisher?: string };
+    }>(`/api/signals/wdi/gdp-global-comparison?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+      .then((res) => {
+        if (mounted) {
+          setGdpGlobalUnitedStatesPoints(res.series?.united_states ?? []);
+          setGdpGlobalChinaPoints(res.series?.china ?? []);
+          setGdpGlobalIranPoints(res.series?.iran ?? []);
+          setGdpGlobalTurkeyPoints(res.series?.turkey ?? []);
+          setGdpGlobalSaudiArabiaPoints(res.series?.saudi_arabia ?? []);
+          setGdpGlobalWorldPoints(res.series?.world ?? []);
+          setGdpGlobalSource(res.source ?? null);
+          setGdpGlobalPerCountryBasis(res.per_country_price_basis ?? null);
+          setGdpGlobalPerCountryIndicatorId(res.per_country_indicator_id ?? null);
+        }
+      })
+      .catch((e) => {
+        if (mounted) {
+          setGdpGlobalUnitedStatesPoints([]);
+          setGdpGlobalChinaPoints([]);
+          setGdpGlobalIranPoints([]);
+          setGdpGlobalTurkeyPoints([]);
+          setGdpGlobalSaudiArabiaPoints([]);
+          setGdpGlobalWorldPoints([]);
+          setGdpGlobalSource(null);
+          setGdpGlobalPerCountryBasis(null);
+          setGdpGlobalPerCountryIndicatorId(null);
+          setError(e instanceof Error ? e.message : "Signal fetch failed");
+        }
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => {
+      mounted = false;
+    };
+  }, [gdpGlobalTimeRange, isGdpGlobalComparison]);
+
+  useEffect(() => {
     if (!povertyTimeRange || !isPovertyHeadcountIran) {
       if (isPovertyHeadcountIran) {
         setPovertyDdayPoints([]);
@@ -2510,6 +2644,7 @@ export default function StudyDetailPage() {
     isGdpIranAccountsDual ||
     isGiniInequality ||
     isInflationCpiYoy ||
+    isGdpGlobalComparison ||
     isPovertyHeadcountIran ||
     isDutchDiseaseDiagnostics;
   const singleSignalReady =
@@ -2543,6 +2678,13 @@ export default function StudyDetailPage() {
                         inflationTurkeyPoints.length > 0 ||
                         inflationChinaPoints.length > 0 ||
                         inflationSaudiArabiaPoints.length > 0
+                      : isGdpGlobalComparison
+                        ? gdpGlobalUnitedStatesPoints.length > 0 ||
+                          gdpGlobalChinaPoints.length > 0 ||
+                          gdpGlobalIranPoints.length > 0 ||
+                          gdpGlobalTurkeyPoints.length > 0 ||
+                          gdpGlobalSaudiArabiaPoints.length > 0 ||
+                          gdpGlobalWorldPoints.length > 0
                       : isPovertyHeadcountIran
                         ? povertyDdayPoints.length > 0 || povertyLmicPoints.length > 0
                         : isDutchDiseaseDiagnostics
@@ -2645,6 +2787,14 @@ export default function StudyDetailPage() {
       if (inflationChinaPoints.length > 0) allDates.push(...collect(inflationChinaPoints));
       if (inflationSaudiArabiaPoints.length > 0) allDates.push(...collect(inflationSaudiArabiaPoints));
     }
+    if (isGdpGlobalComparison) {
+      if (gdpGlobalUnitedStatesPoints.length > 0) allDates.push(...collect(gdpGlobalUnitedStatesPoints));
+      if (gdpGlobalChinaPoints.length > 0) allDates.push(...collect(gdpGlobalChinaPoints));
+      if (gdpGlobalIranPoints.length > 0) allDates.push(...collect(gdpGlobalIranPoints));
+      if (gdpGlobalTurkeyPoints.length > 0) allDates.push(...collect(gdpGlobalTurkeyPoints));
+      if (gdpGlobalSaudiArabiaPoints.length > 0) allDates.push(...collect(gdpGlobalSaudiArabiaPoints));
+      if (gdpGlobalWorldPoints.length > 0) allDates.push(...collect(gdpGlobalWorldPoints));
+    }
     if (isPovertyHeadcountIran) {
       if (povertyDdayPoints.length > 0) allDates.push(...collect(povertyDdayPoints));
       if (povertyLmicPoints.length > 0) allDates.push(...collect(povertyLmicPoints));
@@ -2708,6 +2858,7 @@ export default function StudyDetailPage() {
       productionTimeRange ??
       giniTimeRange ??
       inflationTimeRange ??
+      gdpGlobalTimeRange ??
       povertyTimeRange ??
       exporterTimeRange ??
       gdpCompositionTimeRange ??
@@ -2819,6 +2970,14 @@ export default function StudyDetailPage() {
         if (inflationTurkeyPoints.length > 0) arrays.push(inflationTurkeyPoints);
         if (inflationChinaPoints.length > 0) arrays.push(inflationChinaPoints);
         if (inflationSaudiArabiaPoints.length > 0) arrays.push(inflationSaudiArabiaPoints);
+      }
+      if (isGdpGlobalComparison) {
+        if (gdpGlobalUnitedStatesPoints.length > 0) arrays.push(gdpGlobalUnitedStatesPoints);
+        if (gdpGlobalChinaPoints.length > 0) arrays.push(gdpGlobalChinaPoints);
+        if (gdpGlobalIranPoints.length > 0) arrays.push(gdpGlobalIranPoints);
+        if (gdpGlobalTurkeyPoints.length > 0) arrays.push(gdpGlobalTurkeyPoints);
+        if (gdpGlobalSaudiArabiaPoints.length > 0) arrays.push(gdpGlobalSaudiArabiaPoints);
+        if (gdpGlobalWorldPoints.length > 0) arrays.push(gdpGlobalWorldPoints);
       }
       if (isPovertyHeadcountIran) {
         if (povertyDdayPoints.length > 0) arrays.push(povertyDdayPoints);
@@ -4223,7 +4382,9 @@ export default function StudyDetailPage() {
             <CardTitle className="text-lg font-semibold tracking-tight text-foreground shrink-0">
               {isOilTradeNetwork
                 ? "Network"
-                : isInflationCpiYoy
+                : isGdpGlobalComparison
+                  ? L(isFa, "GDP comparison (World Bank WDI)", "مقایسهٔ GDP (WDI بانک جهانی)")
+                  : isInflationCpiYoy
                   ? "Annual inflation rate (CPI)"
                   : isDutchDiseaseDiagnostics
                     ? "Dutch disease diagnostics (Iran)"
@@ -4297,7 +4458,13 @@ export default function StudyDetailPage() {
           <p className="text-sm text-muted-foreground">
             {isOilTradeNetwork
               ? "Oil trade flows between major exporters and importers. Nodes are countries/regions; edge width reflects trade volume (thousand barrels/day). Drag nodes, zoom, pan."
-              : isInflationCpiYoy
+              : isGdpGlobalComparison
+                ? L(
+                    isFa,
+                    "World Bank WDI total GDP (NY.GDP.MKTP.KD preferred; NY.GDP.MKTP.CD per economy when KD is missing). Default: indexed to 100 in 2000 (or earliest usable base year). Toggle absolute for dollar levels; optional log scale in absolute view. Toggle event layers below.",
+                    "GDP کل WDI بانک جهانی (ترجیح NY.GDP.MKTP.KD؛ در صورت نبود KD برای هر اقتصار NY.GDP.MKTP.CD). پیش‌فرض: شاخص ۱۰۰ در ۲۰۰۰ میلادی (یا نزدیک‌ترین سال پایهٔ معتبر). برای سطح دلاری «مطلق» را بزنید؛ در نمای مطلق می‌توان مقیاس لگاریتمی را روشن کرد. لایه‌های رویداد را پایین تنظیم کنید."
+                  )
+                : isInflationCpiYoy
                 ? "World Bank WDI FP.CPI.TOTL.ZG: annual consumer price inflation (% change from a year earlier). Toggle event layers below."
                 : isDutchDiseaseDiagnostics
                   ? "Four panels: WDI oil rents, manufacturing value added, and imports (each as % of GDP), plus open-market USD→toman. Annual WDI vs higher-frequency FX; exploratory only. Toggle event layers below."
@@ -4335,6 +4502,60 @@ export default function StudyDetailPage() {
                                           ? "Average sentiment score (sampled over time)"
                                           : "Event markers and optional external signals"}
           </p>
+          {isGdpGlobalComparison ? (
+            <div className="mb-2 flex flex-wrap items-center gap-3 text-xs">
+              <span className="text-muted-foreground shrink-0">{L(isFa, "View", "نما")}</span>
+              <div className="inline-flex rounded-md border border-border overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGdpGlobalDisplayMode("indexed");
+                    setGdpGlobalAbsoluteLog(false);
+                  }}
+                  className={`px-2 py-1.5 font-medium transition-colors ${
+                    gdpGlobalDisplayMode === "indexed"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                  }`}
+                >
+                  {L(isFa, "Indexed (2000 = 100)", "شاخص‌شده (۲۰۰۰ = ۱۰۰)")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGdpGlobalDisplayMode("absolute")}
+                  className={`px-2 py-1.5 font-medium transition-colors ${
+                    gdpGlobalDisplayMode === "absolute"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                  }`}
+                >
+                  {L(isFa, "Absolute", "مطلق")}
+                </button>
+              </div>
+              {gdpGlobalDisplayMode === "absolute" ? (
+                <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={gdpGlobalAbsoluteLog}
+                    onChange={(e) => setGdpGlobalAbsoluteLog(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  {L(isFa, "Log scale (left axis)", "مقیاس لگاریتمی (محور چپ)")}
+                </label>
+              ) : null}
+            </div>
+          ) : null}
+          {gdpGlobalPerCountryBasis &&
+          isGdpGlobalComparison &&
+          Object.values(gdpGlobalPerCountryBasis).some((v) => v === "current_usd") ? (
+            <p className="text-xs text-muted-foreground mb-2">
+              {L(
+                isFa,
+                "Note: at least one economy uses current US$ (NY.GDP.MKTP.CD) because the constant 2015 US$ series (NY.GDP.MKTP.KD) is empty in WDI for that country in this window.",
+                "توجه: حداقل یک اقتصاد به‌دلیل خالی بودن سری دلار ثابت ۲۰۱۵ (NY.GDP.MKTP.KD) در این بازه، از دلار جاری (NY.GDP.MKTP.CD) استفاده می‌کند."
+              )}
+            </p>
+          ) : null}
           <div className="flex flex-wrap items-center gap-3 pt-2">
             {!hasTurkeyComparator &&
               !isOilExportCapacity &&
@@ -4345,6 +4566,7 @@ export default function StudyDetailPage() {
               !isGdpIranAccountsDual &&
               !isGiniInequality &&
               !isInflationCpiYoy &&
+              !isGdpGlobalComparison &&
               !isPovertyHeadcountIran &&
               !isDutchDiseaseDiagnostics && (
               <>
@@ -4432,7 +4654,11 @@ export default function StudyDetailPage() {
                 Show sanctions periods
               </label>
             )}
-            {(isGiniInequality || isInflationCpiYoy || isPovertyHeadcountIran || isDutchDiseaseDiagnostics) && (
+            {(isGiniInequality ||
+              isInflationCpiYoy ||
+              isGdpGlobalComparison ||
+              isPovertyHeadcountIran ||
+              isDutchDiseaseDiagnostics) && (
               <>
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                   <input
@@ -6477,6 +6703,230 @@ export default function StudyDetailPage() {
                     <p>
                       Comparing six economies on one chart highlights different inflation regimes over time; it does not by
                       itself explain causes (energy shocks, policy, exchange rates, etc.).
+                    </p>
+                  </>
+                )}
+              </InSimpleTerms>
+            </>
+          ) : isGdpGlobalComparison && gdpGlobalDisplayed ? (
+            <>
+              <MultiSeriesStats
+                locale={isFa ? "fa" : "en"}
+                series={[
+                  {
+                    label: L(isFa, "United States", "ایالات متحده"),
+                    unit:
+                      gdpGlobalDisplayMode === "indexed"
+                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        : L(isFa, "US$ (WDI)", "دلار (WDI)"),
+                    points: gdpGlobalDisplayed.us,
+                  },
+                  {
+                    label: L(isFa, "China", "چین"),
+                    unit:
+                      gdpGlobalDisplayMode === "indexed"
+                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        : L(isFa, "US$ (WDI)", "دلار (WDI)"),
+                    points: gdpGlobalDisplayed.china,
+                  },
+                  {
+                    label: L(isFa, "Iran", "ایران"),
+                    unit:
+                      gdpGlobalDisplayMode === "indexed"
+                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        : L(isFa, "US$ (WDI)", "دلار (WDI)"),
+                    points: gdpGlobalDisplayed.iran,
+                  },
+                  {
+                    label: L(isFa, "Turkey", "ترکیه"),
+                    unit:
+                      gdpGlobalDisplayMode === "indexed"
+                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        : L(isFa, "US$ (WDI)", "دلار (WDI)"),
+                    points: gdpGlobalDisplayed.turkey,
+                  },
+                  {
+                    label: L(isFa, "Saudi Arabia", "عربستان سعودی"),
+                    unit:
+                      gdpGlobalDisplayMode === "indexed"
+                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        : L(isFa, "US$ (WDI)", "دلار (WDI)"),
+                    points: gdpGlobalDisplayed.saudi_arabia,
+                  },
+                  {
+                    label: L(isFa, "World", "جهان"),
+                    unit:
+                      gdpGlobalDisplayMode === "indexed"
+                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        : L(isFa, "US$ (WDI)", "دلار (WDI)"),
+                    points: gdpGlobalDisplayed.world,
+                  },
+                ]}
+                timeRange={gdpGlobalTimeRange ?? undefined}
+              />
+              <TimelineChart
+                chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
+                exportPresentationTitle={
+                  gdpGlobalDisplayMode === "indexed"
+                    ? L(isFa, "GDP — indexed (2000 = 100)", "GDP — شاخص‌شده (۲۰۰۰ = ۱۰۰)")
+                    : L(isFa, "GDP — levels (US$)", "GDP — سطح (دلار)")
+                }
+                exportSourceFooter={studyChartExportSource(isFa, [
+                  gdpGlobalSource?.name ?? "World Bank World Development Indicators",
+                ])}
+                data={[]}
+                valueKey="value"
+                label={L(isFa, "GDP (total)", "GDP (کل)")}
+                events={gdpGlobalFilteredEvents}
+                anchorEventId={anchorEventId || undefined}
+                yAxisLog={gdpGlobalDisplayMode === "absolute" && gdpGlobalAbsoluteLog}
+                yAxisNameSuffix={
+                  gdpGlobalDisplayMode === "absolute" && gdpGlobalAbsoluteLog
+                    ? L(isFa, "(log scale)", "(مقیاس لگاریتمی)")
+                    : undefined
+                }
+                yAxisMin={gdpGlobalDisplayMode === "indexed" ? 0 : undefined}
+                multiSeries={[
+                  {
+                    key: "us",
+                    label: L(isFa, "United States", "ایالات متحده"),
+                    yAxisIndex: 0,
+                    unit:
+                      gdpGlobalDisplayMode === "indexed"
+                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        : L(isFa, "US$ (WDI)", "دلار (WDI)"),
+                    points: gdpGlobalDisplayed.us,
+                    color: COUNTRY_COMPARATOR_STYLES.us.color,
+                    symbol: COUNTRY_COMPARATOR_STYLES.us.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
+                  {
+                    key: "china",
+                    label: L(isFa, "China", "چین"),
+                    yAxisIndex: 0,
+                    unit:
+                      gdpGlobalDisplayMode === "indexed"
+                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        : L(isFa, "US$ (WDI)", "دلار (WDI)"),
+                    points: gdpGlobalDisplayed.china,
+                    color: COUNTRY_COMPARATOR_STYLES.china.color,
+                    symbol: COUNTRY_COMPARATOR_STYLES.china.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
+                  {
+                    key: "iran",
+                    label: L(isFa, "Iran", "ایران"),
+                    yAxisIndex: 0,
+                    unit:
+                      gdpGlobalDisplayMode === "indexed"
+                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        : L(isFa, "US$ (WDI)", "دلار (WDI)"),
+                    points: gdpGlobalDisplayed.iran,
+                    color: COUNTRY_COMPARATOR_STYLES.iran.color,
+                    symbol: COUNTRY_COMPARATOR_STYLES.iran.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
+                  {
+                    key: "turkey",
+                    label: L(isFa, "Turkey", "ترکیه"),
+                    yAxisIndex: 0,
+                    unit:
+                      gdpGlobalDisplayMode === "indexed"
+                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        : L(isFa, "US$ (WDI)", "دلار (WDI)"),
+                    points: gdpGlobalDisplayed.turkey,
+                    color: COUNTRY_COMPARATOR_STYLES.turkey.color,
+                    symbol: COUNTRY_COMPARATOR_STYLES.turkey.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
+                  {
+                    key: "saudi_arabia",
+                    label: L(isFa, "Saudi Arabia", "عربستان سعودی"),
+                    yAxisIndex: 0,
+                    unit:
+                      gdpGlobalDisplayMode === "indexed"
+                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        : L(isFa, "US$ (WDI)", "دلار (WDI)"),
+                    points: gdpGlobalDisplayed.saudi_arabia,
+                    color: COUNTRY_COMPARATOR_STYLES.saudi_arabia.color,
+                    symbol: COUNTRY_COMPARATOR_STYLES.saudi_arabia.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
+                  {
+                    key: "world",
+                    label: L(isFa, "World", "جهان"),
+                    yAxisIndex: 0,
+                    unit:
+                      gdpGlobalDisplayMode === "indexed"
+                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        : L(isFa, "US$ (WDI)", "دلار (WDI)"),
+                    points: gdpGlobalDisplayed.world,
+                    color: "#262626",
+                    symbol: "circle",
+                    showSymbol: false,
+                    lineWidth: 2.65,
+                  },
+                ]}
+                timeRange={gdpGlobalTimeRange ?? study.timeRange}
+                chartRangeGranularity="year"
+                xAxisYearLabel={chartYearAxisLabel}
+                exportFileStem="global-gdp-comparison"
+                multiSeriesYAxisNameOverrides={{
+                  0:
+                    gdpGlobalDisplayMode === "indexed"
+                      ? L(isFa, "GDP index (2000 = 100 when available)", "شاخص GDP (۲۰۰۰ = ۱۰۰ در صورت وجود)")
+                      : L(isFa, "GDP (US$)", "GDP (دلار)"),
+                }}
+              />
+              <LearningNote locale={isFa ? "fa" : "en"} sections={gdpGlobalComparisonLearningSections(isFa)} />
+              {displayStudy.observations?.length ? (
+                <DataObservations locale={isFa ? "fa" : "en"} observations={displayStudy.observations ?? []} />
+              ) : null}
+              {study.concepts?.length ? <ConceptsUsed locale={isFa ? "fa" : "en"} conceptKeys={study.concepts} /> : null}
+              {gdpGlobalSource ? (
+                <SourceInfo
+                  items={[
+                    {
+                      label: L(isFa, "GDP (total)", "GDP (کل)"),
+                      sourceName: gdpGlobalSource.name ?? "World Bank World Development Indicators",
+                      sourceUrl: gdpGlobalSource.url ?? "https://data.worldbank.org/indicator/NY.GDP.MKTP.KD",
+                      sourceDetail: gdpGlobalSource.publisher ?? "World Bank",
+                      unitLabel:
+                        gdpGlobalDisplayMode === "indexed"
+                          ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                          : L(isFa, "US$ total GDP", "GDP کل به دلار"),
+                      unitNote: L(
+                        isFa,
+                        gdpGlobalPerCountryIndicatorId
+                          ? `Per economy WDI codes: ${Object.entries(gdpGlobalPerCountryIndicatorId)
+                              .map(([k, v]) => `${k}: ${v}`)
+                              .join("; ")}.`
+                          : "NY.GDP.MKTP.KD preferred; NY.GDP.MKTP.CD when KD missing for an economy.",
+                        gdpGlobalPerCountryIndicatorId
+                          ? `کدهای WDI به‌ازای هر اقتصاد: ${Object.entries(gdpGlobalPerCountryIndicatorId)
+                              .map(([k, v]) => `${k}: ${v}`)
+                              .join("؛ ")}.`
+                          : "ترجیح NY.GDP.MKTP.KD؛ در نبود KD برای یک اقتصاد از NY.GDP.MKTP.CD استفاده می‌شود."
+                      ),
+                    },
+                  ]}
+                />
+              ) : null}
+              <InSimpleTerms locale={isFa ? "fa" : "en"}>
+                {isFa && faRich?.simpleTermsParagraphs?.length ? (
+                  faRich.simpleTermsParagraphs.map((p, i) => <p key={i}>{p}</p>)
+                ) : (
+                  <>
+                    <p>
+                      GDP totals measure finished goods and services produced in a year. Dollar levels mix real growth,
+                      prices, and (for international series) exchange-rate effects, so very large economies can visually flatten
+                      smaller ones on one axis.
+                    </p>
+                    <p>
+                      The default indexed view sets each country to 100 in calendar year 2000 when that year exists in WDI
+                      for that series (otherwise an early usable base year), so you can compare relative expansion. The world
+                      line is the Bank’s WLD aggregate—not the sum of the five countries.
                     </p>
                   </>
                 )}

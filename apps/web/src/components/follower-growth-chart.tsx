@@ -141,6 +141,8 @@ export function FollowerGrowthChart({
       studyHeading: exportPresentationStudyHeading,
       metricLabel,
       timeRange: chartRange,
+      chartLocale: chartLocale ?? "en",
+      yearAxisMode: "gregorian",
     });
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {

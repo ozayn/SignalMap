@@ -18,6 +18,7 @@ export const IRAN_FA_STUDY_IDS = new Set<string>([
   "iran-gdp-accounts-dual",
   "gini-inequality",
   "inflation-rate",
+  "global-gdp-comparison",
   "poverty-rate",
   "dutch-disease-diagnostics",
 ]);

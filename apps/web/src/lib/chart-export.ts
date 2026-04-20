@@ -4,6 +4,7 @@ import {
   PRESENTATION_EXPORT_CHART_WIDTH,
   PRESENTATION_EXPORT_PIXEL_RATIO,
   PRESENTATION_COMPOSITE,
+  buildExportDataFitAxisPatch,
   buildPresentationEchartsPatch,
   compactExportSlideTitleString,
   formatStudyExportSourceLine,
@@ -552,6 +553,19 @@ export async function compositePngDataUrlWithSourceFooter(
   return canvas.toDataURL("image/png");
 }
 
+/** Restore automatic axis scaling after a temporary export-only `min`/`max` override on the live chart. */
+function buildEchartsAxisAutoClearPatch(opt: Record<string, unknown>): Record<string, unknown> {
+  const c = { min: null, max: null, minInterval: null, scale: null };
+  const xRaw = opt.xAxis;
+  const yRaw = opt.yAxis;
+  const xN = Array.isArray(xRaw) ? xRaw.length : xRaw != null ? 1 : 0;
+  const yN = Array.isArray(yRaw) ? yRaw.length : yRaw != null ? 1 : 0;
+  return {
+    xAxis: xN <= 1 ? c : Array.from({ length: xN }, () => ({ ...c })),
+    yAxis: yN <= 1 ? c : Array.from({ length: yN }, () => ({ ...c })),
+  };
+}
+
 function triggerChartDownload(href: string, filenameStem: string): void {
   const a = document.createElement("a");
   a.href = href;
@@ -609,6 +623,11 @@ async function exportPresentationPngFromLiveChart(
       if (respectLegend) {
         restore = beginEchartsExportWithVisibleLegendSeriesOnly(exportChart);
       }
+      const axisFitPatch = buildExportDataFitAxisPatch(exportChart.getOption() as Record<string, unknown>);
+      if (axisFitPatch) {
+        exportChart.setOption(axisFitPatch as never, false);
+      }
+
       if (process.env.NODE_ENV === "development") {
         const exportOption = exportChart.getOption() as Record<string, unknown>;
         console.log("[export PNG] exportOption", exportOption);
@@ -709,9 +728,17 @@ export function downloadEchartsRaster(
       const footer = footerRaw ? formatStudyExportSourceLine(footerRaw, locale) : "";
       let dataUrl = "";
       let restore: (() => void) | null = null;
+      const optBeforeExport = chart.getOption() as Record<string, unknown>;
+      const axisClearPatch = buildEchartsAxisAutoClearPatch(optBeforeExport);
+      let appliedAxisFit = false;
       try {
         if (respectLegend) {
           restore = beginEchartsExportWithVisibleLegendSeriesOnly(chart);
+        }
+        const axisFitPatch = buildExportDataFitAxisPatch(chart.getOption() as Record<string, unknown>);
+        if (axisFitPatch) {
+          chart.setOption(axisFitPatch as never, false);
+          appliedAxisFit = true;
         }
         dataUrl = chart.getDataURL({
           type: "png",
@@ -720,6 +747,9 @@ export function downloadEchartsRaster(
         });
       } finally {
         restore?.();
+        if (appliedAxisFit) {
+          chart.setOption(axisClearPatch as never, false);
+        }
       }
       if (!footer) {
         triggerChartDownload(dataUrl, filenameStem);

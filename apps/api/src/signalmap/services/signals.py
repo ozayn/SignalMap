@@ -830,6 +830,37 @@ def get_cpi_inflation_yoy_comparison(start: str, end: str) -> dict:
     return result
 
 
+GDP_GLOBAL_COMPARISON_SOURCE = {
+    "name": "World Bank World Development Indicators",
+    "publisher": "World Bank",
+    "url": "https://data.worldbank.org/indicator/NY.GDP.MKTP.KD",
+}
+
+
+def get_gdp_global_comparison(start: str, end: str) -> dict:
+    """
+    Annual GDP (levels) for the United States, China, Iran, Turkey, Saudi Arabia, and world aggregate.
+    Prefers constant 2015 US$ (NY.GDP.MKTP.KD) per economy; falls back to current US$ (NY.GDP.MKTP.CD) when KD is empty.
+    """
+    from signalmap.sources.world_bank_gdp_totals import fetch_gdp_global_comparison_bundle
+
+    ck = f"signal:gdp_global_comparison:v1:{start}:{end}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    bundle = fetch_gdp_global_comparison_bundle(start_year, end_year)
+    result = {
+        **bundle,
+        "source": GDP_GLOBAL_COMPARISON_SOURCE,
+        "resolution": "annual",
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
+
+
 POVERTY_HEADCOUNT_IRAN_SOURCE = {
     "name": "World Bank World Development Indicators",
     "publisher": "World Bank",

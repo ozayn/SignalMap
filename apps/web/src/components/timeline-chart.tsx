@@ -161,6 +161,10 @@ export type ChartSeries = {
   /** ECharts line symbol; overrides key-based defaults when set. */
   symbol?: LegendEndShape;
   symbolSize?: number;
+  /** Line width in px (multi-series). When unset, chart picks default widths. */
+  lineWidth?: number;
+  /** When false, hides point markers along the line (line-only). */
+  showSymbol?: boolean;
 };
 
 type TimelineChartProps = {
@@ -610,6 +614,8 @@ export function TimelineChart({
         studyHeading: exportPresentationStudyHeading,
         metricLabel: label,
         timeRange: chartRange,
+        chartLocale: chartLocale ?? "en",
+        yearAxisMode: xAxisYearLabel ?? "gregorian",
       });
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -1983,8 +1989,9 @@ export function TimelineChart({
                                     : isWageIndex
                                       ? oilColorMuted
                                       : oilColorMuted;
-                const lineWidth =
+                const defaultLineWidth =
                   isGold || isOil || isProductionKey ? 1.5 : hasMultiSeries && !isGold && !isOil && !isProductionKey ? 1.35 : 1;
+                const lineWidth = s.lineWidth ?? defaultLineWidth;
                 const lineType = isTotal ? ("dashed" as const) : undefined;
                 const seriesShape = endShapeForMultiSeriesSeries(s, i);
                 const symbolSize =
@@ -1992,6 +1999,7 @@ export function TimelineChart({
                   (isGold || isOil || isProductionKey
                     ? CHART_LINE_SYMBOL_SIZE_COMPACT
                     : CHART_LINE_SYMBOL_SIZE);
+                const showSymbol = s.showSymbol !== false;
                 return {
                   name: s.label,
                   type: "line" as const,
@@ -2001,7 +2009,7 @@ export function TimelineChart({
                   connectNulls: true,
                   step: (isGold ? "start" : false) as "start" | false,
                   symbol: seriesShape,
-                  showSymbol: true,
+                  showSymbol,
                   symbolSize,
                   lineStyle: { color: lineColor, width: lineWidth, opacity: 1, ...(lineType ? { type: lineType } : {}) },
                   itemStyle: { color: lineColor, opacity: CHART_LINE_SYMBOL_ITEM_OPACITY },

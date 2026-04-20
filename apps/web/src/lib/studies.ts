@@ -21,6 +21,7 @@ export type PrimarySignal =
   | { kind: "iran_gdp_accounts_dual" }
   | { kind: "gini_inequality" }
   | { kind: "inflation_cpi_yoy" }
+  | { kind: "gdp_global_comparison" }
   | { kind: "poverty_headcount_iran" }
   | { kind: "dutch_disease_diagnostics_iran" };
 
@@ -551,6 +552,30 @@ export const STUDIES: StudyMeta[] = [
       "Event markers are optional context and default off; they do not explain structural statistics by themselves.",
     ],
   },
+  {
+    id: "global-gdp-comparison",
+    number: 33,
+    title: "Global GDP comparison",
+    subtitle: "United States, China, Iran, Turkey, Saudi Arabia, and world total (World Bank WDI)",
+    timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "Total GDP over time from the World Bank: constant 2015 US$ (NY.GDP.MKTP.KD) when available for each economy, otherwise current US$ (NY.GDP.MKTP.CD). Includes the WLD aggregate. Default view indexes each series to 100 in calendar year 2000 when that year exists (otherwise the earliest usable base year for that series) so very different economy sizes stay readable on one chart.",
+    status: "active",
+    countries: ["iran", "us", "global"],
+    themes: ["macro"],
+    tags: ["GDP", "World Bank", "Cross-country", "WDI"],
+    keywords: ["ny.gdp.mktp.kd", "ny.gdp.mktp.cd", "aggregate", "china", "turkey", "saudi arabia", "world"],
+    primarySignal: { kind: "gdp_global_comparison" },
+    eventLayers: ["iran_core", "world_core", "sanctions"],
+    concepts: ["gdp_aggregate", "measurement_vs_reality", "indexing", "event_overlay"],
+    unitLabel: "Indexed (2000 = 100) or US$ levels",
+    observations: [
+      "Each economy uses WDI total GDP; the app prefers constant 2015 US$ and falls back to current US$ only when the constant-price series is empty for that country.",
+      "Indexed view rescales each country independently (100 × value ÷ value in the base year); lines are comparable for relative growth, not for ranking absolute dollar totals.",
+      "The world aggregate (WLD) is a World Bank series; it is not a simple sum of the five countries shown.",
+      "Annual data; revisions can shift recent levels slightly.",
+    ],
+  },
 ];
 
 /** Studies page grouped sections (order + copy). Study ids must exist in `STUDIES`. */
@@ -580,6 +605,7 @@ export const STUDY_SECTIONS: { title: string; description: string; studyIds: str
       "iran_fx_spread",
       "gini-inequality",
       "inflation-rate",
+      "global-gdp-comparison",
       "poverty-rate",
     ],
   },
