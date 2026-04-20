@@ -703,8 +703,8 @@
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  padding: 22px;
-  margin-top: 20px;
+  padding: 14px 16px 16px;
+  margin-top: 14px;
 }
 
 .dark .chart-container {

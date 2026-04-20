@@ -4,6 +4,7 @@ import { useRef, useEffect } from "react";
 import * as echarts from "echarts";
 import { cssHsl } from "@/lib/utils";
 import { CHART_LINE_SYMBOL_ITEM_OPACITY, CHART_LINE_SYMBOL_SIZE } from "@/lib/chart-series-markers";
+import { CHART_Y_AXIS_TICK_FONT_SIZE } from "@/lib/chart-axis-label";
 
 export type FollowersPoint = {
   date: string;
@@ -70,7 +71,7 @@ export function FollowersChart({ data, username, metricLabel = "Followers" }: Fo
             return "";
           },
         },
-        grid: { left: "3%", right: "4%", bottom: rotate ? "18%" : "3%", top: "12%", containLabel: true },
+        grid: { left: "3%", right: "4%", bottom: rotate ? "17%" : "3%", top: "10%", containLabel: true },
         xAxis: {
           type: "time",
           boundaryGap: [0, 0],
@@ -78,7 +79,7 @@ export function FollowersChart({ data, username, metricLabel = "Followers" }: Fo
           axisLine: { lineStyle: { color: borderColor } },
           axisLabel: {
             color: mutedFg,
-            fontSize: 11,
+            fontSize: CHART_Y_AXIS_TICK_FONT_SIZE,
             rotate,
             formatter: (value: number) => String(new Date(value).getFullYear()),
           },
@@ -89,7 +90,7 @@ export function FollowersChart({ data, username, metricLabel = "Followers" }: Fo
           splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
           axisLabel: {
             color: mutedFg,
-            fontSize: 11,
+            fontSize: CHART_Y_AXIS_TICK_FONT_SIZE,
             formatter: (v: number) => formatFollowers(v),
           },
         },

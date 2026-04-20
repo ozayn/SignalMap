@@ -68,15 +68,20 @@ The study page shows "Last updated" after a successful run.
 
 Add a **Postgres** database and link it to the API service for Wayback jobs (cache + job queue).
 
-### API service
-- **Option A:** Root Directory = `apps/api`, domain port = `8080`
-- **Option B (if A fails):** Root Directory = `.` (empty), add variable `RAILWAY_DOCKERFILE_PATH` = `Dockerfile.api`, domain port = `8080`
+Use **two Railway services** in the same project. Each service sets **Root Directory** to its app folder so the Docker build context is only that app (no root-level `railway.json` / `railway.web.json` — those were removed to avoid the wrong service building).
 
-**Web service:**
-- Root Directory = `.` (repo root)
-- **Settings → Build → Config File Path = `railway.web.json`** (critical: without this, it builds the API Dockerfile instead)
+### API service
+- **Root Directory:** `apps/api`
+- **Config file (repo):** `apps/api/railway.json` — in the Railway UI this often appears as **`railway.json`** because the service root is already `apps/api`.
+- **Dockerfile:** `apps/api/Dockerfile` (`dockerfilePath` in that config is `Dockerfile`)
+- **Port:** `8080` (match `EXPOSE` / your `run.py` / `PORT` binding)
+
+### Web service
+- **Root Directory:** `apps/web`
+- **Config file (repo):** `apps/web/railway.json` — in the UI, **`railway.json`** relative to the service root.
+- **Dockerfile:** `apps/web/Dockerfile` (context is only `apps/web`; install is **`npm install`** from `apps/web/package.json`, no repo-root `pnpm-lock.yaml` required)
 - Settings → Networking → ensure target port matches `PORT` (Railway auto-sets this)
-- **Do not add `startCommand` in railway.web.json** — Railway runs it without a shell, so `cd` fails ("executable could not be found"). Use the Dockerfile’s `CMD` instead (it runs via `sh -c`).
+- **Do not set a deploy `startCommand` that uses `cd`** — use the Dockerfile `CMD` (via `sh -c`). Both configs rely on Docker `CMD` / `railway.json` `startCommand` only where a plain executable is valid (API).
 
 **Environment variables:**
 

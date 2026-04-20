@@ -270,13 +270,41 @@ function layoutTitleLines(
 /**
  * Measures title + source chrome and returns chart pixel height so the final PNG is exactly 16:9
  * with the plot filling ~78–88% of slide height (PowerPoint-friendly).
+ *
+ * When `embedTitleAndSourceInChart` is true, title/source are rendered inside ECharts; the slot is nearly full slide height.
  */
-function layoutPresentationSlideChrome(titleRaw: string, sourceRaw: string | undefined): PresentationSlideLayout {
+function layoutPresentationSlideChrome(
+  titleRaw: string,
+  sourceRaw: string | undefined,
+  embedTitleAndSourceInChart = false
+): PresentationSlideLayout {
   const L = PRESENTATION_COMPOSITE;
   const BW = L.width;
   const BH = L.height;
   const PR = PRESENTATION_EXPORT_PIXEL_RATIO;
   const padX = L.horizontalPadding;
+
+  if (embedTitleAndSourceInChart) {
+    const verticalMargin = 12;
+    const chartSlotBaseH = Math.max(L.chartSlotMin, BH - verticalMargin * 2);
+    return {
+      baseWidth: BW,
+      baseHeight: BH,
+      pixelRatio: PR,
+      chartSlotBaseH,
+      padX,
+      titleTopPad: verticalMargin,
+      titleFontSize: 0,
+      titleLineHeight: 0,
+      titleLines: [],
+      titleToChartGap: 0,
+      chartToFooterGap: 0,
+      footerFontSize: 0,
+      footerLineHeight: 0,
+      footerLines: [],
+      footerBottomPad: 0,
+    };
+  }
   const maxTextW = BW - padX * 2;
   const titleText = titleRaw.trim() || "Chart";
   const source = sourceRaw?.trim() ?? "";
@@ -412,15 +440,16 @@ export async function compositePresentationSlidePng(opts: {
   ctx.fillStyle = opts.backgroundColor;
   ctx.fillRect(0, 0, BW, BH);
 
-  const titleX = opts.direction === "rtl" ? BW - layout.padX : layout.padX;
   ctx.fillStyle = opts.titleColor;
-  ctx.textAlign = opts.direction === "rtl" ? "right" : "left";
   ctx.textBaseline = "top";
   ctx.font = `700 ${layout.titleFontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
   let ty = layout.titleTopPad;
-  for (const line of layout.titleLines) {
-    ctx.fillText(line, titleX, ty);
-    ty += layout.titleLineHeight;
+  if (layout.titleLines.length > 0) {
+    ctx.textAlign = "center";
+    for (const line of layout.titleLines) {
+      ctx.fillText(line, BW / 2, ty);
+      ty += layout.titleLineHeight;
+    }
   }
 
   const chartY = layout.titleTopPad + layout.titleLines.length * layout.titleLineHeight + layout.titleToChartGap;
@@ -429,10 +458,10 @@ export async function compositePresentationSlidePng(opts: {
   if (layout.footerLines.length > 0) {
     ctx.fillStyle = opts.footerColor;
     ctx.font = `${layout.footerFontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-    ctx.textAlign = opts.direction === "rtl" ? "right" : "left";
+    ctx.textAlign = "center";
     let fy = chartY + layout.chartSlotBaseH + layout.chartToFooterGap;
     for (const line of layout.footerLines) {
-      ctx.fillText(line, titleX, fy);
+      ctx.fillText(line, BW / 2, fy);
       fy += layout.footerLineHeight;
     }
   }
@@ -500,7 +529,7 @@ async function exportPresentationPngFromLiveChart(
   opts: DownloadEchartsRasterOptions
 ): Promise<string> {
   const compactTitle = compactExportSlideTitleString((opts.exportPresentationTitle ?? "").trim() || "Chart");
-  const layout = layoutPresentationSlideChrome(compactTitle, opts.exportSourceFooter?.trim());
+  const layout = layoutPresentationSlideChrome(compactTitle, opts.exportSourceFooter?.trim(), true);
 
   const hidden = document.createElement("div");
   hidden.setAttribute("aria-hidden", "true");
@@ -513,10 +542,15 @@ async function exportPresentationPngFromLiveChart(
       height: layout.chartSlotBaseH,
       renderer: "canvas",
     });
-    const baseOpt = liveChart.getOption() as Record<string, unknown>;
+    const baseOpt = cloneOptionBranch(liveChart.getOption() as Record<string, unknown>);
     exportChart.setOption(baseOpt as never, { notMerge: true });
     const merged = exportChart.getOption() as Record<string, unknown>;
-    exportChart.setOption(buildPresentationEchartsPatch(merged) as never, false);
+    const presentationPatch = buildPresentationEchartsPatch(merged, {
+      chartTitle: compactTitle,
+      sourceFooter: opts.exportSourceFooter?.trim(),
+      direction: opts.exportPresentationDirection ?? "ltr",
+    });
+    exportChart.setOption(presentationPatch as never, false);
     exportChart.resize({
       width: PRESENTATION_EXPORT_CHART_WIDTH,
       height: layout.chartSlotBaseH,
@@ -525,14 +559,55 @@ async function exportPresentationPngFromLiveChart(
     const respectLegend = opts.respectLegendSelection !== false;
     let restore: (() => void) | null = null;
     let chartPng: string;
+    const exportBg =
+      typeof backgroundColor === "string" && backgroundColor.trim() !== "" ? backgroundColor.trim() : "#ffffff";
     try {
       if (respectLegend) {
         restore = beginEchartsExportWithVisibleLegendSeriesOnly(exportChart);
       }
+      if (process.env.NODE_ENV === "development") {
+        const exportOption = exportChart.getOption() as Record<string, unknown>;
+        console.log("[export PNG] exportOption", exportOption);
+        const titleBlock = (Array.isArray(exportOption.title) ? exportOption.title[0] : exportOption.title) as
+          | Record<string, unknown>
+          | undefined;
+        const titleTs = (titleBlock?.textStyle ?? {}) as Record<string, unknown>;
+        const xRaw = exportOption.xAxis;
+        const x0 = (Array.isArray(xRaw) ? xRaw[0] : xRaw) as Record<string, unknown> | undefined;
+        const xAl = (x0?.axisLabel ?? {}) as Record<string, unknown>;
+        const yRaw = exportOption.yAxis;
+        const y0 = (Array.isArray(yRaw) ? yRaw[0] : yRaw) as Record<string, unknown> | undefined;
+        const yAl = (y0?.axisLabel ?? {}) as Record<string, unknown>;
+        const lRaw = exportOption.legend;
+        const l0 = (Array.isArray(lRaw) ? lRaw[0] : lRaw) as Record<string, unknown> | undefined;
+        const lts = (l0?.textStyle ?? {}) as Record<string, unknown>;
+        const tipRaw = exportOption.tooltip;
+        const tip0 = (Array.isArray(tipRaw) ? tipRaw[0] : tipRaw) as Record<string, unknown> | undefined;
+        const tipTs = (tip0?.textStyle ?? {}) as Record<string, unknown>;
+        let sourceGraphicFont: unknown;
+        const gList = exportOption.graphic;
+        if (Array.isArray(gList)) {
+          for (let i = gList.length - 1; i >= 0; i--) {
+            const g = gList[i] as Record<string, unknown> | undefined;
+            if (g?.type === "text" && g.style && typeof g.style === "object") {
+              sourceGraphicFont = (g.style as Record<string, unknown>).fontSize;
+              break;
+            }
+          }
+        }
+        console.log("[export PNG] typography check", {
+          titleFont: titleTs.fontSize,
+          xAxisLabelFont: xAl.fontSize,
+          yAxisLabelFont: yAl.fontSize,
+          legendFont: lts.fontSize,
+          tooltipFont: tipTs.fontSize,
+          sourceGraphicFont,
+        });
+      }
       chartPng = exportChart.getDataURL({
         type: "png",
         pixelRatio: PRESENTATION_EXPORT_PIXEL_RATIO,
-        backgroundColor,
+        backgroundColor: exportBg,
       });
     } finally {
       restore?.();

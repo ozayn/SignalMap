@@ -13,7 +13,9 @@ import {
   type Point,
 } from "@/lib/growth-models";
 import { StudyChartControls } from "@/components/study-chart-controls";
-import { downloadEchartsRaster, type DownloadEchartsRasterOptions } from "@/lib/chart-export";
+import { downloadEchartsRaster, slugifyChartFilename, type DownloadEchartsRasterOptions } from "@/lib/chart-export";
+import { buildStudyChartExportFilenameStem } from "@/lib/chart-export-filename";
+import { useStudyChartExportFilenameContext } from "@/components/study-chart-export-filename-context";
 import { buildPresentationExportTitle } from "@/lib/chart-export-presentation";
 import {
   CHART_Y_AXIS_LABEL_MARGIN,
@@ -23,6 +25,13 @@ import {
   formatYAxisNameMultiline,
 } from "@/lib/chart-axis-label";
 import { CHART_LINE_SYMBOL_ITEM_OPACITY, CHART_LINE_SYMBOL_SIZE } from "@/lib/chart-series-markers";
+import {
+  STUDY_CHART_LEGEND_FONT_PX,
+  STUDY_CHART_SOURCE_WRAP_CLASS,
+  STUDY_CHART_STACK_GAP_CLASS,
+  STUDY_CHART_TITLE_WRAP_CLASS,
+} from "@/lib/chart-study-typography";
+import { localizeChartNumericDisplayString, localizeChartNumericDisplayStringSafe } from "@/lib/chart-numerals-fa";
 
 export type FollowerGrowthPoint = { date: string; value: number };
 
@@ -106,11 +115,26 @@ export function FollowerGrowthChart({
     setClipEnd("");
   }, [rangeBounds?.[0], rangeBounds?.[1]]);
 
+  const exportFilenameCtx = useStudyChartExportFilenameContext();
+
   const handleExportPng = useCallback(() => {
     const chart = chartInstanceRef.current;
     if (!chart) return;
     const backgroundColor = cssHsl("--background", "hsl(0, 0%, 100%)");
-    const stem = exportFileStem ?? metricLabel;
+    const stem =
+      exportFilenameCtx && rangeBounds && chartRange
+        ? buildStudyChartExportFilenameStem({
+            studySlug: exportFilenameCtx.studySlug,
+            chartFileStem: exportFileStem,
+            locale: exportFilenameCtx.locale,
+            yearAxisMode: "gregorian",
+            selectedStart: chartRange[0],
+            selectedEnd: chartRange[1],
+            defaultStart: rangeBounds[0],
+            defaultEnd: rangeBounds[1],
+            rangeGranularity: "day",
+          })
+        : slugifyChartFilename(exportFileStem ?? metricLabel);
     const footerColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
     const titleColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
     const resolvedTitle = buildPresentationExportTitle({
@@ -134,7 +158,16 @@ export function FollowerGrowthChart({
         }
       });
     });
-  }, [chartLocale, chartRange, exportFileStem, exportPresentationStudyHeading, exportSourceFooter, metricLabel]);
+  }, [
+    chartLocale,
+    chartRange,
+    exportFileStem,
+    exportFilenameCtx,
+    exportPresentationStudyHeading,
+    exportSourceFooter,
+    metricLabel,
+    rangeBounds,
+  ]);
 
   useEffect(() => {
     const colorRaw = cssHsl("--chart-primary", "hsl(238, 84%, 67%)");
@@ -217,22 +250,12 @@ export function FollowerGrowthChart({
 
     const option: echarts.EChartsOption = {
       animation: false,
-      ...(showChartControls
-        ? {
-            title: {
-              text: metricLabel,
-              left: "center",
-              top: 2,
-              textStyle: { fontSize: 11, color: mutedFg, fontWeight: 500 },
-            },
-          }
-        : {}),
       tooltip: { trigger: "axis", triggerOn: "mousemove|click" },
       grid: {
         left: "10%",
         right: "6%",
-        bottom: "12%",
-        top: showChartControls ? "24%" : "20%",
+        bottom: "11%",
+        top: showChartControls ? "14%" : "10%",
         containLabel: true,
       },
       xAxis: {
@@ -244,7 +267,7 @@ export function FollowerGrowthChart({
         axisLine: { lineStyle: { color: borderColor } },
         axisLabel: {
           color: mutedFg,
-          fontSize: 11,
+          fontSize: CHART_Y_AXIS_TICK_FONT_SIZE,
           formatter: (value: number) => String(new Date(value).getFullYear()),
         },
       },
@@ -268,10 +291,11 @@ export function FollowerGrowthChart({
       legend: {
         show: true,
         selectedMode: true,
-        top: showChartControls ? "10%" : 0,
+        top: showChartControls ? "6%" : 0,
         left: "center",
-        textStyle: { fontSize: 11, color: mutedFg },
-        itemGap: 16,
+        textStyle: { fontSize: STUDY_CHART_LEGEND_FONT_PX, color: mutedFg },
+        itemGap: 12,
+        itemHeight: 11,
       },
     };
 
@@ -306,15 +330,19 @@ export function FollowerGrowthChart({
     logisticCurveData,
     chartRange,
     showChartControls,
+    chartLocale,
   ]);
 
   if (!data.length) return null;
 
   const showToolbar = showChartControls && !!rangeBounds;
+  const chartLocaleResolved = chartLocale ?? "en";
+  const titleText = localizeChartNumericDisplayString(metricLabel.trim(), chartLocaleResolved);
+  const sourceText = exportSourceFooter?.trim() ?? "";
 
   return (
-    <div className="space-y-2">
-      <p className="text-xs text-muted-foreground">
+    <div className={`min-w-0 flex flex-col ${STUDY_CHART_STACK_GAP_CLASS}`}>
+      <p className="text-xs leading-snug text-muted-foreground">
         Raw data (scatter + line). Fitted models are descriptive only; no extrapolation beyond last point.
       </p>
       {showToolbar ? (
@@ -329,7 +357,15 @@ export function FollowerGrowthChart({
           granularity="day"
         />
       ) : null}
+      <p className={STUDY_CHART_TITLE_WRAP_CLASS} dir={chartLocaleResolved === "fa" ? "rtl" : "ltr"}>
+        {titleText}
+      </p>
       <div ref={chartRef} className="h-72 w-full min-w-0" />
+      {sourceText ? (
+        <p className={STUDY_CHART_SOURCE_WRAP_CLASS} dir="ltr">
+          {localizeChartNumericDisplayStringSafe(sourceText, chartLocaleResolved === "fa" ? "fa" : "en")}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -10,7 +10,7 @@
 
 ## 2) Architecture & repo structure
 
-- **Monorepo**: `apps/api` (FastAPI), `apps/web` (Next.js). Root has Dockerfiles, railway config, pnpm workspace.
+- **Monorepo**: `apps/api` (FastAPI), `apps/web` (Next.js). Root keeps **pnpm workspace** only; **Railway** uses `apps/api/railway.json` + `apps/api/Dockerfile` and `apps/web/railway.json` + `apps/web/Dockerfile` (each service’s Root Directory is that app folder).
 - **FastAPI** (`apps/api`): `main.py` wires routes; `jobs.py` holds cache/job logic and platform-specific cache-first logic. Connectors (wayback_instagram, wayback_twitter, wayback_youtube, etc.) talk to external sources. **DB** (`db.py`): Postgres when `DATABASE_URL` is set; tables include `wayback_snapshot_cache`, `wayback_jobs`, `wayback_job_snapshots`, `signal_points`. No study registry on the backend.
 - **Next.js** (`apps/web`): App Router; pages under `app/studies`, `app/learning`. API routes under `app/api/*` **proxy** to FastAPI (same-origin, no direct backend URL in browser). No caching or business logic in Next.js API routes; they are thin proxies.
 - **Deployment**: Railway (or similar); API and web can be separate services. DB required for Wayback jobs and cache.

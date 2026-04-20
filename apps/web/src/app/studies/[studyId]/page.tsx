@@ -13,6 +13,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TimelineChart, type ChartSeries } from "@/components/timeline-chart";
+import { StudyChartExportFilenameProvider } from "@/components/study-chart-export-filename-context";
 import { COUNTRY_COMPARATOR_STYLES } from "@/lib/chart-country-series-styles";
 import { SourceInfo } from "@/components/source-info";
 import { RealOilDescription } from "@/components/real-oil-description";
@@ -2837,11 +2838,12 @@ export default function StudyDetailPage() {
       : undefined;
 
   return (
-    <div
-      className={`study-page-container study-page-minimal py-8 md:py-10 min-w-0${isFa ? " study-page-fa" : ""}`}
-      dir={isFa ? "rtl" : "ltr"}
-      lang={isFa ? "fa" : "en"}
-    >
+    <StudyChartExportFilenameProvider value={{ studySlug: study.id, locale: isFa ? "fa" : "en" }}>
+      <div
+        className={`study-page-container study-page-minimal py-8 md:py-10 min-w-0${isFa ? " study-page-fa" : ""}`}
+        dir={isFa ? "rtl" : "ltr"}
+        lang={isFa ? "fa" : "en"}
+      >
       <header className="study-header">
         <div className="flex items-center gap-4 flex-wrap">
           <Link
@@ -3454,6 +3456,7 @@ export default function StudyDetailPage() {
                       showExponential={fgShowExponential}
                       showLogistic={fgShowLogistic}
                       chartLocale={chartLocaleForCharts}
+                      exportFileStem="social-follower-growth"
                       exportPresentationStudyHeading={displayStudy.title}
                       exportSourceFooter={studyChartExportSource(isFa, ["Internet Archive Wayback Machine"])}
                     />
@@ -6539,6 +6542,7 @@ export default function StudyDetailPage() {
                 timeRange={povertyTimeRange ?? study.timeRange}
                 chartRangeGranularity="year"
                 xAxisYearLabel={chartYearAxisLabel}
+                forceTimeAxis
                 exportFileStem="poverty-rate"
                 multiSeriesYAxisNameOverrides={{
                   0: L(isFa, "Poverty rate (% of population)", "نرخ فقر (٪ از جمعیت)"),
@@ -7117,7 +7121,7 @@ export default function StudyDetailPage() {
                 timeRange={oilTimeRange ?? study.timeRange}
                 mutedBands
                 yAxisLog
-                chartRangeGranularity="day"
+                chartRangeGranularity="month"
               />
               {showShocks && oilShockDates.length > 0 && (
                 <div className="flex items-center gap-2 mt-2 text-sm text-gray-600">
@@ -7427,7 +7431,7 @@ export default function StudyDetailPage() {
                   oilShockDates={oilShockDates}
                   showOilShocks={showShocks}
                   timeRange={dualTimeRange ?? study.timeRange}
-                  chartRangeGranularity="day"
+                  chartRangeGranularity="month"
                 />
                 </>
               ) : (
@@ -7461,7 +7465,7 @@ export default function StudyDetailPage() {
                   oilShockDates={oilShockDates}
                   showOilShocks={showShocks}
                   timeRange={dualTimeRange ?? study.timeRange}
-                  chartRangeGranularity="day"
+                  chartRangeGranularity="month"
                 />
                 </>
               )}
@@ -7547,7 +7551,7 @@ export default function StudyDetailPage() {
                 }}
                 timeRange={fxTimeRange ?? study.timeRange}
                 highlightLatestPoint
-                chartRangeGranularity="month"
+                chartRangeGranularity="year"
               />
               {fxSource && (
                 <SourceInfo
@@ -7607,6 +7611,7 @@ export default function StudyDetailPage() {
         </CardContent>
       </Card>
       )}
-    </div>
+      </div>
+    </StudyChartExportFilenameProvider>
   );
 }

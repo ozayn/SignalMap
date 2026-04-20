@@ -3,13 +3,13 @@
  * Used for on-screen charts and PNG export (same `setOption` path).
  */
 /** Slightly larger than tick labels for hierarchy on screen and PNG export. */
-export const CHART_Y_AXIS_NAME_FONT_SIZE = 14;
-export const CHART_Y_AXIS_TICK_FONT_SIZE = 12;
+export const CHART_Y_AXIS_NAME_FONT_SIZE = 16;
+export const CHART_Y_AXIS_TICK_FONT_SIZE = 13;
 /**
  * Distance from axis line to the axis name (ECharts `nameGap`).
  * Slightly generous so y-axis titles clear tick labels and the plot when using `nameLocation: "middle"`.
  */
-export const CHART_Y_AXIS_NAME_GAP = 48;
+export const CHART_Y_AXIS_NAME_GAP = 44;
 /** Extra space between tick numerals and the axis line / neighbor content (`axisLabel.margin`). */
 export const CHART_Y_AXIS_LABEL_MARGIN = 16;
 
@@ -19,7 +19,7 @@ export const chartYAxisNameTextStyle = (color: string) =>
     fontSize: CHART_Y_AXIS_NAME_FONT_SIZE,
     fontWeight: 500 as const,
     align: "center" as const,
-    lineHeight: 20,
+    lineHeight: 22,
     /** Keeps rotated titles from sitting flush against the chart edge. */
     padding: [4, 6, 4, 6] as [number, number, number, number],
   }) satisfies {

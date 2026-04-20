@@ -8,7 +8,13 @@ import {
   inferChartRangeGranularityFromDates,
   normalizeChartRangeBound,
 } from "@/lib/chart-study-range";
-import { downloadEchartsRaster, type DownloadEchartsRasterOptions } from "@/lib/chart-export";
+import {
+  downloadEchartsRaster,
+  slugifyChartFilename,
+  type DownloadEchartsRasterOptions,
+} from "@/lib/chart-export";
+import { buildStudyChartExportFilenameStem } from "@/lib/chart-export-filename";
+import { useStudyChartExportFilenameContext } from "@/components/study-chart-export-filename-context";
 import { buildPresentationExportTitle } from "@/lib/chart-export-presentation";
 import { StudyChartControls } from "@/components/study-chart-controls";
 import { timelineChartFaUi } from "@/lib/timeline-chart-fa";
@@ -49,6 +55,12 @@ import {
   CHART_LINE_SYMBOL_SIZE_COMPACT,
   CHART_LINE_SYMBOL_SIZE_MINI,
 } from "@/lib/chart-series-markers";
+import {
+  STUDY_CHART_LEGEND_FONT_PX,
+  STUDY_CHART_SOURCE_WRAP_CLASS,
+  STUDY_CHART_STACK_GAP_CLASS,
+  STUDY_CHART_TITLE_WRAP_CLASS,
+} from "@/lib/chart-study-typography";
 
 const MULTI_SERIES_FALLBACK_LEGEND_ICONS: Array<"circle" | "diamond" | "triangle" | "rect"> = [
   "circle",
@@ -560,6 +572,8 @@ export function TimelineChart({
 
   const rangeInputGranularity = chartRangeGranularityProp ?? inferredChartRangeGranularity;
 
+  const exportFilenameCtx = useStudyChartExportFilenameContext();
+
   useEffect(() => {
     setClipStart("");
     setClipEnd("");
@@ -569,7 +583,25 @@ export function TimelineChart({
     const chart = chartInstanceRef.current;
     if (!chart) return;
     const backgroundColor = cssHsl("--background", "hsl(0, 0%, 100%)");
-    const stem = exportFileStem ?? label;
+    const yearAxisForFile = xAxisYearLabel ?? "gregorian";
+    const stem =
+      exportFilenameCtx &&
+      rangeBounds?.[0] &&
+      rangeBounds[1] &&
+      chartRange?.[0] &&
+      chartRange[1]
+        ? buildStudyChartExportFilenameStem({
+            studySlug: exportFilenameCtx.studySlug,
+            chartFileStem: exportFileStem,
+            locale: exportFilenameCtx.locale,
+            yearAxisMode: yearAxisForFile,
+            selectedStart: chartRange[0],
+            selectedEnd: chartRange[1],
+            defaultStart: rangeBounds[0],
+            defaultEnd: rangeBounds[1],
+            rangeGranularity: rangeInputGranularity,
+          })
+        : slugifyChartFilename(exportFileStem ?? label);
     const footerColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
     const titleColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
     const resolvedTitle =
@@ -599,10 +631,14 @@ export function TimelineChart({
     chartLocale,
     chartRange,
     exportFileStem,
+    exportFilenameCtx,
     exportPresentationStudyHeading,
     exportPresentationTitle,
     exportSourceFooter,
     label,
+    rangeBounds,
+    rangeInputGranularity,
+    xAxisYearLabel,
   ]);
 
   useEffect(() => {
@@ -727,7 +763,7 @@ export function TimelineChart({
     const multiSeriesCount = hasMultiSeries ? multiSeries!.length : 0;
     /** Many country/series names: scrollable legend + extra bottom margin to reduce overlap. */
     const legendUseScroll = hasMultiSeries && multiSeriesCount >= 4;
-    const legendTextFontSize = legendUseScroll ? 12 : 11;
+    const legendTextFontSize = STUDY_CHART_LEGEND_FONT_PX;
     const multiSeriesLegendItemGap = legendUseScroll ? (multiSeriesCount >= 6 ? 22 : 20) : 16;
     const comparatorResolved = comparatorSeries
       ? {
@@ -786,7 +822,8 @@ export function TimelineChart({
       useYearlyMultiSeries && timeRange
         ? (() => {
             const years = [...new Set(allMultiSeriesDates.map((d) => d.slice(0, 4)))].sort();
-            return years.map((y) => `${y}-07-01`);
+            // Mid-year anchor for category axes; calendar-year start when using a time axis (true year distance).
+            return years.map((y) => (forceTimeAxis ? `${y}-01-01` : `${y}-07-01`));
           })()
         : [];
     const useForceTimeRangeDates = forceTimeRangeAxis && hasMultiSeries && timeRange && timeRange[0] && timeRange[1];
@@ -900,15 +937,15 @@ export function TimelineChart({
     const axisLabelBothRich = {
       gy: {
         color: axisYearGregColor,
-        fontSize: 12,
-        lineHeight: 15,
+        fontSize: 13,
+        lineHeight: 16,
         align: "center" as const,
         padding: [0, 0, 2, 0],
       },
       jy: {
         color: axisYearJalaliColor,
-        fontSize: 10,
-        lineHeight: 12,
+        fontSize: 11,
+        lineHeight: 13,
         align: "center" as const,
       },
     };
@@ -933,7 +970,7 @@ export function TimelineChart({
       if (!dualYearStackedAxisActive) return bottomPct;
       const m = bottomPct.match(/^([\d.]+)%$/);
       if (!m) return bottomPct;
-      return `${Math.min(40, parseFloat(m[1]) + 4)}%`;
+      return `${Math.min(38, parseFloat(m[1]) + 3)}%`;
     };
 
     const toTimeData = (vals: (number | null)[]) =>
@@ -1048,7 +1085,7 @@ export function TimelineChart({
         const vl = verticalGlobalOilLabelLayout.get(d.event.id) ?? { showLabel: false, staggerIndex: 0 };
         const shortCaption = globalMacroOilMarkLineShortLabel(d.event);
         const pubOil = oilPublicationLayout && isClassicOilChart;
-        const labelFontSize = pubOil ? 13 : 12;
+        const labelFontSize = pubOil ? 14 : 13;
         const staggerOffsetX = pubOil ? (vl.staggerIndex - 2.5) * VERTICAL_OIL_LABEL_STAGGER_PX : 0;
         return {
           xAxis: d.xAxis,
@@ -1084,7 +1121,7 @@ export function TimelineChart({
             ? {
                 show: true,
                 formatter: localizeChartNumericDisplayString(caption, chartNumeralLocale),
-                fontSize: 12,
+                fontSize: 13,
                 color: mutedFg,
                 distance: 4,
                 position: "end" as const,
@@ -1200,37 +1237,27 @@ export function TimelineChart({
     const oilPrimaryLineWidth = pubOilPrimary ? 2.75 : 1.5;
     const oilPrimarySymbolSize = pubOilPrimary ? CHART_LINE_SYMBOL_SIZE_COMPACT : oilOverlayLineSymbolSize;
 
-    const chartTitleFontSize = pubOilPrimary ? 14 : 13;
-    const xAxisTickFont = pubOilPrimary ? 13 : 12;
+    const xAxisTickFont = pubOilPrimary ? CHART_Y_AXIS_TICK_FONT_SIZE + 1 : CHART_Y_AXIS_TICK_FONT_SIZE;
+    /** Title is rendered in React above the canvas; keep grid tight to the plot (extra top when macro captions). */
     const gridTopPct = pubOilPrimary
       ? hasTopMacroCaptionRows
         ? showChartControls
-          ? "28%"
-          : "24%"
+          ? "23%"
+          : "19%"
         : showChartControls
-          ? "22%"
-          : "14%"
+          ? "16%"
+          : "11%"
       : hasTopMacroCaptionRows
         ? showChartControls
-          ? "26%"
-          : "22%"
-        : showChartControls
           ? "19%"
-          : "12%";
+          : "16%"
+        : showChartControls
+          ? "13%"
+          : "8%";
 
     const option: echarts.EChartsOption = {
       animation: false,
       backgroundColor: "transparent",
-      ...(showChartControls
-        ? {
-            title: {
-              text: localizeChartNumericDisplayString(label, chartNumeralLocale),
-              left: "center",
-              top: 2,
-              textStyle: { fontSize: chartTitleFontSize, color: mutedFg, fontWeight: 600 },
-            },
-          }
-        : {}),
       emphasis: { focus: "none" as const },
       ...(comparatorResolved && comparatorValuesForChart && hasOil
         ? {
@@ -1238,11 +1265,11 @@ export function TimelineChart({
               show: true,
               type: "plain",
               selectedMode: true,
-              bottom: 4,
+              bottom: 2,
               left: "center",
-              itemGap: 16,
-              itemWidth: 26,
-              itemHeight: 10,
+              itemGap: 12,
+              itemWidth: 28,
+              itemHeight: 11,
               textStyle: { color: mutedFg, fontSize: legendTextFontSize },
               data: [
                 {
@@ -1264,14 +1291,14 @@ export function TimelineChart({
                 show: true,
                 type: legendUseScroll ? ("scroll" as const) : ("plain" as const),
                 selectedMode: true,
-                bottom: 2,
+                bottom: 1,
                 left: "center",
                 width: "88%",
-                itemWidth: 26,
-                itemHeight: 10,
+                itemWidth: 28,
+                itemHeight: 11,
                 itemGap: multiSeriesLegendItemGap,
                 textStyle: { color: mutedFg, fontSize: legendTextFontSize },
-                pageTextStyle: { color: mutedFg, fontSize: 11 },
+                pageTextStyle: { color: mutedFg, fontSize: 12 },
                 pageIconSize: legendUseScroll ? 12 : 10,
                 data: multiSeriesLegendData,
               },
@@ -1282,11 +1309,11 @@ export function TimelineChart({
                   show: true,
                   type: "plain",
                   selectedMode: true,
-                  bottom: 4,
+                  bottom: 2,
                   left: "center",
-                  itemGap: 16,
-                  itemWidth: 26,
-                  itemHeight: 10,
+                  itemGap: 12,
+                  itemWidth: 28,
+                  itemHeight: 11,
                   textStyle: { color: mutedFg, fontSize: legendTextFontSize },
                   data: hasData
                     ? [
@@ -1315,7 +1342,7 @@ export function TimelineChart({
         trigger: "axis",
         triggerOn: "mousemove|click",
         confine: true,
-        extraCssText: "max-width: 380px; overflow-wrap: break-word; word-wrap: break-word; white-space: normal; font-size: 13px;",
+        extraCssText: "max-width: 380px; overflow-wrap: break-word; word-wrap: break-word; white-space: normal; font-size: 14px;",
         formatter: (params: unknown) => {
           const arr = Array.isArray(params) ? params : [params];
           const first = arr.find((x) => x && typeof x === "object" && "dataIndex" in x) as
@@ -1535,9 +1562,9 @@ export function TimelineChart({
             : (comparatorResolved && comparatorValuesForChart && hasOil) || (hasMultiSeries && multiSeries) || (hasOil && secondSeries && !comparatorResolved)
               ? legendUseScroll
                 ? multiSeriesCount >= 6
-                  ? "20%"
-                  : "17%"
-                : "12%"
+                  ? "18%"
+                  : "15%"
+                : "11%"
               : "3%"
         ),
         top: gridTopPct,
@@ -1955,7 +1982,8 @@ export function TimelineChart({
                                     : isWageIndex
                                       ? oilColorMuted
                                       : oilColorMuted;
-                const lineWidth = isGold || isOil || isProductionKey ? 1.5 : 1;
+                const lineWidth =
+                  isGold || isOil || isProductionKey ? 1.5 : hasMultiSeries && !isGold && !isOil && !isProductionKey ? 1.35 : 1;
                 const lineType = isTotal ? ("dashed" as const) : undefined;
                 const seriesShape = endShapeForMultiSeriesSeries(s, i);
                 const symbolSize =
@@ -2332,8 +2360,13 @@ export function TimelineChart({
   const showToolbar = showChartControls && !!rangeBounds;
   const chartLocaleResolved = chartLocale ?? "en";
 
+  const studyTitleText = label.trim()
+    ? localizeChartNumericDisplayString(label.trim(), chartLocaleResolved)
+    : "";
+  const sourceLine = exportSourceFooter?.trim() ?? "";
+
   const inner = (
-    <div className="min-w-0 space-y-2">
+    <div className={`min-w-0 flex flex-col ${STUDY_CHART_STACK_GAP_CLASS}`}>
       {showToolbar ? (
         <StudyChartControls
           minDate={rangeBounds[0]}
@@ -2346,7 +2379,17 @@ export function TimelineChart({
           granularity={rangeInputGranularity}
         />
       ) : null}
+      {studyTitleText ? (
+        <p className={STUDY_CHART_TITLE_WRAP_CLASS} dir={chartLocaleResolved === "fa" ? "rtl" : "ltr"}>
+          {studyTitleText}
+        </p>
+      ) : null}
       <div ref={chartRef} className={`chart-area ${chartHeight} w-full min-w-0`} />
+      {sourceLine ? (
+        <p className={STUDY_CHART_SOURCE_WRAP_CLASS} dir="ltr">
+          {localizeChartNumericDisplayStringSafe(sourceLine, chartLocaleResolved === "fa" ? "fa" : "en")}
+        </p>
+      ) : null}
     </div>
   );
 

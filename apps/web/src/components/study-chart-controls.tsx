@@ -24,6 +24,21 @@ export type StudyChartControlsProps = {
   granularity?: ChartRangeGranularity;
 };
 
+/** Toolbar row: inputs and export share one baseline (bottom-aligned). */
+const TOOLBAR_ROW =
+  "flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-border/40 pb-2";
+
+/** Caption above each control; fixed min-height so Export lines up with inputs. */
+const FIELD_LABEL =
+  "mb-0.5 block min-h-[0.875rem] text-[10px] font-medium uppercase tracking-wide text-muted-foreground";
+
+/** Shared 32px control height with charts’ range inputs. */
+const CONTROL_INPUT =
+  "h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-sm outline-none transition-[box-shadow,border-color] focus-visible:border-ring/60 focus-visible:ring-2 focus-visible:ring-ring/25";
+
+const EXPORT_BUTTON =
+  "h-8 shrink-0 rounded-md px-2.5 text-xs font-normal leading-none";
+
 /**
  * Compact per-chart toolbar: start/end range (granularity-aware) and PNG export.
  * Bounds are always `YYYY-MM-DD` at the chart layer; this component maps UI to those strings.
@@ -42,14 +57,27 @@ export function StudyChartControls({
   const minD = minDate.slice(0, 10);
   const maxD = maxDate.slice(0, 10);
 
+  const exportButton = (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className={EXPORT_BUTTON}
+      onClick={onExportPng}
+      disabled={disabledExport}
+    >
+      Export PNG
+    </Button>
+  );
+
   if (granularity === "year") {
     const { min: yMin, max: yMax } = toYearInputMinMax(minD, maxD);
     const startY = startValue ? parseInt(startValue.slice(0, 4), 10) : NaN;
     const endY = endValue ? parseInt(endValue.slice(0, 4), 10) : NaN;
     return (
-      <div className="flex flex-wrap items-center gap-3 pb-1.5 border-b border-border/40">
-        <label className="flex w-[5.5rem] flex-col gap-0.5">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground/90">Start year</span>
+      <div className={TOOLBAR_ROW}>
+        <label className="flex w-[5.5rem] shrink-0 flex-col">
+          <span className={FIELD_LABEL}>Start Year</span>
           <input
             type="number"
             min={yMin}
@@ -67,11 +95,11 @@ export function StudyChartControls({
               const clamped = Math.min(yMax, Math.max(yMin, y));
               onStartChange(normalizeChartRangeBound(String(clamped), false));
             }}
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-sm"
+            className={CONTROL_INPUT}
           />
         </label>
-        <label className="flex w-[5.5rem] flex-col gap-0.5">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground/90">End year</span>
+        <label className="flex w-[5.5rem] shrink-0 flex-col">
+          <span className={FIELD_LABEL}>End Year</span>
           <input
             type="number"
             min={yMin}
@@ -89,19 +117,10 @@ export function StudyChartControls({
               const clamped = Math.min(yMax, Math.max(yMin, y));
               onEndChange(normalizeChartRangeBound(String(clamped), true));
             }}
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-sm"
+            className={CONTROL_INPUT}
           />
         </label>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 shrink-0 text-xs"
-          onClick={onExportPng}
-          disabled={disabledExport}
-        >
-          Export PNG
-        </Button>
+        {exportButton}
       </div>
     );
   }
@@ -109,9 +128,9 @@ export function StudyChartControls({
   if (granularity === "month") {
     const { min: mMin, max: mMax } = toMonthInputMinMax(minD, maxD);
     return (
-      <div className="flex flex-wrap items-center gap-3 pb-1.5 border-b border-border/40">
-        <label className="flex min-w-[8.5rem] flex-col gap-0.5">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground/90">Start</span>
+      <div className={TOOLBAR_ROW}>
+        <label className="flex min-w-[9rem] shrink-0 flex-col">
+          <span className={FIELD_LABEL}>Start Month</span>
           <input
             type="month"
             min={mMin}
@@ -126,11 +145,11 @@ export function StudyChartControls({
               const day = monthInputToStartDay(v);
               onStartChange(clampDateToBounds(day, minD, maxD));
             }}
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-sm"
+            className={CONTROL_INPUT}
           />
         </label>
-        <label className="flex min-w-[8.5rem] flex-col gap-0.5">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground/90">End</span>
+        <label className="flex min-w-[9rem] shrink-0 flex-col">
+          <span className={FIELD_LABEL}>End Month</span>
           <input
             type="month"
             min={mMin}
@@ -145,57 +164,39 @@ export function StudyChartControls({
               const day = monthInputToEndDay(v);
               onEndChange(clampDateToBounds(day, minD, maxD));
             }}
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-sm"
+            className={CONTROL_INPUT}
           />
         </label>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 shrink-0 text-xs"
-          onClick={onExportPng}
-          disabled={disabledExport}
-        >
-          Export PNG
-        </Button>
+        {exportButton}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3 pb-1.5 border-b border-border/40">
-      <label className="flex min-w-[9.5rem] flex-col gap-0.5">
-        <span className="text-[10px] uppercase tracking-wide text-muted-foreground/90">Start</span>
+    <div className={TOOLBAR_ROW}>
+      <label className="flex min-w-[10.5rem] shrink-0 flex-col">
+        <span className={FIELD_LABEL}>Start Date</span>
         <input
           type="date"
           min={minD}
           max={maxD}
           value={startValue ? startValue.slice(0, 10) : ""}
           onChange={(e) => onStartChange(e.target.value)}
-          className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-sm"
+          className={CONTROL_INPUT}
         />
       </label>
-      <label className="flex min-w-[9.5rem] flex-col gap-0.5">
-        <span className="text-[10px] uppercase tracking-wide text-muted-foreground/90">End</span>
+      <label className="flex min-w-[10.5rem] shrink-0 flex-col">
+        <span className={FIELD_LABEL}>End Date</span>
         <input
           type="date"
           min={minD}
           max={maxD}
           value={endValue ? endValue.slice(0, 10) : ""}
           onChange={(e) => onEndChange(e.target.value)}
-          className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-sm"
+          className={CONTROL_INPUT}
         />
       </label>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-8 shrink-0 text-xs"
-        onClick={onExportPng}
-        disabled={disabledExport}
-      >
-        Export PNG
-      </Button>
+      {exportButton}
     </div>
   );
 }
