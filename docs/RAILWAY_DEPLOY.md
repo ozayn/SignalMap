@@ -65,6 +65,19 @@ For **API**, if you see a similar “config not found” error: Root **`apps/api
 
 ---
 
+## Troubleshooting: `pnpm` could not be found (deployment)
+
+Typical causes:
+
+1. **Root Directory is the monorepo root** (`.`) instead of **`apps/web`**. Railpack/Nixpacks then reads the root **`packageManager`** / **`pnpm-lock.yaml`** and runs `pnpm install` or `pnpm run …`, but the default image may not expose `pnpm` on `PATH` the way you expect.
+2. A **custom Build** or **Start** command in the Railway dashboard still says `pnpm …` from an old template.
+
+**Fix (preferred):** Web service → **Root Directory** = **`apps/web`**, config = **`/apps/web/railway.json`**, builder = **Dockerfile** (as in that JSON). Remove dashboard **Start Command** overrides for web so the container uses the Dockerfile **`CMD`** (`npx next start`).
+
+**Image safety net:** `apps/web/Dockerfile` runs **`corepack prepare pnpm@9.14.2`** so `pnpm` exists in the image if Railway or a hook still invokes it. Installs and builds in that Dockerfile remain **`npm install`** / **`npm run build`**.
+
+---
+
 ## Related
 
 - Root **`README.md`** → **Railway deployment** (env vars, health debug).

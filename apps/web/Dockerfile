@@ -2,6 +2,10 @@
 # Uses npm so the image does not depend on the monorepo root lockfile.
 FROM node:20-alpine
 
+# If Railway (or a dashboard override) runs `pnpm` while the repo root uses pnpm, the binary
+# must exist. Install stays `npm install`; this only satisfies stray `pnpm` on PATH.
+RUN corepack enable && corepack prepare pnpm@9.14.2 --activate
+
 WORKDIR /app
 
 COPY package.json ./
