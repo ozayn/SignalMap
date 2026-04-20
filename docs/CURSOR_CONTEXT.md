@@ -13,7 +13,7 @@
 - **Monorepo**: `apps/api` (FastAPI), `apps/web` (Next.js). Root keeps **pnpm workspace** only; **Railway** uses `apps/api/railway.json` + `apps/api/Dockerfile` and `apps/web/railway.json` + `apps/web/Dockerfile` (each service’s Root Directory is that app folder).
 - **FastAPI** (`apps/api`): `main.py` wires routes; `jobs.py` holds cache/job logic and platform-specific cache-first logic. Connectors (wayback_instagram, wayback_twitter, wayback_youtube, etc.) talk to external sources. **DB** (`db.py`): Postgres when `DATABASE_URL` is set; tables include `wayback_snapshot_cache`, `wayback_jobs`, `wayback_job_snapshots`, `signal_points`. No study registry on the backend.
 - **Next.js** (`apps/web`): App Router; pages under `app/studies`, `app/learning`. API routes under `app/api/*` **proxy** to FastAPI (same-origin, no direct backend URL in browser). No caching or business logic in Next.js API routes; they are thin proxies.
-- **Deployment**: Railway; web and API each use **Root Directory** `apps/web` / `apps/api` and **Config-as-code path** `railway.json` (→ `apps/web/railway.json`, `apps/api/railway.json`). Obsolete dashboard paths such as `/railway.web.json` are not in the repo—fix in Railway UI per **`docs/RAILWAY_DEPLOY.md`**.
+- **Deployment**: Railway; **Root Directory** `apps/web` / `apps/api`; **Config-as-code** uses **repo-root absolute paths** `/apps/web/railway.json` and `/apps/api/railway.json` (config path does not follow Root Directory per Railway monorepo docs). Obsolete `/railway.web.json` is dashboard-only—see **`docs/RAILWAY_DEPLOY.md`**.
 
 ## 3) Studies model
 
