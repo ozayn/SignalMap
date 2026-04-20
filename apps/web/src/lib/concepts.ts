@@ -42,7 +42,10 @@ export type ConceptKey =
   | "pca"
   | "umap"
   | "topic_grouping"
-  | "stopwords";
+  | "stopwords"
+  | "gdp_aggregate"
+  | "final_consumption_share"
+  | "gross_capital_formation";
 
 export type ConceptLink = {
   label: string;
@@ -380,6 +383,33 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
       "Common words (e.g. 'the', 'and', 'is') that are filtered out before analysis because they add little discriminative value and can obscure meaningful patterns.",
     links: [
       { label: "Stop words (Wikipedia)", href: "https://en.wikipedia.org/wiki/Stop_word" },
+    ],
+  },
+  gdp_aggregate: {
+    title: "Gross domestic product (GDP)",
+    description:
+      "The total monetary value of finished goods and services produced in an economy over a period. In this study, nominal GDP in current US$ appears only as context for the size of the economy—not on the same scale as the percentage shares on the chart.",
+    inSimpleTerms:
+      "GDP is often described as the total output or size of the economy over a year.",
+    links: [
+      { label: "GDP (Wikipedia)", href: "https://en.wikipedia.org/wiki/Gross_domestic_product" },
+    ],
+  },
+  final_consumption_share: {
+    title: "Final consumption expenditure (% of GDP)",
+    description:
+      "Household and government consumption as a share of GDP. A higher share means a larger fraction of output goes to spending on goods and services rather than, for example, investment.",
+    inSimpleTerms:
+      "Consumption: spending by households and government, shown as a percent of the whole economy.",
+  },
+  gross_capital_formation: {
+    title: "Gross capital formation (% of GDP)",
+    description:
+      "Investment in fixed assets, inventories, and valuables as a share of GDP. It reflects resources used to build future productive capacity (equipment, construction, etc.), before accounting for depreciation.",
+    inSimpleTerms:
+      "Investment (capital formation): spending that adds to capacity for future production.",
+    links: [
+      { label: "Gross capital formation (Wikipedia)", href: "https://en.wikipedia.org/wiki/Gross_fixed_capital_formation" },
     ],
   },
 };

@@ -3,6 +3,12 @@
 import { useRef, useEffect, useState } from "react";
 import * as echarts from "echarts";
 import { cssHsl, withAlphaHsl } from "@/lib/utils";
+import {
+  formatChartCategoryAxisYearLabel,
+  formatChartTimeAxisYearLabel,
+  type ChartAxisYearMode,
+} from "@/lib/chart-axis-year";
+import { formatGdpLevelsAxisTick, formatGdpLevelsTooltipValue } from "@/lib/format-compact-decimal";
 
 type DataPoint = { date: string; value: number; confidence?: number };
 
@@ -35,6 +41,8 @@ export type ChartSeries = {
   yAxisIndex: 0 | 1 | 2;
   unit: string;
   points: { date: string; value: number }[];
+  /** Optional line/symbol color (CSS color string). */
+  color?: string;
 };
 
 type TimelineChartProps = {
@@ -91,6 +99,10 @@ type TimelineChartProps = {
   yAxisMin?: number;
   /** Fixed y-axis max (for consistent scale when switching data sources). */
   yAxisMax?: number;
+  /** X-axis tick year: Gregorian (default) or Iranian (Solar Hijri); display only. */
+  xAxisYearLabel?: ChartAxisYearMode;
+  /** Compact USD / bn-toman tooltips and y-axis ticks (GDP composition levels only). */
+  multiSeriesValueFormat?: "gdp_levels";
 };
 
 function findEventIndex(dates: string[], eventDate: string): number | null {
@@ -181,6 +193,8 @@ export function TimelineChart({
   forceTimeRangeAxis = false,
   yAxisMin,
   yAxisMax,
+  xAxisYearLabel,
+  multiSeriesValueFormat,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
@@ -375,6 +389,8 @@ export function TimelineChart({
     const spanDays = dateMax && dateMin ? (dateMax - dateMin) / 86400000 : 0;
     const useTimeAxis =
       forceTimeAxis || spanYears > 40 || (spanDays > 0 && spanDays < 400);
+
+    const axisYearMode: ChartAxisYearMode = xAxisYearLabel ?? "gregorian";
 
     const toTimeData = (vals: (number | null)[]) =>
       dates.map((d, i) => [Date.parse(d), vals[i] ?? null] as [number, number | null]);
@@ -633,7 +649,9 @@ export function TimelineChart({
               const val = multiSeriesValues[i]?.[idx];
               const formatted =
                 val != null
-                  ? `${Number(val).toLocaleString(undefined, { maximumFractionDigits: 20 })} ${s.unit}`
+                  ? multiSeriesValueFormat === "gdp_levels"
+                    ? formatGdpLevelsTooltipValue(Number(val), s.unit)
+                    : `${Number(val).toLocaleString(undefined, { maximumFractionDigits: 20 })} ${s.unit}`
                   : "—";
               lines.push(`${s.label}: ${formatted}`);
             });
@@ -706,7 +724,7 @@ export function TimelineChart({
                         month: "short",
                         day: "numeric",
                       })
-                    : new Date(value).getFullYear().toString(),
+                    : formatChartTimeAxisYearLabel(value, axisYearMode),
                 color: mutedFg,
                 fontSize: 11,
               },
@@ -750,11 +768,12 @@ export function TimelineChart({
                     const prevYear = (dates[index - 1] ?? "").slice(0, 4);
                     if (index > 0 && prevYear === yearStr) return "";
                     if (!timeLinearTickYears.includes(yearNum)) return "";
-                    return yearStr;
+                    return formatChartCategoryAxisYearLabel(value, axisYearMode);
                   }
                   const n2 = dates.length;
-                  if (n2 > 365) return yearStr;
-                  if (n2 <= 100 || useSparseMultiSeriesDates) return yearStr;
+                  if (n2 > 365) return formatChartCategoryAxisYearLabel(value, axisYearMode);
+                  if (n2 <= 100 || useSparseMultiSeriesDates)
+                    return formatChartCategoryAxisYearLabel(value, axisYearMode);
                   if (n2 > 60) return value.slice(0, 7);
                   return value;
                 },
@@ -817,19 +836,29 @@ export function TimelineChart({
                 axisLabel: {
                   color: mutedFg,
                   fontSize: 11,
-                  ...(first.unit?.includes("toman")
-                    ? useLog
-                      ? {
-                          formatter: (v: number) =>
-                            typeof v === "number" && v >= 1000
-                              ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k`
-                              : String(v),
-                        }
-                      : {
-                          formatter: (v: number) =>
-                            typeof v === "number" ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k` : String(v),
-                        }
-                    : {}),
+                  ...(multiSeriesValueFormat === "gdp_levels" && first.unit && !useLog
+                    ? {
+                        formatter: (v: number | string) => {
+                          const n = typeof v === "number" ? v : Number(v);
+                          return Number.isFinite(n) ? formatGdpLevelsAxisTick(n, first.unit) : String(v);
+                        },
+                      }
+                    : first.unit?.includes("toman") &&
+                        !first.unit.toLowerCase().includes("billion")
+                      ? useLog
+                        ? {
+                            formatter: (v: number) =>
+                              typeof v === "number" && v >= 1000
+                                ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k`
+                                : String(v),
+                          }
+                        : {
+                            formatter: (v: number) =>
+                              typeof v === "number"
+                                ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k`
+                                : String(v),
+                          }
+                      : {}),
                 },
               };
             });
@@ -969,25 +998,27 @@ export function TimelineChart({
                 const isWageIndex = s.key === "index";
                 const isProductionKey = s.key in productionColors;
                 const isTotal = s.key === "total";
-                const lineColor = isProductionKey
-                  ? productionColors[s.key]
-                  : isGold
-                    ? goldColor
-                    : isOil
-                      ? color
-                      : isOfficial
+                const lineColor = s.color
+                  ? s.color
+                  : isProductionKey
+                    ? productionColors[s.key]
+                    : isGold
+                      ? goldColor
+                      : isOil
                         ? color
-                        : isOpen
-                          ? chart2Color
-                          : isSpread
-                            ? oilColorMuted
-                            : isWageNominal
-                              ? color
-                              : isWageReal
-                                ? chart2Color
-                                : isWageIndex
-                                  ? oilColorMuted
-                                  : oilColorMuted;
+                        : isOfficial
+                          ? color
+                          : isOpen
+                            ? chart2Color
+                            : isSpread
+                              ? oilColorMuted
+                              : isWageNominal
+                                ? color
+                                : isWageReal
+                                  ? chart2Color
+                                  : isWageIndex
+                                    ? oilColorMuted
+                                    : oilColorMuted;
                 const lineWidth = isGold || isOil || isProductionKey ? 1.5 : 1;
                 const symbolSize = isGold ? 4 : isOil ? 3 : isProductionKey ? 3 : 2.5;
                 const lineType = isTotal ? ("dashed" as const) : undefined;
@@ -1315,7 +1346,7 @@ export function TimelineChart({
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
     };
-  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods, oilShockDates, showOilShocks, gridRightOverride, xLabelRotate, extendedDates, lastOfficialDateForExtension, forceTimeRangeAxis, yAxisMin, yAxisMax]);
+  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, multiSeriesValueFormat, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods, oilShockDates, showOilShocks, gridRightOverride, xLabelRotate, extendedDates, lastOfficialDateForExtension, forceTimeRangeAxis, yAxisMin, yAxisMax, xAxisYearLabel]);
 
   useEffect(() => {
     return () => {

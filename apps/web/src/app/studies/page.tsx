@@ -42,7 +42,7 @@ const SECTIONS: { title: string; description: string; studyIds: string[] }[] = [
   {
     title: "Foundations (signals)",
     description: "Core price and exchange-rate series that anchor later analysis.",
-    studyIds: ["iran", "usd-toman", "oil-and-fx"],
+    studyIds: ["iran", "usd-toman", "oil-and-fx", "iran-gdp-composition"],
   },
   {
     title: "Context (timelines)",

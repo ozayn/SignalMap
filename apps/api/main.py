@@ -600,6 +600,41 @@ def get_iran_wage_cpi_signal(
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
+@app.get("/api/signals/macro/gdp-composition")
+def get_gdp_composition_signal(
+    start: str = Query(..., description="Start date YYYY-MM-DD (year used)"),
+    end: str = Query(..., description="End date YYYY-MM-DD (year used)"),
+    country: str = Query("IRN", description="ISO 3166-1 alpha-3 (e.g. IRN, TUR)"),
+    levels_currency: Literal["usd", "toman"] = Query(
+        "usd",
+        description="Levels chart only: usd (default) or toman (IRN only; open-market annual average FX).",
+    ),
+):
+    """World Bank WDI: consumption and investment as % of GDP, plus nominal GDP (annual).
+
+    Full WDI history is cached per country; ``start``/``end`` clip the returned points.
+    If ``start`` is earlier than coverage, points begin at the earliest year any of the
+    three indicators has data (see ``data_span`` in the response).
+    """
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    if levels_currency == "toman" and country.strip().upper() != "IRN":
+        raise HTTPException(
+            status_code=400,
+            detail="levels_currency=toman is only supported for country=IRN",
+        )
+    try:
+        from signalmap.services.signals import get_gdp_composition_series
+
+        return get_gdp_composition_series(country.strip(), start, end, levels_currency)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
+
+
 def _today_iso() -> str:
     from datetime import date
     return date.today().strftime("%Y-%m-%d")

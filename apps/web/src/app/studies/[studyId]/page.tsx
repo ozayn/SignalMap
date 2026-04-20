@@ -36,6 +36,7 @@ import {
 } from "@/lib/oil-trade-regions";
 import { trackEvent } from "@/lib/analytics";
 import { formatStatDate, decodeHtmlEntities } from "@/lib/utils";
+import type { ChartAxisYearMode } from "@/lib/chart-axis-year";
 
 type OverviewData = {
   study_id: string;
@@ -364,6 +365,32 @@ export default function StudyDetailPage() {
   const [exporterYMin, setExporterYMin] = useState<number | undefined>(undefined);
   const [exporterYMax, setExporterYMax] = useState<number | undefined>(undefined);
   const [exporterSource, setExporterSource] = useState<"curated" | "db">("db");
+  const [gdpConsumptionPoints, setGdpConsumptionPoints] = useState<{ date: string; value: number }[]>([]);
+  const [gdpInvestmentPoints, setGdpInvestmentPoints] = useState<{ date: string; value: number }[]>([]);
+  const [gdpNominalPoints, setGdpNominalPoints] = useState<{ date: string; value: number }[]>([]);
+  const [gdpCompositionSource, setGdpCompositionSource] = useState<{ name?: string; publisher?: string; url?: string } | null>(null);
+  const [showGdpIranEvents, setShowGdpIranEvents] = useState(true);
+  const [gdpDataSpan, setGdpDataSpan] = useState<{
+    first_year_any?: number | null;
+    last_year_any?: number | null;
+    returned_start_year?: number | null;
+    returned_end_year?: number | null;
+    per_series?: Record<string, { first_year?: number | null; last_year?: number | null }>;
+  } | null>(null);
+  const [gdpLevelConsumptionPoints, setGdpLevelConsumptionPoints] = useState<{ date: string; value: number }[]>([]);
+  const [gdpLevelGdpPoints, setGdpLevelGdpPoints] = useState<{ date: string; value: number }[]>([]);
+  const [gdpLevelInvestmentPoints, setGdpLevelInvestmentPoints] = useState<{ date: string; value: number }[]>([]);
+  const [gdpLevelsPriceBasis, setGdpLevelsPriceBasis] = useState<string | null>(null);
+  const [gdpLevelsUnit, setGdpLevelsUnit] = useState<string | null>(null);
+  const [gdpStudyView, setGdpStudyView] = useState<"composition" | "levels">("composition");
+  const [gdpLevelsCurrency, setGdpLevelsCurrency] = useState<"usd" | "toman">("usd");
+  const [gdpCalendarMode, setGdpCalendarMode] = useState<"gregorian" | "jalali">("gregorian");
+  const [gdpLevelsConversionMeta, setGdpLevelsConversionMeta] = useState<{
+    currency?: string;
+    basis?: string;
+    description?: string;
+    display_unit?: string;
+  } | null>(null);
   const [fgMetadata, setFgMetadata] = useState<{
     source?: "cache" | "live" | "mixed";
     count?: number;
@@ -440,6 +467,8 @@ export default function StudyDetailPage() {
   const isOilExporterTimeseries = study?.primarySignal.kind === "oil_exporter_timeseries";
   const isOilGeopoliticalReaction = study?.primarySignal.kind === "oil_geopolitical_reaction";
   const isYoutubeCommentAnalysis = study?.primarySignal.kind === "youtube_comment_analysis";
+  const isGdpComposition = study?.primarySignal.kind === "gdp_composition";
+  const isGdpIranLocal = study?.gdpCompositionIranLocalOptions === true;
 
   const useShortWindowOptions = isOilBrent || isFxUsdToman || isOilAndFx || isRealOil;
   const windowOptions = useShortWindowOptions
@@ -500,6 +529,13 @@ export default function StudyDetailPage() {
     return [start, resolvedEnd];
   }, [study, isOilExporterTimeseries]);
 
+  const gdpCompositionTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isGdpComposition) return null;
+    const [start, end] = study.timeRange;
+    const resolvedEnd = end === "today" ? new Date().toISOString().slice(0, 10) : end;
+    return [start, resolvedEnd];
+  }, [study, isGdpComposition]);
+
   /** Study 17: x-axis from (min data year - 1) to (max data year + 1), no empty leading/trailing years. */
   const exporterChartTimeRange = useMemo((): [string, string] | null => {
     if (!exporterTimeRange || !isOilExporterTimeseries) return null;
@@ -525,6 +561,35 @@ export default function StudyDetailPage() {
       return true;
     });
   }, [isOilProductionMajorExporters, events, showIranEvents, showSanctionsEvents, showOpecEvents]);
+
+  const gdpCompositionChartEvents = useMemo(() => {
+    if (!isGdpComposition) return [];
+    return showGdpIranEvents ? events : [];
+  }, [isGdpComposition, events, showGdpIranEvents]);
+
+  const gdpCompositionChartTimeRange = useMemo((): [string, string] | null => {
+    if (!isGdpComposition) return null;
+    const all = [
+      ...gdpConsumptionPoints,
+      ...gdpInvestmentPoints,
+      ...gdpNominalPoints,
+      ...gdpLevelConsumptionPoints,
+      ...gdpLevelGdpPoints,
+      ...gdpLevelInvestmentPoints,
+    ];
+    if (all.length === 0) return gdpCompositionTimeRange;
+    const dates = all.map((p) => p.date).sort();
+    return [dates[0]!, dates[dates.length - 1]!];
+  }, [
+    isGdpComposition,
+    gdpConsumptionPoints,
+    gdpInvestmentPoints,
+    gdpNominalPoints,
+    gdpLevelConsumptionPoints,
+    gdpLevelGdpPoints,
+    gdpLevelInvestmentPoints,
+    gdpCompositionTimeRange,
+  ]);
 
   /** Extend annual production series to current year for display; synthetic points flagged for tooltip. */
   const {
@@ -924,10 +989,10 @@ export default function StudyDetailPage() {
           ? "iran"
           : studyId,
     });
-    const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isWageCpiReal || isEventsTimeline || isOilGeopoliticalReaction;
+    const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isWageCpiReal || isEventsTimeline || isOilGeopoliticalReaction || isGdpComposition;
     if (hasEventLayers && !isEventsTimeline) {
       let layers: string[];
-      if (((isOilGlobalLong || isGoldAndOil || isRealOil || isOilExportCapacity || isOilProductionMajorExporters || isOilGeopoliticalReaction) && study.eventLayers?.length) || (hasTurkeyComparator && study.eventLayers !== undefined)) {
+      if (((isOilGlobalLong || isGoldAndOil || isRealOil || isOilExportCapacity || isOilProductionMajorExporters || isOilGeopoliticalReaction || isGdpComposition) && study.eventLayers?.length) || (hasTurkeyComparator && study.eventLayers !== undefined)) {
         if (isOilGeopoliticalReaction) {
           layers = [
             ...(showGeopoliticalWorldCore ? ["world_core"] : []),
@@ -966,7 +1031,7 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, isOilProductionMajorExporters, isOilGeopoliticalReaction, isWageCpiReal, hasTurkeyComparator, isEventsTimeline, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms, showSanctionsPeriods, showOpecEvents, showGeopoliticalWorldCore, showGeopoliticalWorld1900, showGeopoliticalSanctions, showGeopoliticalOpec]);
+  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, isOilProductionMajorExporters, isOilGeopoliticalReaction, isWageCpiReal, isGdpComposition, hasTurkeyComparator, isEventsTimeline, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms, showSanctionsPeriods, showOpecEvents, showGeopoliticalWorldCore, showGeopoliticalWorld1900, showGeopoliticalSanctions, showGeopoliticalOpec]);
 
   useEffect(() => {
     if (study && (isEventsTimeline || isFollowerGrowthDynamics || isYoutubeCommentAnalysis)) {
@@ -1176,6 +1241,100 @@ export default function StudyDetailPage() {
       .finally(() => mounted && setLoading(false));
     return () => { mounted = false; };
   }, [exporterTimeRange, isOilExporterTimeseries]);
+
+  useEffect(() => {
+    if (!gdpCompositionTimeRange || !isGdpComposition) {
+      if (isGdpComposition) {
+        setGdpConsumptionPoints([]);
+        setGdpInvestmentPoints([]);
+        setGdpNominalPoints([]);
+        setGdpCompositionSource(null);
+        setGdpDataSpan(null);
+        setGdpLevelConsumptionPoints([]);
+        setGdpLevelGdpPoints([]);
+        setGdpLevelInvestmentPoints([]);
+        setGdpLevelsPriceBasis(null);
+        setGdpLevelsUnit(null);
+        setGdpLevelsConversionMeta(null);
+      }
+      return;
+    }
+    const [start, end] = gdpCompositionTimeRange;
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+    fetchJson<{
+      source?: { name?: string; publisher?: string; url?: string };
+      data_span?: {
+        first_year_any?: number | null;
+        last_year_any?: number | null;
+        returned_start_year?: number | null;
+        returned_end_year?: number | null;
+        per_series?: Record<string, { first_year?: number | null; last_year?: number | null }>;
+      };
+      indicators: {
+        final_consumption_pct_gdp: { points: { date: string; value: number }[] };
+        gross_capital_formation_pct_gdp: { points: { date: string; value: number }[] };
+        gdp_current_usd: { points: { date: string; value: number }[] };
+      };
+      levels?: {
+        price_basis?: string | null;
+        unit?: string | null;
+        indicators?: {
+          consumption: { points: { date: string; value: number }[]; unit?: string };
+          gdp: { points: { date: string; value: number }[]; unit?: string };
+          investment: { points: { date: string; value: number }[]; unit?: string };
+        };
+      };
+      levels_conversion?: {
+        currency?: string;
+        basis?: string;
+        description?: string;
+        display_unit?: string;
+      } | null;
+    }>(
+      `/api/signals/macro/gdp-composition?start=${encodeURIComponent(start)}&end=${encodeURIComponent(
+        end
+      )}&country=IRN&levels_currency=${isGdpIranLocal && gdpLevelsCurrency === "toman" ? "toman" : "usd"}`
+    )
+      .then((res) => {
+        if (!mounted) return;
+        setGdpConsumptionPoints(res.indicators?.final_consumption_pct_gdp?.points ?? []);
+        setGdpInvestmentPoints(res.indicators?.gross_capital_formation_pct_gdp?.points ?? []);
+        setGdpNominalPoints(res.indicators?.gdp_current_usd?.points ?? []);
+        setGdpCompositionSource(res.source ?? null);
+        setGdpDataSpan(res.data_span ?? null);
+        const lvl = res.levels?.indicators;
+        setGdpLevelConsumptionPoints(lvl?.consumption?.points ?? []);
+        setGdpLevelGdpPoints(lvl?.gdp?.points ?? []);
+        setGdpLevelInvestmentPoints(lvl?.investment?.points ?? []);
+        setGdpLevelsPriceBasis(res.levels?.price_basis ?? null);
+        setGdpLevelsUnit(
+          res.levels?.indicators?.consumption?.unit ?? res.levels?.indicators?.gdp?.unit ?? res.levels?.unit ?? null
+        );
+        setGdpLevelsConversionMeta(res.levels_conversion ?? null);
+      })
+      .catch((e) => {
+        if (mounted) {
+          setGdpConsumptionPoints([]);
+          setGdpInvestmentPoints([]);
+          setGdpNominalPoints([]);
+          setGdpCompositionSource(null);
+          setGdpDataSpan(null);
+          setGdpLevelConsumptionPoints([]);
+          setGdpLevelGdpPoints([]);
+          setGdpLevelInvestmentPoints([]);
+          setGdpLevelsPriceBasis(null);
+          setGdpLevelsUnit(null);
+          setGdpLevelsConversionMeta(null);
+          setError(e instanceof Error ? e.message : "GDP composition fetch failed");
+        }
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => {
+      mounted = false;
+    };
+  }, [gdpCompositionTimeRange, isGdpComposition, isGdpIranLocal, gdpLevelsCurrency]);
 
   const { exporterSaudiPoints, exporterRussiaPoints, exporterUsPoints, exporterIranPoints } = useMemo(() => {
     const empty = { exporterSaudiPoints: [], exporterRussiaPoints: [], exporterUsPoints: [], exporterIranPoints: [] };
@@ -1644,7 +1803,7 @@ export default function StudyDetailPage() {
 
   const showError = error || (isOverviewStub && !data) || (isYoutubeCommentAnalysis && analysisError);
 
-  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isFxUsdIrrDual || isWageCpiReal || isOilTradeNetwork || isOilExporterTimeseries || isOilGeopoliticalReaction;
+  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isFxUsdIrrDual || isWageCpiReal || isOilTradeNetwork || isOilExporterTimeseries || isOilGeopoliticalReaction || isGdpComposition;
   const singleSignalReady =
     isGoldAndOil
       ? goldPoints.length > 0 && oilPoints.length > 0
@@ -1672,7 +1831,14 @@ export default function StudyDetailPage() {
                         ? exporterSaudiPoints.length > 0 || exporterRussiaPoints.length > 0 || exporterUsPoints.length > 0 || exporterIranPoints.length > 0
                         : isOilGeopoliticalReaction
                           ? oilPoints.length > 0
-                          : false;
+                          : isGdpComposition
+                            ? gdpConsumptionPoints.length > 0 &&
+                              gdpInvestmentPoints.length > 0 &&
+                              gdpNominalPoints.length > 0 &&
+                              gdpLevelConsumptionPoints.length > 0 &&
+                              gdpLevelGdpPoints.length > 0 &&
+                              gdpLevelInvestmentPoints.length > 0
+                            : false;
   if (loading && (isOverviewStub ? !data : isSingleSignalStudy && !singleSignalReady) || (isYoutubeCommentAnalysis && analysisLoading)) {
     return (
       <div className="study-page-container py-12 animate-pulse space-y-8">
@@ -1733,6 +1899,14 @@ export default function StudyDetailPage() {
       if (exporterUsPoints.length > 0) allDates.push(...collect(exporterUsPoints));
       if (exporterIranPoints.length > 0) allDates.push(...collect(exporterIranPoints));
     }
+    if (isGdpComposition) {
+      if (gdpConsumptionPoints.length > 0) allDates.push(...collect(gdpConsumptionPoints));
+      if (gdpInvestmentPoints.length > 0) allDates.push(...collect(gdpInvestmentPoints));
+      if (gdpNominalPoints.length > 0) allDates.push(...collect(gdpNominalPoints));
+      if (gdpLevelConsumptionPoints.length > 0) allDates.push(...collect(gdpLevelConsumptionPoints));
+      if (gdpLevelGdpPoints.length > 0) allDates.push(...collect(gdpLevelGdpPoints));
+      if (gdpLevelInvestmentPoints.length > 0) allDates.push(...collect(gdpLevelInvestmentPoints));
+    }
     if (isFollowerGrowthDynamics && fgData) {
       const list = fgData.snapshots ?? fgData.results ?? [];
       const dates = list
@@ -1765,7 +1939,7 @@ export default function StudyDetailPage() {
       return [networkYears[0]!, networkYears[networkYears.length - 1]!] as [string, string];
     }
     const requestedRange =
-      oilTimeRange ?? fxTimeRange ?? dualTimeRange ?? exportCapacityTimeRange ?? productionTimeRange ?? exporterTimeRange ?? fxDualTimeRange ?? wageTimeRange ?? study.timeRange;
+      oilTimeRange ?? fxTimeRange ?? dualTimeRange ?? exportCapacityTimeRange ?? productionTimeRange ?? exporterTimeRange ?? gdpCompositionTimeRange ?? fxDualTimeRange ?? wageTimeRange ?? study.timeRange;
     if (allDates.length === 0) return null;
     const sorted = [...allDates].sort();
     const dataMin = sorted[0]!;
@@ -1848,11 +2022,24 @@ export default function StudyDetailPage() {
         if (exporterUsPoints.length > 0) arrays.push(exporterUsPoints);
         if (exporterIranPoints.length > 0) arrays.push(exporterIranPoints);
       }
+      if (isGdpComposition) {
+        if (gdpConsumptionPoints.length > 0) arrays.push(gdpConsumptionPoints);
+        if (gdpInvestmentPoints.length > 0) arrays.push(gdpInvestmentPoints);
+        if (gdpNominalPoints.length > 0) arrays.push(gdpNominalPoints);
+        if (gdpLevelConsumptionPoints.length > 0) arrays.push(gdpLevelConsumptionPoints);
+        if (gdpLevelGdpPoints.length > 0) arrays.push(gdpLevelGdpPoints);
+        if (gdpLevelInvestmentPoints.length > 0) arrays.push(gdpLevelInvestmentPoints);
+      }
       return arrays;
     })()
   );
 
   const { prev: prevStudy, next: nextStudy } = getPrevNextStudies(study?.id ?? studyId);
+
+  const gdpLevelsXAxisYearLabel: ChartAxisYearMode | undefined =
+    isGdpComposition && isGdpIranLocal && gdpStudyView === "levels" && gdpCalendarMode === "jalali"
+      ? "jalali"
+      : undefined;
 
   return (
     <div className="study-page-container py-12 space-y-6 min-w-0">
@@ -1902,7 +2089,7 @@ export default function StudyDetailPage() {
         </p>
         {latestDataDate && (
           <p className="study-header-meta">
-            Data last available: {(isOilTradeNetwork || isOilExporterTimeseries) ? latestDataDate.getFullYear() : formatDate(latestDataDate)}
+            Data last available: {(isOilTradeNetwork || isOilExporterTimeseries || isGdpComposition) ? latestDataDate.getFullYear() : formatDate(latestDataDate)}
           </p>
         )}
         {lastUpdated && (
@@ -3169,6 +3356,8 @@ export default function StudyDetailPage() {
             <CardTitle className="text-base font-medium shrink-0">
               {isOilTradeNetwork
                 ? "Network"
+                : isGdpComposition
+                ? "Composition, levels, and nominal GDP"
                 : isOilExporterTimeseries
                 ? "Crude oil exports"
                 : isOilGeopoliticalReaction
@@ -3231,6 +3420,8 @@ export default function StudyDetailPage() {
           <p className="text-sm text-muted-foreground">
             {isOilTradeNetwork
               ? "Oil trade flows between major exporters and importers. Nodes are countries/regions; edge width reflects trade volume (thousand barrels/day). Drag nodes, zoom, pan."
+              : isGdpComposition
+              ? "Iran: Composition vs Levels; optional Toman (levels only) and Iranian (Solar Hijri) year labels on the Levels charts. Others: all panels without those toggles. Toggle Iran events when shown."
               : isOilExporterTimeseries
               ? "Annual crude oil exports for Saudi Arabia, Russia, United States, and Iran. Derived from bilateral trade flows (UN Comtrade HS 2709)."
               : isOilGeopoliticalReaction
@@ -3258,7 +3449,7 @@ export default function StudyDetailPage() {
                     : "Event markers and optional external signals"}
           </p>
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            {!hasTurkeyComparator && !isOilExportCapacity && !isOilTradeNetwork && !isOilExporterTimeseries && !isOilGeopoliticalReaction && (
+            {!hasTurkeyComparator && !isOilExportCapacity && !isOilTradeNetwork && !isOilExporterTimeseries && !isOilGeopoliticalReaction && !isGdpComposition && (
               <>
                 <select
                   value={anchorEventId}
@@ -3363,6 +3554,17 @@ export default function StudyDetailPage() {
                   Show OPEC decisions
                 </label>
               </>
+            )}
+            {isGdpComposition && (
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showGdpIranEvents}
+                  onChange={(e) => setShowGdpIranEvents(e.target.checked)}
+                  className="rounded border-border"
+                />
+                Show Iran events on charts
+              </label>
             )}
             {isOilGeopoliticalReaction && (
               <>
@@ -3694,6 +3896,286 @@ export default function StudyDetailPage() {
                   Moving the year slider reveals how these trade routes change over time.
                 </p>
               </InSimpleTerms>
+            </>
+          ) : isGdpComposition ? (
+            <>
+              {isGdpIranLocal ? (
+                <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-muted-foreground shrink-0">View</span>
+                  <div className="inline-flex rounded-md border border-border overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setGdpStudyView("composition")}
+                      className={`px-2.5 py-1.5 font-medium transition-colors ${
+                        gdpStudyView === "composition"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                      }`}
+                    >
+                      Composition
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGdpStudyView("levels")}
+                      className={`px-2.5 py-1.5 font-medium transition-colors ${
+                        gdpStudyView === "levels"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                      }`}
+                    >
+                      Levels
+                    </button>
+                  </div>
+                  {gdpStudyView === "levels" ? (
+                    <>
+                      <span className="text-muted-foreground shrink-0 ml-1">Currency</span>
+                      <div className="inline-flex rounded-md border border-border overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setGdpLevelsCurrency("usd")}
+                          className={`px-2.5 py-1.5 font-medium transition-colors ${
+                            gdpLevelsCurrency === "usd"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                          }`}
+                        >
+                          USD
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGdpLevelsCurrency("toman")}
+                          className={`px-2.5 py-1.5 font-medium transition-colors ${
+                            gdpLevelsCurrency === "toman"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                          }`}
+                        >
+                          Toman
+                        </button>
+                      </div>
+                      <span className="text-muted-foreground shrink-0 ml-1">Year</span>
+                      <div className="inline-flex rounded-md border border-border overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setGdpCalendarMode("gregorian")}
+                          className={`px-2.5 py-1.5 font-medium transition-colors ${
+                            gdpCalendarMode === "gregorian"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                          }`}
+                        >
+                          Gregorian
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGdpCalendarMode("jalali")}
+                          className={`px-2.5 py-1.5 font-medium transition-colors ${
+                            gdpCalendarMode === "jalali"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                          }`}
+                        >
+                          Iranian
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+              {(!isGdpIranLocal || gdpStudyView === "composition") ? (
+                <>
+                  <MultiSeriesStats
+                    series={[
+                      { label: "Final consumption expenditure", unit: "% of GDP", points: gdpConsumptionPoints },
+                      { label: "Gross capital formation", unit: "% of GDP", points: gdpInvestmentPoints },
+                    ]}
+                    timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? undefined}
+                  />
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5 mt-1">Shares of GDP</p>
+                  <TimelineChart
+                    data={[]}
+                    valueKey="value"
+                    label="GDP composition (shares of GDP)"
+                    events={gdpCompositionChartEvents}
+                    anchorEventId={anchorEventId || undefined}
+                    multiSeries={[
+                      {
+                        key: "pct_consumption",
+                        label: "Final consumption expenditure",
+                        yAxisIndex: 0,
+                        unit: "% of GDP",
+                        points: gdpConsumptionPoints,
+                        color: "#2563eb",
+                      },
+                      {
+                        key: "pct_investment",
+                        label: "Gross capital formation",
+                        yAxisIndex: 0,
+                        unit: "% of GDP",
+                        points: gdpInvestmentPoints,
+                        color: "#16a34a",
+                      },
+                    ]}
+                    timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
+                    forceTimeRangeAxis
+                    mutedEventLines
+                  />
+                </>
+              ) : null}
+              {(!isGdpIranLocal || gdpStudyView === "levels") ? (
+                <>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5 mt-1">Nominal GDP (companion)</p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Current US$, log scale—same period as the levels chart. Always US dollars. For Iran, axis years
+                    can show Solar Hijri when you choose Iranian year in the Levels view.
+                  </p>
+                  <TimelineChart
+                    data={[]}
+                    valueKey="value"
+                    label="GDP (nominal)"
+                    events={gdpCompositionChartEvents}
+                    anchorEventId={anchorEventId || undefined}
+                    multiSeries={[
+                      {
+                        key: "gdp_nominal",
+                        label: "GDP (nominal)",
+                        yAxisIndex: 0,
+                        unit: "current US$",
+                        points: gdpNominalPoints,
+                        color: "#dc2626",
+                      },
+                    ]}
+                    timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
+                    forceTimeRangeAxis
+                    yAxisLog
+                    chartHeight="h-52"
+                    mutedEventLines
+                    xAxisYearLabel={gdpLevelsXAxisYearLabel}
+                  />
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5 mt-6">Levels (absolute size)</p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Three lines in{" "}
+                    <span className="text-foreground font-medium">
+                      {gdpLevelsCurrency === "toman"
+                        ? "billion tomans (approx.): each year’s WDI USD level × that Gregorian year’s mean daily open-market toman/USD (merged Bonbast + rial archive + FRED pre-2012; same signal as the USD→toman study—not official)"
+                        : gdpLevelsPriceBasis === "constant_2015_usd"
+                          ? "constant 2015 US dollars (real-term levels comparable across years except for methodology breaks)"
+                          : gdpLevelsPriceBasis === "current_usd"
+                            ? "current US dollars (includes inflation and exchange-rate effects)"
+                            : "national-account levels"}
+                    </span>
+                    : Consumption (final consumption expenditure), GDP, and Investment (gross capital formation).
+                    Currency toggle applies to this chart only (not the % composition chart). Linear scale.
+                  </p>
+                  <TimelineChart
+                    data={[]}
+                    valueKey="value"
+                    label="National accounts (levels)"
+                    events={gdpCompositionChartEvents}
+                    anchorEventId={anchorEventId || undefined}
+                    multiSeries={[
+                      {
+                        key: "level_consumption",
+                        label: "Consumption",
+                        yAxisIndex: 0,
+                        unit: gdpLevelsUnit ?? "US$",
+                        points: gdpLevelConsumptionPoints,
+                        color: "#2563eb",
+                      },
+                      {
+                        key: "level_gdp",
+                        label: "GDP",
+                        yAxisIndex: 0,
+                        unit: gdpLevelsUnit ?? "US$",
+                        points: gdpLevelGdpPoints,
+                        color: "#dc2626",
+                      },
+                      {
+                        key: "level_investment",
+                        label: "Investment",
+                        yAxisIndex: 0,
+                        unit: gdpLevelsUnit ?? "US$",
+                        points: gdpLevelInvestmentPoints,
+                        color: "#16a34a",
+                      },
+                    ]}
+                    timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
+                    forceTimeRangeAxis
+                    chartHeight="h-56"
+                    mutedEventLines
+                    xAxisYearLabel={gdpLevelsXAxisYearLabel}
+                    multiSeriesValueFormat="gdp_levels"
+                  />
+                </>
+              ) : null}
+              <LearningNote
+                sections={[
+                  {
+                    heading: "How to read this chart",
+                    bullets: [
+                      "Composition: each line is a share of GDP—how large consumption or investment is relative to GDP that year, not its dollar size. (Iran: open the Composition view.)",
+                      "Nominal GDP: current US$ with a log scale—headline dollar size including inflation and exchange-rate moves.",
+                      "Levels: consumption, GDP, and investment in the same WDI price basis (constant 2015 US$ when available, else current US$). Toman view (Iran): each point’s year uses that year’s own FX—arithmetic mean of daily open-market tomans per USD in that Gregorian year (merged Bonbast + rial archive + FRED pre-2012; not official), then shown in billions of tomans.",
+                      "Shares can move even when dollar levels all rise; use Composition vs Levels to separate structure from scale.",
+                      "Iran: Iranian year relabels x-axis tick years to Solar Hijri (UTC date mapping via Intl); underlying points stay Gregorian.",
+                      "Use “Show Iran events on charts” for optional context markers only.",
+                    ],
+                  },
+                  {
+                    heading: "Limitations",
+                    bullets: [
+                      "Annual national accounts; they do not capture informal activity fully and can be revised.",
+                      "WDI series can begin in different years; early years may show only the series that already exists.",
+                      "Constant-price series follow the World Bank’s 2015 base; switching to another constant-price basis later is a data configuration change, not a code rewrite.",
+                      "Toman levels: WDI USD × per-year mean daily open-market toman/USD (same merged USD→toman pipeline). Hybrid if WDI is constant 2015 US$: nominal market FX on real WDI dollars—illustrative only, not national accounts in tomans.",
+                      "Event markers do not imply cause or forecast.",
+                    ],
+                  },
+                ]}
+              />
+              {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
+              <SourceInfo
+                items={[
+                  {
+                    label: "National accounts (Iran)",
+                    sourceName: gdpCompositionSource?.name ?? "World Bank World Development Indicators",
+                    sourceUrl: gdpCompositionSource?.url ?? "https://data.worldbank.org/",
+                    sourceDetail: gdpCompositionSource?.publisher ?? "World Bank",
+                    unitLabel: "% of GDP (composition); current US$ log (nominal GDP); level series (WDI + optional FX)",
+                    unitNote:
+                      gdpLevelsPriceBasis === "constant_2015_usd"
+                        ? "Shares: NE.CON.TOTL.ZS, NE.GDI.TOTL.ZS. Nominal GDP: NY.GDP.MKTP.CD. Levels: NE.CON.TOTL.KD, NY.GDP.MKTP.KD, NE.GDI.TOTL.KD (constant 2015 US$). ISO3 IRN."
+                        : "Shares: NE.CON.TOTL.ZS, NE.GDI.TOTL.ZS. Nominal GDP: NY.GDP.MKTP.CD. Levels: NE.CON.TOTL.CD, NY.GDP.MKTP.CD, NE.GDI.TOTL.CD (current US$ fallback). ISO3 IRN.",
+                  },
+                ]}
+                note={
+                  (gdpDataSpan?.first_year_any != null && gdpDataSpan?.last_year_any != null
+                    ? `Data window returned: ${gdpDataSpan.returned_start_year ?? gdpDataSpan.first_year_any}–${gdpDataSpan.returned_end_year ?? gdpDataSpan.last_year_any} (WDI coverage from ${gdpDataSpan.first_year_any} as the earliest year any indicator in this bundle has values). `
+                    : "") +
+                  (gdpLevelsConversionMeta?.description
+                    ? `${gdpLevelsConversionMeta.description} `
+                    : "") +
+                  "Educational visualization only; not a forecast."
+                }
+              />
+              <InSimpleTerms>
+                <p>
+                  Composition shows shares: of GDP counted in a year, how much is consumption and how much is
+                  investment—each as a percent of that GDP number. Levels show how large each aggregate is in money
+                  units (US dollars from WDI, or optional tomans for Iran: each Gregorian year uses that year’s mean
+                  daily open-market toman per USD from the merged USD→toman series—Bonbast, rial-exchange-rates-archive,
+                  and FRED pre-2012—not the official rate; approximate).
+                </p>
+                <p>
+                  Nominal GDP is always in current US dollars on a log scale. The % chart does not switch to tomans;
+                  only the three-line levels chart does.
+                </p>
+                <p>
+                  Iranian year labels on the axis are display-only (Solar Hijri year from each point’s Gregorian date,
+                  UTC). They do not change the underlying annual observations.
+                </p>
+              </InSimpleTerms>
+              {study.observations?.length ? <DataObservations observations={study.observations} /> : null}
             </>
           ) : isOilExporterTimeseries ? (
             <>

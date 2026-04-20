@@ -16,7 +16,8 @@ export type PrimarySignal =
   | { kind: "oil_trade_network" }
   | { kind: "oil_exporter_timeseries" }
   | { kind: "oil_geopolitical_reaction" }
-  | { kind: "youtube_comment_analysis" };
+  | { kind: "youtube_comment_analysis" }
+  | { kind: "gdp_composition" };
 
 import type { ConceptKey } from "./concepts";
 
@@ -49,6 +50,8 @@ export type StudyMeta = {
   youtubeChannelId?: string;
   /** YouTube discourse: language for display and text direction ("English" | "Persian"). Overrides API when set. */
   youtubeLanguage?: "English" | "Persian";
+  /** GDP composition (Iran): show local view toggles (levels currency, calendar). */
+  gdpCompositionIranLocalOptions?: boolean;
 };
 
 export const STUDIES: StudyMeta[] = [
@@ -377,6 +380,29 @@ export const STUDIES: StudyMeta[] = [
       "Real minimum wage is flat or declining for much of the period in this dataset.",
       "The gap between nominal and real widens in high-inflation years.",
       "Real purchasing power appears to recover only partially toward the end of the series.",
+    ],
+  },
+  {
+    id: "iran-gdp-composition",
+    number: 27,
+    title: "GDP composition — Iran",
+    gdpCompositionIranLocalOptions: true,
+    subtitle: "Consumption and investment as shares of GDP (World Bank)",
+    timeRange: ["1900-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "Annual economic structure: consumption and investment as shares of GDP, nominal GDP (current US$), and absolute levels for consumption, GDP, and investment (constant 2015 US$ when available). Iran only in this version; the API supports other countries for future comparisons.",
+    status: "active",
+    primarySignal: { kind: "gdp_composition" },
+    eventLayers: ["iran_core"],
+    concepts: ["gdp_aggregate", "final_consumption_share", "gross_capital_formation", "event_overlay"],
+    observations: [
+      "Consumption and investment shares are both expressed as percent of GDP, so they are comparable on the same vertical scale.",
+      "The two shares do not sum to 100%: GDP also includes net exports, government investment nuances, and statistical discrepancies in national accounts.",
+      "Nominal GDP (current US$) appears in a separate companion chart (log scale) so the dollar size of the economy is visible without compressing the % series.",
+      "The level chart shows consumption, GDP, and investment in the same price basis (constant 2015 US$ when WDI has all three KD series; otherwise current US$).",
+      "This study can switch Composition vs Levels; in Levels, optional Toman view (approximate): each Gregorian year multiplies WDI USD levels by that year’s arithmetic mean of daily open-market tomans per USD—the same merged series as the USD→toman study (Bonbast + archive + FRED pre-2012), not the official rate. Iranian (Solar Hijri) year labels are display-only on the axis.",
+      "The series start in different years in WDI; the app uses the earliest year any bundled indicator has data through the latest available year.",
+      "World Bank data are annual; revisions and methodology can shift recent years slightly.",
     ],
   },
 ];

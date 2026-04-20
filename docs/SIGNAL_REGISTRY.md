@@ -25,6 +25,7 @@ These are the `signal_key` values used in `signal_points` and `signals.py`:
 - `oil_price_ppp_turkey` — Derived from Brent + World Bank PPP
 - `iran_oil_export_volume` — Static (IRAN_EXPORT_VOLUME_EST)
 - `derived_export_revenue_proxy` — Derived from oil × volume
+- `gdp_composition` — World Bank WDI (per country, TTL cache; not in `signal_points`)
 
 ---
 
@@ -44,6 +45,7 @@ These are the `signal_key` values used in `signal_points` and `signals.py`:
 | `GET /api/signals/fx/usd-irr-dual` | usd_irr_official + usd_toman_open_market | `get_usd_irr_dual_series` |
 | `GET /api/signals/wage/iran-minimum-cpi` | (static) | `get_iran_wage_cpi_series` |
 | `GET /api/market/brent-current` | (FMP, cached 1h) | `get_current_brent_price` |
+| `GET /api/signals/macro/gdp-composition` | gdp_composition (WDI indicators) | `get_gdp_composition_series` |
 
 ---
 
@@ -74,6 +76,7 @@ These are the `signal_key` values used in `signal_points` and `signals.py`:
 |--------|----------|--------|-------------|-------|
 | **Gold** | `/api/signals/gold/global` | GOLD_ANNUAL (static) | annual | LBMA/Treasury/WGC. No daily source. |
 | **Iran wage/CPI** | `/api/signals/wage/iran-minimum-cpi` | IRAN_NOMINAL_MINIMUM_WAGE, IRAN_CPI_2010_BASE (static) | annual | Study 13: nominal + CPI for real wage. |
+| **GDP composition** | `/api/signals/macro/gdp-composition` | World Bank WDI: shares NE.CON.TOTL.ZS, NE.GDI.TOTL.ZS; nominal NY.GDP.MKTP.CD; levels prefer NE.CON.TOTL.KD, NY.GDP.MKTP.KD, NE.GDI.TOTL.KD else *CD | annual | Study 27: % GDP, nominal GDP log, absolute levels. Query `levels_currency` (`usd` or `toman`; toman IRN-only): levels scaled by calendar-year mean open-market tomans per USD; response includes `levels_conversion`. Cached per ISO3; `data_span` + `levels.price_basis`. |
 | **Brent current** | `/api/market/brent-current` | FMP (brent_market_price) | point-in-time | Cached 1h. Not in signal_points. |
 
 ---
