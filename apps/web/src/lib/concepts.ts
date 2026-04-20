@@ -45,7 +45,8 @@ export type ConceptKey =
   | "stopwords"
   | "gdp_aggregate"
   | "final_consumption_share"
-  | "gross_capital_formation";
+  | "gross_capital_formation"
+  | "dutch_disease_pattern";
 
 export type ConceptLink = {
   label: string;
@@ -410,6 +411,16 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
       "Investment (capital formation): spending that adds to capacity for future production.",
     links: [
       { label: "Gross capital formation (Wikipedia)", href: "https://en.wikipedia.org/wiki/Gross_fixed_capital_formation" },
+    ],
+  },
+  dutch_disease_pattern: {
+    title: "Dutch disease (diagnostic pattern)",
+    description:
+      "A hypothesis in international economics that a large resource windfall can appreciate the real exchange rate and shrink tradable sectors (e.g. manufacturing). It is not a single measured variable: researchers look at several indicators—resource rents, sector shares, trade, and the real exchange rate—together with institutional and policy context.",
+    inSimpleTerms:
+      "Think of it as a checklist of clues economists sometimes watch after a resource boom—not a single score that proves the economy is “sick.”",
+    links: [
+      { label: "Dutch disease (Wikipedia)", href: "https://en.wikipedia.org/wiki/Dutch_disease" },
     ],
   },
 };

@@ -2,8 +2,8 @@
  * Single source of truth for WDI cross-country comparator series (`ChartSeries.key`).
  * Colors and marker shapes align TimelineChart lines, emphasis, and legend icons.
  *
- * Iran and the United States both use circle markers per product spec; they remain
- * visually distinct via color. Germany and Turkey use different shapes.
+ * Each country has a distinct symbol (Iran circle, US triangle, Germany rect, Turkey diamond)
+ * so multi-series charts remain readable when printed or color is ambiguous.
  */
 export type CountryComparatorSeriesKey = "iran" | "us" | "germany" | "turkey";
 
@@ -17,7 +17,7 @@ export type CountryComparatorStyle = {
 
 export const COUNTRY_COMPARATOR_STYLES: Record<CountryComparatorSeriesKey, CountryComparatorStyle> = {
   iran: { color: "#f59e0b", symbol: "circle", legendIcon: "circle" },
-  us: { color: "#2563eb", symbol: "circle", legendIcon: "circle" },
+  us: { color: "#2563eb", symbol: "triangle", legendIcon: "triangle" },
   germany: { color: "#6b7280", symbol: "rect", legendIcon: "rect" },
   turkey: { color: "#10b981", symbol: "diamond", legendIcon: "diamond" },
 };

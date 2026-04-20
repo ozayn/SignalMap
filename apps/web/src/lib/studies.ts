@@ -21,7 +21,8 @@ export type PrimarySignal =
   | { kind: "iran_gdp_accounts_dual" }
   | { kind: "gini_inequality" }
   | { kind: "inflation_cpi_yoy" }
-  | { kind: "poverty_headcount_iran" };
+  | { kind: "poverty_headcount_iran" }
+  | { kind: "dutch_disease_diagnostics_iran" };
 
 import type { ConceptKey } from "./concepts";
 
@@ -512,6 +513,44 @@ export const STUDIES: StudyMeta[] = [
       "International lines differ from national poverty statistics and survey timing.",
     ],
   },
+  {
+    id: "dutch-disease-diagnostics",
+    number: 32,
+    title: "Dutch disease diagnostics — Iran (pattern view)",
+    subtitle: "Oil rents, manufacturing share, imports, and open-market FX (exploratory)",
+    timeRange: ["1970-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "A multi-panel diagnostic view for Iran: World Bank oil rents and manufacturing value added as shares of GDP, imports as a share of GDP, and open-market USD→toman as macro pressure context. Dutch disease is a structural hypothesis about resource booms and tradables—not something this page measures as a single index.",
+    status: "active",
+    countries: ["iran"],
+    themes: ["macro", "oil", "fx"],
+    tags: ["WDI", "Dutch disease", "Resource curse", "Structural change"],
+    keywords: [
+      "NY.GDP.PETR.RT.ZS",
+      "NV.IND.MANF.ZS",
+      "NE.IMP.GNFS.ZS",
+      "manufacturing",
+      "oil rents",
+      "imports",
+      "toman",
+    ],
+    primarySignal: { kind: "dutch_disease_diagnostics_iran" },
+    eventLayers: ["iran_core", "world_core", "sanctions"],
+    concepts: [
+      "gdp_aggregate",
+      "fx_rate",
+      "export_dependencies",
+      "measurement_vs_reality",
+      "event_overlay",
+      "dutch_disease_pattern",
+    ],
+    observations: [
+      "Oil rents, manufacturing’s GDP share, and imports share are separate WDI series; co-movement is descriptive, not proof of a mechanism.",
+      "Manufacturing value added is one tradable-sector proxy; services and agriculture are not shown here.",
+      "Open-market FX is daily/irregular where available; WDI panels are annual—compare broad timing, not day-to-day alignment.",
+      "Event markers are optional context and default off; they do not explain structural statistics by themselves.",
+    ],
+  },
 ];
 
 /** Studies page grouped sections (order + copy). Study ids must exist in `STUDIES`. */
@@ -519,7 +558,7 @@ export const STUDY_SECTIONS: { title: string; description: string; studyIds: str
   {
     title: "Foundations (signals)",
     description: "Core price and exchange-rate series that anchor later analysis.",
-    studyIds: ["iran", "usd-toman", "oil-and-fx", "iran-gdp-composition", "iran-gdp-accounts-dual"],
+    studyIds: ["iran", "usd-toman", "oil-and-fx", "iran-gdp-composition", "iran-gdp-accounts-dual", "dutch-disease-diagnostics"],
   },
   {
     title: "Context (timelines)",

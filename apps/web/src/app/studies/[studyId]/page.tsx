@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { StudyLanguageToggle } from "@/components/study-language-toggle";
 import {
   mergeIranStudyDisplay,
@@ -13,6 +13,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TimelineChart, type ChartSeries } from "@/components/timeline-chart";
+import { COUNTRY_COMPARATOR_STYLES } from "@/lib/chart-country-series-styles";
 import { SourceInfo } from "@/components/source-info";
 import { RealOilDescription } from "@/components/real-oil-description";
 import { OilPppIranDescription } from "@/components/oil-ppp-iran-description";
@@ -38,6 +39,7 @@ import {
 } from "@/lib/studies";
 import { iranGdpMacroEventsToTimeline } from "@/lib/gdp-composition-macro-events";
 import {
+  dutchDiseaseDiagnosticsLearningSections,
   giniLearningSections,
   inflationLearningSections,
   povertyLearningSections,
@@ -61,6 +63,7 @@ import {
   toDisplayName,
 } from "@/lib/oil-trade-regions";
 import { joinExportSourceNames } from "@/lib/chart-export";
+import { CHART_LINE_SYMBOL_SIZE } from "@/lib/chart-series-markers";
 import {
   isStudyEventLayerVisible,
   studyEventLayersForFetch,
@@ -362,6 +365,8 @@ export default function StudyDetailPage() {
   const [pppYAxisLog, setPppYAxisLog] = useState(true);
   const [showSanctionsPeriods, setShowSanctionsPeriods] = useState(false);
   const [showShocks, setShowShocks] = useState(true);
+  /** Brent / global oil: story = major vertical markers only; data = all toggled point events on the chart. */
+  const [oilEventStoryMode, setOilEventStoryMode] = useState(true);
   const [oilPoints, setOilPoints] = useState<OilSignalData["points"]>([]);
   const [oilSource, setOilSource] = useState<OilSource | null>(null);
   const [oilSourceAnnual, setOilSourceAnnual] = useState<OilSource | null>(null);
@@ -403,6 +408,12 @@ export default function StudyDetailPage() {
   const [povertyDdayIndicatorId, setPovertyDdayIndicatorId] = useState("");
   const [povertyLmicIndicatorId, setPovertyLmicIndicatorId] = useState("");
   const [povertySource, setPovertySource] = useState<{ name?: string; url?: string; publisher?: string } | null>(null);
+  const [dutchOilRentsPoints, setDutchOilRentsPoints] = useState<{ date: string; value: number }[]>([]);
+  const [dutchManufacturingPoints, setDutchManufacturingPoints] = useState<{ date: string; value: number }[]>([]);
+  const [dutchImportsPoints, setDutchImportsPoints] = useState<{ date: string; value: number }[]>([]);
+  const [dutchWdiSource, setDutchWdiSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(null);
+  const [dutchFxPoints, setDutchFxPoints] = useState<{ date: string; value: number }[]>([]);
+  const [dutchFxSource, setDutchFxSource] = useState<FxUsdTomanSource | null>(null);
   const [fxDualOfficialPoints, setFxDualOfficialPoints] = useState<{ date: string; value: number }[]>([]);
   const [fxDualOpenPoints, setFxDualOpenPoints] = useState<{ date: string; value: number }[]>([]);
   const [fxDualOfficialSource, setFxDualOfficialSource] = useState<FxUsdTomanSource | null>(null);
@@ -561,9 +572,22 @@ export default function StudyDetailPage() {
   const isGiniInequality = study?.primarySignal.kind === "gini_inequality";
   const isInflationCpiYoy = study?.primarySignal.kind === "inflation_cpi_yoy";
   const isPovertyHeadcountIran = study?.primarySignal.kind === "poverty_headcount_iran";
+  const isDutchDiseaseDiagnostics = study?.primarySignal.kind === "dutch_disease_diagnostics_iran";
   /** WDI national-accounts levels bundle (composition study or dual-axis reference study). */
   const isGdpMacroNationalAccounts = isGdpComposition || isGdpIranAccountsDual;
   const isGdpIranLocal = study?.gdpCompositionIranLocalOptions === true;
+
+  const oilMacroDefaultsApplied = useRef(false);
+  useEffect(() => {
+    if (isOilBrent || isOilGlobalLong) {
+      if (!oilMacroDefaultsApplied.current) {
+        oilMacroDefaultsApplied.current = true;
+        setShowGlobalMacroOil(true);
+      }
+    } else {
+      oilMacroDefaultsApplied.current = false;
+    }
+  }, [studyId, isOilBrent, isOilGlobalLong]);
 
   const useShortWindowOptions = isOilBrent || isFxUsdToman || isOilAndFx || isRealOil;
   const windowOptions = useShortWindowOptions
@@ -659,6 +683,34 @@ export default function StudyDetailPage() {
     return [start, resolvedEnd];
   }, [study, isPovertyHeadcountIran, anchorEventId, events, effectiveWindowYears]);
 
+  const dutchTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isDutchDiseaseDiagnostics) return null;
+    if (anchorEventId) {
+      const ev = events.find((e) => e.id === anchorEventId);
+      if (ev) {
+        const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
+        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowYears);
+      }
+    }
+    const [start, end] = study.timeRange;
+    const resolvedEnd = end === "today" ? new Date().toISOString().slice(0, 10) : end;
+    return [start, resolvedEnd];
+  }, [study, isDutchDiseaseDiagnostics, anchorEventId, events, effectiveWindowYears]);
+
+  const dutchFxTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isDutchDiseaseDiagnostics) return null;
+    if (anchorEventId) {
+      const ev = events.find((e) => e.id === anchorEventId);
+      if (ev) {
+        const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
+        if (anchorDate) return computeWindowRangeDays(anchorDate, effectiveWindowValue);
+      }
+    }
+    const [start, end] = study.timeRange;
+    const resolvedEnd = end === "today" ? new Date().toISOString().slice(0, 10) : end;
+    return [start, resolvedEnd];
+  }, [study, isDutchDiseaseDiagnostics, anchorEventId, events, effectiveWindowValue]);
+
   const exporterTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isOilExporterTimeseries) return null;
     const [start, end] = study.timeRange;
@@ -720,6 +772,11 @@ export default function StudyDetailPage() {
     if (!isPovertyHeadcountIran) return events;
     return events.filter((e) => isStudyEventLayerVisible(e.layer, chartEventToggleState));
   }, [isPovertyHeadcountIran, events, chartEventToggleState]);
+
+  const dutchFilteredEvents = useMemo(() => {
+    if (!isDutchDiseaseDiagnostics) return events;
+    return events.filter((e) => isStudyEventLayerVisible(e.layer, chartEventToggleState));
+  }, [isDutchDiseaseDiagnostics, events, chartEventToggleState]);
 
   const gdpCompositionChartTimeRange = useMemo((): [string, string] | null => {
     if (!isGdpMacroNationalAccounts) return null;
@@ -1291,7 +1348,8 @@ export default function StudyDetailPage() {
       isGdpIranAccountsDual ||
       isGiniInequality ||
       isInflationCpiYoy ||
-      isPovertyHeadcountIran;
+      isPovertyHeadcountIran ||
+      isDutchDiseaseDiagnostics;
     if (hasEventLayers && !isEventsTimeline) {
       let layers: string[];
       const studyLayersLen = study.eventLayers?.length ?? 0;
@@ -1306,7 +1364,8 @@ export default function StudyDetailPage() {
           isGdpIranAccountsDual ||
           isGiniInequality ||
           isInflationCpiYoy ||
-          isPovertyHeadcountIran) &&
+          isPovertyHeadcountIran ||
+          isDutchDiseaseDiagnostics) &&
           studyLayersLen > 0) ||
         (hasTurkeyComparator && studyLayersLen > 0)
       ) {
@@ -1333,7 +1392,12 @@ export default function StudyDetailPage() {
             ...(showGdpIranEvents ? ["iran_core"] : []),
             ...(showGdpGlobalMacroOil ? ["global_macro_oil"] : []),
           ];
-        } else if (isGiniInequality || isInflationCpiYoy || isPovertyHeadcountIran) {
+        } else if (
+          isGiniInequality ||
+          isInflationCpiYoy ||
+          isPovertyHeadcountIran ||
+          isDutchDiseaseDiagnostics
+        ) {
           layers = [
             ...(showIranEvents ? ["iran_core"] : []),
             ...(showWorldEvents ? ["world_core"] : []),
@@ -1390,6 +1454,7 @@ export default function StudyDetailPage() {
     isGiniInequality,
     isInflationCpiYoy,
     isPovertyHeadcountIran,
+    isDutchDiseaseDiagnostics,
     hasTurkeyComparator,
     isEventsTimeline,
     chartEventToggleState,
@@ -2155,6 +2220,79 @@ export default function StudyDetailPage() {
   }, [povertyTimeRange, isPovertyHeadcountIran]);
 
   useEffect(() => {
+    if (!dutchTimeRange || !isDutchDiseaseDiagnostics) {
+      if (isDutchDiseaseDiagnostics) {
+        setDutchOilRentsPoints([]);
+        setDutchManufacturingPoints([]);
+        setDutchImportsPoints([]);
+        setDutchWdiSource(null);
+      }
+      return;
+    }
+    const [start, end] = dutchTimeRange;
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+    fetchJson<{
+      series: {
+        oil_rents_pct_gdp: { date: string; value: number }[];
+        manufacturing_pct_gdp: { date: string; value: number }[];
+        imports_pct_gdp: { date: string; value: number }[];
+      };
+      source?: { name: string; url?: string; publisher?: string };
+    }>(`/api/signals/wdi/dutch-disease-diagnostics-iran?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+      .then((res) => {
+        if (mounted) {
+          setDutchOilRentsPoints(res.series?.oil_rents_pct_gdp ?? []);
+          setDutchManufacturingPoints(res.series?.manufacturing_pct_gdp ?? []);
+          setDutchImportsPoints(res.series?.imports_pct_gdp ?? []);
+          setDutchWdiSource(res.source ?? null);
+        }
+      })
+      .catch((e) => {
+        if (mounted) {
+          setDutchOilRentsPoints([]);
+          setDutchManufacturingPoints([]);
+          setDutchImportsPoints([]);
+          setDutchWdiSource(null);
+          setError(e instanceof Error ? e.message : "Signal fetch failed");
+        }
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => {
+      mounted = false;
+    };
+  }, [dutchTimeRange, isDutchDiseaseDiagnostics]);
+
+  useEffect(() => {
+    if (!dutchFxTimeRange || !isDutchDiseaseDiagnostics) {
+      if (isDutchDiseaseDiagnostics) {
+        setDutchFxPoints([]);
+        setDutchFxSource(null);
+      }
+      return;
+    }
+    const [start, end] = dutchFxTimeRange;
+    let mounted = true;
+    fetchJson<FxUsdTomanSignalData>(`/api/signals/fx/usd-toman?start=${start}&end=${end}`)
+      .then((res) => {
+        if (mounted) {
+          setDutchFxPoints(res.points ?? []);
+          setDutchFxSource(res.source ?? null);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setDutchFxPoints([]);
+          setDutchFxSource(null);
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [dutchFxTimeRange, isDutchDiseaseDiagnostics]);
+
+  useEffect(() => {
     if (!fxDualTimeRange || !isFxUsdIrrDual) {
       if (isFxUsdIrrDual) {
         setFxDualOfficialPoints([]);
@@ -2353,7 +2491,8 @@ export default function StudyDetailPage() {
     isGdpIranAccountsDual ||
     isGiniInequality ||
     isInflationCpiYoy ||
-    isPovertyHeadcountIran;
+    isPovertyHeadcountIran ||
+    isDutchDiseaseDiagnostics;
   const singleSignalReady =
     isGoldAndOil
       ? goldPoints.length > 0 && oilPoints.length > 0
@@ -2383,6 +2522,11 @@ export default function StudyDetailPage() {
                         inflationTurkeyPoints.length > 0
                       : isPovertyHeadcountIran
                         ? povertyDdayPoints.length > 0 || povertyLmicPoints.length > 0
+                        : isDutchDiseaseDiagnostics
+                          ? dutchOilRentsPoints.length > 0 ||
+                            dutchManufacturingPoints.length > 0 ||
+                            dutchImportsPoints.length > 0 ||
+                            dutchFxPoints.length > 0
                       : isFxUsdIrrDual
                         ? fxDualOpenPoints.length > 0
                         : isWageCpiReal
@@ -2477,6 +2621,12 @@ export default function StudyDetailPage() {
     if (isPovertyHeadcountIran) {
       if (povertyDdayPoints.length > 0) allDates.push(...collect(povertyDdayPoints));
       if (povertyLmicPoints.length > 0) allDates.push(...collect(povertyLmicPoints));
+    }
+    if (isDutchDiseaseDiagnostics) {
+      if (dutchOilRentsPoints.length > 0) allDates.push(...collect(dutchOilRentsPoints));
+      if (dutchManufacturingPoints.length > 0) allDates.push(...collect(dutchManufacturingPoints));
+      if (dutchImportsPoints.length > 0) allDates.push(...collect(dutchImportsPoints));
+      if (dutchFxPoints.length > 0) allDates.push(...collect(dutchFxPoints));
     }
     if (isOilExporterTimeseries) {
       if (exporterSaudiPoints.length > 0) allDates.push(...collect(exporterSaudiPoints));
@@ -3271,6 +3421,9 @@ export default function StudyDetailPage() {
                       showLinear={fgShowLinear}
                       showExponential={fgShowExponential}
                       showLogistic={fgShowLogistic}
+                      chartLocale={chartLocaleForCharts}
+                      exportPresentationStudyHeading={displayStudy.title}
+                      exportSourceFooter={studyChartExportSource(isFa, ["Internet Archive Wayback Machine"])}
                     />
                     {fgMetadata && (
                       <p className="mt-3 text-xs text-muted-foreground border-t border-border pt-3">
@@ -3395,6 +3548,7 @@ export default function StudyDetailPage() {
               />
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
                 exportSourceFooter={studyChartExportSource(isFa, [
                   fxDualOfficialSource?.name,
@@ -3413,6 +3567,8 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "toman/USD", "تومان/دلار"),
                     points: fxDualOfficialPoints,
+                    symbol: "circle",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   {
                     key: "open",
@@ -3420,6 +3576,8 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "toman/USD", "تومان/دلار"),
                     points: fxDualOpenPoints,
+                    symbol: "diamond",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   ...(showFxSpread
                     ? [
@@ -3428,6 +3586,8 @@ export default function StudyDetailPage() {
                           label: L(isFa, "Spread (%)", "شکاف (٪)"),
                           yAxisIndex: 1,
                           unit: "%",
+                          symbol: "triangle",
+                          symbolSize: CHART_LINE_SYMBOL_SIZE,
                           points: (() => {
                             const byDate: Record<string, number> = {};
                             fxDualOfficialPoints.forEach((p) => {
@@ -3447,6 +3607,7 @@ export default function StudyDetailPage() {
                 ]}
                 timeRange={fxDualTimeRange ?? study.timeRange}
                 mutedBands={false}
+                chartRangeGranularity="month"
               />
               <LearningNote locale={isFa ? "fa" : "en"}
                 sections={[
@@ -3620,6 +3781,7 @@ export default function StudyDetailPage() {
             <div className="chart-container">
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
                 exportSourceFooter={studyChartExportSource(isFa, [oilSource?.name])}
                 data={geopoliticalChartData.points}
@@ -3632,6 +3794,7 @@ export default function StudyDetailPage() {
                 showOilShocks
                 chartHeight="h-72 md:h-80"
                 forceTimeAxis
+                chartRangeGranularity="day"
               />
             </div>
           )}
@@ -4029,6 +4192,8 @@ export default function StudyDetailPage() {
                 ? "Network"
                 : isInflationCpiYoy
                   ? "Annual inflation rate (CPI)"
+                  : isDutchDiseaseDiagnostics
+                    ? "Dutch disease diagnostics (Iran)"
                   : isPovertyHeadcountIran
                     ? "Poverty headcount ratio (Iran)"
                     : isGiniInequality
@@ -4101,6 +4266,8 @@ export default function StudyDetailPage() {
               ? "Oil trade flows between major exporters and importers. Nodes are countries/regions; edge width reflects trade volume (thousand barrels/day). Drag nodes, zoom, pan."
               : isInflationCpiYoy
                 ? "World Bank WDI FP.CPI.TOTL.ZG: annual consumer price inflation (% change from a year earlier). Toggle event layers below."
+                : isDutchDiseaseDiagnostics
+                  ? "Four panels: WDI oil rents, manufacturing value added, and imports (each as % of GDP), plus open-market USD→toman. Annual WDI vs higher-frequency FX; exploratory only. Toggle event layers below."
                 : isPovertyHeadcountIran
                   ? "World Bank WDI SI.POV.DDAY and SI.POV.LMIC: share of Iran’s population below two international poverty lines (annual %). Toggle event layers below."
                   : isGiniInequality
@@ -4145,7 +4312,8 @@ export default function StudyDetailPage() {
               !isGdpIranAccountsDual &&
               !isGiniInequality &&
               !isInflationCpiYoy &&
-              !isPovertyHeadcountIran && (
+              !isPovertyHeadcountIran &&
+              !isDutchDiseaseDiagnostics && (
               <>
                 <select
                   value={anchorEventId}
@@ -4231,7 +4399,7 @@ export default function StudyDetailPage() {
                 Show sanctions periods
               </label>
             )}
-            {(isGiniInequality || isInflationCpiYoy || isPovertyHeadcountIran) && (
+            {(isGiniInequality || isInflationCpiYoy || isPovertyHeadcountIran || isDutchDiseaseDiagnostics) && (
               <>
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                   <input
@@ -4770,6 +4938,7 @@ export default function StudyDetailPage() {
               </div>
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 exportSourceFooter={studyChartExportSource(isFa, [
                   gdpCompositionSource?.name ?? "World Bank World Development Indicators",
                 ])}
@@ -4790,6 +4959,8 @@ export default function StudyDetailPage() {
                     unit: gdpLevelsUnit ?? "US$",
                     points: gdpLevelsDisplaySeries.consumption,
                     color: "#2563eb",
+                    symbol: "circle",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   {
                     key: "dual_level_investment",
@@ -4798,6 +4969,8 @@ export default function StudyDetailPage() {
                     unit: gdpLevelsUnit ?? "US$",
                     points: gdpLevelsDisplaySeries.investment,
                     color: "#16a34a",
+                    symbol: "rect",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   {
                     key: "dual_level_gdp",
@@ -4806,6 +4979,8 @@ export default function StudyDetailPage() {
                     unit: gdpLevelsUnit ?? "US$",
                     points: gdpLevelsDisplaySeries.gdp,
                     color: "#dc2626",
+                    symbol: "triangle",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                 ]}
                 multiSeriesYAxisNameOverrides={gdpLevelsDualAxisYAxisNameOverrides}
@@ -4823,6 +4998,7 @@ export default function StudyDetailPage() {
                 }
                 yAxisMin={gdpLevelsDisplayMode === "indexed" ? 0 : undefined}
                 gridRight="14%"
+                chartRangeGranularity="year"
               />
               <LearningNote locale={isFa ? "fa" : "en"}
                 sections={[
@@ -4979,6 +5155,7 @@ export default function StudyDetailPage() {
                   </p>
                   <TimelineChart
                     chartLocale={chartLocaleForCharts}
+                    exportPresentationStudyHeading={displayStudy.title}
                     xAxisYearLabel={chartYearAxisLabel}
                     exportSourceFooter={studyChartExportSource(isFa, [
                       gdpCompositionSource?.name ?? "World Bank World Development Indicators",
@@ -4997,6 +5174,8 @@ export default function StudyDetailPage() {
                         unit: L(isFa, "% of GDP", "٪ از GDP"),
                         points: gdpConsumptionPoints,
                         color: "#2563eb",
+                        symbol: "circle",
+                        symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
                       {
                         key: "pct_investment",
@@ -5005,12 +5184,15 @@ export default function StudyDetailPage() {
                         unit: L(isFa, "% of GDP", "٪ از GDP"),
                         points: gdpInvestmentPoints,
                         color: "#16a34a",
+                        symbol: "diamond",
+                        symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
                     ]}
                     timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
                     forceTimeRangeAxis
                     mutedEventLines
                     categoryYearTickStep={5}
+                    chartRangeGranularity="year"
                   />
                 </>
               ) : null}
@@ -5025,6 +5207,7 @@ export default function StudyDetailPage() {
                   </p>
                   <TimelineChart
                     chartLocale={chartLocaleForCharts}
+                    exportPresentationStudyHeading={displayStudy.title}
                     exportSourceFooter={studyChartExportSource(isFa, [
                       gdpCompositionSource?.name ?? "World Bank World Development Indicators",
                     ])}
@@ -5041,6 +5224,8 @@ export default function StudyDetailPage() {
                         unit: L(isFa, "current US$", "دلار جاری آمریکا"),
                         points: gdpNominalPoints,
                         color: "#dc2626",
+                        symbol: "circle",
+                        symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
                     ]}
                     timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
@@ -5051,6 +5236,7 @@ export default function StudyDetailPage() {
                     xAxisYearLabel={gdpLevelsXAxisYearLabel ?? chartYearAxisLabel}
                     categoryYearTickStep={5}
                     multiSeriesValueFormat="gdp_absolute"
+                    chartRangeGranularity="year"
                   />
                   <p className="text-xs font-medium text-muted-foreground mb-1.5 mt-6">
                     {gdpLevelsDisplayMode === "indexed"
@@ -5115,6 +5301,7 @@ export default function StudyDetailPage() {
                   </div>
                   <TimelineChart
                     chartLocale={chartLocaleForCharts}
+                    exportPresentationStudyHeading={displayStudy.title}
                     exportSourceFooter={studyChartExportSource(isFa, [
                       gdpCompositionSource?.name ?? "World Bank World Development Indicators",
                     ])}
@@ -5131,6 +5318,8 @@ export default function StudyDetailPage() {
                         unit: gdpLevelsUnit ?? "US$",
                         points: gdpLevelsDisplaySeries.consumption,
                         color: "#2563eb",
+                        symbol: "circle",
+                        symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
                       {
                         key: "level_gdp",
@@ -5139,6 +5328,8 @@ export default function StudyDetailPage() {
                         unit: gdpLevelsUnit ?? "US$",
                         points: gdpLevelsDisplaySeries.gdp,
                         color: "#dc2626",
+                        symbol: "triangle",
+                        symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
                       {
                         key: "level_investment",
@@ -5147,6 +5338,8 @@ export default function StudyDetailPage() {
                         unit: gdpLevelsUnit ?? "US$",
                         points: gdpLevelsDisplaySeries.investment,
                         color: "#16a34a",
+                        symbol: "rect",
+                        symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
                     ]}
                     timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
@@ -5162,6 +5355,7 @@ export default function StudyDetailPage() {
                         : undefined
                     }
                     yAxisMin={gdpLevelsDisplayMode === "indexed" ? 0 : undefined}
+                    chartRangeGranularity="year"
                   />
                 </>
               ) : null}
@@ -5278,6 +5472,7 @@ export default function StudyDetailPage() {
               />
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
                 exportSourceFooter={studyChartExportSource(isFa, ["UN Comtrade"])}
                 data={[]}
@@ -5285,15 +5480,48 @@ export default function StudyDetailPage() {
                 label="Crude oil exports"
                 events={[]}
                 multiSeries={[
-                  { key: "saudi", label: "Saudi Arabia", yAxisIndex: 0, unit: "thousand bbl/day", points: exporterSaudiPoints },
-                  { key: "russia", label: "Russia", yAxisIndex: 0, unit: "thousand bbl/day", points: exporterRussiaPoints },
-                  { key: "us", label: "United States", yAxisIndex: 0, unit: "thousand bbl/day", points: exporterUsPoints },
-                  { key: "iran", label: "Iran", yAxisIndex: 0, unit: "thousand bbl/day", points: exporterIranPoints },
+                  {
+                    key: "saudi",
+                    label: "Saudi Arabia",
+                    yAxisIndex: 0,
+                    unit: "thousand bbl/day",
+                    points: exporterSaudiPoints,
+                    symbol: "diamond",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
+                  {
+                    key: "russia",
+                    label: "Russia",
+                    yAxisIndex: 0,
+                    unit: "thousand bbl/day",
+                    points: exporterRussiaPoints,
+                    symbol: "triangle",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
+                  {
+                    key: "us",
+                    label: "United States",
+                    yAxisIndex: 0,
+                    unit: "thousand bbl/day",
+                    points: exporterUsPoints,
+                    symbol: "circle",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
+                  {
+                    key: "iran",
+                    label: "Iran",
+                    yAxisIndex: 0,
+                    unit: "thousand bbl/day",
+                    points: exporterIranPoints,
+                    symbol: "roundRect",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
                 ]}
                 timeRange={exporterChartTimeRange ?? exporterTimeRange ?? study.timeRange}
                 forceTimeRangeAxis
                 yAxisMin={exporterYMin}
                 yAxisMax={exporterYMax}
+                chartRangeGranularity="year"
               />
               <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
                 <span>Source: UN Comtrade (HS 2709 crude oil trade)</span>
@@ -5414,6 +5642,7 @@ export default function StudyDetailPage() {
             <>
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
                 exportSourceFooter={studyChartExportSource(isFa, [
                   pppIranSource?.oil,
@@ -5431,6 +5660,8 @@ export default function StudyDetailPage() {
                   unit: "toman/bbl (PPP)",
                   points: pppIranPoints,
                   yAxisIndex: 1,
+                  symbol: "circle",
+                  symbolSize: CHART_LINE_SYMBOL_SIZE,
                 }}
                 timeRange={oilTimeRange ?? study.timeRange}
                 mutedBands={false}
@@ -5444,10 +5675,16 @@ export default function StudyDetailPage() {
                 }
                 comparatorSeries={
                   hasTurkeyComparator && pppTurkeyPoints.length > 0
-                    ? { label: "Turkey (PPP)", points: pppTurkeyPoints }
+                    ? {
+                        label: "Turkey (PPP)",
+                        points: pppTurkeyPoints,
+                        symbol: COUNTRY_COMPARATOR_STYLES.turkey.symbol,
+                        symbolSize: CHART_LINE_SYMBOL_SIZE,
+                      }
                     : undefined
                 }
                 indexComparator={hasTurkeyComparator}
+                chartRangeGranularity="year"
               />
               {hasTurkeyComparator && (
                 <p className="mt-3 text-xs text-muted-foreground max-w-2xl break-words">
@@ -5624,6 +5861,7 @@ export default function StudyDetailPage() {
               />
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
                 exportSourceFooter={studyChartExportSource(isFa, [
                   "FRED DCOILBRENTEU",
@@ -5641,6 +5879,8 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "USD/bbl", "دلار/بشکه"),
                     points: exportCapacityOilPoints,
+                    symbol: "triangle",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   {
                     key: "proxy",
@@ -5650,11 +5890,14 @@ export default function StudyDetailPage() {
                       ? L(isFa, `Index (base=${exportCapacityBaseYear})`, `شاخص (پایه=${exportCapacityBaseYear})`)
                       : L(isFa, "Index", "شاخص"),
                     points: exportCapacityProxyPoints,
+                    symbol: "rect",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                 ]}
                 timeRange={exportCapacityTimeRange ?? study.timeRange}
                 mutedBands={false}
                 sanctionsPeriods={sanctionsPeriodsFromEvents}
+                chartRangeGranularity="year"
               />
               <LearningNote locale={isFa ? "fa" : "en"}
                 sections={[
@@ -5770,6 +6013,7 @@ export default function StudyDetailPage() {
               />
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
                 exportSourceFooter={studyChartExportSource(isFa, [productionSource?.name])}
                 data={[]}
@@ -5778,17 +6022,60 @@ export default function StudyDetailPage() {
                 events={study14FilteredEvents}
                 anchorEventId={anchorEventId || undefined}
                 multiSeries={[
-                  { key: "us", label: "United States", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionUsPoints },
-                  { key: "saudi", label: "Saudi Arabia", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionSaudiPoints },
-                  { key: "russia", label: "Russia", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionRussiaPoints },
-                  { key: "iran", label: "Iran", yAxisIndex: 0, unit: "million bbl/day", points: extendedProductionIranPoints },
+                  {
+                    key: "us",
+                    label: "United States",
+                    yAxisIndex: 0,
+                    unit: "million bbl/day",
+                    points: extendedProductionUsPoints,
+                    symbol: "circle",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
+                  {
+                    key: "saudi",
+                    label: "Saudi Arabia",
+                    yAxisIndex: 0,
+                    unit: "million bbl/day",
+                    points: extendedProductionSaudiPoints,
+                    symbol: "diamond",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
+                  {
+                    key: "russia",
+                    label: "Russia",
+                    yAxisIndex: 0,
+                    unit: "million bbl/day",
+                    points: extendedProductionRussiaPoints,
+                    symbol: "triangle",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
+                  {
+                    key: "iran",
+                    label: "Iran",
+                    yAxisIndex: 0,
+                    unit: "million bbl/day",
+                    points: extendedProductionIranPoints,
+                    symbol: "roundRect",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
                   ...(extendedProductionTotalPoints.length > 0
-                    ? [{ key: "total", label: "Total (US + Saudi + Russia + Iran)", yAxisIndex: 0 as const, unit: "million bbl/day", points: extendedProductionTotalPoints }]
+                    ? [
+                        {
+                          key: "total",
+                          label: "Total (US + Saudi + Russia + Iran)",
+                          yAxisIndex: 0 as const,
+                          unit: "million bbl/day",
+                          points: extendedProductionTotalPoints,
+                          symbol: "rect" as const,
+                          symbolSize: CHART_LINE_SYMBOL_SIZE,
+                        },
+                      ]
                     : []),
                 ]}
                 timeRange={productionTimeRange ?? study.timeRange}
                 extendedDates={productionExtendedDates}
                 lastOfficialDateForExtension={productionLastOfficialDate}
+                chartRangeGranularity="year"
               />
               <LearningNote locale={isFa ? "fa" : "en"}
                 sections={[
@@ -5882,6 +6169,7 @@ export default function StudyDetailPage() {
               />
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 exportSourceFooter={studyChartExportSource(isFa, [
                   giniSource?.name ?? "World Bank World Development Indicators",
                 ])}
@@ -5897,6 +6185,8 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "Gini coefficient (0–100)", "ضریب جینی (۰–۱۰۰)"),
                     points: giniIranPoints,
+                    symbol: COUNTRY_COMPARATOR_STYLES.iran.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   {
                     key: "us",
@@ -5904,6 +6194,8 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "Gini coefficient (0–100)", "ضریب جینی (۰–۱۰۰)"),
                     points: giniUsPoints,
+                    symbol: COUNTRY_COMPARATOR_STYLES.us.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   {
                     key: "germany",
@@ -5911,6 +6203,8 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "Gini coefficient (0–100)", "ضریب جینی (۰–۱۰۰)"),
                     points: giniGermanyPoints,
+                    symbol: COUNTRY_COMPARATOR_STYLES.germany.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   {
                     key: "turkey",
@@ -5918,6 +6212,8 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "Gini coefficient (0–100)", "ضریب جینی (۰–۱۰۰)"),
                     points: giniTurkeyPoints,
+                    symbol: COUNTRY_COMPARATOR_STYLES.turkey.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                 ]}
                 timeRange={giniTimeRange ?? study.timeRange}
@@ -6002,6 +6298,7 @@ export default function StudyDetailPage() {
               />
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 exportSourceFooter={studyChartExportSource(isFa, [
                   inflationSource?.name ?? "World Bank World Development Indicators",
                 ])}
@@ -6017,6 +6314,8 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
                     points: inflationIranPoints,
+                    symbol: COUNTRY_COMPARATOR_STYLES.iran.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   {
                     key: "us",
@@ -6024,6 +6323,8 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
                     points: inflationUsPoints,
+                    symbol: COUNTRY_COMPARATOR_STYLES.us.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   {
                     key: "germany",
@@ -6031,6 +6332,8 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
                     points: inflationGermanyPoints,
+                    symbol: COUNTRY_COMPARATOR_STYLES.germany.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   {
                     key: "turkey",
@@ -6038,6 +6341,8 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
                     points: inflationTurkeyPoints,
+                    symbol: COUNTRY_COMPARATOR_STYLES.turkey.symbol,
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                 ]}
                 timeRange={inflationTimeRange ?? study.timeRange}
@@ -6112,6 +6417,7 @@ export default function StudyDetailPage() {
               />
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 exportSourceFooter={studyChartExportSource(isFa, [
                   povertySource?.name ?? "World Bank World Development Indicators",
                 ])}
@@ -6128,6 +6434,8 @@ export default function StudyDetailPage() {
                     unit: L(isFa, "% of population", "٪ از جمعیت"),
                     points: povertyDdayPoints,
                     color: "#64748b",
+                    symbol: "circle",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   {
                     key: "pov_lmic",
@@ -6136,6 +6444,8 @@ export default function StudyDetailPage() {
                     unit: L(isFa, "% of population", "٪ از جمعیت"),
                     points: povertyLmicPoints,
                     color: "#0d9488",
+                    symbol: "diamond",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                 ]}
                 timeRange={povertyTimeRange ?? study.timeRange}
@@ -6204,6 +6514,203 @@ export default function StudyDetailPage() {
                 )}
               </InSimpleTerms>
             </>
+          ) : isDutchDiseaseDiagnostics ? (
+            <>
+              <div className="space-y-8">
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {L(isFa, "1. Oil rents (% of GDP)", "۱. اجاره نفت (٪ از GDP)")}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {L(
+                      isFa,
+                      "World Bank WDI NY.GDP.PETR.RT.ZS — oil rents as a share of GDP (annual).",
+                      "WDI بانک جهانی NY.GDP.PETR.RT.ZS — اجاره نفت به‌صورت سهم از GDP (سالانه)."
+                    )}
+                  </p>
+                  <TimelineChart
+                    chartLocale={chartLocaleForCharts}
+                    exportPresentationStudyHeading={displayStudy.title}
+                    exportPresentationTitle={L(
+                      isFa,
+                      `${displayStudy.title} — ${"Oil rents (% of GDP)"}`,
+                      `${displayStudy.title} — ${"اجاره نفت (٪ از GDP)"}`
+                    )}
+                    exportSourceFooter={studyChartExportSource(isFa, [
+                      dutchWdiSource?.name ?? "World Bank WDI",
+                      "NY.GDP.PETR.RT.ZS",
+                    ])}
+                    data={dutchOilRentsPoints}
+                    valueKey="value"
+                    label={L(isFa, "Oil rents (% of GDP)", "اجاره نفت (٪ از GDP)")}
+                    unit="%"
+                    events={dutchFilteredEvents}
+                    anchorEventId={anchorEventId || undefined}
+                    timeRange={dutchTimeRange ?? study.timeRange}
+                    chartRangeGranularity="year"
+                    xAxisYearLabel={chartYearAxisLabel}
+                    exportFileStem="dutch-disease-oil-rents"
+                    showChartControls={false}
+                  />
+                </div>
+                <div className="space-y-2 border-t border-border pt-6">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {L(isFa, "2. Manufacturing value added (% of GDP)", "۲. ارزش افزوده تولیدات کارخانه‌ای (٪ از GDP)")}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {L(
+                      isFa,
+                      "World Bank WDI NV.IND.MANF.ZS — one tradable-sector proxy; not all tradables.",
+                      "WDI بانک جهانی NV.IND.MANF.ZS — یک نماینده بخش قابل‌معامله؛ همه بخش‌های قابل‌معامله نیست."
+                    )}
+                  </p>
+                  <TimelineChart
+                    chartLocale={chartLocaleForCharts}
+                    exportPresentationStudyHeading={displayStudy.title}
+                    exportPresentationTitle={L(
+                      isFa,
+                      `${displayStudy.title} — ${"Manufacturing (% of GDP)"}`,
+                      `${displayStudy.title} — ${"تولیدات کارخانه‌ای (٪ از GDP)"}`
+                    )}
+                    exportSourceFooter={studyChartExportSource(isFa, [
+                      dutchWdiSource?.name ?? "World Bank WDI",
+                      "NV.IND.MANF.ZS",
+                    ])}
+                    data={dutchManufacturingPoints}
+                    valueKey="value"
+                    label={L(isFa, "Manufacturing (% of GDP)", "تولیدات کارخانه‌ای (٪ از GDP)")}
+                    unit="%"
+                    events={dutchFilteredEvents}
+                    anchorEventId={anchorEventId || undefined}
+                    timeRange={dutchTimeRange ?? study.timeRange}
+                    chartRangeGranularity="year"
+                    xAxisYearLabel={chartYearAxisLabel}
+                    exportFileStem="dutch-disease-manufacturing"
+                    showChartControls={false}
+                  />
+                </div>
+                <div className="space-y-2 border-t border-border pt-6">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {L(isFa, "3. Imports of goods and services (% of GDP)", "۳. واردات کالا و خدمات (٪ از GDP)")}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {L(
+                      isFa,
+                      "World Bank WDI NE.IMP.GNFS.ZS — imports relative to GDP (annual).",
+                      "WDI بانک جهانی NE.IMP.GNFS.ZS — واردات نسبت به GDP (سالانه)."
+                    )}
+                  </p>
+                  <TimelineChart
+                    chartLocale={chartLocaleForCharts}
+                    exportPresentationStudyHeading={displayStudy.title}
+                    exportPresentationTitle={L(
+                      isFa,
+                      `${displayStudy.title} — ${"Imports (% of GDP)"}`,
+                      `${displayStudy.title} — ${"واردات (٪ از GDP)"}`
+                    )}
+                    exportSourceFooter={studyChartExportSource(isFa, [
+                      dutchWdiSource?.name ?? "World Bank WDI",
+                      "NE.IMP.GNFS.ZS",
+                    ])}
+                    data={dutchImportsPoints}
+                    valueKey="value"
+                    label={L(isFa, "Imports (% of GDP)", "واردات (٪ از GDP)")}
+                    unit="%"
+                    events={dutchFilteredEvents}
+                    anchorEventId={anchorEventId || undefined}
+                    timeRange={dutchTimeRange ?? study.timeRange}
+                    chartRangeGranularity="year"
+                    xAxisYearLabel={chartYearAxisLabel}
+                    exportFileStem="dutch-disease-imports"
+                    showChartControls={false}
+                  />
+                </div>
+                <div className="space-y-2 border-t border-border pt-6">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {L(isFa, "4. Open-market USD→toman (context)", "۴. دلار به تومان بازار آزاد (زمینه)")}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {L(
+                      isFa,
+                      "Same series as the USD→toman study; higher frequency than WDI panels. Read alongside annual shares, not as a strict year-by-year match.",
+                      "همان سری مطالعهٔ دلار/تومان؛ تناوب بالاتر از پنل‌های WDI؛ کنار سهم‌های سالانه ببینید، نه تطبیق دقیق سال‌به‌سال."
+                    )}
+                  </p>
+                  <TimelineChart
+                    chartLocale={chartLocaleForCharts}
+                    exportPresentationStudyHeading={displayStudy.title}
+                    exportPresentationTitle={L(
+                      isFa,
+                      `${displayStudy.title} — ${"Open-market USD→toman"}`,
+                      `${displayStudy.title} — ${"دلار به تومان بازار آزاد"}`
+                    )}
+                    exportSourceFooter={studyChartExportSource(isFa, [dutchFxSource?.name, dutchFxSource?.publisher])}
+                    data={dutchFxPoints}
+                    valueKey="value"
+                    label={L(isFa, "Open-market toman per USD", "تومان بازار آزاد به ازای هر دلار")}
+                    unit={L(isFa, "toman/USD", "تومان/دلار")}
+                    events={dutchFilteredEvents}
+                    anchorEventId={anchorEventId || undefined}
+                    timeRange={dutchFxTimeRange ?? study.timeRange}
+                    xAxisYearLabel={chartYearAxisLabel}
+                    exportFileStem="dutch-disease-fx-context"
+                    showChartControls={false}
+                    forceTimeAxis
+                  />
+                </div>
+              </div>
+              <LearningNote locale={isFa ? "fa" : "en"} sections={dutchDiseaseDiagnosticsLearningSections(isFa)} />
+              {displayStudy.observations?.length ? (
+                <DataObservations locale={isFa ? "fa" : "en"} observations={displayStudy.observations ?? []} />
+              ) : null}
+              {study.concepts?.length ? <ConceptsUsed locale={isFa ? "fa" : "en"} conceptKeys={study.concepts} /> : null}
+              <SourceInfo
+                items={[
+                  {
+                    label: L(isFa, "WDI bundle", "بسته WDI"),
+                    sourceName: dutchWdiSource?.name ?? "World Bank World Development Indicators",
+                    sourceUrl: dutchWdiSource?.url ?? "https://data.worldbank.org/country/iran",
+                    sourceDetail: dutchWdiSource?.publisher ?? "World Bank",
+                    unitLabel: L(isFa, "Annual % of GDP (three indicators)", "٪ سالانه از GDP (سه شاخص)"),
+                    unitNote: L(
+                      isFa,
+                      "NY.GDP.PETR.RT.ZS; NV.IND.MANF.ZS; NE.IMP.GNFS.ZS.",
+                      "NY.GDP.PETR.RT.ZS؛ NV.IND.MANF.ZS؛ NE.IMP.GNFS.ZS."
+                    ),
+                  },
+                  {
+                    label: L(isFa, "Open-market FX", "نرخ بازار آزاد"),
+                    sourceName: dutchFxSource?.name ?? "—",
+                    sourceUrl: dutchFxSource?.url,
+                    sourceDetail: dutchFxSource?.publisher ?? "",
+                    unitLabel: L(isFa, "toman per USD", "تومان به ازای دلار"),
+                  },
+                ]}
+                note={L(
+                  isFa,
+                  "این صفحه برای اکتشاف آموزشی است؛ فرضیه ساختاری را به‌صورت یک شاخص واحد اندازه نمی‌گیرد و علیت ادعا نمی‌کند.",
+                  "Educational exploration only: no composite Dutch-disease index and no causal claims."
+                )}
+              />
+              <InSimpleTerms locale={isFa ? "fa" : "en"}>
+                {isFa && faRich?.simpleTermsParagraphs?.length ? (
+                  faRich.simpleTermsParagraphs.map((p, i) => <p key={i}>{p}</p>)
+                ) : (
+                  <>
+                    <p>
+                      Economists sometimes discuss &quot;Dutch disease&quot; when a resource boom coincides with a shrinking
+                      tradable sector or rising external imbalance—but those are patterns people investigate with several
+                      indicators, not one magic number.
+                    </p>
+                    <p>
+                      Here you get separate charts so you can compare timing and scale without pretending the lines are a single
+                      official score. The FX panel uses the same open-market USD→toman series as elsewhere on SignalMap, shown
+                      as macro pressure context rather than a formal real exchange rate index.
+                    </p>
+                  </>
+                )}
+              </InSimpleTerms>
+            </>
           ) : isWageCpiReal ? (
             <>
               <Card className="chart-card border-border">
@@ -6249,6 +6756,7 @@ export default function StudyDetailPage() {
                   />
                   <TimelineChart
                     chartLocale={chartLocaleForCharts}
+                    exportPresentationStudyHeading={displayStudy.title}
                     xAxisYearLabel={chartYearAxisLabel}
                     exportSourceFooter={studyChartExportSource(isFa, [
                       wageSource?.nominal,
@@ -6267,6 +6775,8 @@ export default function StudyDetailPage() {
                         yAxisIndex: 0,
                         unit: "k tomans/month",
                         points: wageNominalKTomans,
+                        symbol: "circle",
+                        symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
                       {
                         key: "real",
@@ -6274,6 +6784,8 @@ export default function StudyDetailPage() {
                         yAxisIndex: 0,
                         unit: `k tomans/month (${wageBaseYear ?? ""} prices)`,
                         points: wageRealKTomans,
+                        symbol: "diamond",
+                        symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
                       ...(showWageIndex
                         ? [
@@ -6283,12 +6795,15 @@ export default function StudyDetailPage() {
                               yAxisIndex: 1,
                               unit: "Index (base=100)",
                               points: wageIndexPoints,
+                              symbol: "triangle",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE,
                             } as ChartSeries,
                           ]
                         : []),
                     ]}
                     timeRange={wageTimeRange ?? study.timeRange}
                     mutedBands={false}
+                    chartRangeGranularity="year"
                   />
                   <LearningNote locale={isFa ? "fa" : "en"}
                     sections={[
@@ -6373,6 +6888,7 @@ export default function StudyDetailPage() {
             <>
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
                 exportSourceFooter={studyChartExportSource(isFa, [
                   realOilSource?.oil,
@@ -6391,6 +6907,7 @@ export default function StudyDetailPage() {
                 }}
                 timeRange={oilTimeRange ?? study.timeRange}
                 mutedBands={false}
+                chartRangeGranularity="day"
               />
               <RealOilDescription />
               <LearningNote locale={isFa ? "fa" : "en"}
@@ -6480,6 +6997,7 @@ export default function StudyDetailPage() {
               />
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
                 exportSourceFooter={studyChartExportSource(isFa, [goldSource?.name, oilSource?.name])}
                 data={[]}
@@ -6487,14 +7005,31 @@ export default function StudyDetailPage() {
                 label="Gold"
                 events={events}
                 multiSeries={[
-                  { key: "gold", label: "Gold price", yAxisIndex: 0, unit: "USD/oz", points: goldPoints },
-                  { key: "oil", label: "Oil price", yAxisIndex: 1, unit: "USD/bbl", points: oilPointsWithVolatility },
+                  {
+                    key: "gold",
+                    label: "Gold price",
+                    yAxisIndex: 0,
+                    unit: "USD/oz",
+                    points: goldPoints,
+                    symbol: "circle",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
+                  {
+                    key: "oil",
+                    label: "Oil price",
+                    yAxisIndex: 1,
+                    unit: "USD/bbl",
+                    points: oilPointsWithVolatility,
+                    symbol: "triangle",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                  },
                 ]}
                 oilShockDates={oilShockDates}
                 showOilShocks={showShocks}
                 timeRange={oilTimeRange ?? study.timeRange}
                 mutedBands
                 yAxisLog
+                chartRangeGranularity="day"
               />
               {showShocks && oilShockDates.length > 0 && (
                 <div className="flex items-center gap-2 mt-2 text-sm text-gray-600">
@@ -6582,18 +7117,42 @@ export default function StudyDetailPage() {
           ) : isOilBrent || isOilGlobalLong ? (
             <>
               <div className="chart-container">
-                {oilShockDates.length > 0 && (
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer mb-2">
+                <div className="mb-2 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+                  {oilShockDates.length > 0 ? (
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={showShocks}
+                        onChange={(e) => setShowShocks(e.target.checked)}
+                      />
+                      Show shocks
+                    </label>
+                  ) : null}
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
+                    Events on chart
+                  </span>
+                  <label className="flex cursor-pointer items-center gap-2">
                     <input
-                      type="checkbox"
-                      checked={showShocks}
-                      onChange={(e) => setShowShocks(e.target.checked)}
+                      type="radio"
+                      name="oil-event-density"
+                      checked={oilEventStoryMode}
+                      onChange={() => setOilEventStoryMode(true)}
                     />
-                    Show shocks
+                    Story (major markers)
                   </label>
-                )}
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="radio"
+                      name="oil-event-density"
+                      checked={!oilEventStoryMode}
+                      onChange={() => setOilEventStoryMode(false)}
+                    />
+                    Data (all point events)
+                  </label>
+                </div>
                 <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
                 exportSourceFooter={studyChartExportSource(isFa, [oilSource?.name])}
                   data={[]}
@@ -6606,12 +7165,17 @@ export default function StudyDetailPage() {
                     unit: "USD/barrel",
                     points: oilPointsWithVolatility,
                     yAxisIndex: 1,
+                    symbol: "circle",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   }}
                   oilShockDates={oilShockDates}
                   showOilShocks={showShocks}
                   timeRange={oilTimeRange ?? study.timeRange}
                   mutedBands={isOilGlobalLong}
                   highlightLatestPoint
+                  oilPublicationLayout
+                  oilEventDensity={oilEventStoryMode ? "story" : "data"}
+                  chartRangeGranularity="day"
                 />
                 {showShocks && oilShockDates.length > 0 && (
                   <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
@@ -6625,6 +7189,7 @@ export default function StudyDetailPage() {
                 {dailyReturnPoints.length > 0 && (
                   <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
                 exportSourceFooter={studyChartExportSource(isFa, [oilSource?.name])}
                     data={dailyReturnPoints as { date: string; value: number }[]}
@@ -6635,6 +7200,8 @@ export default function StudyDetailPage() {
                     chartHeight="h-56 md:h-64"
                     referenceLine={{ value: 0, label: "0%" }}
                     gridRight="12%"
+                    chartLineRole="secondary"
+                    chartRangeGranularity="day"
                   />
                 )}
               </div>
@@ -6728,6 +7295,7 @@ export default function StudyDetailPage() {
                   />
                   <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
                     exportSourceFooter={studyChartExportSource(isFa, [
                       oilSource?.name,
@@ -6740,13 +7308,38 @@ export default function StudyDetailPage() {
                     events={events}
                     anchorEventId={anchorEventId || undefined}
                     multiSeries={[
-                      { key: "oil", label: "Brent oil", yAxisIndex: 0, unit: "USD/barrel", points: oilPointsWithVolatility },
-                      { key: "fx", label: "USD→Toman", yAxisIndex: 1, unit: "toman/USD", points: fxPoints },
-                      { key: "gold", label: "Gold price", yAxisIndex: 2, unit: "USD/oz", points: goldPoints },
+                      {
+                        key: "oil",
+                        label: "Brent oil",
+                        yAxisIndex: 0,
+                        unit: "USD/barrel",
+                        points: oilPointsWithVolatility,
+                        symbol: "triangle",
+                        symbolSize: CHART_LINE_SYMBOL_SIZE,
+                      },
+                      {
+                        key: "fx",
+                        label: "USD→Toman",
+                        yAxisIndex: 1,
+                        unit: "toman/USD",
+                        points: fxPoints,
+                        symbol: "diamond",
+                        symbolSize: CHART_LINE_SYMBOL_SIZE,
+                      },
+                      {
+                        key: "gold",
+                        label: "Gold price",
+                        yAxisIndex: 2,
+                        unit: "USD/oz",
+                        points: goldPoints,
+                        symbol: "circle",
+                        symbolSize: CHART_LINE_SYMBOL_SIZE,
+                      },
                     ]}
                   oilShockDates={oilShockDates}
                   showOilShocks={showShocks}
                   timeRange={dualTimeRange ?? study.timeRange}
+                  chartRangeGranularity="day"
                 />
                 </>
               ) : (
@@ -6760,6 +7353,7 @@ export default function StudyDetailPage() {
                   />
                   <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
                     exportSourceFooter={studyChartExportSource(isFa, [oilSource?.name, fxSource?.name])}
                     data={oilPointsWithVolatility}
@@ -6773,10 +7367,13 @@ export default function StudyDetailPage() {
                     unit: "toman/USD",
                     points: fxPoints,
                     yAxisIndex: 1,
+                    symbol: "triangle",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
                   }}
                   oilShockDates={oilShockDates}
                   showOilShocks={showShocks}
                   timeRange={dualTimeRange ?? study.timeRange}
+                  chartRangeGranularity="day"
                 />
                 </>
               )}
@@ -6846,6 +7443,7 @@ export default function StudyDetailPage() {
             <>
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
                 exportSourceFooter={studyChartExportSource(isFa, [fxSource?.name])}
                 data={[]}
@@ -6861,6 +7459,7 @@ export default function StudyDetailPage() {
                 }}
                 timeRange={fxTimeRange ?? study.timeRange}
                 highlightLatestPoint
+                chartRangeGranularity="month"
               />
               {fxSource && (
                 <SourceInfo
@@ -6891,6 +7490,7 @@ export default function StudyDetailPage() {
           ) : data ? (
             <TimelineChart
               chartLocale={chartLocaleForCharts}
+              exportPresentationStudyHeading={displayStudy.title}
               xAxisYearLabel={chartYearAxisLabel}
               exportSourceFooter={studyChartExportSource(
                 isFa,

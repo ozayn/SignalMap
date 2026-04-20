@@ -1649,7 +1649,7 @@ def update_macro_signals() -> dict:
     Refresh slow-moving World Bank WDI-backed caches (weekly, Sunday UTC only).
 
     - GDP composition: ``get_gdp_composition_series(..., force_refresh=True)`` for IRN.
-    - Gini, CPI inflation YoY, poverty headcount: in-memory TTL entries invalidated so the
+    - Gini, CPI inflation YoY, poverty headcount, Dutch-disease diagnostics bundle: in-memory TTL entries invalidated so the
       next API request refetches WDI (same weekly cadence; no daily churn for annual series).
 
     Callers: unified cron via ``signalmap.services.daily_updates`` (``macro_signals`` key).
@@ -1695,6 +1695,7 @@ def update_macro_signals() -> dict:
             "gini_inequality": invalidate_prefix("signal:gini_inequality:"),
             "cpi_inflation_yoy": invalidate_prefix("signal:cpi_inflation_yoy:"),
             "poverty_headcount_iran": invalidate_prefix("signal:poverty_headcount_iran:"),
+            "dutch_disease_diagnostics_iran": invalidate_prefix("signal:dutch_disease_diagnostics_iran:"),
         }
     except Exception as e:
         out["wdi_signal_cache_invalidated"] = {"error": str(e)}

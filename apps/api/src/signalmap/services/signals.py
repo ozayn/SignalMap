@@ -856,6 +856,40 @@ def get_poverty_headcount_iran(start: str, end: str) -> dict:
     return result
 
 
+DUTCH_DISEASE_DIAGNOSTICS_SOURCE = {
+    "name": "World Bank World Development Indicators",
+    "publisher": "World Bank",
+    "url": "https://data.worldbank.org/country/iran",
+}
+
+
+def get_dutch_disease_diagnostics_iran(start: str, end: str) -> dict:
+    """
+    Iran-only annual WDI bundle for exploratory structural diagnostics (not a composite “Dutch disease index”):
+
+    - NY.GDP.PETR.RT.ZS — oil rents (% of GDP)
+    - NV.IND.MANF.ZS — manufacturing value added (% of GDP)
+    - NE.IMP.GNFS.ZS — imports of goods and services (% of GDP)
+    """
+    from signalmap.sources.world_bank_dutch_disease import fetch_iran_dutch_disease_bundle
+
+    ck = f"signal:dutch_disease_diagnostics_iran:{start}:{end}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    bundle = fetch_iran_dutch_disease_bundle(start_year, end_year)
+    result = {
+        **bundle,
+        "source": DUTCH_DISEASE_DIAGNOSTICS_SOURCE,
+        "resolution": "annual",
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
+
+
 def get_iran_wage_cpi_series(start: str, end: str) -> dict:
     """
     Return Iran nominal minimum wage and CPI (annual) for real wage study.

@@ -19,6 +19,7 @@ export const IRAN_FA_STUDY_IDS = new Set<string>([
   "gini-inequality",
   "inflation-rate",
   "poverty-rate",
+  "dutch-disease-diagnostics",
 ]);
 
 export type StudyLocale = "en" | "fa";

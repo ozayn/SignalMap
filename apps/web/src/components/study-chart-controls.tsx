@@ -47,7 +47,7 @@ export function StudyChartControls({
     const startY = startValue ? parseInt(startValue.slice(0, 4), 10) : NaN;
     const endY = endValue ? parseInt(endValue.slice(0, 4), 10) : NaN;
     return (
-      <div className="flex flex-wrap items-end gap-2.5 pb-1.5 border-b border-border/40">
+      <div className="flex flex-wrap items-center gap-3 pb-1.5 border-b border-border/40">
         <label className="flex w-[5.5rem] flex-col gap-0.5">
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground/90">Start year</span>
           <input
@@ -56,7 +56,6 @@ export function StudyChartControls({
             max={yMax}
             step={1}
             value={Number.isFinite(startY) ? startY : ""}
-            placeholder={`${yMin}`}
             onChange={(e) => {
               const raw = e.target.value;
               if (raw === "") {
@@ -79,7 +78,6 @@ export function StudyChartControls({
             max={yMax}
             step={1}
             value={Number.isFinite(endY) ? endY : ""}
-            placeholder={`${yMax}`}
             onChange={(e) => {
               const raw = e.target.value;
               if (raw === "") {
@@ -111,7 +109,7 @@ export function StudyChartControls({
   if (granularity === "month") {
     const { min: mMin, max: mMax } = toMonthInputMinMax(minD, maxD);
     return (
-      <div className="flex flex-wrap items-end gap-2.5 pb-1.5 border-b border-border/40">
+      <div className="flex flex-wrap items-center gap-3 pb-1.5 border-b border-border/40">
         <label className="flex min-w-[8.5rem] flex-col gap-0.5">
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground/90">Start</span>
           <input
@@ -165,7 +163,7 @@ export function StudyChartControls({
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-2.5 pb-1.5 border-b border-border/40">
+    <div className="flex flex-wrap items-center gap-3 pb-1.5 border-b border-border/40">
       <label className="flex min-w-[9.5rem] flex-col gap-0.5">
         <span className="text-[10px] uppercase tracking-wide text-muted-foreground/90">Start</span>
         <input

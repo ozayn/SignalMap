@@ -9,6 +9,7 @@ import {
   normalizeChartRangeBound,
 } from "@/lib/chart-study-range";
 import { downloadEchartsRaster, type DownloadEchartsRasterOptions } from "@/lib/chart-export";
+import { buildPresentationExportTitle } from "@/lib/chart-export-presentation";
 import { StudyChartControls } from "@/components/study-chart-controls";
 import { timelineChartFaUi } from "@/lib/timeline-chart-fa";
 import {
@@ -41,6 +42,12 @@ import {
   countryComparatorSeriesStyle,
 } from "@/lib/chart-country-series-styles";
 import { localizeChartNumericDisplayString, localizeChartNumericDisplayStringSafe } from "@/lib/chart-numerals-fa";
+import {
+  CHART_LINE_SYMBOL_ITEM_OPACITY,
+  CHART_LINE_SYMBOL_SIZE,
+  CHART_LINE_SYMBOL_SIZE_COMPACT,
+  CHART_LINE_SYMBOL_SIZE_MINI,
+} from "@/lib/chart-series-markers";
 
 const MULTI_SERIES_FALLBACK_LEGEND_ICONS: Array<"circle" | "diamond" | "triangle" | "rect"> = [
   "circle",
@@ -48,14 +55,6 @@ const MULTI_SERIES_FALLBACK_LEGEND_ICONS: Array<"circle" | "diamond" | "triangle
   "triangle",
   "rect",
 ];
-
-const PRODUCTION_LEGEND_ICONS: Record<string, "circle" | "diamond" | "triangle" | "roundRect" | "rect"> = {
-  us: "circle",
-  saudi: "diamond",
-  russia: "triangle",
-  iran: "roundRect",
-  total: "rect",
-};
 
 type LegendEndShape = "circle" | "rect" | "diamond" | "triangle" | "roundRect";
 
@@ -129,6 +128,9 @@ export type SecondSeries = {
   unit?: string;
   points: { date: string; value: number }[];
   yAxisIndex: 1;
+  /** ECharts line symbol for this series (legend + line). */
+  symbol?: LegendEndShape;
+  symbolSize?: number;
 };
 
 export type ChartSeries = {
@@ -139,6 +141,9 @@ export type ChartSeries = {
   points: { date: string; value: number }[];
   /** Optional line/symbol color (CSS color string). */
   color?: string;
+  /** ECharts line symbol; overrides key-based defaults when set. */
+  symbol?: LegendEndShape;
+  symbolSize?: number;
 };
 
 type TimelineChartProps = {
@@ -161,6 +166,15 @@ type TimelineChartProps = {
   yAxisNameSuffix?: string;
   /** Reduce opacity and stroke of event lines so they do not compete with the curve. */
   mutedEventLines?: boolean;
+  /**
+   * Brent / global oil price chart: narrative-first layout (major vertical markers by default,
+   * staggered rotated labels, thicker price line, larger axis type).
+   */
+  oilPublicationLayout?: boolean;
+  /** With ``oilPublicationLayout``: ``story`` = only ``global_macro_oil`` (+ anchor) verticals; ``data`` = all point events. */
+  oilEventDensity?: "story" | "data";
+  /** Single-series line styling (e.g. companion daily return chart). */
+  chartLineRole?: "primary" | "secondary";
   /** Horizontal reference line (value on y-axis). */
   referenceLine?: { value: number; label?: string };
   /** Lightly shaded band for a descriptive period (e.g. approximate structural break). */
@@ -168,7 +182,12 @@ type TimelineChartProps = {
   /** Use timeRange for date axis when band overlays (e.g. presidential terms) need full range. Use for dense/short-range data (e.g. FX). */
   useTimeRangeForDateAxis?: boolean;
   /** Comparator series on same axis as secondSeries (e.g. Turkey PPP). Thinner, muted. */
-  comparatorSeries?: { label: string; points: { date: string; value: number }[] };
+  comparatorSeries?: {
+    label: string;
+    points: { date: string; value: number }[];
+    symbol?: LegendEndShape;
+    symbolSize?: number;
+  };
   /** When true, index both series to 100 at first common year so different-scale series (e.g. Iran vs Turkey) are comparable. */
   indexComparator?: boolean;
   /** Optional sanctions periods rendered as low-opacity background bands (Study 9). */
@@ -205,6 +224,10 @@ type TimelineChartProps = {
   exportFileStem?: string;
   /** Full source line appended below the chart in PNG export only (e.g. `Source: World Bank`). */
   exportSourceFooter?: string;
+  /** Overrides auto-generated presentation title (export only). */
+  exportPresentationTitle?: string;
+  /** Study / page heading for auto title: `Heading — metric (years)`. */
+  exportPresentationStudyHeading?: string;
   /** When set with dense category axes, show a year label about every N calendar years (Gregorian year index; Jalali label still applies). */
   categoryYearTickStep?: number;
   /** Compact USD / bn-toman tooltips and y-axis ticks (GDP composition absolute-value charts). */
@@ -231,6 +254,12 @@ const MIN_LABEL_GAP_YEARS = 4;
 
 /** Minimum years between shown **vertical** global oil / macro captions (lines always draw). */
 const MIN_VERTICAL_LABEL_GAP_YEARS = 5;
+
+/** Publication oil chart: fewer vertical captions, further apart. */
+const PUBLICATION_VERTICAL_OIL_LABEL_GAP_YEARS = 11;
+
+/** Horizontal pixel offset between rotated vertical oil labels (stagger). */
+const VERTICAL_OIL_LABEL_STAGGER_PX = 18;
 
 /** Vertical pixel bands for top captions so nearby years can both show text without stacking on one row. */
 const MACRO_LABEL_ROW_HEIGHT = 11;
@@ -293,22 +322,24 @@ function buildMacroLabelLayout(args: {
   return layout;
 }
 
-type VerticalOilLabelLayout = { showLabel: boolean };
+type VerticalOilLabelLayout = { showLabel: boolean; staggerIndex: number };
 
 /**
- * Global oil markLines: at most one vertical caption per ``MIN_VERTICAL_LABEL_GAP_YEARS``
- * (anchor always gets a label). Lines for every event stay in ``markLineData``; only labels drop.
+ * Global oil markLines: at most one vertical caption per ``minGapYears``
+ * (anchor always gets a label). ``staggerIndex`` spreads labels horizontally when rotated 90°.
  */
 function buildVerticalGlobalOilLabelLayout(args: {
   globalOilMarkData: { event: TimelineEvent }[];
   anchorEventId?: string;
+  minGapYears?: number;
 }): Map<string, VerticalOilLabelLayout> {
-  const { globalOilMarkData, anchorEventId } = args;
+  const { globalOilMarkData, anchorEventId, minGapYears } = args;
+  const gap = minGapYears ?? MIN_VERTICAL_LABEL_GAP_YEARS;
   const layout = new Map<string, VerticalOilLabelLayout>();
   if (globalOilMarkData.length === 0) return layout;
 
   for (const d of globalOilMarkData) {
-    layout.set(d.event.id, { showLabel: false });
+    layout.set(d.event.id, { showLabel: false, staggerIndex: 0 });
   }
 
   const sorted = [...globalOilMarkData].sort((a, b) => {
@@ -319,13 +350,15 @@ function buildVerticalGlobalOilLabelLayout(args: {
   });
 
   let lastLabeledYear = -Infinity;
+  let stagger = 0;
 
   for (const d of sorted) {
     const y = eventGregorianYear(d.event);
     const isAnchor = anchorEventId === d.event.id;
-    const show = isAnchor || y - lastLabeledYear >= MIN_VERTICAL_LABEL_GAP_YEARS;
+    const show = isAnchor || y - lastLabeledYear >= gap;
     if (show) {
-      layout.set(d.event.id, { showLabel: true });
+      layout.set(d.event.id, { showLabel: true, staggerIndex: stagger % 6 });
+      stagger += 1;
       lastLabeledYear = y;
     }
   }
@@ -340,6 +373,16 @@ function macroMarkLineCaption(ev: TimelineEvent): string {
   const t = ev.title.trim();
   if (t.length <= 16) return t;
   return `${t.slice(0, 14)}…`;
+}
+
+/** Single readable line for tooltips (publication oil / macro events). */
+function eventTooltipOneLiner(ev: TimelineEvent): string {
+  const raw = (ev.description ?? "").trim().replace(/\s+/g, " ");
+  if (!raw) return ev.title.trim();
+  const sentence = raw.split(/(?<=[.!?])\s/)[0] ?? raw;
+  const one = sentence.trim();
+  if (one.length <= 160) return one;
+  return `${one.slice(0, 157)}…`;
 }
 
 /** Same dashed markLine + caption layout as ``macroMarker`` (API global oil anchors omit the flag). */
@@ -421,6 +464,9 @@ export function TimelineChart({
   yAxisLog = false,
   yAxisNameSuffix,
   mutedEventLines = false,
+  oilPublicationLayout = false,
+  oilEventDensity = "story",
+  chartLineRole = "primary",
   referenceLine,
   regimeArea,
   useTimeRangeForDateAxis = false,
@@ -444,6 +490,8 @@ export function TimelineChart({
   chartRangeGranularity: chartRangeGranularityProp,
   exportFileStem,
   exportSourceFooter,
+  exportPresentationTitle,
+  exportPresentationStudyHeading,
   multiSeriesValueFormat,
   indexedTooltipBaseLabel,
   multiSeriesYAxisNameOverrides,
@@ -492,11 +540,15 @@ export function TimelineChart({
   }, [showChartControls, rangeBounds, clipStart, clipEnd]);
 
   const inferredChartRangeGranularity = useMemo((): ChartRangeGranularity => {
+    const primary = data.map((p) => p.date);
+    if (primary.length >= 2) {
+      return inferChartRangeGranularityFromDates(primary);
+    }
     const samples: string[] = [];
     for (const p of data) samples.push(p.date);
-    for (const p of oilPoints) samples.push(p.date);
-    if (secondSeries) for (const p of secondSeries.points) samples.push(p.date);
     if (multiSeries) for (const s of multiSeries) for (const p of s.points) samples.push(p.date);
+    if (secondSeries) for (const p of secondSeries.points) samples.push(p.date);
+    for (const p of oilPoints) samples.push(p.date);
     if (comparatorSeries) for (const p of comparatorSeries.points) samples.push(p.date);
     return inferChartRangeGranularityFromDates(samples);
   }, [data, oilPoints, secondSeries, multiSeries, comparatorSeries]);
@@ -514,13 +566,23 @@ export function TimelineChart({
     const backgroundColor = cssHsl("--background", "hsl(0, 0%, 100%)");
     const stem = exportFileStem ?? label;
     const footerColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
+    const titleColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
+    const resolvedTitle =
+      exportPresentationTitle?.trim() ??
+      buildPresentationExportTitle({
+        studyHeading: exportPresentationStudyHeading,
+        metricLabel: label,
+        timeRange: chartRange,
+      });
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         try {
-          chart.resize();
           const exportOpts: DownloadEchartsRasterOptions = {
             exportSourceFooter: exportSourceFooter?.trim(),
             exportSourceFooterColor: footerColor,
+            exportPresentationTitle: resolvedTitle,
+            exportPresentationDirection: chartLocale === "fa" ? "rtl" : "ltr",
+            exportPresentationTitleColor: titleColor,
           };
           downloadEchartsRaster(chart, "png", stem, backgroundColor, exportOpts);
         } catch {
@@ -528,7 +590,15 @@ export function TimelineChart({
         }
       });
     });
-  }, [exportFileStem, exportSourceFooter, label]);
+  }, [
+    chartLocale,
+    chartRange,
+    exportFileStem,
+    exportPresentationStudyHeading,
+    exportPresentationTitle,
+    exportSourceFooter,
+    label,
+  ]);
 
   useEffect(() => {
     const updateRotate = () => setXLabelRotate(window.innerWidth < 640 ? 90 : 0);
@@ -558,6 +628,38 @@ export function TimelineChart({
       russia: "triangle",
       iran: "roundRect",
       total: "circle",
+    };
+
+    /** Line end marker for multi-series: explicit `s.symbol` wins; then comparator keys, production, FX/wage keys, fallback by index. */
+    const endShapeForMultiSeriesSeries = (s: ChartSeries, index: number): LegendEndShape => {
+      if (s.symbol) return s.symbol;
+      const cmp = countryComparatorSeriesStyle(s.key);
+      if (cmp) return cmp.symbol;
+      if (s.key in productionColors) {
+        return (productionSymbols[s.key] ?? "circle") as LegendEndShape;
+      }
+      const isGold = s.key === "gold";
+      const isOil = s.key === "oil";
+      const isOfficial = s.key === "official";
+      const isOpen = s.key === "open";
+      const isSpread = s.key === "spread";
+      const isProxy = s.key === "proxy";
+      const isWageNominal = s.key === "nominal";
+      const isWageReal = s.key === "real";
+      const isWageIndex = s.key === "index";
+      const isFx = s.key === "fx";
+      if (isGold) return "circle";
+      if (isOil) return "triangle";
+      if (isOfficial) return "circle";
+      if (isOpen) return "diamond";
+      if (isSpread) return "triangle";
+      if (isFx) return "diamond";
+      if (isWageNominal) return "circle";
+      if (isWageReal) return "diamond";
+      if (isWageIndex) return "triangle";
+      if (isProxy) return "diamond";
+      if (s.yAxisIndex === 1 && !isWageIndex) return "diamond";
+      return MULTI_SERIES_FALLBACK_LEGEND_ICONS[index % MULTI_SERIES_FALLBACK_LEGEND_ICONS.length]!;
     };
 
     const timeRange = chartRange ?? timeRangeProp;
@@ -590,7 +692,7 @@ export function TimelineChart({
 
     const ui = timelineChartFaUi(chartLocale);
     const yAxisNameStyle = chartYAxisNameTextStyle(mutedFg);
-    const yAxisTickLabelBase = {
+    let yAxisTickLabelBase = {
       color: mutedFg,
       fontSize: CHART_Y_AXIS_TICK_FONT_SIZE,
       margin: CHART_Y_AXIS_LABEL_MARGIN,
@@ -633,6 +735,12 @@ export function TimelineChart({
               : comparatorSeries.points,
         }
       : null;
+    const isClassicOilChart = Boolean(
+      hasOil && secondSeries && !hasData && !hasMultiSeries && !comparatorResolved
+    );
+    if (oilPublicationLayout && isClassicOilChart) {
+      yAxisTickLabelBase = { ...yAxisTickLabelBase, fontSize: CHART_Y_AXIS_TICK_FONT_SIZE + 1 };
+    }
     const useTimeRangeForAxis = (mutedBands || hasMultiSeries) && timeRange && timeRange[0] && timeRange[1];
     const hasFallback = !hasData && (hasOil || hasMultiSeries || (timeRangeProp && events.length > 0));
     if (!chartRef.current || (!hasData && !hasFallback)) return;
@@ -907,8 +1015,13 @@ export function TimelineChart({
       }
     }
 
-    const iranMacroMarkLineData = markLineData.filter((d) => d.event.macroMarker === true);
-    const globalOilMarkLineData = markLineData.filter((d) => d.event.layer === "global_macro_oil");
+    const markLineDataForRender =
+      oilPublicationLayout && isClassicOilChart && oilEventDensity === "story"
+        ? markLineData.filter((d) => d.event.layer === "global_macro_oil" || d.isAnchor)
+        : markLineData;
+
+    const iranMacroMarkLineData = markLineDataForRender.filter((d) => d.event.macroMarker === true);
+    const globalOilMarkLineData = markLineDataForRender.filter((d) => d.event.layer === "global_macro_oil");
     const hasTopMacroCaptionRows = iranMacroMarkLineData.length > 0;
     const macroLabelLayout = buildMacroLabelLayout({
       macroMarkData: iranMacroMarkLineData,
@@ -917,30 +1030,38 @@ export function TimelineChart({
     const verticalGlobalOilLabelLayout = buildVerticalGlobalOilLabelLayout({
       globalOilMarkData: globalOilMarkLineData,
       anchorEventId,
+      minGapYears:
+        oilPublicationLayout && isClassicOilChart
+          ? PUBLICATION_VERTICAL_OIL_LABEL_GAP_YEARS
+          : undefined,
     });
 
     type MarkLineDatum = { xAxis: string; event: TimelineEvent; isAnchor: boolean };
     const verticalMarkLineItem = (d: MarkLineDatum) => {
       if (d.event.layer === "global_macro_oil") {
-        const vl = verticalGlobalOilLabelLayout.get(d.event.id) ?? { showLabel: false };
+        const vl = verticalGlobalOilLabelLayout.get(d.event.id) ?? { showLabel: false, staggerIndex: 0 };
         const shortCaption = globalMacroOilMarkLineShortLabel(d.event);
+        const pubOil = oilPublicationLayout && isClassicOilChart;
+        const labelFontSize = pubOil ? 13 : 12;
+        const staggerOffsetX = pubOil ? (vl.staggerIndex - 2.5) * VERTICAL_OIL_LABEL_STAGGER_PX : 0;
         return {
           xAxis: d.xAxis,
           label: vl.showLabel
             ? {
                 show: true,
                 formatter: localizeChartNumericDisplayString(shortCaption, chartNumeralLocale),
-                fontSize: 12,
-                color: withAlphaHsl(mutedFg, 0.86),
-                distance: 8,
+                fontSize: labelFontSize,
+                fontWeight: pubOil ? 600 : 400,
+                color: pubOil ? withAlphaHsl(mutedFg, 0.95) : withAlphaHsl(mutedFg, 0.86),
+                distance: pubOil ? 10 : 8,
                 position: "middle" as const,
                 rotate: 90,
-                offset: [0, 0] as [number, number],
+                offset: [staggerOffsetX, 0] as [number, number],
               }
             : { show: false },
           lineStyle: {
-            color: withAlphaHsl(muted, 0.28),
-            width: 1,
+            color: pubOil ? withAlphaHsl(mutedFg, 0.38) : withAlphaHsl(muted, 0.28),
+            width: pubOil ? 1.15 : 1,
             type: "dashed" as const,
           },
         };
@@ -999,7 +1120,7 @@ export function TimelineChart({
       };
     };
 
-    const markLineSeriesItems = markLineData.map((d) => verticalMarkLineItem(d));
+    const markLineSeriesItems = markLineDataForRender.map((d) => verticalMarkLineItem(d));
 
     const rangeBandData: { xStart: string; xEnd: string; event: TimelineEvent }[] = [];
     const presidentialBandData: { xStart: string; xEnd: string; event: TimelineEvent }[] = [];
@@ -1036,31 +1157,60 @@ export function TimelineChart({
     const oilColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
     const comparatorColor = "hsl(195, 55%, 42%)";
 
-    const useMultiSparseMarkers = hasMultiSeries && multiSeriesCount >= 2;
     const multiSeriesLegendData =
       hasMultiSeries && multiSeries
         ? multiSeries.map((s, i) => {
             const cmp = countryComparatorSeriesStyle(s.key);
-            if (cmp) {
-              return {
-                name: s.label,
-                icon: multiSeriesLegendLineMarkerPath(cmp.legendIcon),
-                itemStyle: { color: cmp.color },
-              };
-            }
-            if (s.key in productionColors) {
-              const col = productionColors[s.key] ?? mutedFg;
-              const shape = PRODUCTION_LEGEND_ICONS[s.key] ?? "circle";
-              return { name: s.label, icon: multiSeriesLegendLineMarkerPath(shape), itemStyle: { color: col } };
-            }
-            const shape = MULTI_SERIES_FALLBACK_LEGEND_ICONS[i % MULTI_SERIES_FALLBACK_LEGEND_ICONS.length]!;
+            const shape = endShapeForMultiSeriesSeries(s, i);
+            const lineColor = cmp ? cmp.color : s.key in productionColors ? (productionColors[s.key] ?? mutedFg) : (s.color ?? mutedFg);
             return {
               name: s.label,
               icon: multiSeriesLegendLineMarkerPath(shape),
-              itemStyle: { color: s.color ?? mutedFg },
+              itemStyle: { color: lineColor },
             };
           })
         : [];
+
+    const dualAxisOilFxOverlay = Boolean(hasData && secondSeries);
+    const indexedComparatorOil = Boolean(comparatorResolved && comparatorValuesForChart && hasOil);
+    const oilOverlayLineSymbol: LegendEndShape =
+      secondSeries?.symbol ?? (indexedComparatorOil ? "circle" : dualAxisOilFxOverlay ? "triangle" : "circle");
+    const oilOverlayLineSymbolSize =
+      secondSeries?.symbolSize ??
+      (indexedComparatorOil
+        ? CHART_LINE_SYMBOL_SIZE
+        : dualAxisOilFxOverlay
+          ? CHART_LINE_SYMBOL_SIZE_COMPACT
+          : CHART_LINE_SYMBOL_SIZE_MINI);
+    const comparatorLineSymbol: LegendEndShape = comparatorSeries?.symbol ?? "diamond";
+    const comparatorLineSymbolSize = comparatorSeries?.symbolSize ?? CHART_LINE_SYMBOL_SIZE;
+
+    const pubOilPrimary = oilPublicationLayout && isClassicOilChart;
+    const oilPrimaryLineColor = pubOilPrimary
+      ? color
+      : comparatorResolved && comparatorValuesForChart
+        ? color
+        : oilColor;
+    const oilPrimaryLineWidth = pubOilPrimary ? 2.75 : 1.5;
+    const oilPrimarySymbolSize = pubOilPrimary ? CHART_LINE_SYMBOL_SIZE_COMPACT : oilOverlayLineSymbolSize;
+
+    const chartTitleFontSize = pubOilPrimary ? 14 : 13;
+    const xAxisTickFont = pubOilPrimary ? 13 : 12;
+    const gridTopPct = pubOilPrimary
+      ? hasTopMacroCaptionRows
+        ? showChartControls
+          ? "28%"
+          : "24%"
+        : showChartControls
+          ? "22%"
+          : "14%"
+      : hasTopMacroCaptionRows
+        ? showChartControls
+          ? "26%"
+          : "22%"
+        : showChartControls
+          ? "19%"
+          : "12%";
 
     const option: echarts.EChartsOption = {
       animation: false,
@@ -1071,7 +1221,7 @@ export function TimelineChart({
               text: localizeChartNumericDisplayString(label, chartNumeralLocale),
               left: "center",
               top: 2,
-              textStyle: { fontSize: 13, color: mutedFg, fontWeight: 600 },
+              textStyle: { fontSize: chartTitleFontSize, color: mutedFg, fontWeight: 600 },
             },
           }
         : {}),
@@ -1085,8 +1235,21 @@ export function TimelineChart({
               bottom: 4,
               left: "center",
               itemGap: 16,
+              itemWidth: 26,
+              itemHeight: 10,
               textStyle: { color: mutedFg, fontSize: legendTextFontSize },
-              data: [secondSeries?.label ?? "Iran (PPP)", comparatorResolved.label],
+              data: [
+                {
+                  name: secondSeries?.label ?? "Iran (PPP)",
+                  icon: multiSeriesLegendLineMarkerPath(secondSeries?.symbol ?? "circle"),
+                  itemStyle: { color },
+                },
+                {
+                  name: comparatorResolved.label,
+                  icon: multiSeriesLegendLineMarkerPath(comparatorSeries?.symbol ?? "diamond"),
+                  itemStyle: { color: comparatorColor },
+                },
+              ],
             },
           }
         : hasMultiSeries && multiSeries
@@ -1116,8 +1279,29 @@ export function TimelineChart({
                   bottom: 4,
                   left: "center",
                   itemGap: 16,
+                  itemWidth: 26,
+                  itemHeight: 10,
                   textStyle: { color: mutedFg, fontSize: legendTextFontSize },
-                  data: hasData ? [label, secondSeries.label] : [secondSeries?.label ?? "Brent oil"],
+                  data: hasData
+                    ? [
+                        {
+                          name: label,
+                          icon: multiSeriesLegendLineMarkerPath("circle"),
+                          itemStyle: { color },
+                        },
+                        {
+                          name: secondSeries.label,
+                          icon: multiSeriesLegendLineMarkerPath(secondSeries.symbol ?? "triangle"),
+                          itemStyle: { color: oilColor },
+                        },
+                      ]
+                    : [
+                        {
+                          name: secondSeries?.label ?? "Brent oil",
+                          icon: multiSeriesLegendLineMarkerPath(secondSeries?.symbol ?? "triangle"),
+                          itemStyle: { color: oilColor },
+                        },
+                      ],
                 },
               }
             : {}),
@@ -1147,7 +1331,7 @@ export function TimelineChart({
           const sanctionsBand = sanctionsPeriods.find((p) => dateStr >= p.date_start && dateStr <= p.date_end);
           const rangeEv = rangeBand?.event;
           const nearestEv = !rangeEv
-            ? markLineData
+            ? markLineDataForRender
                 .map((m) => ({
                   ev: m.event,
                   dist: Math.abs(new Date(m.event.date!).getTime() - hoverTime),
@@ -1158,7 +1342,7 @@ export function TimelineChart({
                 })
                 .sort((a, b) => a.dist - b.dist)[0]
             : null;
-          const ev = rangeEv ?? nearestEv?.ev ?? markLineData.find(
+          const ev = rangeEv ?? nearestEv?.ev ?? markLineDataForRender.find(
             (m) => m.xAxis === axisValue || m.xAxis === dateStr
           )?.event;
           const lines: string[] = [];
@@ -1171,19 +1355,32 @@ export function TimelineChart({
           }
           if (ev) {
             if (eventUsesMacroMarkLineStyle(ev)) {
-              const mt = ev.type === "political" || ev.type === "war" || ev.type === "sanctions" ? ev.type : "";
-              const mtLabel =
-                mt === "political"
-                  ? ui.political
-                  : mt === "war"
-                    ? ui.warSecurity
-                    : mt === "sanctions"
-                      ? ui.sanctions
-                      : ui.macroContext;
-              lines.push(`<span style="font-size:10px;color:#888">${mtLabel}</span>`);
-              lines.push(`<span style="font-weight:600">${ev.title}</span>`);
-              if (ev.date) lines.push(ev.date);
-              if (ev.description) lines.push(ev.description);
+              const usePubOilTooltip = oilPublicationLayout && isClassicOilChart;
+              if (usePubOilTooltip && ev.layer === "global_macro_oil") {
+                const dateLine = ev.date ?? ev.date_start ?? "";
+                lines.push(`<span style="font-weight:600;font-size:14px">${ev.title}</span>`);
+                lines.push(`<span style="font-size:12px;color:#888">${dateLine}</span>`);
+                lines.push(
+                  `<span style="font-size:13px;line-height:1.35">${localizeChartNumericDisplayStringSafe(
+                    eventTooltipOneLiner(ev),
+                    chartNumeralLocale
+                  )}</span>`
+                );
+              } else {
+                const mt = ev.type === "political" || ev.type === "war" || ev.type === "sanctions" ? ev.type : "";
+                const mtLabel =
+                  mt === "political"
+                    ? ui.political
+                    : mt === "war"
+                      ? ui.warSecurity
+                      : mt === "sanctions"
+                        ? ui.sanctions
+                        : ui.macroContext;
+                lines.push(`<span style="font-size:10px;color:#888">${mtLabel}</span>`);
+                lines.push(`<span style="font-weight:600">${ev.title}</span>`);
+                if (ev.date) lines.push(ev.date);
+                if (ev.description) lines.push(ev.description);
+              }
             } else if (rangeBand && isPresidentialEvent(ev)) {
               lines.push(`<span style="font-size:10px;color:#888">${ui.presidentialTerm}</span>`);
               lines.push(`<span style="font-weight:600">${ev.title}</span> ${ev.date_start} — ${ev.date_end}`);
@@ -1202,7 +1399,8 @@ export function TimelineChart({
             }
             if (
               !(rangeBand && isPresidentialEvent(ev)) &&
-              (!eventUsesMacroMarkLineStyle(ev) || ev.layer === "global_macro_oil")
+              (!eventUsesMacroMarkLineStyle(ev) || ev.layer === "global_macro_oil") &&
+              !(oilPublicationLayout && isClassicOilChart && ev.layer === "global_macro_oil")
             ) {
               if (ev.sources && ev.sources.length > 0) {
                 const urlSources = ev.sources.filter((s) => s.startsWith("http"));
@@ -1334,7 +1532,7 @@ export function TimelineChart({
                 : "12%"
               : "3%"
         ),
-        top: hasTopMacroCaptionRows ? (showChartControls ? "26%" : "22%") : showChartControls ? "19%" : "12%",
+        top: gridTopPct,
         containLabel: true,
       },
       xAxis: useTimeAxis
@@ -1369,7 +1567,7 @@ export function TimelineChart({
                       : formatChartTimeAxisYearLabel(value, axisYearMode, chartNumeralLocale),
                 ...(axisYearMode === "both" && !isShortSpan ? { rich: axisLabelBothRich } : {}),
                 color: mutedFg,
-                fontSize: 12,
+                fontSize: xAxisTickFont,
               },
             };
           })()
@@ -1409,7 +1607,7 @@ export function TimelineChart({
               axisLine: { lineStyle: { color: borderColor } },
               axisLabel: {
                 color: mutedFg,
-                fontSize: 12,
+                fontSize: xAxisTickFont,
                 rotate: xLabelRotate,
                 interval,
                 ...(axisYearMode === "both" ? { rich: axisLabelBothRich } : {}),
@@ -1665,7 +1863,7 @@ export function TimelineChart({
                 symbol: "none",
                 emphasis: { focus: "none" as const },
                 markLine:
-                  markLineData.length > 0 || referenceLine
+                  markLineDataForRender.length > 0 || referenceLine
                     ? {
                         symbol: "none",
                         silent: false,
@@ -1717,7 +1915,6 @@ export function TimelineChart({
               ...multiSeries.map((s, i) => {
                 const isGold = s.key === "gold";
                 const isOil = s.key === "oil";
-                const isProxy = s.key === "proxy";
                 const isOfficial = s.key === "official";
                 const isOpen = s.key === "open";
                 const isSpread = s.key === "spread";
@@ -1726,7 +1923,6 @@ export function TimelineChart({
                 const isWageIndex = s.key === "index";
                 const isProductionKey = s.key in productionColors;
                 const isTotal = s.key === "total";
-                const cmpStyle = countryComparatorSeriesStyle(s.key);
                 const comparatorCountryColor = countryComparatorSeriesColor(s.key);
                 const lineColor = s.color
                   ? s.color
@@ -1753,39 +1949,12 @@ export function TimelineChart({
                                       : oilColorMuted;
                 const lineWidth = isGold || isOil || isProductionKey ? 1.5 : 1;
                 const lineType = isTotal ? ("dashed" as const) : undefined;
-                const symbol = cmpStyle
-                  ? cmpStyle.symbol
-                  : isProductionKey
-                    ? productionSymbols[s.key]
-                    : isGold
-                      ? "circle"
-                      : isProxy || (s.yAxisIndex === 1 && !isWageIndex)
-                        ? "diamond"
-                        : isOfficial
-                          ? "circle"
-                          : isOpen
-                            ? "diamond"
-                            : isSpread
-                              ? "triangle"
-                              : isWageNominal
-                                ? "circle"
-                                : isWageReal
-                                  ? "diamond"
-                                  : isWageIndex
-                                    ? "triangle"
-                                    : MULTI_SERIES_FALLBACK_LEGEND_ICONS[i % MULTI_SERIES_FALLBACK_LEGEND_ICONS.length]!;
-                /** 2+ series (non gold/oil): no on-canvas markers by default; small symbol on axis-hover only. */
-                const sparseLineMarkers = useMultiSparseMarkers && !isGold && !isOil;
+                const seriesShape = endShapeForMultiSeriesSeries(s, i);
                 const symbolSize =
-                  sparseLineMarkers
-                    ? 0
-                    : isGold
-                      ? 4
-                      : isOil
-                        ? 3
-                        : isProductionKey
-                          ? 3
-                          : 2.5;
+                  s.symbolSize ??
+                  (isGold || isOil || isProductionKey
+                    ? CHART_LINE_SYMBOL_SIZE_COMPACT
+                    : CHART_LINE_SYMBOL_SIZE);
                 return {
                   name: s.label,
                   type: "line" as const,
@@ -1794,27 +1963,22 @@ export function TimelineChart({
                   smooth: false,
                   connectNulls: true,
                   step: (isGold ? "start" : false) as "start" | false,
-                  symbol: symbol as "circle" | "diamond" | "triangle" | "roundRect" | "rect",
-                  showSymbol: !sparseLineMarkers,
+                  symbol: seriesShape,
+                  showSymbol: true,
                   symbolSize,
-                  lineStyle: { color: lineColor, width: lineWidth, ...(lineType ? { type: lineType } : {}) },
-                  itemStyle: { color: lineColor },
+                  lineStyle: { color: lineColor, width: lineWidth, opacity: 1, ...(lineType ? { type: lineType } : {}) },
+                  itemStyle: { color: lineColor, opacity: CHART_LINE_SYMBOL_ITEM_OPACITY },
                   emphasis: {
-                    focus: sparseLineMarkers ? ("series" as const) : ("none" as const),
+                    focus: "none" as const,
                     scale: false,
-                    symbol,
-                    symbolSize: sparseLineMarkers ? 5 : symbolSize,
-                    lineStyle: { color: lineColor, width: lineWidth, ...(lineType ? { type: lineType } : {}) },
-                    itemStyle: {
-                      color: lineColor,
-                      ...(sparseLineMarkers ? { borderColor: "rgba(255,255,255,0.9)", borderWidth: 1 } : {}),
-                    },
+                    lineStyle: { color: lineColor, width: lineWidth, opacity: 1, ...(lineType ? { type: lineType } : {}) },
+                    itemStyle: { color: lineColor, opacity: 1 },
                   },
                   markPoint:
                     showOilShocks && isOil && shockMarkPointData.length > 0
                       ? {
                           symbol: "circle",
-                          symbolSize: 5,
+                          symbolSize: CHART_LINE_SYMBOL_SIZE_COMPACT,
                           itemStyle: { color: "rgba(180, 30, 30, 0.6)", borderWidth: 0, shadowBlur: 0 },
                           data: shockMarkPointData.map((d) => ({ name: "shock", coord: d.coord })),
                         }
@@ -1830,27 +1994,47 @@ export function TimelineChart({
                 data: useTimeAxis ? toTimeData(values) : values,
                 smooth: true,
                 symbol: "circle",
-                symbolSize: 4,
-                lineStyle: { color, width: 2 },
-                itemStyle: { color },
-                areaStyle: {
-                  color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                    { offset: 0, color: withAlphaHsl(color, 0.25) },
-                    { offset: 1, color: withAlphaHsl(color, 0.03) },
-                  ]),
+                symbolSize: chartLineRole === "secondary" ? CHART_LINE_SYMBOL_SIZE_MINI : CHART_LINE_SYMBOL_SIZE_COMPACT,
+                lineStyle:
+                  chartLineRole === "secondary"
+                    ? {
+                        color: withAlphaHsl(color, 0.55),
+                        width: 1.35,
+                        opacity: 1,
+                        type: "dashed" as const,
+                      }
+                    : { color, width: 2, opacity: 1 },
+                itemStyle: {
+                  color: chartLineRole === "secondary" ? withAlphaHsl(color, 0.55) : color,
+                  opacity: CHART_LINE_SYMBOL_ITEM_OPACITY,
                 },
+                ...(chartLineRole === "secondary"
+                  ? {}
+                  : {
+                      areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                          { offset: 0, color: withAlphaHsl(color, 0.25) },
+                          { offset: 1, color: withAlphaHsl(color, 0.03) },
+                        ]),
+                      },
+                    }),
                 emphasis: {
                   focus: "none" as const,
-                  areaStyle: {
-                    opacity: 1,
-                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                      { offset: 0, color: withAlphaHsl(color, 0.25) },
-                      { offset: 1, color: withAlphaHsl(color, 0.03) },
-                    ]),
-                  },
+                  itemStyle: { opacity: 1 },
+                  ...(chartLineRole === "secondary"
+                    ? {}
+                    : {
+                        areaStyle: {
+                          opacity: 1,
+                          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: withAlphaHsl(color, 0.25) },
+                            { offset: 1, color: withAlphaHsl(color, 0.03) },
+                          ]),
+                        },
+                      }),
                 },
                 markLine:
-                  markLineData.length > 0 || referenceLine
+                  markLineDataForRender.length > 0 || referenceLine
                     ? {
                         symbol: "none",
                         data: [
@@ -1865,7 +2049,7 @@ export function TimelineChart({
                   showOilShocks && shockMarkPointData.length > 0 && hasData
                     ? {
                         symbol: "circle",
-                        symbolSize: 5,
+                        symbolSize: CHART_LINE_SYMBOL_SIZE_COMPACT,
                         itemStyle: { color: "rgba(180, 30, 30, 0.6)", borderWidth: 0, shadowBlur: 0 },
                         data: shockMarkPointData.map((d) => ({ name: "shock", coord: d.coord })),
                       }
@@ -1905,7 +2089,7 @@ export function TimelineChart({
                 symbol: "none",
                 emphasis: { focus: "none" as const },
                 markLine:
-                  !hasOil && (markLineData.length > 0 || referenceLine)
+                  !hasOil && (markLineDataForRender.length > 0 || referenceLine)
                     ? {
                         symbol: "none",
                         data: [
@@ -1970,25 +2154,28 @@ export function TimelineChart({
                 data: useTimeAxis ? toTimeData(oilValuesForChart) : oilValuesForChart,
                 smooth: true,
                 connectNulls: true,
-                symbol: "circle",
-                symbolSize: 3,
+                symbol: oilOverlayLineSymbol,
+                symbolSize: oilPrimarySymbolSize,
                 lineStyle: {
-                  color: comparatorResolved && comparatorValuesForChart ? color : oilColor,
-                  width: 1.5,
+                  color: oilPrimaryLineColor,
+                  width: oilPrimaryLineWidth,
+                  opacity: 1,
+                  type: "solid" as const,
                 },
                 itemStyle: {
-                  color: comparatorResolved && comparatorValuesForChart ? color : oilColor,
+                  color: oilPrimaryLineColor,
+                  opacity: CHART_LINE_SYMBOL_ITEM_OPACITY,
                 },
                 emphasis: {
                   focus: "none" as const,
-                  lineStyle: { color: comparatorResolved && comparatorValuesForChart ? color : oilColor },
-                  itemStyle: { color: comparatorResolved && comparatorValuesForChart ? color : oilColor },
+                  lineStyle: { color: oilPrimaryLineColor, width: oilPrimaryLineWidth, opacity: 1 },
+                  itemStyle: { color: oilPrimaryLineColor, opacity: 1 },
                 },
                 markPoint:
                   (showOilShocks && shockMarkPointData.length > 0) || (highlightLatestPoint && latestPointData)
                     ? {
                         symbol: "circle",
-                        symbolSize: 5,
+                        symbolSize: CHART_LINE_SYMBOL_SIZE_COMPACT,
                         itemStyle: { color: "rgba(180, 30, 30, 0.6)", borderWidth: 0, shadowBlur: 0 },
                         data: [
                           ...(showOilShocks && shockMarkPointData.length > 0
@@ -1999,9 +2186,9 @@ export function TimelineChart({
                                 {
                                   name: "latest",
                                   coord: latestPointData.coord,
-                                  symbolSize: 4,
+                                  symbolSize: CHART_LINE_SYMBOL_SIZE_COMPACT,
                                   itemStyle: {
-                                    color: comparatorResolved && comparatorValuesForChart ? color : oilColor,
+                                    color: oilPrimaryLineColor,
                                     borderColor: "#fff",
                                     borderWidth: 1,
                                   },
@@ -2012,7 +2199,7 @@ export function TimelineChart({
                       }
                     : undefined,
                 markLine:
-                  markLineData.length > 0 || referenceLine
+                  markLineDataForRender.length > 0 || referenceLine
                     ? {
                         symbol: "none",
                         silent: false,
@@ -2036,11 +2223,15 @@ export function TimelineChart({
                 data: useTimeAxis ? toTimeData(comparatorValuesForChart) : comparatorValuesForChart,
                 smooth: true,
                 connectNulls: true,
-                symbol: "diamond",
-                symbolSize: 2.5,
-                lineStyle: { color: comparatorColor, width: 1.25 },
-                itemStyle: { color: comparatorColor },
-                emphasis: { focus: "none" as const, lineStyle: { color: comparatorColor }, itemStyle: { color: comparatorColor } },
+                symbol: comparatorLineSymbol,
+                symbolSize: comparatorLineSymbolSize,
+                lineStyle: { color: comparatorColor, width: 1.25, opacity: 1 },
+                itemStyle: { color: comparatorColor, opacity: CHART_LINE_SYMBOL_ITEM_OPACITY },
+                emphasis: {
+                  focus: "none" as const,
+                  lineStyle: { color: comparatorColor, opacity: 1 },
+                  itemStyle: { color: comparatorColor, opacity: 1 },
+                },
               },
             ]
           : []),
@@ -2092,6 +2283,9 @@ export function TimelineChart({
     yAxisLog,
     yAxisNameSuffix,
     mutedEventLines,
+    oilPublicationLayout,
+    oilEventDensity,
+    chartLineRole,
     referenceLine,
     regimeArea,
     useTimeRangeForDateAxis,

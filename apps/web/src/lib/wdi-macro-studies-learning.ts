@@ -161,3 +161,45 @@ export function inflationLearningSections(isFa: boolean): LearningNoteSection[] 
 export function povertyLearningSections(isFa: boolean): LearningNoteSection[] {
   return isFa ? POVERTY_FA : POVERTY_EN;
 }
+
+const DUTCH_DIAGNOSTICS_EN: LearningNoteSection[] = [
+  {
+    heading: "How to read these panels",
+    bullets: [
+      "Four separate charts: (1) oil rents as % of GDP, (2) manufacturing value added as % of GDP, (3) imports as % of GDP, (4) open-market USD→toman.",
+      "The first three are annual World Bank WDI shares; the FX chart uses the same open-market series as the USD→toman study and may be daily.",
+      "Each y-axis is tuned to its own series—do not compare vertical gaps across panels as fixed magnitudes.",
+    ],
+  },
+  {
+    heading: "What this study does not claim",
+    bullets: [
+      "No composite “Dutch disease score” and no causal attribution: co-movement is descriptive.",
+      "Manufacturing share is one tradable-sector proxy; other tradables and relative prices are not fully represented.",
+      "Event markers are optional context only when enabled.",
+    ],
+  },
+];
+
+const DUTCH_DIAGNOSTICS_FA: LearningNoteSection[] = [
+  {
+    heading: "چگونه بخوانید",
+    bullets: [
+      "چهار نمودار جدا: (۱) اجاره نفت به‌صورت ٪ از GDP، (۲) ارزش افزوده تولیدات کارخانه‌ای ٪ از GDP، (۳) واردات ٪ از GDP، (۴) دلار به تومان بازار آزاد.",
+      "سه تای اول سالانه و WDI هستند؛ FX ممکن است روزانه باشد.",
+      "هر محور عمودی برای همان سری تنظیم شده — فاصلهٔ بصری بین پنل‌ها را نسبت مطلق نگیرید.",
+    ],
+  },
+  {
+    heading: "این مطالعه چه ادعایی ندارد",
+    bullets: [
+      "شاخص ترکیبی «بیم هلندی» وجود ندارد و هم‌حرکتی علیت نیست.",
+      "سهم کارخانه‌جات فقط یک نماینده بخش قابل‌معامله است.",
+      "نشانگرهای رویداد در صورت روشن شدن صرفاً زمینه‌اند.",
+    ],
+  },
+];
+
+export function dutchDiseaseDiagnosticsLearningSections(isFa: boolean): LearningNoteSection[] {
+  return isFa ? DUTCH_DIAGNOSTICS_FA : DUTCH_DIAGNOSTICS_EN;
+}

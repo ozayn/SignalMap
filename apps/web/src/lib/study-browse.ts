@@ -55,6 +55,7 @@ export function getSignalTags(study: StudyMeta): string[] {
   if (kind === "gini_inequality") tags.push("Inequality");
   if (kind === "inflation_cpi_yoy") tags.push("Inflation");
   if (kind === "poverty_headcount_iran") tags.push("Poverty");
+  if (kind === "dutch_disease_diagnostics_iran") tags.push("Macro", "Oil", "FX");
   if (kind === "oil_trade_network" || kind === "oil_exporter_timeseries") tags.push("Trade");
   if (study.eventLayers && study.eventLayers.length > 0 && !tags.includes("Events")) {
     tags.push("Events");
@@ -255,6 +256,21 @@ function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
         themes: ["inequality", "macro"],
         tags: [],
         keywords: ["poverty", "headcount", "wdi", "world bank", "ppp", "international line"],
+      };
+    case "dutch_disease_diagnostics_iran":
+      return {
+        countries: ["iran"],
+        themes: ["macro", "oil", "fx"],
+        tags: [],
+        keywords: [
+          "dutch disease",
+          "resource curse",
+          "oil rents",
+          "manufacturing",
+          "imports",
+          "wdi",
+          "structural",
+        ],
       };
     default:
       return { countries: ["global"], themes: ["macro"], tags: [], keywords: [] };

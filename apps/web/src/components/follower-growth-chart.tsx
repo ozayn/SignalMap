@@ -13,7 +13,8 @@ import {
   type Point,
 } from "@/lib/growth-models";
 import { StudyChartControls } from "@/components/study-chart-controls";
-import { downloadEchartsRaster } from "@/lib/chart-export";
+import { downloadEchartsRaster, type DownloadEchartsRasterOptions } from "@/lib/chart-export";
+import { buildPresentationExportTitle } from "@/lib/chart-export-presentation";
 import {
   CHART_Y_AXIS_LABEL_MARGIN,
   CHART_Y_AXIS_NAME_GAP,
@@ -21,6 +22,7 @@ import {
   chartYAxisNameTextStyle,
   formatYAxisNameMultiline,
 } from "@/lib/chart-axis-label";
+import { CHART_LINE_SYMBOL_ITEM_OPACITY, CHART_LINE_SYMBOL_SIZE } from "@/lib/chart-series-markers";
 
 export type FollowerGrowthPoint = { date: string; value: number };
 
@@ -45,6 +47,9 @@ type FollowerGrowthChartProps = {
   showLogistic?: boolean;
   showChartControls?: boolean;
   exportFileStem?: string;
+  exportSourceFooter?: string;
+  exportPresentationStudyHeading?: string;
+  chartLocale?: "en" | "fa";
 };
 
 export function FollowerGrowthChart({
@@ -55,6 +60,9 @@ export function FollowerGrowthChart({
   showLogistic = true,
   showChartControls = true,
   exportFileStem,
+  exportSourceFooter,
+  exportPresentationStudyHeading,
+  chartLocale,
 }: FollowerGrowthChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
@@ -103,17 +111,30 @@ export function FollowerGrowthChart({
     if (!chart) return;
     const backgroundColor = cssHsl("--background", "hsl(0, 0%, 100%)");
     const stem = exportFileStem ?? metricLabel;
+    const footerColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
+    const titleColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
+    const resolvedTitle = buildPresentationExportTitle({
+      studyHeading: exportPresentationStudyHeading,
+      metricLabel,
+      timeRange: chartRange,
+    });
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         try {
-          chart.resize();
-          downloadEchartsRaster(chart, "png", stem, backgroundColor);
+          const exportOpts: DownloadEchartsRasterOptions = {
+            exportSourceFooter: exportSourceFooter?.trim(),
+            exportSourceFooterColor: footerColor,
+            exportPresentationTitle: resolvedTitle,
+            exportPresentationDirection: chartLocale === "fa" ? "rtl" : "ltr",
+            exportPresentationTitleColor: titleColor,
+          };
+          downloadEchartsRaster(chart, "png", stem, backgroundColor, exportOpts);
         } catch {
           // Instance may be disposed mid-frame
         }
       });
     });
-  }, [exportFileStem, metricLabel]);
+  }, [chartLocale, chartRange, exportFileStem, exportPresentationStudyHeading, exportSourceFooter, metricLabel]);
 
   useEffect(() => {
     const colorRaw = cssHsl("--chart-primary", "hsl(238, 84%, 67%)");
@@ -144,9 +165,9 @@ export function FollowerGrowthChart({
         type: "line",
         data: rawSeries,
         showSymbol: true,
-        symbolSize: 8,
-        lineStyle: { color: colorRaw, width: 2 },
-        itemStyle: { color: colorRaw },
+        symbolSize: CHART_LINE_SYMBOL_SIZE,
+        lineStyle: { color: colorRaw, width: 2, opacity: 1 },
+        itemStyle: { color: colorRaw, opacity: CHART_LINE_SYMBOL_ITEM_OPACITY },
         z: 10,
       },
     ];

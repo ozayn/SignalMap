@@ -3,6 +3,7 @@
 import { useRef, useEffect } from "react";
 import * as echarts from "echarts";
 import { cssHsl } from "@/lib/utils";
+import { CHART_LINE_SYMBOL_ITEM_OPACITY, CHART_LINE_SYMBOL_SIZE } from "@/lib/chart-series-markers";
 
 export type FollowersPoint = {
   date: string;
@@ -98,13 +99,13 @@ export function FollowersChart({ data, username, metricLabel = "Followers" }: Fo
             type: "line",
             data: seriesData,
             showSymbol: true,
-            symbolSize: 8,
+            symbolSize: CHART_LINE_SYMBOL_SIZE,
             connectNulls: false,
             lineStyle:
               data.length >= 3
                 ? { color, width: 1, opacity: 0.35 }
                 : { width: 0 },
-            itemStyle: { color },
+            itemStyle: { color, opacity: CHART_LINE_SYMBOL_ITEM_OPACITY },
           },
         ],
       };
