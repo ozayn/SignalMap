@@ -1,5 +1,6 @@
 "use client";
 
+import { formatMultiSeriesEconomicTooltipValue } from "@/lib/format-compact-decimal";
 import { formatStatDate } from "@/lib/utils";
 
 type SeriesStatInput = {
@@ -14,15 +15,8 @@ type MultiSeriesStatsProps = {
   timeRange?: [string, string];
 };
 
-function formatStatValue(value: number): string {
-  if (!Number.isFinite(value)) return "—";
-  if (Math.abs(value) >= 1000) {
-    return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  }
-  if (Number.isInteger(value) || Math.abs(value) >= 1) {
-    return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  }
-  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+function formatStatValue(value: number, unit: string): string {
+  return formatMultiSeriesEconomicTooltipValue(value, unit);
 }
 
 function computeStats(points: Array<{ date: string; value: number }>, timeRange?: [string, string]) {
@@ -84,7 +78,7 @@ export function MultiSeriesStats({ series, timeRange }: MultiSeriesStatsProps) {
               className="font-medium tabular-nums block"
               title={date ? formatStatDate(date) : undefined}
             >
-              {value != null ? formatStatValue(value) : "—"}
+              {value != null ? formatStatValue(value, s.unit) : "—"}
             </span>
             {showDates && date && (
               <span className="text-xs text-muted-foreground block">{formatStatDate(date)}</span>
@@ -110,7 +104,7 @@ export function MultiSeriesStats({ series, timeRange }: MultiSeriesStatsProps) {
             <StatCell value={stats.latestValue} date={stats.latestDate} />
             <span className="text-xs text-muted-foreground">Avg</span>
             <span className="font-medium tabular-nums text-right">
-              {stats.avgValue != null ? formatStatValue(stats.avgValue) : "—"}
+              {stats.avgValue != null ? formatStatValue(stats.avgValue, s.unit) : "—"}
             </span>
             <span className="text-xs text-muted-foreground">Min</span>
             <StatCell value={stats.minValue} date={stats.minDate} />

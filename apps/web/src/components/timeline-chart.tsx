@@ -8,7 +8,13 @@ import {
   formatChartTimeAxisYearLabel,
   type ChartAxisYearMode,
 } from "@/lib/chart-axis-year";
-import { formatGdpLevelsAxisTick, formatGdpLevelsTooltipValue } from "@/lib/format-compact-decimal";
+import {
+  formatEconomicAxisTick,
+  formatEconomicDisplay,
+  formatGdpLevelsAxisTick,
+  formatGdpLevelsTooltipValue,
+  formatMultiSeriesEconomicTooltipValue,
+} from "@/lib/format-compact-decimal";
 import { globalMacroOilMarkLineShortLabel } from "@/lib/timeline-global-macro-oil-labels";
 
 /** GDP study: compact absolute values (levels + nominal); `gdp_levels` kept as alias. */
@@ -914,7 +920,14 @@ export function TimelineChart({
           const pt = hasData && idx < data.length ? data[idx] : null;
           if (pt) {
             const val = pt[valueKey];
-            lines.push(`${label}: ${val ?? "—"}`);
+            const num = typeof val === "number" ? val : val != null ? Number(val) : NaN;
+            const valDisp =
+              val == null || (typeof val !== "number" && (typeof val !== "string" || val === ""))
+                ? "—"
+                : Number.isFinite(num)
+                  ? `${formatMultiSeriesEconomicTooltipValue(num, unit ?? "")}${unit ? ` ${unit}` : ""}`
+                  : String(val);
+            lines.push(`${label}: ${valDisp}`);
             if (pt.confidence != null) {
               lines.push(`Confidence: ${(pt.confidence * 100).toFixed(0)}%`);
             }
@@ -926,7 +939,7 @@ export function TimelineChart({
                 val != null
                   ? isGdpCompactMultiSeriesFormat(multiSeriesValueFormat)
                     ? formatGdpLevelsTooltipValue(Number(val), s.unit)
-                    : `${Number(val).toLocaleString(undefined, { maximumFractionDigits: 20 })} ${s.unit}`
+                    : `${formatMultiSeriesEconomicTooltipValue(Number(val), s.unit)} ${s.unit}`
                   : "—";
               lines.push(`${s.label}: ${formatted}`);
             });
@@ -943,8 +956,8 @@ export function TimelineChart({
                 ? isIndexed
                   ? `${oilVal.toFixed(1)} (indexed)`
                   : unit.includes("toman")
-                  ? `${(oilVal / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k ${unit}`
-                  : `${oilVal} ${unit}`
+                    ? `${formatEconomicDisplay(Math.round((oilVal / 1000) * 10) / 10, { maximumFractionDigits: 1, minimumFractionDigits: 0 })}k ${unit}`
+                    : `${formatMultiSeriesEconomicTooltipValue(oilVal, unit)} ${unit}`
                 : "—";
             lines.push(`${lbl}: ${formatted}`);
             if (comparatorValuesForChart && comparatorSeries) {
@@ -953,7 +966,7 @@ export function TimelineChart({
                 compVal != null
                   ? isIndexed
                     ? `${compVal.toFixed(1)} (indexed)`
-                    : `${compVal}`
+                    : `${formatMultiSeriesEconomicTooltipValue(Number(compVal), secondSeries?.unit ?? "")}`
                   : "—";
               lines.push(`${comparatorSeries.label}: ${compFormatted}`);
             }
@@ -1146,16 +1159,21 @@ export function TimelineChart({
                         ? {
                             formatter: (v: number) =>
                               typeof v === "number" && v >= 1000
-                                ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k`
+                                ? `${formatEconomicDisplay(Math.round(v / 1000), { maximumFractionDigits: 0, minimumFractionDigits: 0 })}k`
                                 : String(v),
                           }
                         : {
                             formatter: (v: number) =>
                               typeof v === "number"
-                                ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k`
+                                ? `${formatEconomicDisplay(Math.round(v / 1000), { maximumFractionDigits: 0, minimumFractionDigits: 0 })}k`
                                 : String(v),
                           }
-                      : {}),
+                      : {
+                          formatter: (v: number | string) => {
+                            const n = typeof v === "number" ? v : Number(v);
+                            return Number.isFinite(n) ? formatEconomicAxisTick(n) : String(v);
+                          },
+                        }),
                 },
               };
             });
@@ -1170,7 +1188,14 @@ export function TimelineChart({
               nameGap: 8,
               axisLine: { show: false },
               splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
-              axisLabel: { color: mutedFg, fontSize: 11 },
+              axisLabel: {
+                color: mutedFg,
+                fontSize: 11,
+                formatter: (v: number | string) => {
+                  const n = typeof v === "number" ? v : Number(v);
+                  return Number.isFinite(n) ? formatEconomicAxisTick(n) : String(v);
+                },
+              },
               show: hasData,
             },
             {
@@ -1192,14 +1217,22 @@ export function TimelineChart({
                 ...(secondSeries?.unit?.includes("toman") && !yAxisLog
                   ? {
                       formatter: (v: number) =>
-                        typeof v === "number" ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k` : String(v),
+                        typeof v === "number"
+                          ? `${formatEconomicDisplay(Math.round(v / 1000), { maximumFractionDigits: 0, minimumFractionDigits: 0 })}k`
+                          : String(v),
                     }
                   : yAxisLog
-                  ? {
-                      formatter: (v: number) =>
-                        typeof v === "number" && v >= 1000 ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k` : String(v),
-                    }
-                  : {}),
+                    ? {
+                        formatter: (v: number) =>
+                          typeof v === "number" && v >= 1000
+                            ? `${formatEconomicDisplay(Math.round(v / 1000), { maximumFractionDigits: 0, minimumFractionDigits: 0 })}k`
+                            : typeof v === "number"
+                              ? formatEconomicAxisTick(v)
+                              : String(v),
+                      }
+                    : {
+                        formatter: (v: number) => (typeof v === "number" ? formatEconomicAxisTick(v) : String(v)),
+                      }),
               },
             },
           ]
@@ -1210,7 +1243,14 @@ export function TimelineChart({
             nameGap: 8,
             axisLine: { show: false },
             splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
-            axisLabel: { color: mutedFg, fontSize: 11 },
+            axisLabel: {
+              color: mutedFg,
+              fontSize: 11,
+              formatter: (v: number | string) => {
+                const n = typeof v === "number" ? v : Number(v);
+                return Number.isFinite(n) ? formatEconomicAxisTick(n) : String(v);
+              },
+            },
           },
       series: [
         ...(hasMultiSeries && multiSeries && multiSeriesValues
