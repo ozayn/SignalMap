@@ -207,6 +207,11 @@ function macroMarkLineCaption(ev: TimelineEvent): string {
   return `${t.slice(0, 14)}…`;
 }
 
+/** Same dashed markLine + caption layout as ``macroMarker`` (API global oil anchors omit the flag). */
+function eventUsesMacroMarkLineStyle(ev: TimelineEvent): boolean {
+  return ev.macroMarker === true || ev.layer === "global_macro_oil";
+}
+
 function sparseDatesFromRange(start: string, end: string, stepMonths = 1): string[] {
   const out: string[] = [];
   const [sY, sM] = start.split("-").map(Number);
@@ -578,7 +583,7 @@ export function TimelineChart({
       }
     }
 
-    const macroMarkLineData = markLineData.filter((d) => d.event.macroMarker === true);
+    const macroMarkLineData = markLineData.filter((d) => eventUsesMacroMarkLineStyle(d.event));
     const hasMacroMarkers = macroMarkLineData.length > 0;
     const macroLabelLayout = buildMacroLabelLayout({
       macroMarkData: macroMarkLineData,
@@ -587,7 +592,7 @@ export function TimelineChart({
 
     type MarkLineDatum = { xAxis: string; event: TimelineEvent; isAnchor: boolean };
     const verticalMarkLineItem = (d: MarkLineDatum) => {
-      if (d.event.macroMarker === true) {
+      if (eventUsesMacroMarkLineStyle(d.event)) {
         const ml = macroLabelLayout.get(d.event.id) ?? { showLabel: false, staggerIndex: 0 };
         const showTopMacroLabel = ml.showLabel;
         const caption = macroMarkLineCaption(d.event);
@@ -647,6 +652,17 @@ export function TimelineChart({
         lineStyle: { color: lineColor, width: lineWidth, type: "dashed" as const },
       };
     };
+
+    const markLineSeriesItems = markLineData.map((d) => verticalMarkLineItem(d));
+    if (process.env.NODE_ENV === "development" && markLineData.some((d) => d.event.layer === "global_macro_oil")) {
+      console.log(
+        "[TimelineChart] markLine.data (global_macro_oil present)",
+        markLineSeriesItems.map((item) => ({
+          xAxis: item.xAxis,
+          label: item.label,
+        }))
+      );
+    }
 
     const rangeBandData: { xStart: string; xEnd: string; event: TimelineEvent }[] = [];
     const presidentialBandData: { xStart: string; xEnd: string; event: TimelineEvent }[] = [];
@@ -753,7 +769,7 @@ export function TimelineChart({
                   dist: Math.abs(new Date(m.event.date!).getTime() - hoverTime),
                 }))
                 .filter((x) => {
-                  const win = x.ev.macroMarker === true ? dayMs * 220 : dayMs * 7;
+                  const win = eventUsesMacroMarkLineStyle(x.ev) ? dayMs * 220 : dayMs * 7;
                   return x.dist <= win;
                 })
                 .sort((a, b) => a.dist - b.dist)[0]
@@ -770,7 +786,7 @@ export function TimelineChart({
             lines.push("—");
           }
           if (ev) {
-            if (ev.macroMarker === true) {
+            if (eventUsesMacroMarkLineStyle(ev)) {
               const mt = ev.type === "political" || ev.type === "war" || ev.type === "sanctions" ? ev.type : "";
               const mtLabel =
                 mt === "political"
@@ -799,7 +815,10 @@ export function TimelineChart({
               }
               if (ev.description) lines.push(ev.description);
             }
-            if (!(rangeBand && isPresidentialEvent(ev)) && ev.macroMarker !== true) {
+            if (
+              !(rangeBand && isPresidentialEvent(ev)) &&
+              (!eventUsesMacroMarkLineStyle(ev) || ev.layer === "global_macro_oil")
+            ) {
               if (ev.sources && ev.sources.length > 0) {
                 const urlSources = ev.sources.filter((s) => s.startsWith("http"));
                 const textSources = ev.sources.filter((s) => !s.startsWith("http"));
@@ -1137,7 +1156,7 @@ export function TimelineChart({
                         symbol: "none",
                         silent: false,
                         data: [
-                          ...markLineData.map((d) => verticalMarkLineItem(d)),
+                          ...markLineSeriesItems,
                           ...(referenceLine
                             ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
                             : []),
@@ -1297,7 +1316,7 @@ export function TimelineChart({
                     ? {
                         symbol: "none",
                         data: [
-                          ...markLineData.map((d) => verticalMarkLineItem(d)),
+                          ...markLineSeriesItems,
                           ...(referenceLine
                             ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
                             : []),
@@ -1352,7 +1371,7 @@ export function TimelineChart({
                     ? {
                         symbol: "none",
                         data: [
-                          ...markLineData.map((d) => verticalMarkLineItem(d)),
+                          ...markLineSeriesItems,
                           ...(referenceLine
                             ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
                             : []),
@@ -1452,7 +1471,7 @@ export function TimelineChart({
                         symbol: "none",
                         silent: false,
                         data: [
-                          ...markLineData.map((d) => verticalMarkLineItem(d)),
+                          ...markLineSeriesItems,
                           ...(referenceLine
                             ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
                             : []),
