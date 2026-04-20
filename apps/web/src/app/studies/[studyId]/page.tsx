@@ -409,7 +409,6 @@ export default function StudyDetailPage() {
   const [gdpLevelsUnit, setGdpLevelsUnit] = useState<string | null>(null);
   const [gdpStudyView, setGdpStudyView] = useState<"composition" | "levels">("composition");
   /** Optional reference-style dual-axis levels chart (consumption + investment left; GDP right). */
-  const [gdpLevelsShowDualAxisComparison, setGdpLevelsShowDualAxisComparison] = useState(false);
   const [gdpLevelsValueType, setGdpLevelsValueType] = useState<"real" | "usd" | "toman">("real");
   /** Display-only: levels chart as raw units vs indexed to first common year (each series ÷ its value that year). */
   const [gdpLevelsDisplayMode, setGdpLevelsDisplayMode] = useState<"absolute" | "indexed">("absolute");
@@ -498,6 +497,9 @@ export default function StudyDetailPage() {
   const isOilGeopoliticalReaction = study?.primarySignal.kind === "oil_geopolitical_reaction";
   const isYoutubeCommentAnalysis = study?.primarySignal.kind === "youtube_comment_analysis";
   const isGdpComposition = study?.primarySignal.kind === "gdp_composition";
+  const isGdpIranAccountsDual = study?.primarySignal.kind === "iran_gdp_accounts_dual";
+  /** WDI national-accounts levels bundle (composition study or dual-axis reference study). */
+  const isGdpMacroNationalAccounts = isGdpComposition || isGdpIranAccountsDual;
   const isGdpIranLocal = study?.gdpCompositionIranLocalOptions === true;
 
   const useShortWindowOptions = isOilBrent || isFxUsdToman || isOilAndFx || isRealOil;
@@ -560,11 +562,11 @@ export default function StudyDetailPage() {
   }, [study, isOilExporterTimeseries]);
 
   const gdpCompositionTimeRange = useMemo((): [string, string] | null => {
-    if (!study || !isGdpComposition) return null;
+    if (!study || !isGdpMacroNationalAccounts) return null;
     const [start, end] = study.timeRange;
     const resolvedEnd = end === "today" ? new Date().toISOString().slice(0, 10) : end;
     return [start, resolvedEnd];
-  }, [study, isGdpComposition]);
+  }, [study, isGdpMacroNationalAccounts]);
 
   /** Study 17: x-axis from (min data year - 1) to (max data year + 1), no empty leading/trailing years. */
   const exporterChartTimeRange = useMemo((): [string, string] | null => {
@@ -594,7 +596,7 @@ export default function StudyDetailPage() {
   }, [isOilProductionMajorExporters, events, showIranEvents, showSanctionsEvents, showOpecEvents, showGlobalMacroOil]);
 
   const gdpCompositionChartTimeRange = useMemo((): [string, string] | null => {
-    if (!isGdpComposition) return null;
+    if (!isGdpMacroNationalAccounts) return null;
     const all = [
       ...gdpConsumptionPoints,
       ...gdpInvestmentPoints,
@@ -607,7 +609,7 @@ export default function StudyDetailPage() {
     const dates = all.map((p) => p.date).sort();
     return [dates[0]!, dates[dates.length - 1]!];
   }, [
-    isGdpComposition,
+    isGdpMacroNationalAccounts,
     gdpConsumptionPoints,
     gdpInvestmentPoints,
     gdpNominalPoints,
@@ -618,7 +620,7 @@ export default function StudyDetailPage() {
   ]);
 
   const gdpCompositionChartEvents = useMemo(() => {
-    if (!isGdpComposition) return [];
+    if (!isGdpMacroNationalAccounts) return [];
     const range = gdpCompositionChartTimeRange ?? gdpCompositionTimeRange;
     const macro =
       showGdpMacroEvents && range
@@ -628,7 +630,7 @@ export default function StudyDetailPage() {
     const globalFromApi = showGdpGlobalMacroOil ? events.filter((e) => e.layer === "global_macro_oil") : [];
     return [...macro, ...iranFromApi, ...globalFromApi];
   }, [
-    isGdpComposition,
+    isGdpMacroNationalAccounts,
     events,
     showGdpIranEvents,
     showGdpGlobalMacroOil,
@@ -640,13 +642,13 @@ export default function StudyDetailPage() {
   /** Same Gregorian base year for all three series; each line is ÷ its own level that year (display only). */
   const gdpLevelsIndexedBaseYear = useMemo(
     () =>
-      isGdpComposition
+      isGdpMacroNationalAccounts
         ? resolveIndexedBaseYear(gdpLevelConsumptionPoints, gdpLevelGdpPoints, gdpLevelInvestmentPoints, {
             /** ~Solar 1355; used when all three series have non-zero data that year (IRN WDI bundle). */
             preferredGregorianYears: [1976],
           })
         : null,
-    [isGdpComposition, gdpLevelConsumptionPoints, gdpLevelGdpPoints, gdpLevelInvestmentPoints],
+    [isGdpMacroNationalAccounts, gdpLevelConsumptionPoints, gdpLevelGdpPoints, gdpLevelInvestmentPoints],
   );
 
   const gdpLevelsIndexedBaseIsoDate = useMemo(
@@ -656,14 +658,26 @@ export default function StudyDetailPage() {
 
   const gdpLevelsIndexedBaseYearLabel = useMemo(() => {
     if (gdpLevelsIndexedBaseYear == null || !gdpLevelsIndexedBaseIsoDate) return "";
-    if (isGdpIranLocal && gdpStudyView === "levels" && gdpCalendarMode === "jalali") {
+    const jalaliLevelsAxis =
+      isGdpIranLocal &&
+      gdpCalendarMode === "jalali" &&
+      (isGdpIranAccountsDual || (isGdpComposition && gdpStudyView === "levels"));
+    if (jalaliLevelsAxis) {
       return persianYearLabelFromIsoDate(gdpLevelsIndexedBaseIsoDate);
     }
     return String(gdpLevelsIndexedBaseYear);
-  }, [gdpLevelsIndexedBaseYear, gdpLevelsIndexedBaseIsoDate, isGdpIranLocal, gdpStudyView, gdpCalendarMode]);
+  }, [
+    gdpLevelsIndexedBaseYear,
+    gdpLevelsIndexedBaseIsoDate,
+    isGdpIranLocal,
+    gdpStudyView,
+    gdpCalendarMode,
+    isGdpIranAccountsDual,
+    isGdpComposition,
+  ]);
 
   const gdpLevelsDisplaySeries = useMemo(() => {
-    if (!isGdpComposition) {
+    if (!isGdpMacroNationalAccounts) {
       return {
         consumption: gdpLevelConsumptionPoints,
         gdp: gdpLevelGdpPoints,
@@ -683,7 +697,7 @@ export default function StudyDetailPage() {
       investment: indexSeriesAtBaseYear(gdpLevelInvestmentPoints, gdpLevelsIndexedBaseYear),
     };
   }, [
-    isGdpComposition,
+    isGdpMacroNationalAccounts,
     gdpLevelsDisplayMode,
     gdpLevelsIndexedBaseYear,
     gdpLevelConsumptionPoints,
@@ -693,7 +707,7 @@ export default function StudyDetailPage() {
 
   /** Reference-style dual-axis: left = consumption + investment; right = GDP (same unit basis as levels view). */
   const gdpLevelsDualAxisYAxisNameOverrides = useMemo((): Partial<Record<number, string>> | undefined => {
-    if (!isGdpComposition) return undefined;
+    if (!isGdpMacroNationalAccounts) return undefined;
     if (gdpLevelsDisplayMode === "indexed" && gdpLevelsIndexedBaseYearLabel) {
       return {
         0: `Consumption & investment (× vs ${gdpLevelsIndexedBaseYearLabel})`,
@@ -705,7 +719,7 @@ export default function StudyDetailPage() {
       0: `Consumption & investment (${u})`,
       1: `GDP (${u})`,
     };
-  }, [isGdpComposition, gdpLevelsUnit, gdpLevelsDisplayMode, gdpLevelsIndexedBaseYearLabel]);
+  }, [isGdpMacroNationalAccounts, gdpLevelsUnit, gdpLevelsDisplayMode, gdpLevelsIndexedBaseYearLabel]);
 
   useEffect(() => {
     if (gdpLevelsDisplayMode === "indexed" && gdpLevelsIndexedBaseYear == null) {
@@ -1111,12 +1125,34 @@ export default function StudyDetailPage() {
           ? "iran"
           : studyId,
     });
-    const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isWageCpiReal || isEventsTimeline || isOilGeopoliticalReaction || isGdpComposition;
+    const hasEventLayers =
+      isOverviewStub ||
+      isOilBrent ||
+      isOilGlobalLong ||
+      isGoldAndOil ||
+      isFxUsdToman ||
+      isOilAndFx ||
+      isRealOil ||
+      isOilPppIran ||
+      isOilExportCapacity ||
+      isOilProductionMajorExporters ||
+      isWageCpiReal ||
+      isEventsTimeline ||
+      isOilGeopoliticalReaction ||
+      isGdpComposition ||
+      isGdpIranAccountsDual;
     if (hasEventLayers && !isEventsTimeline) {
       let layers: string[];
       const studyLayersLen = study.eventLayers?.length ?? 0;
       if (
-        ((isOilGlobalLong || isGoldAndOil || isRealOil || isOilExportCapacity || isOilProductionMajorExporters || isOilGeopoliticalReaction || isGdpComposition) &&
+        ((isOilGlobalLong ||
+          isGoldAndOil ||
+          isRealOil ||
+          isOilExportCapacity ||
+          isOilProductionMajorExporters ||
+          isOilGeopoliticalReaction ||
+          isGdpComposition ||
+          isGdpIranAccountsDual) &&
           studyLayersLen > 0) ||
         (hasTurkeyComparator && studyLayersLen > 0)
       ) {
@@ -1138,7 +1174,7 @@ export default function StudyDetailPage() {
             "opec_decisions",
             ...(showGlobalMacroOil ? ["global_macro_oil"] : []),
           ];
-        } else if (isGdpComposition) {
+        } else if (isGdpComposition || isGdpIranAccountsDual) {
           layers = [
             ...(showGdpIranEvents ? ["iran_core"] : []),
             ...(showGdpGlobalMacroOil ? ["global_macro_oil"] : []),
@@ -1190,6 +1226,7 @@ export default function StudyDetailPage() {
     isOilGeopoliticalReaction,
     isWageCpiReal,
     isGdpComposition,
+    isGdpIranAccountsDual,
     hasTurkeyComparator,
     isEventsTimeline,
     showIranEvents,
@@ -1417,8 +1454,8 @@ export default function StudyDetailPage() {
   }, [exporterTimeRange, isOilExporterTimeseries]);
 
   useEffect(() => {
-    if (!gdpCompositionTimeRange || !isGdpComposition) {
-      if (isGdpComposition) {
+    if (!gdpCompositionTimeRange || !isGdpMacroNationalAccounts) {
+      if (isGdpMacroNationalAccounts) {
         setGdpConsumptionPoints([]);
         setGdpInvestmentPoints([]);
         setGdpNominalPoints([]);
@@ -1515,7 +1552,7 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [gdpCompositionTimeRange, isGdpComposition, isGdpIranLocal, gdpLevelsValueType]);
+  }, [gdpCompositionTimeRange, isGdpMacroNationalAccounts, isGdpIranLocal, gdpLevelsValueType]);
 
   const { exporterSaudiPoints, exporterRussiaPoints, exporterUsPoints, exporterIranPoints } = useMemo(() => {
     const empty = { exporterSaudiPoints: [], exporterRussiaPoints: [], exporterUsPoints: [], exporterIranPoints: [] };
@@ -1984,7 +2021,23 @@ export default function StudyDetailPage() {
 
   const showError = error || (isOverviewStub && !data) || (isYoutubeCommentAnalysis && analysisError);
 
-  const isSingleSignalStudy = isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isFxUsdIrrDual || isWageCpiReal || isOilTradeNetwork || isOilExporterTimeseries || isOilGeopoliticalReaction || isGdpComposition;
+  const isSingleSignalStudy =
+    isOilBrent ||
+    isOilGlobalLong ||
+    isGoldAndOil ||
+    isFxUsdToman ||
+    isOilAndFx ||
+    isRealOil ||
+    isOilPppIran ||
+    isOilExportCapacity ||
+    isOilProductionMajorExporters ||
+    isFxUsdIrrDual ||
+    isWageCpiReal ||
+    isOilTradeNetwork ||
+    isOilExporterTimeseries ||
+    isOilGeopoliticalReaction ||
+    isGdpComposition ||
+    isGdpIranAccountsDual;
   const singleSignalReady =
     isGoldAndOil
       ? goldPoints.length > 0 && oilPoints.length > 0
@@ -2012,14 +2065,18 @@ export default function StudyDetailPage() {
                         ? exporterSaudiPoints.length > 0 || exporterRussiaPoints.length > 0 || exporterUsPoints.length > 0 || exporterIranPoints.length > 0
                         : isOilGeopoliticalReaction
                           ? oilPoints.length > 0
-                          : isGdpComposition
-                            ? gdpConsumptionPoints.length > 0 &&
-                              gdpInvestmentPoints.length > 0 &&
-                              gdpNominalPoints.length > 0 &&
-                              gdpLevelConsumptionPoints.length > 0 &&
+                          : isGdpIranAccountsDual
+                            ? gdpLevelConsumptionPoints.length > 0 &&
                               gdpLevelGdpPoints.length > 0 &&
                               gdpLevelInvestmentPoints.length > 0
-                            : false;
+                            : isGdpComposition
+                              ? gdpConsumptionPoints.length > 0 &&
+                                gdpInvestmentPoints.length > 0 &&
+                                gdpNominalPoints.length > 0 &&
+                                gdpLevelConsumptionPoints.length > 0 &&
+                                gdpLevelGdpPoints.length > 0 &&
+                                gdpLevelInvestmentPoints.length > 0
+                              : false;
   if (loading && (isOverviewStub ? !data : isSingleSignalStudy && !singleSignalReady) || (isYoutubeCommentAnalysis && analysisLoading)) {
     return (
       <div className="study-page-container py-12 animate-pulse space-y-8">
@@ -2080,7 +2137,7 @@ export default function StudyDetailPage() {
       if (exporterUsPoints.length > 0) allDates.push(...collect(exporterUsPoints));
       if (exporterIranPoints.length > 0) allDates.push(...collect(exporterIranPoints));
     }
-    if (isGdpComposition) {
+    if (isGdpMacroNationalAccounts) {
       if (gdpConsumptionPoints.length > 0) allDates.push(...collect(gdpConsumptionPoints));
       if (gdpInvestmentPoints.length > 0) allDates.push(...collect(gdpInvestmentPoints));
       if (gdpNominalPoints.length > 0) allDates.push(...collect(gdpNominalPoints));
@@ -2203,7 +2260,7 @@ export default function StudyDetailPage() {
         if (exporterUsPoints.length > 0) arrays.push(exporterUsPoints);
         if (exporterIranPoints.length > 0) arrays.push(exporterIranPoints);
       }
-      if (isGdpComposition) {
+      if (isGdpMacroNationalAccounts) {
         if (gdpConsumptionPoints.length > 0) arrays.push(gdpConsumptionPoints);
         if (gdpInvestmentPoints.length > 0) arrays.push(gdpInvestmentPoints);
         if (gdpNominalPoints.length > 0) arrays.push(gdpNominalPoints);
@@ -2218,7 +2275,9 @@ export default function StudyDetailPage() {
   const { prev: prevStudy, next: nextStudy } = getPrevNextStudies(study?.id ?? studyId);
 
   const gdpLevelsXAxisYearLabel: ChartAxisYearMode | undefined =
-    isGdpComposition && isGdpIranLocal && gdpStudyView === "levels" && gdpCalendarMode === "jalali"
+    isGdpIranLocal &&
+    gdpCalendarMode === "jalali" &&
+    (isGdpIranAccountsDual || (isGdpComposition && gdpStudyView === "levels"))
       ? "jalali"
       : undefined;
 
@@ -2270,7 +2329,10 @@ export default function StudyDetailPage() {
         </p>
         {latestDataDate && (
           <p className="study-header-meta">
-            Data last available: {(isOilTradeNetwork || isOilExporterTimeseries || isGdpComposition) ? latestDataDate.getFullYear() : formatDate(latestDataDate)}
+            Data last available:{" "}
+            {(isOilTradeNetwork || isOilExporterTimeseries || isGdpMacroNationalAccounts)
+              ? latestDataDate.getFullYear()
+              : formatDate(latestDataDate)}
           </p>
         )}
         {lastUpdated && (
@@ -3537,35 +3599,37 @@ export default function StudyDetailPage() {
             <CardTitle className="text-base font-medium shrink-0">
               {isOilTradeNetwork
                 ? "Network"
-                : isGdpComposition
-                ? "Composition, levels, and nominal GDP"
-                : isOilExporterTimeseries
-                ? "Crude oil exports"
-                : isOilGeopoliticalReaction
-                ? "Brent oil (short-term)"
-                : isWageCpiReal
-                ? "Real minimum wage (CPI-adjusted)"
-                : isGoldAndOil
-                ? "Gold and oil prices"
-                : isOilGlobalLong
-                ? "Oil price"
-                : isOilBrent
-                ? "Brent oil price"
-                : isRealOil
-                ? "Real oil price (constant 2015 USD per barrel)"
-                : hasTurkeyComparator
-                ? "Iran and Turkey: PPP oil burden"
-                : isOilPppIran
-                ? "Oil price burden (PPP)"
-                : isOilExportCapacity
-                ? "Oil price and export capacity proxy"
-                : isFxUsdToman
-                  ? "USD→Toman (open market)"
-                  : isOilAndFx
-                    ? "Oil and USD/Toman"
-                    : data?.timeline?.length
-                      ? "Sentiment over time"
-                      : "Timeline"}
+                : isGdpIranAccountsDual
+                  ? "National accounts (dual-axis reference)"
+                  : isGdpComposition
+                    ? "Composition, levels, and nominal GDP"
+                    : isOilExporterTimeseries
+                    ? "Crude oil exports"
+                    : isOilGeopoliticalReaction
+                      ? "Brent oil (short-term)"
+                      : isWageCpiReal
+                        ? "Real minimum wage (CPI-adjusted)"
+                        : isGoldAndOil
+                          ? "Gold and oil prices"
+                          : isOilGlobalLong
+                            ? "Oil price"
+                            : isOilBrent
+                              ? "Brent oil price"
+                              : isRealOil
+                                ? "Real oil price (constant 2015 USD per barrel)"
+                                : hasTurkeyComparator
+                                  ? "Iran and Turkey: PPP oil burden"
+                                  : isOilPppIran
+                                    ? "Oil price burden (PPP)"
+                                    : isOilExportCapacity
+                                      ? "Oil price and export capacity proxy"
+                                      : isFxUsdToman
+                                        ? "USD→Toman (open market)"
+                                        : isOilAndFx
+                                          ? "Oil and USD/Toman"
+                                          : data?.timeline?.length
+                                            ? "Sentiment over time"
+                                            : "Timeline"}
             </CardTitle>
             {(isOilGeopoliticalReaction && geopoliticalStats && (
               <LatestValueBanner
@@ -3601,36 +3665,44 @@ export default function StudyDetailPage() {
           <p className="text-sm text-muted-foreground">
             {isOilTradeNetwork
               ? "Oil trade flows between major exporters and importers. Nodes are countries/regions; edge width reflects trade volume (thousand barrels/day). Drag nodes, zoom, pan."
-              : isGdpComposition
-              ? "Iran: Composition vs Levels; levels value type Real / USD / Toman; Iranian (Solar Hijri) year labels on Levels charts. Others: all panels without those toggles. Toggle Iran events when shown."
-              : isOilExporterTimeseries
-              ? "Annual crude oil exports for Saudi Arabia, Russia, United States, and Iran. Derived from bilateral trade flows (UN Comtrade HS 2709)."
-              : isOilGeopoliticalReaction
-              ? "Recent Brent price with event markers for military escalation, sanctions, OPEC decisions, and major geopolitical shocks."
-              : isGoldAndOil
-              ? "Gold (left axis) and oil (right axis) on shared timeline. World event range overlays."
-              : isOilGlobalLong
-              ? "Oil price (USD/barrel) with event markers. Annual data pre-1987; daily Brent from 1987."
-              : isOilBrent
-              ? "Daily Brent crude oil price (USD/barrel) with event markers. Brent is a benchmark oil type traded on world markets."
-              : isRealOil
-              ? "Inflation-adjusted oil price (constant 2015 USD/bbl) with world event overlays"
-              : hasTurkeyComparator
-              ? "Iran and Turkey indexed to first common year (= 100). Identical methodology and resolution."
-              : isOilPppIran
-              ? "PPP-adjusted oil burden in Iran (annual) with event overlays"
-              : isOilExportCapacity
-              ? "Oil price (left) and export capacity proxy (right, indexed). Sanctions markers."
-              : isFxUsdToman
-                ? "Open-market USD/toman rate (toman per USD) with event markers"
-                : isOilAndFx
-                  ? "Brent oil (left axis) and USD→toman (right axis) with event markers. Brent is a benchmark oil type traded on world markets."
-                  : data?.timeline?.length
-                    ? "Average sentiment score (sampled over time)"
-                    : "Event markers and optional external signals"}
+              : isGdpIranAccountsDual
+                ? "Iran WDI levels: consumption and investment (left axis), GDP (right axis). Value type Real / USD / Toman; Iranian (Solar Hijri) year labels optional. Toggle Iran events when shown."
+                : isGdpComposition
+                  ? "Iran: Composition vs Levels; levels value type Real / USD / Toman; Iranian (Solar Hijri) year labels on Levels charts. Others: all panels without those toggles. Toggle Iran events when shown."
+                  : isOilExporterTimeseries
+                    ? "Annual crude oil exports for Saudi Arabia, Russia, United States, and Iran. Derived from bilateral trade flows (UN Comtrade HS 2709)."
+                    : isOilGeopoliticalReaction
+                      ? "Recent Brent price with event markers for military escalation, sanctions, OPEC decisions, and major geopolitical shocks."
+                      : isGoldAndOil
+                        ? "Gold (left axis) and oil (right axis) on shared timeline. World event range overlays."
+                        : isOilGlobalLong
+                          ? "Oil price (USD/barrel) with event markers. Annual data pre-1987; daily Brent from 1987."
+                          : isOilBrent
+                            ? "Daily Brent crude oil price (USD/barrel) with event markers. Brent is a benchmark oil type traded on world markets."
+                            : isRealOil
+                              ? "Inflation-adjusted oil price (constant 2015 USD/bbl) with world event overlays"
+                              : hasTurkeyComparator
+                                ? "Iran and Turkey indexed to first common year (= 100). Identical methodology and resolution."
+                                : isOilPppIran
+                                  ? "PPP-adjusted oil burden in Iran (annual) with event overlays"
+                                  : isOilExportCapacity
+                                    ? "Oil price (left) and export capacity proxy (right, indexed). Sanctions markers."
+                                    : isFxUsdToman
+                                      ? "Open-market USD/toman rate (toman per USD) with event markers"
+                                      : isOilAndFx
+                                        ? "Brent oil (left axis) and USD→toman (right axis) with event markers. Brent is a benchmark oil type traded on world markets."
+                                        : data?.timeline?.length
+                                          ? "Average sentiment score (sampled over time)"
+                                          : "Event markers and optional external signals"}
           </p>
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            {!hasTurkeyComparator && !isOilExportCapacity && !isOilTradeNetwork && !isOilExporterTimeseries && !isOilGeopoliticalReaction && !isGdpComposition && (
+            {!hasTurkeyComparator &&
+              !isOilExportCapacity &&
+              !isOilTradeNetwork &&
+              !isOilExporterTimeseries &&
+              !isOilGeopoliticalReaction &&
+              !isGdpComposition &&
+              !isGdpIranAccountsDual && (
               <>
                 <select
                   value={anchorEventId}
@@ -3756,7 +3828,7 @@ export default function StudyDetailPage() {
                 </label>
               </>
             )}
-            {isGdpComposition && (
+            {(isGdpComposition || isGdpIranAccountsDual) && (
               <>
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                   <input
@@ -4127,6 +4199,236 @@ export default function StudyDetailPage() {
                 </p>
               </InSimpleTerms>
             </>
+          ) : isGdpIranAccountsDual ? (
+            <>
+              {isGdpIranLocal ? (
+                <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-muted-foreground shrink-0">Value type</span>
+                  <div className="inline-flex rounded-md border border-border overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setGdpLevelsValueType("real")}
+                      className={`px-2 py-1.5 text-sm font-medium transition-colors ${
+                        gdpLevelsValueType === "real"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                      }`}
+                    >
+                      Real
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGdpLevelsValueType("usd")}
+                      className={`px-2 py-1.5 text-sm font-medium transition-colors ${
+                        gdpLevelsValueType === "usd"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                      }`}
+                    >
+                      USD
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGdpLevelsValueType("toman")}
+                      className={`px-2 py-1.5 text-sm font-medium transition-colors ${
+                        gdpLevelsValueType === "toman"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                      }`}
+                    >
+                      Toman
+                    </button>
+                  </div>
+                  <span className="text-muted-foreground shrink-0 ml-1">Year labels</span>
+                  <div className="inline-flex rounded-md border border-border overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setGdpCalendarMode("gregorian")}
+                      className={`px-2.5 py-1.5 font-medium transition-colors ${
+                        gdpCalendarMode === "gregorian"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                      }`}
+                    >
+                      Gregorian
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGdpCalendarMode("jalali")}
+                      className={`px-2.5 py-1.5 font-medium transition-colors ${
+                        gdpCalendarMode === "jalali"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                      }`}
+                    >
+                      Iranian
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              <p className="mb-3 text-sm text-muted-foreground border-l-2 border-primary/40 pl-3">
+                <span className="font-medium text-foreground">Dual-axis reference.</span> This reference-style chart
+                uses separate y-axes: consumption and investment on the left, GDP on the right. The two vertical scales
+                are independent—do not read vertical gaps between left-axis lines and GDP as a single cross-axis
+                magnitude.
+              </p>
+              {gdpLevelsDisplayNote ? (
+                <p className="text-xs text-amber-700 dark:text-amber-500/90 mb-2">{gdpLevelsDisplayNote}</p>
+              ) : null}
+              <p className="text-xs text-muted-foreground mb-2">
+                Same WDI level bundle as Study 27 levels. Units:{" "}
+                <span className="text-foreground font-medium">
+                  {gdpLevelsValueType === "real"
+                    ? "constant 2015 US$ (NE.CON.TOTL.KD, NE.GDI.TOTL.KD, NY.GDP.MKTP.KD)"
+                    : gdpLevelsValueType === "toman"
+                      ? "billion tomans (approx.; current US$ × annual mean open-market toman/USD—not official)"
+                      : "current US$ (NE.CON.TOTL.CD, NE.GDI.TOTL.CD, NY.GDP.MKTP.CD)"}
+                </span>
+                . Left axis: consumption (blue) and investment (green). Right axis: GDP (red). Linear scales.
+              </p>
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-muted-foreground shrink-0">Scale</span>
+                <div className="inline-flex rounded-md border border-border overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setGdpLevelsDisplayMode("absolute")}
+                    className={`px-2 py-1.5 font-medium transition-colors ${
+                      gdpLevelsDisplayMode === "absolute"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                    }`}
+                  >
+                    Absolute
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGdpLevelsDisplayMode("indexed")}
+                    disabled={gdpLevelsIndexedBaseYear == null}
+                    title={
+                      gdpLevelsIndexedBaseYear == null
+                        ? "Indexed scale needs at least one calendar year where consumption, GDP, and investment are all non-zero."
+                        : undefined
+                    }
+                    className={`px-2 py-1.5 font-medium transition-colors ${
+                      gdpLevelsDisplayMode === "indexed"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                    } disabled:opacity-50 disabled:pointer-events-none`}
+                  >
+                    Indexed
+                  </button>
+                </div>
+              </div>
+              <TimelineChart
+                data={[]}
+                valueKey="value"
+                label="National accounts (dual-axis reference)"
+                events={gdpCompositionChartEvents}
+                anchorEventId={anchorEventId || undefined}
+                multiSeries={[
+                  {
+                    key: "dual_level_consumption",
+                    label: "Consumption",
+                    yAxisIndex: 0,
+                    unit: gdpLevelsUnit ?? "US$",
+                    points: gdpLevelsDisplaySeries.consumption,
+                    color: "#2563eb",
+                  },
+                  {
+                    key: "dual_level_investment",
+                    label: "Investment",
+                    yAxisIndex: 0,
+                    unit: gdpLevelsUnit ?? "US$",
+                    points: gdpLevelsDisplaySeries.investment,
+                    color: "#16a34a",
+                  },
+                  {
+                    key: "dual_level_gdp",
+                    label: "GDP",
+                    yAxisIndex: 1,
+                    unit: gdpLevelsUnit ?? "US$",
+                    points: gdpLevelsDisplaySeries.gdp,
+                    color: "#dc2626",
+                  },
+                ]}
+                multiSeriesYAxisNameOverrides={gdpLevelsDualAxisYAxisNameOverrides}
+                timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
+                forceTimeRangeAxis
+                chartHeight="h-80 md:h-[26rem]"
+                mutedEventLines
+                xAxisYearLabel={gdpLevelsXAxisYearLabel}
+                categoryYearTickStep={5}
+                multiSeriesValueFormat={gdpLevelsDisplayMode === "indexed" ? "gdp_indexed" : "gdp_absolute"}
+                indexedTooltipBaseLabel={
+                  gdpLevelsDisplayMode === "indexed" && gdpLevelsIndexedBaseYearLabel
+                    ? gdpLevelsIndexedBaseYearLabel
+                    : undefined
+                }
+                yAxisMin={gdpLevelsDisplayMode === "indexed" ? 0 : undefined}
+                gridRight="14%"
+              />
+              <LearningNote
+                sections={[
+                  {
+                    heading: "How to read this chart",
+                    bullets: [
+                      "Left y-axis: consumption and investment (two level series).",
+                      "Right y-axis: GDP (same WDI price basis as the levels bundle, separate scale).",
+                      "This reference-style chart uses separate y-axes: consumption and investment on the left, GDP on the right.",
+                      "Absolute vs Indexed matches Study 27 levels (indexed divides each series by its own value in a common base year; display-only).",
+                      "Iranian x-axis year labels are display-only (Solar Hijri from each point’s Gregorian date).",
+                      "Event lines: optional Iran macro markers and API event layers (see toggles above the chart).",
+                    ],
+                  },
+                  {
+                    heading: "Limitations",
+                    bullets: [
+                      "Dual-axis layouts do not make left- and right-axis values directly comparable unless you normalize explicitly.",
+                      "Annual WDI national accounts; informal activity and revisions are not fully reflected.",
+                      "Toman view uses illustrative open-market FX, not official national-accounts tomans.",
+                    ],
+                  },
+                ]}
+              />
+              {study.concepts?.length ? <ConceptsUsed conceptKeys={study.concepts} /> : null}
+              <SourceInfo
+                items={[
+                  {
+                    label: "National accounts levels (Iran)",
+                    sourceName: gdpCompositionSource?.name ?? "World Bank World Development Indicators",
+                    sourceUrl: gdpCompositionSource?.url ?? "https://data.worldbank.org/",
+                    sourceDetail: gdpCompositionSource?.publisher ?? "World Bank",
+                    unitLabel:
+                      "Dual-axis levels by value type (Real / USD / Toman); left: consumption & investment; right: GDP",
+                    unitNote:
+                      gdpLevelsValueType === "real"
+                        ? "Levels (Real): NE.CON.TOTL.KD, NE.GDI.TOTL.KD, NY.GDP.MKTP.KD (constant 2015 US$). ISO3 IRN."
+                        : gdpLevelsValueType === "toman"
+                          ? "Levels (Toman): NE.CON.TOTL.CD, NE.GDI.TOTL.CD, NY.GDP.MKTP.CD × annual mean open-market toman/USD. ISO3 IRN."
+                          : "Levels (USD): NE.CON.TOTL.CD, NE.GDI.TOTL.CD, NY.GDP.MKTP.CD (current US$). ISO3 IRN.",
+                  },
+                ]}
+                note={
+                  (gdpDataSpan?.first_year_any != null && gdpDataSpan?.last_year_any != null
+                    ? `Data window returned: ${gdpDataSpan.returned_start_year ?? gdpDataSpan.first_year_any}–${gdpDataSpan.returned_end_year ?? gdpDataSpan.last_year_any} (WDI coverage from ${gdpDataSpan.first_year_any} as the earliest year any indicator in this bundle has values). `
+                    : "") +
+                  (gdpLevelsConversionMeta?.description ? `${gdpLevelsConversionMeta.description} ` : "") +
+                  "Educational visualization only; not a forecast."
+                }
+              />
+              <InSimpleTerms>
+                <p>
+                  Consumption, investment, and GDP are shown in the same WDI units you choose (Real, USD, or Toman),
+                  but consumption and investment share the left vertical axis while GDP uses the right—like many
+                  reference charts. That helps you scan shapes; it does not put every line on one ruler.
+                </p>
+                <p>
+                  For one shared vertical scale across all three aggregates, open the GDP composition study and use the
+                  three-line levels chart.
+                </p>
+              </InSimpleTerms>
+              {study.observations?.length ? <DataObservations observations={study.observations} /> : null}
+            </>
           ) : isGdpComposition ? (
             <>
               {isGdpIranLocal ? (
@@ -4404,85 +4706,6 @@ export default function StudyDetailPage() {
                     }
                     yAxisMin={gdpLevelsDisplayMode === "indexed" ? 0 : undefined}
                   />
-                  <div className="mt-6 border-t border-border pt-4 space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setGdpLevelsShowDualAxisComparison((v) => !v)}
-                        className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                          gdpLevelsShowDualAxisComparison
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-transparent text-muted-foreground hover:bg-muted/60"
-                        }`}
-                      >
-                        {gdpLevelsShowDualAxisComparison ? "Hide" : "Show"} dual-axis comparison view
-                      </button>
-                      <span className="text-xs text-muted-foreground max-w-prose">
-                        Reference-style layout: consumption and investment on the left axis; GDP on the right (same
-                        unit basis and value type as the main levels chart).
-                      </span>
-                    </div>
-                    {gdpLevelsShowDualAxisComparison ? (
-                      <>
-                        <p className="text-xs font-medium text-muted-foreground">
-                          Reference-style comparison chart — dual-axis comparison view
-                        </p>
-                        <p className="text-xs text-muted-foreground mb-1">
-                          Not the default interpretive view—use for side-by-side comparison with common reference
-                          charts. Same underlying series as the main three-line levels chart above. Dual-axis chart —
-                          values across the two axes are not directly comparable.
-                        </p>
-                        <TimelineChart
-                          data={[]}
-                          valueKey="value"
-                          label="National accounts (dual-axis reference)"
-                          events={gdpCompositionChartEvents}
-                          anchorEventId={anchorEventId || undefined}
-                          multiSeries={[
-                            {
-                              key: "dual_level_consumption",
-                              label: "Consumption",
-                              yAxisIndex: 0,
-                              unit: gdpLevelsUnit ?? "US$",
-                              points: gdpLevelsDisplaySeries.consumption,
-                              color: "#2563eb",
-                            },
-                            {
-                              key: "dual_level_investment",
-                              label: "Investment",
-                              yAxisIndex: 0,
-                              unit: gdpLevelsUnit ?? "US$",
-                              points: gdpLevelsDisplaySeries.investment,
-                              color: "#16a34a",
-                            },
-                            {
-                              key: "dual_level_gdp",
-                              label: "GDP",
-                              yAxisIndex: 1,
-                              unit: gdpLevelsUnit ?? "US$",
-                              points: gdpLevelsDisplaySeries.gdp,
-                              color: "#dc2626",
-                            },
-                          ]}
-                          multiSeriesYAxisNameOverrides={gdpLevelsDualAxisYAxisNameOverrides}
-                          timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
-                          forceTimeRangeAxis
-                          chartHeight="h-72 md:h-[24rem]"
-                          mutedEventLines
-                          xAxisYearLabel={gdpLevelsXAxisYearLabel}
-                          categoryYearTickStep={5}
-                          multiSeriesValueFormat={gdpLevelsDisplayMode === "indexed" ? "gdp_indexed" : "gdp_absolute"}
-                          indexedTooltipBaseLabel={
-                            gdpLevelsDisplayMode === "indexed" && gdpLevelsIndexedBaseYearLabel
-                              ? gdpLevelsIndexedBaseYearLabel
-                              : undefined
-                          }
-                          yAxisMin={gdpLevelsDisplayMode === "indexed" ? 0 : undefined}
-                          gridRight="14%"
-                        />
-                      </>
-                    ) : null}
-                  </div>
                 </>
               ) : null}
               <LearningNote
@@ -4493,7 +4716,7 @@ export default function StudyDetailPage() {
                       "Composition: each line is a share of GDP—how large consumption or investment is relative to GDP that year, not its dollar size. (Iran: open the Composition view.)",
                       "Nominal GDP: current US$ with a log scale—headline dollar size including inflation and exchange-rate moves.",
                       "Levels value type (Iran): Real = constant 2015 US$ (*KD) aggregates—domestic real scale without market FX. USD = current US$ (*CD)—headline international dollars. Toman = current US$ × per-year mean open-market toman/USD (merged Bonbast + archive + FRED pre-2012; not official)—mixes economics with depreciation.",
-                      "Optional dual-axis comparison (Levels view): consumption and investment on the left axis, GDP on the right—same unit basis as the main levels chart; values across axes are not directly comparable.",
+                      "Dual-axis reference chart: use the separate study \"Iran national accounts — dual-axis reference\" (same WDI bundle).",
                       "Scale toggle (Absolute / Indexed): indexed mode rescales each levels line by its own value in a common base calendar year—1976 when all three are non-zero there, else the earliest such year (display-only); tooltips show multipliers (e.g. 2.4× vs that year).",
                       "Shares can move even when dollar levels all rise; use Composition vs Levels to separate structure from scale.",
                       "Iran: Iranian year relabels x-axis tick years to Solar Hijri (UTC date mapping via Intl); underlying points stay Gregorian.",

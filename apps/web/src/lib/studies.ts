@@ -17,7 +17,8 @@ export type PrimarySignal =
   | { kind: "oil_exporter_timeseries" }
   | { kind: "oil_geopolitical_reaction" }
   | { kind: "youtube_comment_analysis" }
-  | { kind: "gdp_composition" };
+  | { kind: "gdp_composition" }
+  | { kind: "iran_gdp_accounts_dual" };
 
 import type { ConceptKey } from "./concepts";
 
@@ -405,6 +406,26 @@ export const STUDIES: StudyMeta[] = [
       "World Bank data are annual; revisions and methodology can shift recent years slightly.",
     ],
   },
+  {
+    id: "iran-gdp-accounts-dual",
+    number: 28,
+    title: "Iran national accounts — dual-axis reference",
+    subtitle: "Consumption and investment (left) vs GDP (right)",
+    gdpCompositionIranLocalOptions: true,
+    timeRange: ["1900-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "Reference-style layout for Iran: final consumption and gross capital formation (investment) on the left y-axis, GDP on the right. Same World Bank WDI level units as the GDP composition study’s levels view (Real / USD / Toman). The two axes are not directly comparable—this chart is for visual comparison with common academic figures, not for ratio reading across axes.",
+    status: "active",
+    primarySignal: { kind: "iran_gdp_accounts_dual" },
+    eventLayers: ["iran_core"],
+    concepts: ["gdp_aggregate", "final_consumption_share", "gross_capital_formation", "event_overlay"],
+    observations: [
+      "Left axis: consumption and investment (two separate series). Right axis: GDP. Each axis has its own scale.",
+      "Lines use the same WDI indicators and value-type bundle as Study 27 levels (NE.CON.*, NY.GDP.MKTP.*, NE.GDI.TOTL.*).",
+      "Because the vertical scales differ, you cannot read a gap between a left-axis line and the GDP line as a fixed economic magnitude.",
+      "Annual data; missing FX years omit Toman points when that value type is selected.",
+    ],
+  },
 ];
 
 /** Primary signals that may attach the `global_macro_oil` event layer (curated world anchors). */
@@ -418,6 +439,7 @@ const PRIMARY_KINDS_GLOBAL_MACRO_OIL: ReadonlyArray<PrimarySignal["kind"]> = [
   "oil_production_major_exporters",
   "oil_geopolitical_reaction",
   "gdp_composition",
+  "iran_gdp_accounts_dual",
 ];
 
 export function studyUsesGlobalMacroOilLayer(study: StudyMeta | undefined): boolean {

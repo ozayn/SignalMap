@@ -31,6 +31,7 @@ function getSignalTags(study: StudyMeta): string[] {
     if (study.youtubeLanguage !== "English") tags.push("Persian");
   }
   if (kind === "wage_cpi_real") tags.push("Wage");
+  if (kind === "gdp_composition" || kind === "iran_gdp_accounts_dual") tags.push("GDP");
   if (kind === "oil_trade_network" || kind === "oil_exporter_timeseries") tags.push("Trade");
   if (study.eventLayers && study.eventLayers.length > 0 && !tags.includes("Events")) {
     tags.push("Events");
@@ -42,7 +43,7 @@ const SECTIONS: { title: string; description: string; studyIds: string[] }[] = [
   {
     title: "Foundations (signals)",
     description: "Core price and exchange-rate series that anchor later analysis.",
-    studyIds: ["iran", "usd-toman", "oil-and-fx", "iran-gdp-composition"],
+    studyIds: ["iran", "usd-toman", "oil-and-fx", "iran-gdp-composition", "iran-gdp-accounts-dual"],
   },
   {
     title: "Context (timelines)",

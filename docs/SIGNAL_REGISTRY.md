@@ -26,6 +26,7 @@ These are the `signal_key` values used in `signal_points` and `signals.py`:
 - `iran_oil_export_volume` — Static (IRAN_EXPORT_VOLUME_EST)
 - `derived_export_revenue_proxy` — Derived from oil × volume
 - `gdp_composition` — World Bank WDI (per country, TTL cache; not in `signal_points`)
+- `iran_gdp_accounts_dual` — Same WDI bundle as `gdp_composition` levels (study UI only; not a separate API key)
 
 ---
 
