@@ -402,6 +402,8 @@ export default function StudyDetailPage() {
   const [gdpLevelInvestmentPoints, setGdpLevelInvestmentPoints] = useState<{ date: string; value: number }[]>([]);
   const [gdpLevelsUnit, setGdpLevelsUnit] = useState<string | null>(null);
   const [gdpStudyView, setGdpStudyView] = useState<"composition" | "levels">("composition");
+  /** Optional reference-style dual-axis levels chart (consumption + investment left; GDP right). */
+  const [gdpLevelsShowDualAxisComparison, setGdpLevelsShowDualAxisComparison] = useState(false);
   const [gdpLevelsValueType, setGdpLevelsValueType] = useState<"real" | "usd" | "toman">("real");
   const [gdpLevelsDisplayNote, setGdpLevelsDisplayNote] = useState<string | null>(null);
   const [gdpCalendarMode, setGdpCalendarMode] = useState<"gregorian" | "jalali">("gregorian");
@@ -626,6 +628,16 @@ export default function StudyDetailPage() {
     gdpCompositionTimeRange,
     gdpCompositionChartTimeRange,
   ]);
+
+  /** Reference-style dual-axis: left = consumption + investment; right = GDP (same unit basis as levels view). */
+  const gdpLevelsDualAxisYAxisNameOverrides = useMemo((): Partial<Record<number, string>> | undefined => {
+    if (!isGdpComposition) return undefined;
+    const u = (gdpLevelsUnit ?? "US$").trim() || "US$";
+    return {
+      0: `Consumption & investment (${u})`,
+      1: `GDP (${u})`,
+    };
+  }, [isGdpComposition, gdpLevelsUnit]);
 
   /** Extend annual production series to current year for display; synthetic points flagged for tooltip. */
   const {
@@ -4266,6 +4278,79 @@ export default function StudyDetailPage() {
                     categoryYearTickStep={5}
                     multiSeriesValueFormat="gdp_absolute"
                   />
+                  <div className="mt-6 border-t border-border pt-4 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setGdpLevelsShowDualAxisComparison((v) => !v)}
+                        className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                          gdpLevelsShowDualAxisComparison
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-transparent text-muted-foreground hover:bg-muted/60"
+                        }`}
+                      >
+                        {gdpLevelsShowDualAxisComparison ? "Hide" : "Show"} dual-axis comparison view
+                      </button>
+                      <span className="text-xs text-muted-foreground max-w-prose">
+                        Reference-style layout: consumption and investment on the left axis; GDP on the right (same
+                        unit basis and value type as the main levels chart).
+                      </span>
+                    </div>
+                    {gdpLevelsShowDualAxisComparison ? (
+                      <>
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Reference-style comparison chart — dual-axis comparison view
+                        </p>
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Not the default interpretive view—use for side-by-side comparison with common reference
+                          charts. Same underlying series as the main three-line levels chart above. Dual-axis chart —
+                          values across the two axes are not directly comparable.
+                        </p>
+                        <TimelineChart
+                          data={[]}
+                          valueKey="value"
+                          label="National accounts (dual-axis reference)"
+                          events={gdpCompositionChartEvents}
+                          anchorEventId={anchorEventId || undefined}
+                          multiSeries={[
+                            {
+                              key: "dual_level_consumption",
+                              label: "Consumption",
+                              yAxisIndex: 0,
+                              unit: gdpLevelsUnit ?? "US$",
+                              points: gdpLevelConsumptionPoints,
+                              color: "#2563eb",
+                            },
+                            {
+                              key: "dual_level_investment",
+                              label: "Investment",
+                              yAxisIndex: 0,
+                              unit: gdpLevelsUnit ?? "US$",
+                              points: gdpLevelInvestmentPoints,
+                              color: "#16a34a",
+                            },
+                            {
+                              key: "dual_level_gdp",
+                              label: "GDP",
+                              yAxisIndex: 1,
+                              unit: gdpLevelsUnit ?? "US$",
+                              points: gdpLevelGdpPoints,
+                              color: "#dc2626",
+                            },
+                          ]}
+                          multiSeriesYAxisNameOverrides={gdpLevelsDualAxisYAxisNameOverrides}
+                          timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
+                          forceTimeRangeAxis
+                          chartHeight="h-72 md:h-[24rem]"
+                          mutedEventLines
+                          xAxisYearLabel={gdpLevelsXAxisYearLabel}
+                          categoryYearTickStep={5}
+                          multiSeriesValueFormat="gdp_absolute"
+                          gridRight="14%"
+                        />
+                      </>
+                    ) : null}
+                  </div>
                 </>
               ) : null}
               <LearningNote
@@ -4276,6 +4361,7 @@ export default function StudyDetailPage() {
                       "Composition: each line is a share of GDP—how large consumption or investment is relative to GDP that year, not its dollar size. (Iran: open the Composition view.)",
                       "Nominal GDP: current US$ with a log scale—headline dollar size including inflation and exchange-rate moves.",
                       "Levels value type (Iran): Real = constant 2015 US$ (*KD) aggregates—domestic real scale without market FX. USD = current US$ (*CD)—headline international dollars. Toman = current US$ × per-year mean open-market toman/USD (merged Bonbast + archive + FRED pre-2012; not official)—mixes economics with depreciation.",
+                      "Optional dual-axis comparison (Levels view): consumption and investment on the left axis, GDP on the right—same unit basis as the main levels chart; values across axes are not directly comparable.",
                       "Shares can move even when dollar levels all rise; use Composition vs Levels to separate structure from scale.",
                       "Iran: Iranian year relabels x-axis tick years to Solar Hijri (UTC date mapping via Intl); underlying points stay Gregorian.",
                       "Show events: subtle vertical markers for a fixed Iran macro timeline (hover for notes). Show Iran event layers: separate timeline data from the study’s event feed. Global oil/macro (curated): optional small set of world oil-market anchors from the API (off by default).",

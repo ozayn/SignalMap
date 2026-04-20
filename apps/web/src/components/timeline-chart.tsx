@@ -124,6 +124,8 @@ type TimelineChartProps = {
   categoryYearTickStep?: number;
   /** Compact USD / bn-toman tooltips and y-axis ticks (GDP composition absolute-value charts). */
   multiSeriesValueFormat?: "gdp_levels" | "gdp_absolute";
+  /** Override multi-series y-axis titles (key = ``yAxisIndex``), e.g. dual-axis reference layouts. */
+  multiSeriesYAxisNameOverrides?: Partial<Record<number, string>>;
 };
 
 function findEventIndex(dates: string[], eventDate: string): number | null {
@@ -338,6 +340,7 @@ export function TimelineChart({
   xAxisYearLabel,
   categoryYearTickStep,
   multiSeriesValueFormat,
+  multiSeriesYAxisNameOverrides,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
@@ -1105,6 +1108,10 @@ export function TimelineChart({
                           ? `${first.label} (${first.unit})`
                           : first.label;
               const nameWithSuffix = yAxisNameSuffix ? `${shortName} ${yAxisNameSuffix}` : shortName;
+              const axisTitle =
+                multiSeriesYAxisNameOverrides?.[yAxisIndex] != null && multiSeriesYAxisNameOverrides[yAxisIndex] !== ""
+                  ? multiSeriesYAxisNameOverrides[yAxisIndex]!
+                  : nameWithSuffix;
               const isGoldLogAxis = useLog && first.unit === "USD/oz";
               const fixedRange =
                 yAxisMin != null && yAxisMax != null && isLeft
@@ -1117,7 +1124,7 @@ export function TimelineChart({
                 ...fixedRange,
                 position: (isLeft ? "left" : "right") as "left" | "right",
                 offset: isRight ? rightOffset : 0,
-                name: nameWithSuffix,
+                name: axisTitle,
                 nameLocation: "end" as const,
                 nameTextStyle: { color: mutedFg, fontSize: 10 },
                 nameGap: 12,
@@ -1588,7 +1595,7 @@ export function TimelineChart({
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
     };
-  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, multiSeriesValueFormat, categoryYearTickStep, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods, oilShockDates, showOilShocks, gridRightOverride, xLabelRotate, extendedDates, lastOfficialDateForExtension, forceTimeRangeAxis, yAxisMin, yAxisMax, xAxisYearLabel]);
+  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, multiSeriesValueFormat, multiSeriesYAxisNameOverrides, categoryYearTickStep, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods, oilShockDates, showOilShocks, gridRightOverride, xLabelRotate, extendedDates, lastOfficialDateForExtension, forceTimeRangeAxis, yAxisMin, yAxisMax, xAxisYearLabel]);
 
   useEffect(() => {
     return () => {
