@@ -6,6 +6,7 @@ import {
   PRESENTATION_COMPOSITE,
   buildPresentationEchartsPatch,
   compactExportSlideTitleString,
+  formatStudyExportSourceLine,
   type PresentationSlideLayout,
 } from "@/lib/chart-export-presentation";
 
@@ -699,7 +700,9 @@ export function downloadEchartsRaster(
     .then((href) => triggerChartDownload(href, filenameStem))
     .catch(() => {
       const respectLegend = opts?.respectLegendSelection !== false;
-      const footer = opts?.exportSourceFooter?.trim();
+      const footerRaw = opts?.exportSourceFooter?.trim();
+      const locale = opts?.exportPresentationLocale ?? "en";
+      const footer = footerRaw ? formatStudyExportSourceLine(footerRaw, locale) : "";
       let dataUrl = "";
       let restore: (() => void) | null = null;
       try {

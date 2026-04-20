@@ -16,7 +16,7 @@ import { StudyChartControls } from "@/components/study-chart-controls";
 import { downloadEchartsRaster, slugifyChartFilename, type DownloadEchartsRasterOptions } from "@/lib/chart-export";
 import { buildStudyChartExportFilenameStem } from "@/lib/chart-export-filename";
 import { useStudyChartExportFilenameContext } from "@/components/study-chart-export-filename-context";
-import { buildPresentationExportTitle } from "@/lib/chart-export-presentation";
+import { buildPresentationExportTitle, formatStudyExportSourceLine } from "@/lib/chart-export-presentation";
 import {
   CHART_Y_AXIS_LABEL_MARGIN,
   CHART_Y_AXIS_NAME_GAP,
@@ -339,7 +339,7 @@ export function FollowerGrowthChart({
   const showToolbar = showChartControls && !!rangeBounds;
   const chartLocaleResolved = chartLocale ?? "en";
   const titleText = localizeChartNumericDisplayString(metricLabel.trim(), chartLocaleResolved);
-  const sourceText = exportSourceFooter?.trim() ?? "";
+  const sourceText = formatStudyExportSourceLine(exportSourceFooter, chartLocaleResolved);
 
   return (
     <div className={`min-w-0 flex flex-col ${STUDY_CHART_STACK_GAP_CLASS}`}>

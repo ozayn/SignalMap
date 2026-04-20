@@ -322,11 +322,9 @@ function formatDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Localized `Source: …` / `منبع: …` line for PNG export only (body from `joinExportSourceNames`). */
-function studyChartExportSource(isFa: boolean, parts: Array<string | null | undefined>): string | undefined {
-  const body = joinExportSourceNames(parts);
-  if (!body) return undefined;
-  return L(isFa, `Source: ${body}`, `منبع: ${body}`);
+/** Publisher line(s) for PNG export only (no prefix). `buildPresentationEchartsPatch` adds `Source:` vs `داده‌ها:` from `chartLocale`. */
+function studyChartExportSource(_isFa: boolean, parts: Array<string | null | undefined>): string | undefined {
+  return joinExportSourceNames(parts);
 }
 
 export default function StudyDetailPage() {

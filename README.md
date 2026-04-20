@@ -68,24 +68,22 @@ The study page shows "Last updated" after a successful run.
 
 Add a **Postgres** database and link it to the API service for Wayback jobs (cache + job queue).
 
-Use **two Railway services** in the same project. Each service sets **Root Directory** to its app folder so the Docker build context is only that app. Per-service configs live as **`railway.json`** inside `apps/api` and `apps/web` only (no root-level Railway config).
-
-**Step-by-step + troubleshooting:** see **`docs/RAILWAY_DEPLOY.md`** (includes fixing errors that still reference removed `railway.web.json`).
+Use **two Railway services** in the same project. Each service sets **Root Directory** to its app folder so the Docker build context is only that app. Per-service **Config-as-code** is **`railway.json`** inside that folder (`apps/api/railway.json`, `apps/web/railway.json`). Full checklist: **`docs/RAILWAY_DEPLOY.md`**.
 
 ### API service
 - **Root Directory:** `apps/api`
-- **Config file (repo):** `apps/api/railway.json` — in the Railway UI this often appears as **`railway.json`** because the service root is already `apps/api`.
+- **Config-as-code path (Railway UI):** **`railway.json`** (relative to Root Directory → file **`apps/api/railway.json`**). Railway may label this *Config file* or *Railway config file*.
 - **Dockerfile:** `apps/api/Dockerfile` (`dockerfilePath` in that config is `Dockerfile`)
 - **Port:** `8080` (match `EXPOSE` / your `run.py` / `PORT` binding)
 
 ### Web service
 - **Root Directory:** `apps/web`
-- **Config file (repo):** `apps/web/railway.json` — in the Railway UI, with Root Directory = `apps/web`, set the config file to **`railway.json`** (not `railway.web.json`, not `/railway.web.json`).
+- **Config-as-code path (Railway UI):** **`railway.json`** (relative to Root Directory → file **`apps/web/railway.json`**). Must **not** be `/railway.web.json` or `railway.web.json` (obsolete).
 - **Dockerfile:** `apps/web/Dockerfile` (referenced by `dockerfilePath` in `apps/web/railway.json`; build context is `apps/web`; install is **`npm install`** from `apps/web/package.json`, no repo-root `pnpm-lock.yaml` required)
 - Settings → Networking → ensure target port matches `PORT` (Railway auto-sets this)
 - **Do not set a deploy `startCommand` that uses `cd`** — use the Dockerfile `CMD` (via `sh -c`). Both configs rely on Docker `CMD` / `railway.json` `startCommand` only where a plain executable is valid (API).
 
-**Deploy error `service config at '/railway.web.json' not found`:** the platform is still pointed at the old file. Update the web service to Root **`apps/web`** and config **`railway.json`** as above, or see **`docs/RAILWAY_DEPLOY.md`**.
+**Deploy error `service config at '/railway.web.json' not found`:** Railway still has the old **Config-as-code** path. Update it in the **web service dashboard** (not the repo): Root **`apps/web`**, config **`railway.json`**. See **`docs/RAILWAY_DEPLOY.md` → Troubleshooting**.
 
 **Environment variables:**
 

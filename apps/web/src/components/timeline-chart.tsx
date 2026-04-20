@@ -15,7 +15,7 @@ import {
 } from "@/lib/chart-export";
 import { buildStudyChartExportFilenameStem } from "@/lib/chart-export-filename";
 import { useStudyChartExportFilenameContext } from "@/components/study-chart-export-filename-context";
-import { buildPresentationExportTitle } from "@/lib/chart-export-presentation";
+import { buildPresentationExportTitle, formatStudyExportSourceLine } from "@/lib/chart-export-presentation";
 import { StudyChartControls } from "@/components/study-chart-controls";
 import { timelineChartFaUi } from "@/lib/timeline-chart-fa";
 import {
@@ -2364,7 +2364,7 @@ export function TimelineChart({
   const studyTitleText = label.trim()
     ? localizeChartNumericDisplayString(label.trim(), chartLocaleResolved)
     : "";
-  const sourceLine = exportSourceFooter?.trim() ?? "";
+  const sourceLine = formatStudyExportSourceLine(exportSourceFooter, chartLocaleResolved);
 
   const inner = (
     <div className={`min-w-0 flex flex-col ${STUDY_CHART_STACK_GAP_CLASS}`}>

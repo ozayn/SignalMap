@@ -9,20 +9,21 @@ export const PRESENTATION_SLIDE_BASE_WIDTH = 1920;
 export const PRESENTATION_SLIDE_BASE_HEIGHT = 1080;
 /** Chart canvas width always matches slide width; height is computed per export in `chart-export.ts`. */
 export const PRESENTATION_EXPORT_CHART_WIDTH = PRESENTATION_SLIDE_BASE_WIDTH;
-/** Sharp raster for PowerPoint / retina. */
-export const PRESENTATION_EXPORT_PIXEL_RATIO = 2;
+/** Sharp raster for PowerPoint / retina (higher = crisper axis text in PNG). */
+export const PRESENTATION_EXPORT_PIXEL_RATIO = 3;
 
 /** Target typography on the export chart surface (px at base slide width). Single source for all study PNG exports. */
 export const PRESENTATION_EXPORT_FONTS = {
-  title: 23,
-  axisTick: 14,
-  axisName: 16,
-  axisNameLineHeight: 18,
-  legend: 14,
-  legendPage: 12,
-  markLineLabel: 14,
-  tooltip: 14,
-  sourceGraphic: 12,
+  title: 28,
+  axisTick: 18,
+  axisName: 20,
+  axisNameLineHeight: 24,
+  legend: 18,
+  legendPage: 16,
+  markLineLabel: 18,
+  tooltip: 18,
+  sourceGraphic: 16,
+  seriesLabel: 16,
 } as const;
 
 /** Context for slide-style PNG export: title + source are drawn on the offscreen ECharts canvas (not the outer composite). */
@@ -166,7 +167,7 @@ function scaleRichForPresentation(rich: Record<string, unknown> | undefined): Re
     const o = v as Record<string, unknown>;
     const fs = typeof o.fontSize === "number" ? o.fontSize : 12;
     const lh = typeof o.lineHeight === "number" ? o.lineHeight : Math.round(fs * 1.25);
-    const factor = PRESENTATION_EXPORT_FONTS.axisTick / 12;
+    const factor = PRESENTATION_EXPORT_FONTS.axisTick / 12; // scale rich-text vs default 12px baseline
     out[k] = {
       ...o,
       fontSize: Math.round(fs * factor),
@@ -178,18 +179,38 @@ function scaleRichForPresentation(rich: Record<string, unknown> | undefined): Re
 
 /** Grid margins (logical px @ 1920 wide): room for larger title, axis names, legend, and corner source without clipping. */
 const PRESENTATION_EXPORT_GRID = {
-  left: 70,
-  right: 50,
-  top: 70,
-  bottom: 70,
+  left: 78,
+  right: 54,
+  top: 78,
+  bottom: 80,
   containLabel: true as const,
 };
 
+/** Strip any existing EN/FA source labels so export can apply a single locale-appropriate prefix. */
+function stripExportSourcePrefixes(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^\s*source\s*:\s*/i, "")
+    .replace(/^منبع\s*[:：]\s*/u, "")
+    .replace(/^داده‌ها\s*[:：]\s*/u, "")
+    .trim();
+}
+
+/**
+ * One line for the in-chart source `graphic`: English uses `Source: …`, Persian uses `داده‌ها: …` only (no mixed prefixes).
+ */
 function formatExportSourceGraphicText(footer: string | undefined, chartLocale: "en" | "fa"): string | undefined {
-  const t = footer?.trim();
-  if (!t) return undefined;
-  const body = t.toLowerCase().startsWith("source") ? t : `Source: ${t}`;
-  return localizeChartNumericDisplayString(body, chartLocale);
+  const body = stripExportSourcePrefixes(footer ?? "");
+  if (!body) return undefined;
+  if (chartLocale === "fa") {
+    return localizeChartNumericDisplayString(`داده‌ها: ${body}`, "fa");
+  }
+  return localizeChartNumericDisplayString(`Source: ${body}`, "en");
+}
+
+/** Localized source line for under-chart UI and PNG graphic (same prefix rules as export). */
+export function formatStudyExportSourceLine(footer: string | undefined, chartLocale: "en" | "fa"): string {
+  return formatExportSourceGraphicText(footer, chartLocale) ?? "";
 }
 
 function buildPresentationTitlePatch(opt: Record<string, unknown>, ctx: PresentationEchartsExportContext): Record<string, unknown> {
@@ -242,9 +263,9 @@ export function buildPresentationEchartsPatch(
     const hasName = typeof ax.name === "string" && ax.name.trim() !== "";
     const nameGapPatch =
       typeof ax.nameGap === "number"
-        ? { nameGap: Math.max(52, Math.round(ax.nameGap * 1.05)) }
+        ? { nameGap: Math.max(58, Math.round(ax.nameGap * 1.05)) }
         : hasName
-          ? { nameGap: 52 }
+          ? { nameGap: 58 }
           : {};
     return {
       ...ax,
@@ -273,9 +294,9 @@ export function buildPresentationEchartsPatch(
     const pts = (legRec.pageTextStyle ?? {}) as Record<string, unknown>;
     return {
       ...legRec,
-      bottom: 12,
-      itemWidth: 20,
-      itemHeight: 10,
+      bottom: 20,
+      itemWidth: 30,
+      itemHeight: 16,
       textStyle: { ...ts, fontSize: fonts.legend },
       pageTextStyle: { ...pts, fontSize: fonts.legendPage },
     };
@@ -296,10 +317,33 @@ export function buildPresentationEchartsPatch(
     };
   };
 
+  const patchSeriesTextLabels = (sRec: Record<string, unknown>): Record<string, unknown> => {
+    let next: Record<string, unknown> = { ...sRec };
+    const lab = next.label as Record<string, unknown> | undefined;
+    if (lab && lab.show !== false) {
+      next = { ...next, label: { ...lab, fontSize: fonts.seriesLabel } };
+    }
+    const endLab = next.endLabel as Record<string, unknown> | undefined;
+    if (endLab && endLab.show !== false) {
+      next = { ...next, endLabel: { ...endLab, fontSize: fonts.seriesLabel } };
+    }
+    const emph = next.emphasis as Record<string, unknown> | undefined;
+    if (emph && emph.label && typeof emph.label === "object") {
+      const el = emph.label as Record<string, unknown>;
+      if (el.show !== false) {
+        next = {
+          ...next,
+          emphasis: { ...emph, label: { ...el, fontSize: fonts.seriesLabel } },
+        };
+      }
+    }
+    return next;
+  };
+
   const series = asArray(opt.series).map((s) => {
     const sRec = s as Record<string, unknown>;
     const ml = sRec.markLine as Record<string, unknown> | undefined;
-    let next: Record<string, unknown> = { ...sRec };
+    let next: Record<string, unknown> = patchSeriesTextLabels({ ...sRec });
     if (ml && Array.isArray(ml.data)) {
       next = { ...next, markLine: { ...ml, data: (ml.data as unknown[]).map(patchMarkLineEntry) } };
     }
@@ -321,7 +365,7 @@ export function buildPresentationEchartsPatch(
         {
           type: "text" as const,
           ...(dir === "rtl" ? { left: 10 } : { right: 10 }),
-          bottom: 10,
+          bottom: 14,
           style: {
             text: sourceText,
             fontSize: fonts.sourceGraphic,
@@ -334,7 +378,21 @@ export function buildPresentationEchartsPatch(
       ]
     : [];
 
-  const prevGraphics = asArray(opt.graphic).filter((g) => g != null);
+  const prevGraphics = asArray(opt.graphic)
+    .filter((g) => g != null)
+    .map((g) => {
+      const gr = g as Record<string, unknown>;
+      if (gr.type !== "text" || !gr.style || typeof gr.style !== "object") return g;
+      const st = gr.style as Record<string, unknown>;
+      const prevFs = typeof st.fontSize === "number" ? st.fontSize : 0;
+      return {
+        ...gr,
+        style: {
+          ...st,
+          fontSize: Math.max(prevFs, fonts.sourceGraphic),
+        },
+      };
+    });
 
   const rawTooltip = opt.tooltip;
   const tooltip0 = (Array.isArray(rawTooltip) ? rawTooltip[0] : rawTooltip) as Record<string, unknown> | undefined;

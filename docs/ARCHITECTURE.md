@@ -21,7 +21,7 @@ signalmap/
 |--------|---------|
 | `apps/api` | FastAPI backend: signals, Wayback, cron, jobs |
 | `apps/web` | Next.js App Router: studies UI, charts, API proxy routes |
-| `docs` | Railway cron setup, Cursor context |
+| `docs` | Railway web/API deploy (`RAILWAY_DEPLOY.md`), cron setup, Cursor context |
 | `.github/workflows` | Daily cron (POST to `/api/cron/update-all`) |
 
 ### API ↔ Web Interaction
