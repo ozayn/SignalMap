@@ -51,6 +51,8 @@ Set these in the **Railway dashboard** for the **web** service (not in git alone
 
 That message means the **Web** service’s dashboard setting still points at a **deleted** config file at the **repository root**. **Fix this in Railway only** (do **not** re-add `railway.web.json` to git).
 
+On the **Build** tab, Railway may show a banner like **“The value is set in `/railway.web.json`”** with **Open file** — that only indicates **which config file the service is bound to**, not that you should recreate that file. After you point the service at **`/apps/web/railway.json`**, the same banner should refer to that file and show **`Dockerfile`** (from the repo), not `Dockerfile.web`.
+
 1. Railway project → select the **Web** service (the one that builds Next.js).
 2. **Settings** → find **Root Directory** and **Railway config file** / **Config-as-code** / **Config file** (wording varies).
 3. **Root Directory:** **`apps/web`**
