@@ -23,12 +23,23 @@ export default function Error({
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-12 space-y-4 min-w-0 w-full">
-      <p className="text-muted-foreground">Something went wrong.</p>
       {deployMismatch ? (
-        <p className="text-sm text-foreground max-w-prose">
-          This often happens after a new deployment while an older tab is still open. Try a full page reload (refresh),
-          then use the app again. If it persists, clear the site cache or open the site in a private window.
-        </p>
+        <p className="text-foreground font-medium">This page is out of sync with the server.</p>
+      ) : (
+        <p className="text-muted-foreground">Something went wrong.</p>
+      )}
+      {deployMismatch ? (
+        <div className="text-sm text-muted-foreground max-w-prose space-y-2">
+          <p>
+            That usually happens right after we ship an update, while a tab still has an older copy of the app loaded.
+            Your work is fine; the page just needs to pick up the latest version.
+          </p>
+          <p>
+            Refresh this page (or use <span className="text-foreground">Reload page</span> below). If it still
+            happens, copy the URL from the address bar and open it in a new tab. As a last resort, try a private
+            window or clear cached data for this site.
+          </p>
+        </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
         <button

@@ -589,13 +589,13 @@ export function TimelineChart({
     const verticalMarkLineItem = (d: MarkLineDatum) => {
       if (d.event.macroMarker === true) {
         const ml = macroLabelLayout.get(d.event.id) ?? { showLabel: false, staggerIndex: 0 };
-        const showMacroLabel = ml.showLabel;
+        const showTopMacroLabel = ml.showLabel;
         const caption = macroMarkLineCaption(d.event);
         const row = ml.staggerIndex % MACRO_LABEL_MAX_ROWS;
         const offsetY = -row * MACRO_LABEL_ROW_HEIGHT;
         return {
           xAxis: d.xAxis,
-          label: showMacroLabel
+          label: showTopMacroLabel
             ? {
                 show: true,
                 formatter: caption,
@@ -604,8 +604,18 @@ export function TimelineChart({
                 distance: 4,
                 position: "end" as const,
                 offset: [0, offsetY] as [number, number],
+                rotate: 0,
               }
-            : { show: false },
+            : {
+                show: true,
+                formatter: caption,
+                fontSize: 9,
+                color: withAlphaHsl(mutedFg, 0.92),
+                distance: 10,
+                position: "middle" as const,
+                rotate: 90,
+                offset: [0, 0] as [number, number],
+              },
           lineStyle: {
             color: withAlphaHsl(muted, 0.28),
             width: 1,
