@@ -135,7 +135,11 @@ function findEventIndex(dates: string[], eventDate: string): number | null {
 }
 
 /** Minimum Gregorian years between shown macro-marker captions (lines always draw). */
-const MIN_LABEL_GAP_YEARS = 5;
+const MIN_LABEL_GAP_YEARS = 3;
+
+/** Vertical pixel bands for top captions so nearby years can both show text without stacking on one row. */
+const MACRO_LABEL_ROW_HEIGHT = 11;
+const MACRO_LABEL_MAX_ROWS = 5;
 
 /** Higher = earlier in sort when years tie (prefer war/sanctions captions). */
 function macroEventPriority(ev: TimelineEvent): number {
@@ -155,8 +159,8 @@ function eventGregorianYear(ev: TimelineEvent): number {
 type MacroLabelLayout = { showLabel: boolean; staggerIndex: number };
 
 /**
- * Macro-marker captions: at most one label per MIN_LABEL_GAP_YEARS (anchor always gets a label).
- * Stagger index alternates ECharts label position (insideEndTop / insideStartTop).
+ * Macro-marker captions: at most one label per MIN_LABEL_GAP_YEARS in time (anchor always gets a label).
+ * `staggerIndex` picks a vertical offset band at the top so multiple labels can remain readable.
  */
 function buildMacroLabelLayout(args: {
   macroMarkData: { xAxis: string; event: TimelineEvent }[];
@@ -192,6 +196,15 @@ function buildMacroLabelLayout(args: {
   }
 
   return layout;
+}
+
+/** Short markLine text; full title stays on the event for tooltips. */
+function macroMarkLineCaption(ev: TimelineEvent): string {
+  const c = ev.chartLabel?.trim();
+  if (c) return c;
+  const t = ev.title.trim();
+  if (t.length <= 16) return t;
+  return `${t.slice(0, 14)}…`;
 }
 
 function sparseDatesFromRange(start: string, end: string, stepMonths = 1): string[] {
@@ -577,9 +590,9 @@ export function TimelineChart({
       if (d.event.macroMarker === true) {
         const ml = macroLabelLayout.get(d.event.id) ?? { showLabel: false, staggerIndex: 0 };
         const showMacroLabel = ml.showLabel;
-        const caption = (d.event.chartLabel ?? d.event.title).trim() || d.event.title;
-        const labelPosition =
-          ml.staggerIndex % 2 === 0 ? ("insideEndTop" as const) : ("insideStartTop" as const);
+        const caption = macroMarkLineCaption(d.event);
+        const row = ml.staggerIndex % MACRO_LABEL_MAX_ROWS;
+        const offsetY = -row * MACRO_LABEL_ROW_HEIGHT;
         return {
           xAxis: d.xAxis,
           label: showMacroLabel
@@ -588,8 +601,9 @@ export function TimelineChart({
                 formatter: caption,
                 fontSize: 10,
                 color: mutedFg,
-                distance: 6,
-                position: labelPosition,
+                distance: 4,
+                position: "end" as const,
+                offset: [0, offsetY] as [number, number],
               }
             : { show: false },
           lineStyle: {
@@ -865,7 +879,7 @@ export function TimelineChart({
           : (comparatorSeries && comparatorValuesForChart && hasOil) || (hasMultiSeries && multiSeries) || (hasOil && secondSeries && !comparatorSeries)
             ? "10%"
             : "3%",
-        top: hasMacroMarkers ? "17%" : "10%",
+        top: hasMacroMarkers ? "20%" : "10%",
         containLabel: true,
       },
       xAxis: useTimeAxis
