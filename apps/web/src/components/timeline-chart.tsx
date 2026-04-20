@@ -9,6 +9,7 @@ import {
   type ChartAxisYearMode,
 } from "@/lib/chart-axis-year";
 import { formatGdpLevelsAxisTick, formatGdpLevelsTooltipValue } from "@/lib/format-compact-decimal";
+import { globalMacroOilMarkLineShortLabel } from "@/lib/timeline-global-macro-oil-labels";
 
 /** GDP study: compact absolute values (levels + nominal); `gdp_levels` kept as alias. */
 function isGdpCompactMultiSeriesFormat(fmt?: string): boolean {
@@ -134,8 +135,11 @@ function findEventIndex(dates: string[], eventDate: string): number | null {
   return dates.length - 1;
 }
 
-/** Minimum Gregorian years between shown macro-marker captions (lines always draw). */
+/** Minimum Gregorian years between shown Iran macro **top** captions (lines always draw). */
 const MIN_LABEL_GAP_YEARS = 3;
+
+/** Minimum years between shown **vertical** global oil / macro captions (lines always draw). */
+const MIN_VERTICAL_LABEL_GAP_YEARS = 4;
 
 /** Vertical pixel bands for top captions so nearby years can both show text without stacking on one row. */
 const MACRO_LABEL_ROW_HEIGHT = 11;
@@ -191,6 +195,46 @@ function buildMacroLabelLayout(args: {
     if (show) {
       layout.set(d.event.id, { showLabel: true, staggerIndex: stagger });
       stagger += 1;
+      lastLabeledYear = y;
+    }
+  }
+
+  return layout;
+}
+
+type VerticalOilLabelLayout = { showLabel: boolean };
+
+/**
+ * Global oil markLines: at most one vertical caption per ``MIN_VERTICAL_LABEL_GAP_YEARS``
+ * (anchor always gets a label). Lines for every event stay in ``markLineData``; only labels drop.
+ */
+function buildVerticalGlobalOilLabelLayout(args: {
+  globalOilMarkData: { event: TimelineEvent }[];
+  anchorEventId?: string;
+}): Map<string, VerticalOilLabelLayout> {
+  const { globalOilMarkData, anchorEventId } = args;
+  const layout = new Map<string, VerticalOilLabelLayout>();
+  if (globalOilMarkData.length === 0) return layout;
+
+  for (const d of globalOilMarkData) {
+    layout.set(d.event.id, { showLabel: false });
+  }
+
+  const sorted = [...globalOilMarkData].sort((a, b) => {
+    const ya = eventGregorianYear(a.event);
+    const yb = eventGregorianYear(b.event);
+    if (ya !== yb) return ya - yb;
+    return macroEventPriority(b.event) - macroEventPriority(a.event);
+  });
+
+  let lastLabeledYear = -Infinity;
+
+  for (const d of sorted) {
+    const y = eventGregorianYear(d.event);
+    const isAnchor = anchorEventId === d.event.id;
+    const show = isAnchor || y - lastLabeledYear >= MIN_VERTICAL_LABEL_GAP_YEARS;
+    if (show) {
+      layout.set(d.event.id, { showLabel: true });
       lastLabeledYear = y;
     }
   }
@@ -583,16 +627,45 @@ export function TimelineChart({
       }
     }
 
-    const macroMarkLineData = markLineData.filter((d) => eventUsesMacroMarkLineStyle(d.event));
-    const hasMacroMarkers = macroMarkLineData.length > 0;
+    const iranMacroMarkLineData = markLineData.filter((d) => d.event.macroMarker === true);
+    const globalOilMarkLineData = markLineData.filter((d) => d.event.layer === "global_macro_oil");
+    const hasTopMacroCaptionRows = iranMacroMarkLineData.length > 0;
     const macroLabelLayout = buildMacroLabelLayout({
-      macroMarkData: macroMarkLineData,
+      macroMarkData: iranMacroMarkLineData,
+      anchorEventId,
+    });
+    const verticalGlobalOilLabelLayout = buildVerticalGlobalOilLabelLayout({
+      globalOilMarkData: globalOilMarkLineData,
       anchorEventId,
     });
 
     type MarkLineDatum = { xAxis: string; event: TimelineEvent; isAnchor: boolean };
     const verticalMarkLineItem = (d: MarkLineDatum) => {
-      if (eventUsesMacroMarkLineStyle(d.event)) {
+      if (d.event.layer === "global_macro_oil") {
+        const vl = verticalGlobalOilLabelLayout.get(d.event.id) ?? { showLabel: false };
+        const shortCaption = globalMacroOilMarkLineShortLabel(d.event);
+        return {
+          xAxis: d.xAxis,
+          label: vl.showLabel
+            ? {
+                show: true,
+                formatter: shortCaption,
+                fontSize: 10,
+                color: withAlphaHsl(mutedFg, 0.86),
+                distance: 8,
+                position: "middle" as const,
+                rotate: 90,
+                offset: [0, 0] as [number, number],
+              }
+            : { show: false },
+          lineStyle: {
+            color: withAlphaHsl(muted, 0.28),
+            width: 1,
+            type: "dashed" as const,
+          },
+        };
+      }
+      if (d.event.macroMarker === true) {
         const ml = macroLabelLayout.get(d.event.id) ?? { showLabel: false, staggerIndex: 0 };
         const showTopMacroLabel = ml.showLabel;
         const caption = macroMarkLineCaption(d.event);
@@ -654,15 +727,6 @@ export function TimelineChart({
     };
 
     const markLineSeriesItems = markLineData.map((d) => verticalMarkLineItem(d));
-    if (process.env.NODE_ENV === "development" && markLineData.some((d) => d.event.layer === "global_macro_oil")) {
-      console.log(
-        "[TimelineChart] markLine.data (global_macro_oil present)",
-        markLineSeriesItems.map((item) => ({
-          xAxis: item.xAxis,
-          label: item.label,
-        }))
-      );
-    }
 
     const rangeBandData: { xStart: string; xEnd: string; event: TimelineEvent }[] = [];
     const presidentialBandData: { xStart: string; xEnd: string; event: TimelineEvent }[] = [];
@@ -908,7 +972,7 @@ export function TimelineChart({
           : (comparatorSeries && comparatorValuesForChart && hasOil) || (hasMultiSeries && multiSeries) || (hasOil && secondSeries && !comparatorSeries)
             ? "10%"
             : "3%",
-        top: hasMacroMarkers ? "20%" : "10%",
+        top: hasTopMacroCaptionRows ? "20%" : "10%",
         containLabel: true,
       },
       xAxis: useTimeAxis
