@@ -14,16 +14,17 @@ export const PRESENTATION_EXPORT_PIXEL_RATIO = 3;
 
 /** Target typography on the export chart surface (px at base slide width). Single source for all study PNG exports. */
 export const PRESENTATION_EXPORT_FONTS = {
-  title: 28,
-  axisTick: 18,
-  axisName: 20,
-  axisNameLineHeight: 24,
-  legend: 18,
-  legendPage: 16,
-  markLineLabel: 18,
-  tooltip: 18,
-  sourceGraphic: 16,
-  seriesLabel: 16,
+  title: 38,
+  /** x/y axis value tick labels */
+  axisLabel: 22,
+  axisName: 26,
+  axisNameLineHeight: 31,
+  legend: 21,
+  legendPage: 18,
+  markLineLabel: 20,
+  tooltip: 20,
+  sourceGraphic: 17,
+  seriesLabel: 18,
 } as const;
 
 /** Context for slide-style PNG export: title + source are drawn on the offscreen ECharts canvas (not the outer composite). */
@@ -167,7 +168,7 @@ function scaleRichForPresentation(rich: Record<string, unknown> | undefined): Re
     const o = v as Record<string, unknown>;
     const fs = typeof o.fontSize === "number" ? o.fontSize : 12;
     const lh = typeof o.lineHeight === "number" ? o.lineHeight : Math.round(fs * 1.25);
-    const factor = PRESENTATION_EXPORT_FONTS.axisTick / 12; // scale rich-text vs default 12px baseline
+    const factor = PRESENTATION_EXPORT_FONTS.axisLabel / 12; // scale rich-text vs default 12px baseline
     out[k] = {
       ...o,
       fontSize: Math.round(fs * factor),
@@ -179,10 +180,10 @@ function scaleRichForPresentation(rich: Record<string, unknown> | undefined): Re
 
 /** Grid margins (logical px @ 1920 wide): room for larger title, axis names, legend, and corner source without clipping. */
 const PRESENTATION_EXPORT_GRID = {
-  left: 78,
-  right: 54,
-  top: 78,
-  bottom: 80,
+  left: 112,
+  right: 68,
+  top: 108,
+  bottom: 112,
   containLabel: true as const,
 };
 
@@ -218,16 +219,18 @@ function buildPresentationTitlePatch(opt: Record<string, unknown>, ctx: Presenta
   const title0 = (Array.isArray(rawTitle) ? rawTitle[0] : rawTitle) as Record<string, unknown> | undefined;
   const prevTs = (title0?.textStyle ?? {}) as Record<string, unknown>;
   const displayTitle = localizeChartNumericDisplayString(ctx.chartTitle.trim(), ctx.chartLocale ?? "en");
+  const fs = PRESENTATION_EXPORT_FONTS.title;
   return {
     ...(title0 ?? {}),
     show: true,
     text: displayTitle,
     left: "center",
-    top: 10,
+    top: 8,
     textStyle: {
       ...prevTs,
-      fontSize: PRESENTATION_EXPORT_FONTS.title,
-      fontWeight: 600,
+      fontSize: fs,
+      fontWeight: 700,
+      lineHeight: Math.round(fs * 1.18),
       color: typeof prevTs.color === "string" ? prevTs.color : "#0f172a",
     },
   };
@@ -263,17 +266,17 @@ export function buildPresentationEchartsPatch(
     const hasName = typeof ax.name === "string" && ax.name.trim() !== "";
     const nameGapPatch =
       typeof ax.nameGap === "number"
-        ? { nameGap: Math.max(58, Math.round(ax.nameGap * 1.05)) }
+        ? { nameGap: Math.max(76, Math.round(ax.nameGap * 1.08)) }
         : hasName
-          ? { nameGap: 58 }
+          ? { nameGap: 76 }
           : {};
     return {
       ...ax,
       ...nameGapPatch,
       axisLabel: {
         ...al,
-        fontSize: fonts.axisTick,
-        margin: typeof al.margin === "number" ? Math.max(al.margin, 12) : 12,
+        fontSize: fonts.axisLabel,
+        margin: typeof al.margin === "number" ? Math.max(al.margin, 16) : 16,
         ...(rich ? { rich: scaleRichForPresentation(rich) } : {}),
       },
       nameTextStyle: {
@@ -294,9 +297,9 @@ export function buildPresentationEchartsPatch(
     const pts = (legRec.pageTextStyle ?? {}) as Record<string, unknown>;
     return {
       ...legRec,
-      bottom: 20,
-      itemWidth: 30,
-      itemHeight: 16,
+      bottom: 26,
+      itemWidth: 38,
+      itemHeight: 19,
       textStyle: { ...ts, fontSize: fonts.legend },
       pageTextStyle: { ...pts, fontSize: fonts.legendPage },
     };
@@ -364,8 +367,8 @@ export function buildPresentationEchartsPatch(
     ? [
         {
           type: "text" as const,
-          ...(dir === "rtl" ? { left: 10 } : { right: 10 }),
-          bottom: 14,
+          ...(dir === "rtl" ? { left: 14 } : { right: 14 }),
+          bottom: 20,
           style: {
             text: sourceText,
             fontSize: fonts.sourceGraphic,
