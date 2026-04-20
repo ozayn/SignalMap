@@ -796,8 +796,8 @@ CPI_INFLATION_YOY_SOURCE = {
 
 def get_cpi_inflation_yoy_comparison(start: str, end: str) -> dict:
     """
-    Annual consumer price inflation (% change from a year earlier) for Iran and the United States.
-    WDI indicator FP.CPI.TOTL.ZG.
+    Annual consumer price inflation (% change from a year earlier) for Iran, United States,
+    Germany, and Turkey. WDI indicator FP.CPI.TOTL.ZG (same source as Gini comparator studies).
     """
     from signalmap.sources.world_bank_cpi_inflation import WDI_CPI_INFLATION_ANNUAL_PCT, fetch_cpi_inflation_yoy_for_countries
 
@@ -808,7 +808,12 @@ def get_cpi_inflation_yoy_comparison(start: str, end: str) -> dict:
 
     start_year = int(start[:4])
     end_year = int(end[:4])
-    iso3_to_key = {"IRN": "iran", "USA": "united_states"}
+    iso3_to_key = {
+        "IRN": "iran",
+        "USA": "united_states",
+        "DEU": "germany",
+        "TUR": "turkey",
+    }
     series = fetch_cpi_inflation_yoy_for_countries(iso3_to_key, start_year, end_year)
     result = {
         "series": series,

@@ -1,7 +1,10 @@
 import type { StudyMeta } from "@/lib/studies";
 import { IRAN_STUDY_FA_DISPLAY } from "@/lib/iran-study-fa-copy";
 
-/** Iran-focused studies that expose EN/FA on the study detail page (not full-site i18n). */
+/**
+ * Iran-focused studies that expose EN/FA on the study detail page (not full-site i18n).
+ * Also drives the shared Gregorian / Jalali / Both year-axis control and `xAxisYearLabel` wiring on those pages.
+ */
 export const IRAN_FA_STUDY_IDS = new Set<string>([
   "iran",
   "usd-toman",

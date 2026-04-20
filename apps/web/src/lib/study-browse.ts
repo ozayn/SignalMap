@@ -235,10 +235,19 @@ function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
       };
     case "inflation_cpi_yoy":
       return {
-        countries: ["iran", "us"],
+        countries: ["iran", "us", "global"],
         themes: ["macro"],
         tags: [],
-        keywords: ["inflation", "cpi", "consumer prices", "yoy", "prices", "world bank"],
+        keywords: [
+          "inflation",
+          "cpi",
+          "consumer prices",
+          "yoy",
+          "prices",
+          "world bank",
+          "germany",
+          "turkey",
+        ],
       };
     case "poverty_headcount_iran":
       return {

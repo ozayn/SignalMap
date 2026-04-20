@@ -55,7 +55,7 @@ const INFLATION_EN: LearningNoteSection[] = [
     heading: "What this shows",
     bullets: [
       "Inflation rate measures how quickly consumer prices rise each year, expressed as the percentage change from the same period a year earlier (year-on-year, YoY).",
-      "This chart uses the World Bank’s annual series (FP.CPI.TOTL.ZG) for Iran and the United States.",
+      "This chart uses the World Bank’s annual series (FP.CPI.TOTL.ZG) for Iran, the United States, Germany, and Turkey.",
     ],
   },
   {
@@ -80,7 +80,7 @@ const INFLATION_FA: LearningNoteSection[] = [
     heading: "What this shows",
     bullets: [
       "نرخ تورم نشان می‌دهد قیمت‌های مصرف‌کننده در هر سال نسبت به همان دورهٔ سال قبل چه مقدار تغییر کرده‌اند (درصد تغییر سال‌به‌سال، YoY).",
-      "این نمودار از سری سالانهٔ بانک جهانی (FP.CPI.TOTL.ZG) برای ایران و ایالات متحده استفاده می‌کند.",
+      "این نمودار از سری سالانهٔ بانک جهانی (FP.CPI.TOTL.ZG) برای ایران، ایالات متحده، آلمان و ترکیه استفاده می‌کند.",
     ],
   },
   {

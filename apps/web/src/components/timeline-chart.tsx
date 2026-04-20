@@ -8,7 +8,7 @@ import {
   inferChartRangeGranularityFromDates,
   normalizeChartRangeBound,
 } from "@/lib/chart-study-range";
-import { downloadEchartsRaster } from "@/lib/chart-export";
+import { downloadEchartsRaster, type DownloadEchartsRasterOptions } from "@/lib/chart-export";
 import { StudyChartControls } from "@/components/study-chart-controls";
 import { timelineChartFaUi } from "@/lib/timeline-chart-fa";
 import {
@@ -22,6 +22,7 @@ import {
   formatChartCategoryAxisYearLabel,
   formatChartTimeAxisYearLabel,
   formatChartTooltipYearLine,
+  getChartAxisYearDisplayParts,
   type ChartAxisYearMode,
 } from "@/lib/chart-axis-year";
 import {
@@ -37,7 +38,55 @@ import { globalMacroOilMarkLineShortLabel } from "@/lib/timeline-global-macro-oi
 import {
   COUNTRY_COMPARATOR_SERIES_COLORS,
   countryComparatorSeriesColor,
-} from "@/lib/chart-country-series-colors";
+  countryComparatorSeriesStyle,
+} from "@/lib/chart-country-series-styles";
+import { localizeChartNumericDisplayString, localizeChartNumericDisplayStringSafe } from "@/lib/chart-numerals-fa";
+
+const MULTI_SERIES_FALLBACK_LEGEND_ICONS: Array<"circle" | "diamond" | "triangle" | "rect"> = [
+  "circle",
+  "diamond",
+  "triangle",
+  "rect",
+];
+
+const PRODUCTION_LEGEND_ICONS: Record<string, "circle" | "diamond" | "triangle" | "roundRect" | "rect"> = {
+  us: "circle",
+  saudi: "diamond",
+  russia: "triangle",
+  iran: "roundRect",
+  total: "rect",
+};
+
+type LegendEndShape = "circle" | "rect" | "diamond" | "triangle" | "roundRect";
+
+/**
+ * Legend entry icon: short line segment + small end marker (same geometry as series symbol),
+ * instead of a large filled-only shape. Coordinates ~0–22 × 0–12; ECharts scales to ``itemWidth`` / ``itemHeight``.
+ */
+function multiSeriesLegendLineMarkerPath(shape: LegendEndShape): string {
+  const line = "M0.3,5.45L12.8,5.45L12.8,6.65L0.3,6.65Z";
+  let glyph = "";
+  switch (shape) {
+    case "circle":
+      glyph = "M16.2,6m-2.35,0a2.35,2.35,0,1,1,4.71,0a2.35,2.35,0,1,1,-4.71,0";
+      break;
+    case "rect":
+      glyph = "M14.35,3.85H18.75V8.15H14.35Z";
+      break;
+    case "diamond":
+      glyph = "M16.5,3.55L19.65,6L16.5,8.45L13.35,6Z";
+      break;
+    case "triangle":
+      glyph = "M16.5,3.65L19.85,8.35H13.15Z";
+      break;
+    case "roundRect":
+      glyph = "M14.1,4.1H18.9A1.05,1.05,0,0,1,19.95,5.15V6.85A1.05,1.05,0,0,1,18.9,7.9H14.1A1.05,1.05,0,0,1,13.05,6.85V5.15A1.05,1.05,0,0,1,14.1,4.1Z";
+      break;
+    default:
+      glyph = "M16.2,6m-2.35,0a2.35,2.35,0,1,1,4.71,0a2.35,2.35,0,1,1,-4.71,0";
+  }
+  return `path://${line}${glyph}`;
+}
 
 /** GDP study: compact absolute values, indexed ratios, or nominal; `gdp_levels` kept as alias. */
 function isGdpCompactMultiSeriesFormat(fmt?: string): boolean {
@@ -154,6 +203,8 @@ type TimelineChartProps = {
   chartRangeGranularity?: ChartRangeGranularity;
   /** Download filename stem for PNG export (sanitized); defaults to `label`. */
   exportFileStem?: string;
+  /** Full source line appended below the chart in PNG export only (e.g. `Source: World Bank`). */
+  exportSourceFooter?: string;
   /** When set with dense category axes, show a year label about every N calendar years (Gregorian year index; Jalali label still applies). */
   categoryYearTickStep?: number;
   /** Compact USD / bn-toman tooltips and y-axis ticks (GDP composition absolute-value charts). */
@@ -392,6 +443,7 @@ export function TimelineChart({
   showChartControls = true,
   chartRangeGranularity: chartRangeGranularityProp,
   exportFileStem,
+  exportSourceFooter,
   multiSeriesValueFormat,
   indexedTooltipBaseLabel,
   multiSeriesYAxisNameOverrides,
@@ -461,17 +513,22 @@ export function TimelineChart({
     if (!chart) return;
     const backgroundColor = cssHsl("--background", "hsl(0, 0%, 100%)");
     const stem = exportFileStem ?? label;
+    const footerColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         try {
           chart.resize();
-          downloadEchartsRaster(chart, "png", stem, backgroundColor);
+          const exportOpts: DownloadEchartsRasterOptions = {
+            exportSourceFooter: exportSourceFooter?.trim(),
+            exportSourceFooterColor: footerColor,
+          };
+          downloadEchartsRaster(chart, "png", stem, backgroundColor, exportOpts);
         } catch {
           // Instance may be disposed mid-frame
         }
       });
     });
-  }, [exportFileStem, label]);
+  }, [exportFileStem, exportSourceFooter, label]);
 
   useEffect(() => {
     const updateRotate = () => setXLabelRotate(window.innerWidth < 640 ? 90 : 0);
@@ -723,6 +780,47 @@ export function TimelineChart({
       forceTimeAxis || spanYears > 40 || (spanDays > 0 && spanDays < 400);
 
     const axisYearMode: ChartAxisYearMode = xAxisYearLabel ?? "gregorian";
+    const chartNumeralLocale = chartLocale ?? "en";
+    const axisYearGregColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
+    const axisYearJalaliColor = mutedFg;
+    const axisLabelBothRich = {
+      gy: {
+        color: axisYearGregColor,
+        fontSize: 12,
+        lineHeight: 15,
+        align: "center" as const,
+        padding: [0, 0, 2, 0],
+      },
+      jy: {
+        color: axisYearJalaliColor,
+        fontSize: 10,
+        lineHeight: 12,
+        align: "center" as const,
+      },
+    };
+    const tooltipYearLineColors = {
+      gregorianColor: axisYearGregColor,
+      jalaliColor: axisYearJalaliColor,
+      labelColor: mutedFg,
+    };
+    const formatCategoryAxisYearTick = (value: string) => {
+      if (axisYearMode !== "both")
+        return formatChartCategoryAxisYearLabel(value, axisYearMode, chartNumeralLocale);
+      const { gregorian, jalali } = getChartAxisYearDisplayParts(value);
+      if (!gregorian) return value;
+      return jalali
+        ? `{gy|${localizeChartNumericDisplayString(gregorian, chartNumeralLocale)}}\n{jy|${localizeChartNumericDisplayString(jalali, chartNumeralLocale)}}`
+        : localizeChartNumericDisplayString(gregorian, chartNumeralLocale);
+    };
+    const isShortSpanTimeAxis = useTimeAxis && spanDays < 400;
+    const dualYearStackedAxisActive =
+      axisYearMode === "both" && (!useTimeAxis || !isShortSpanTimeAxis);
+    const bumpGridBottomForDualYear = (bottomPct: string) => {
+      if (!dualYearStackedAxisActive) return bottomPct;
+      const m = bottomPct.match(/^([\d.]+)%$/);
+      if (!m) return bottomPct;
+      return `${Math.min(40, parseFloat(m[1]) + 4)}%`;
+    };
 
     const toTimeData = (vals: (number | null)[]) =>
       dates.map((d, i) => [Date.parse(d), vals[i] ?? null] as [number, number | null]);
@@ -831,7 +929,7 @@ export function TimelineChart({
           label: vl.showLabel
             ? {
                 show: true,
-                formatter: shortCaption,
+                formatter: localizeChartNumericDisplayString(shortCaption, chartNumeralLocale),
                 fontSize: 12,
                 color: withAlphaHsl(mutedFg, 0.86),
                 distance: 8,
@@ -858,7 +956,7 @@ export function TimelineChart({
           label: showTopMacroLabel
             ? {
                 show: true,
-                formatter: caption,
+                formatter: localizeChartNumericDisplayString(caption, chartNumeralLocale),
                 fontSize: 12,
                 color: mutedFg,
                 distance: 4,
@@ -938,13 +1036,39 @@ export function TimelineChart({
     const oilColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
     const comparatorColor = "hsl(195, 55%, 42%)";
 
+    const useMultiSparseMarkers = hasMultiSeries && multiSeriesCount >= 2;
+    const multiSeriesLegendData =
+      hasMultiSeries && multiSeries
+        ? multiSeries.map((s, i) => {
+            const cmp = countryComparatorSeriesStyle(s.key);
+            if (cmp) {
+              return {
+                name: s.label,
+                icon: multiSeriesLegendLineMarkerPath(cmp.legendIcon),
+                itemStyle: { color: cmp.color },
+              };
+            }
+            if (s.key in productionColors) {
+              const col = productionColors[s.key] ?? mutedFg;
+              const shape = PRODUCTION_LEGEND_ICONS[s.key] ?? "circle";
+              return { name: s.label, icon: multiSeriesLegendLineMarkerPath(shape), itemStyle: { color: col } };
+            }
+            const shape = MULTI_SERIES_FALLBACK_LEGEND_ICONS[i % MULTI_SERIES_FALLBACK_LEGEND_ICONS.length]!;
+            return {
+              name: s.label,
+              icon: multiSeriesLegendLineMarkerPath(shape),
+              itemStyle: { color: s.color ?? mutedFg },
+            };
+          })
+        : [];
+
     const option: echarts.EChartsOption = {
       animation: false,
       backgroundColor: "transparent",
       ...(showChartControls
         ? {
             title: {
-              text: label,
+              text: localizeChartNumericDisplayString(label, chartNumeralLocale),
               left: "center",
               top: 2,
               textStyle: { fontSize: 13, color: mutedFg, fontWeight: 600 },
@@ -957,6 +1081,7 @@ export function TimelineChart({
             legend: {
               show: true,
               type: "plain",
+              selectedMode: true,
               bottom: 4,
               left: "center",
               itemGap: 16,
@@ -969,14 +1094,17 @@ export function TimelineChart({
               legend: {
                 show: true,
                 type: legendUseScroll ? ("scroll" as const) : ("plain" as const),
+                selectedMode: true,
                 bottom: 2,
                 left: "center",
                 width: "88%",
+                itemWidth: 26,
+                itemHeight: 10,
                 itemGap: legendUseScroll ? 20 : 16,
                 textStyle: { color: mutedFg, fontSize: legendTextFontSize },
                 pageTextStyle: { color: mutedFg, fontSize: 11 },
                 pageIconSize: legendUseScroll ? 12 : 10,
-                data: multiSeries.map((s) => s.label),
+                data: multiSeriesLegendData,
               },
             }
           : hasOil && secondSeries && !comparatorResolved
@@ -984,6 +1112,7 @@ export function TimelineChart({
                 legend: {
                   show: true,
                   type: "plain",
+                  selectedMode: true,
                   bottom: 4,
                   left: "center",
                   itemGap: 16,
@@ -1101,7 +1230,13 @@ export function TimelineChart({
             lines.push("—");
           }
           lines.push(
-            formatChartTooltipYearLine(dateStr, axisYearMode, chartLocale === "fa" ? "fa" : "en")
+            formatChartTooltipYearLine(
+              dateStr,
+              axisYearMode,
+              chartLocale === "fa" ? "fa" : "en",
+              tooltipYearLineColors,
+              chartNumeralLocale
+            )
           );
           const pt = hasData && idx < dataResolved.length ? dataResolved[idx] : null;
           if (pt) {
@@ -1111,11 +1246,16 @@ export function TimelineChart({
               val == null || (typeof val !== "number" && (typeof val !== "string" || val === ""))
                 ? "—"
                 : Number.isFinite(num)
-                  ? `${formatMultiSeriesEconomicTooltipValue(num, unit ?? "")}${unit ? ` ${unit}` : ""}`
+                  ? `${formatMultiSeriesEconomicTooltipValue(num, unit ?? "", chartNumeralLocale)}${unit ? ` ${unit}` : ""}`
                   : String(val);
             lines.push(`${label}: ${valDisp}`);
             if (pt.confidence != null) {
-              lines.push(`${ui.confidence}: ${(pt.confidence * 100).toFixed(0)}%`);
+              lines.push(
+                localizeChartNumericDisplayString(
+                  `${ui.confidence}: ${(pt.confidence * 100).toFixed(0)}%`,
+                  chartNumeralLocale
+                )
+              );
             }
           }
           if (hasMultiSeries && multiSeries && multiSeriesValues) {
@@ -1125,10 +1265,10 @@ export function TimelineChart({
                 val != null
                   ? isGdpCompactMultiSeriesFormat(multiSeriesValueFormat)
                     ? multiSeriesValueFormat === "gdp_indexed" && indexedTooltipBaseLabel
-                      ? formatGdpIndexedTooltipValue(Number(val), indexedTooltipBaseLabel)
-                      : formatGdpLevelsTooltipValue(Number(val), s.unit)
+                      ? formatGdpIndexedTooltipValue(Number(val), indexedTooltipBaseLabel, chartNumeralLocale)
+                      : formatGdpLevelsTooltipValue(Number(val), s.unit, chartNumeralLocale)
                     : (() => {
-                        const core = formatMultiSeriesEconomicTooltipValue(Number(val), s.unit);
+                        const core = formatMultiSeriesEconomicTooltipValue(Number(val), s.unit, chartNumeralLocale);
                         const u = s.unit ?? "";
                         if (u.includes("%")) return u.trim().startsWith("%") ? `${core}${u}` : `${core} ${u}`;
                         return `${core} ${u}`;
@@ -1149,10 +1289,17 @@ export function TimelineChart({
             const formatted =
               oilVal != null
                 ? isIndexed
-                  ? `${oilVal.toFixed(1)} (${ui.indexed})`
+                  ? localizeChartNumericDisplayString(`${oilVal.toFixed(1)} (${ui.indexed})`, chartNumeralLocale)
                   : unit.includes("toman")
-                    ? `${formatEconomicDisplay(Math.round((oilVal / 1000) * 10) / 10, { maximumFractionDigits: 1, minimumFractionDigits: 0 })}k ${unit}`
-                    : `${formatMultiSeriesEconomicTooltipValue(oilVal, unit)} ${unit}`
+                    ? localizeChartNumericDisplayString(
+                        `${formatEconomicDisplay(Math.round((oilVal / 1000) * 10) / 10, {
+                          maximumFractionDigits: 1,
+                          minimumFractionDigits: 0,
+                          chartLocale: chartNumeralLocale,
+                        })}k ${unit}`,
+                        chartNumeralLocale
+                      )
+                    : `${formatMultiSeriesEconomicTooltipValue(oilVal, unit, chartNumeralLocale)} ${unit}`
                 : "—";
             lines.push(`${lbl}: ${formatted}`);
             if (comparatorValuesForChart && comparatorResolved) {
@@ -1160,32 +1307,34 @@ export function TimelineChart({
               const compFormatted =
                 compVal != null
                   ? isIndexed
-                    ? `${compVal.toFixed(1)} (${ui.indexed})`
-                    : `${formatMultiSeriesEconomicTooltipValue(Number(compVal), secondSeries?.unit ?? "")}`
+                    ? localizeChartNumericDisplayString(`${compVal.toFixed(1)} (${ui.indexed})`, chartNumeralLocale)
+                    : `${formatMultiSeriesEconomicTooltipValue(Number(compVal), secondSeries?.unit ?? "", chartNumeralLocale)}`
                   : "—";
               lines.push(`${comparatorResolved.label}: ${compFormatted}`);
             }
           }
-          return lines.join("<br/>");
+          return localizeChartNumericDisplayStringSafe(lines.join("<br/>"), chartNumeralLocale);
         },
       },
       grid: {
-        left: hasMultiSeries ? "12%" : "3%",
+        left: hasMultiSeries ? "15%" : "5%",
         right:
           gridRightOverride ??
           (hasMultiSeries && multiSeries && multiSeries.some((s) => s.yAxisIndex >= 2)
-            ? "28%"
+            ? "30%"
             : hasOil || !hasData || hasMultiSeries
-              ? "14%"
-              : "4%"),
-        bottom: xLabelRotate
-          ? "18%"
-          : (comparatorResolved && comparatorValuesForChart && hasOil) || (hasMultiSeries && multiSeries) || (hasOil && secondSeries && !comparatorResolved)
-            ? legendUseScroll
-              ? "17%"
-              : "12%"
-            : "3%",
-        top: hasTopMacroCaptionRows ? (showChartControls ? "24%" : "20%") : showChartControls ? "16%" : "10%",
+              ? "16%"
+              : "6%"),
+        bottom: bumpGridBottomForDualYear(
+          xLabelRotate
+            ? "18%"
+            : (comparatorResolved && comparatorValuesForChart && hasOil) || (hasMultiSeries && multiSeries) || (hasOil && secondSeries && !comparatorResolved)
+              ? legendUseScroll
+                ? "17%"
+                : "12%"
+              : "3%"
+        ),
+        top: hasTopMacroCaptionRows ? (showChartControls ? "26%" : "22%") : showChartControls ? "19%" : "12%",
         containLabel: true,
       },
       xAxis: useTimeAxis
@@ -1205,11 +1354,20 @@ export function TimelineChart({
               axisLabel: {
                 formatter: (value: number) =>
                   isShortSpan
-                    ? new Date(value).toLocaleDateString(undefined, {
+                    ? new Date(value).toLocaleDateString(chartNumeralLocale === "fa" ? "fa-IR" : undefined, {
                         month: "short",
                         day: "numeric",
                       })
-                    : formatChartTimeAxisYearLabel(value, axisYearMode),
+                    : axisYearMode === "both"
+                      ? (() => {
+                          const iso = new Date(value).toISOString().slice(0, 10);
+                          const { gregorian, jalali } = getChartAxisYearDisplayParts(iso);
+                          return jalali
+                            ? `{gy|${localizeChartNumericDisplayString(gregorian, chartNumeralLocale)}}\n{jy|${localizeChartNumericDisplayString(jalali, chartNumeralLocale)}}`
+                            : localizeChartNumericDisplayString(gregorian, chartNumeralLocale);
+                        })()
+                      : formatChartTimeAxisYearLabel(value, axisYearMode, chartNumeralLocale),
+                ...(axisYearMode === "both" && !isShortSpan ? { rich: axisLabelBothRich } : {}),
                 color: mutedFg,
                 fontSize: 12,
               },
@@ -1254,6 +1412,7 @@ export function TimelineChart({
                 fontSize: 12,
                 rotate: xLabelRotate,
                 interval,
+                ...(axisYearMode === "both" ? { rich: axisLabelBothRich } : {}),
                 formatter: (value: string, index: number) => {
                   const yearStr = value.slice(0, 4);
                   const yearNum = parseInt(yearStr, 10);
@@ -1261,7 +1420,7 @@ export function TimelineChart({
                     const prevYear = (dates[index - 1] ?? "").slice(0, 4);
                     if (index > 0 && prevYear === yearStr) return "";
                     if (!timeLinearTickYears.includes(yearNum)) return "";
-                    return formatChartCategoryAxisYearLabel(value, axisYearMode);
+                    return formatCategoryAxisYearTick(value);
                   }
                   const n2 = dates.length;
                   if (n2 > 365) {
@@ -1273,12 +1432,12 @@ export function TimelineChart({
                       const isLast = index === dates.length - 1;
                       if (rel % step !== 0 && !isLast) return "";
                     }
-                    return formatChartCategoryAxisYearLabel(value, axisYearMode);
+                    return formatCategoryAxisYearTick(value);
                   }
-                  if (n2 <= 100 || useSparseMultiSeriesDates)
-                    return formatChartCategoryAxisYearLabel(value, axisYearMode);
-                  if (n2 > 60) return value.slice(0, 7);
-                  return value;
+                  if (n2 <= 100 || useSparseMultiSeriesDates) return formatCategoryAxisYearTick(value);
+                  if (n2 > 60)
+                    return localizeChartNumericDisplayString(value.slice(0, 7), chartNumeralLocale);
+                  return localizeChartNumericDisplayString(value, chartNumeralLocale);
                 },
               },
             };
@@ -1336,8 +1495,9 @@ export function TimelineChart({
                 ...fixedRange,
                 position: (isLeft ? "left" : "right") as "left" | "right",
                 offset: isRight ? rightOffset : 0,
-                name: formatYAxisNameMultiline(axisTitle),
-                nameLocation: "end" as const,
+                name: formatYAxisNameMultiline(localizeChartNumericDisplayString(axisTitle, chartNumeralLocale)),
+                nameLocation: "middle" as const,
+                nameRotate: isLeft ? 90 : -90,
                 nameTextStyle: yAxisNameStyle,
                 nameGap: CHART_Y_AXIS_NAME_GAP,
                 axisLine: { show: false },
@@ -1350,8 +1510,8 @@ export function TimelineChart({
                         formatter: (v: number | string) => {
                           const n = typeof v === "number" ? v : Number(v);
                           if (!Number.isFinite(n)) return String(v);
-                          if (multiSeriesValueFormat === "gdp_indexed") return formatGdpIndexedAxisTick(n);
-                          return formatGdpLevelsAxisTick(n, first.unit);
+                          if (multiSeriesValueFormat === "gdp_indexed") return formatGdpIndexedAxisTick(n, chartNumeralLocale);
+                          return formatGdpLevelsAxisTick(n, first.unit, chartNumeralLocale);
                         },
                       }
                     : first.unit?.includes("%") &&
@@ -1361,7 +1521,10 @@ export function TimelineChart({
                             const n = typeof v === "number" ? v : Number(v);
                             if (!Number.isFinite(n)) return String(v);
                             const r = Math.round(n * 10) / 10;
-                            return Math.abs(r - Math.round(r)) < 1e-6 ? `${Math.round(r)}%` : `${r.toFixed(1)}%`;
+                            return localizeChartNumericDisplayString(
+                              Math.abs(r - Math.round(r)) < 1e-6 ? `${Math.round(r)}%` : `${r.toFixed(1)}%`,
+                              chartNumeralLocale
+                            );
                           },
                         }
                       : first.unit?.includes("toman") &&
@@ -1370,19 +1533,27 @@ export function TimelineChart({
                           ? {
                               formatter: (v: number) =>
                                 typeof v === "number" && v >= 1000
-                                  ? `${formatEconomicDisplay(Math.round(v / 1000), { maximumFractionDigits: 0, minimumFractionDigits: 0 })}k`
+                                  ? `${formatEconomicDisplay(Math.round(v / 1000), {
+                                      maximumFractionDigits: 0,
+                                      minimumFractionDigits: 0,
+                                      chartLocale: chartNumeralLocale,
+                                    })}k`
                                   : String(v),
                             }
                           : {
                               formatter: (v: number) =>
                                 typeof v === "number"
-                                  ? `${formatEconomicDisplay(Math.round(v / 1000), { maximumFractionDigits: 0, minimumFractionDigits: 0 })}k`
+                                  ? `${formatEconomicDisplay(Math.round(v / 1000), {
+                                      maximumFractionDigits: 0,
+                                      minimumFractionDigits: 0,
+                                      chartLocale: chartNumeralLocale,
+                                    })}k`
                                   : String(v),
                             }
                         : {
                             formatter: (v: number | string) => {
                               const n = typeof v === "number" ? v : Number(v);
-                              return Number.isFinite(n) ? formatEconomicAxisTick(n) : String(v);
+                              return Number.isFinite(n) ? formatEconomicAxisTick(n, chartNumeralLocale) : String(v);
                             },
                           }),
                 },
@@ -1395,9 +1566,13 @@ export function TimelineChart({
               type: "value" as const,
               position: "left" as const,
               name: formatYAxisNameMultiline(
-                (hasData ? label : secondSeries?.label ?? "Brent oil") + (unit ? ` (${unit})` : "")
+                localizeChartNumericDisplayString(
+                  (hasData ? label : secondSeries?.label ?? "Brent oil") + (unit ? ` (${unit})` : ""),
+                  chartNumeralLocale
+                )
               ),
-              nameLocation: "end" as const,
+              nameLocation: "middle" as const,
+              nameRotate: 90,
               nameTextStyle: yAxisNameStyle,
               nameGap: CHART_Y_AXIS_NAME_GAP,
               axisLine: { show: false },
@@ -1406,7 +1581,7 @@ export function TimelineChart({
                 ...yAxisTickLabelBase,
                 formatter: (v: number | string) => {
                   const n = typeof v === "number" ? v : Number(v);
-                  return Number.isFinite(n) ? formatEconomicAxisTick(n) : String(v);
+                  return Number.isFinite(n) ? formatEconomicAxisTick(n, chartNumeralLocale) : String(v);
                 },
               },
               show: hasData,
@@ -1415,13 +1590,17 @@ export function TimelineChart({
               type: (yAxisLog ? "log" : "value") as "value" | "log",
               position: "right" as const,
               name: formatYAxisNameMultiline(
-                useIndexed && indexBaseYear != null
-                  ? `Index (base=${indexBaseYear})` + (yAxisNameSuffix ? ` ${yAxisNameSuffix}` : "")
-                  : (secondSeries?.label ?? "Brent oil") +
-                      (secondSeries?.unit?.includes("toman") ? " (k toman/USD)" : secondSeries?.unit ? ` (${secondSeries.unit})` : "") +
-                      (yAxisNameSuffix ? ` ${yAxisNameSuffix}` : "")
+                localizeChartNumericDisplayString(
+                  useIndexed && indexBaseYear != null
+                    ? `Index (base=${indexBaseYear})` + (yAxisNameSuffix ? ` ${yAxisNameSuffix}` : "")
+                    : (secondSeries?.label ?? "Brent oil") +
+                        (secondSeries?.unit?.includes("toman") ? " (k toman/USD)" : secondSeries?.unit ? ` (${secondSeries.unit})` : "") +
+                        (yAxisNameSuffix ? ` ${yAxisNameSuffix}` : ""),
+                  chartNumeralLocale
+                )
               ),
-              nameLocation: "end" as const,
+              nameLocation: "middle" as const,
+              nameRotate: -90,
               nameTextStyle: yAxisNameStyle,
               nameGap: CHART_Y_AXIS_NAME_GAP,
               axisLine: { show: false },
@@ -1432,28 +1611,38 @@ export function TimelineChart({
                   ? {
                       formatter: (v: number) =>
                         typeof v === "number"
-                          ? `${formatEconomicDisplay(Math.round(v / 1000), { maximumFractionDigits: 0, minimumFractionDigits: 0 })}k`
+                          ? `${formatEconomicDisplay(Math.round(v / 1000), {
+                              maximumFractionDigits: 0,
+                              minimumFractionDigits: 0,
+                              chartLocale: chartNumeralLocale,
+                            })}k`
                           : String(v),
                     }
                   : yAxisLog
                     ? {
                         formatter: (v: number) =>
                           typeof v === "number" && v >= 1000
-                            ? `${formatEconomicDisplay(Math.round(v / 1000), { maximumFractionDigits: 0, minimumFractionDigits: 0 })}k`
+                            ? `${formatEconomicDisplay(Math.round(v / 1000), {
+                                maximumFractionDigits: 0,
+                                minimumFractionDigits: 0,
+                                chartLocale: chartNumeralLocale,
+                              })}k`
                             : typeof v === "number"
-                              ? formatEconomicAxisTick(v)
+                              ? formatEconomicAxisTick(v, chartNumeralLocale)
                               : String(v),
                       }
                     : {
-                        formatter: (v: number) => (typeof v === "number" ? formatEconomicAxisTick(v) : String(v)),
+                        formatter: (v: number) =>
+                          typeof v === "number" ? formatEconomicAxisTick(v, chartNumeralLocale) : String(v),
                       }),
               },
             },
           ]
         : {
             type: "value",
-            name: formatYAxisNameMultiline(label),
-            nameLocation: "end" as const,
+            name: formatYAxisNameMultiline(localizeChartNumericDisplayString(label, chartNumeralLocale)),
+            nameLocation: "middle" as const,
+            nameRotate: 90,
             nameTextStyle: yAxisNameStyle,
             nameGap: CHART_Y_AXIS_NAME_GAP,
             axisLine: { show: false },
@@ -1462,7 +1651,7 @@ export function TimelineChart({
               ...yAxisTickLabelBase,
               formatter: (v: number | string) => {
                 const n = typeof v === "number" ? v : Number(v);
-                return Number.isFinite(n) ? formatEconomicAxisTick(n) : String(v);
+                return Number.isFinite(n) ? formatEconomicAxisTick(n, chartNumeralLocale) : String(v);
               },
             },
           },
@@ -1483,7 +1672,7 @@ export function TimelineChart({
                         data: [
                           ...markLineSeriesItems,
                           ...(referenceLine
-                            ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
+                            ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: localizeChartNumericDisplayString(referenceLine.label ?? "", chartNumeralLocale) }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
                             : []),
                         ],
                       }
@@ -1537,6 +1726,7 @@ export function TimelineChart({
                 const isWageIndex = s.key === "index";
                 const isProductionKey = s.key in productionColors;
                 const isTotal = s.key === "total";
+                const cmpStyle = countryComparatorSeriesStyle(s.key);
                 const comparatorCountryColor = countryComparatorSeriesColor(s.key);
                 const lineColor = s.color
                   ? s.color
@@ -1562,27 +1752,40 @@ export function TimelineChart({
                                       ? oilColorMuted
                                       : oilColorMuted;
                 const lineWidth = isGold || isOil || isProductionKey ? 1.5 : 1;
-                const symbolSize = isGold ? 4 : isOil ? 3 : isProductionKey ? 3 : 2.5;
                 const lineType = isTotal ? ("dashed" as const) : undefined;
-                const symbol = isProductionKey
-                  ? productionSymbols[s.key]
-                  : isGold
-                    ? "circle"
-                    : isProxy || (s.yAxisIndex === 1 && !isWageIndex)
-                      ? "diamond"
-                      : isOfficial
-                        ? "circle"
-                        : isOpen
-                          ? "diamond"
-                          : isSpread
-                            ? "triangle"
-                            : isWageNominal
-                              ? "circle"
-                              : isWageReal
-                                ? "diamond"
-                                : isWageIndex
-                                  ? "triangle"
-                                  : "circle";
+                const symbol = cmpStyle
+                  ? cmpStyle.symbol
+                  : isProductionKey
+                    ? productionSymbols[s.key]
+                    : isGold
+                      ? "circle"
+                      : isProxy || (s.yAxisIndex === 1 && !isWageIndex)
+                        ? "diamond"
+                        : isOfficial
+                          ? "circle"
+                          : isOpen
+                            ? "diamond"
+                            : isSpread
+                              ? "triangle"
+                              : isWageNominal
+                                ? "circle"
+                                : isWageReal
+                                  ? "diamond"
+                                  : isWageIndex
+                                    ? "triangle"
+                                    : MULTI_SERIES_FALLBACK_LEGEND_ICONS[i % MULTI_SERIES_FALLBACK_LEGEND_ICONS.length]!;
+                /** 2+ series (non gold/oil): no on-canvas markers by default; small symbol on axis-hover only. */
+                const sparseLineMarkers = useMultiSparseMarkers && !isGold && !isOil;
+                const symbolSize =
+                  sparseLineMarkers
+                    ? 0
+                    : isGold
+                      ? 4
+                      : isOil
+                        ? 3
+                        : isProductionKey
+                          ? 3
+                          : 2.5;
                 return {
                   name: s.label,
                   type: "line" as const,
@@ -1591,14 +1794,21 @@ export function TimelineChart({
                   smooth: false,
                   connectNulls: true,
                   step: (isGold ? "start" : false) as "start" | false,
-                  symbol: symbol as "circle" | "diamond" | "triangle" | "roundRect",
+                  symbol: symbol as "circle" | "diamond" | "triangle" | "roundRect" | "rect",
+                  showSymbol: !sparseLineMarkers,
                   symbolSize,
                   lineStyle: { color: lineColor, width: lineWidth, ...(lineType ? { type: lineType } : {}) },
                   itemStyle: { color: lineColor },
                   emphasis: {
-                    focus: "none" as const,
+                    focus: sparseLineMarkers ? ("series" as const) : ("none" as const),
+                    scale: false,
+                    symbol,
+                    symbolSize: sparseLineMarkers ? 5 : symbolSize,
                     lineStyle: { color: lineColor, width: lineWidth, ...(lineType ? { type: lineType } : {}) },
-                    itemStyle: { color: lineColor },
+                    itemStyle: {
+                      color: lineColor,
+                      ...(sparseLineMarkers ? { borderColor: "rgba(255,255,255,0.9)", borderWidth: 1 } : {}),
+                    },
                   },
                   markPoint:
                     showOilShocks && isOil && shockMarkPointData.length > 0
@@ -1646,7 +1856,7 @@ export function TimelineChart({
                         data: [
                           ...markLineSeriesItems,
                           ...(referenceLine
-                            ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
+                            ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: localizeChartNumericDisplayString(referenceLine.label ?? "", chartNumeralLocale) }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
                             : []),
                         ],
                       }
@@ -1701,7 +1911,7 @@ export function TimelineChart({
                         data: [
                           ...markLineSeriesItems,
                           ...(referenceLine
-                            ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
+                            ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: localizeChartNumericDisplayString(referenceLine.label ?? "", chartNumeralLocale) }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
                             : []),
                         ],
                       }
@@ -1732,7 +1942,15 @@ export function TimelineChart({
                                   {
                                     xAxis: regimeArea.xStart,
                                     itemStyle: { color: withAlphaHsl(muted, 0.04), borderColor: "transparent" },
-                                    label: regimeArea.label ? { show: true, formatter: regimeArea.label, color: mutedFg, fontSize: 9, position: "insideTop" as const } : undefined,
+                                    label: regimeArea.label
+                                      ? {
+                                          show: true,
+                                          formatter: localizeChartNumericDisplayString(regimeArea.label, chartNumeralLocale),
+                                          color: mutedFg,
+                                          fontSize: 9,
+                                          position: "insideTop" as const,
+                                        }
+                                      : undefined,
                                   },
                                   { xAxis: regimeArea.xEnd },
                                 ] as [{ xAxis: string; itemStyle?: object; label?: object }, { xAxis: string }],
@@ -1801,7 +2019,7 @@ export function TimelineChart({
                         data: [
                           ...markLineSeriesItems,
                           ...(referenceLine
-                            ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
+                            ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: localizeChartNumericDisplayString(referenceLine.label ?? "", chartNumeralLocale) }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
                             : []),
                         ],
                       }

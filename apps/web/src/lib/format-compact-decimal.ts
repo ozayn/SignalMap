@@ -3,7 +3,11 @@
  * Uses K / M / B / T with one decimal, e.g. 207_330_025_746 → "207.3B".
  */
 
+import { localizeChartNumericDisplayString } from "@/lib/chart-numerals-fa";
+
 const DISPLAY_LOCALE = "en-US";
+
+export type ChartFormatLocale = "en" | "fa";
 
 /**
  * Economic chart display numbers: grouped thousands, no scientific notation (display only).
@@ -11,16 +15,17 @@ const DISPLAY_LOCALE = "en-US";
  */
 export function formatEconomicDisplay(
   value: number,
-  options?: { maximumFractionDigits?: number; minimumFractionDigits?: number }
+  options?: { maximumFractionDigits?: number; minimumFractionDigits?: number; chartLocale?: ChartFormatLocale }
 ): string {
   if (!Number.isFinite(value)) return "—";
   const maximumFractionDigits = options?.maximumFractionDigits ?? 0;
   const minimumFractionDigits = options?.minimumFractionDigits ?? 0;
-  return value.toLocaleString(DISPLAY_LOCALE, {
+  const raw = value.toLocaleString(DISPLAY_LOCALE, {
     useGrouping: true,
     maximumFractionDigits,
     minimumFractionDigits,
   });
+  return localizeChartNumericDisplayString(raw, options?.chartLocale);
 }
 
 const TIERS = [
@@ -32,24 +37,25 @@ const TIERS = [
 
 export function formatCompactDecimal(
   value: number,
-  options?: { axisTicks?: boolean }
+  options?: { axisTicks?: boolean; chartLocale?: ChartFormatLocale }
 ): string {
   if (!Number.isFinite(value)) return "—";
   const sign = value < 0 ? "-" : "";
   const v = Math.abs(value);
+  const loc = (s: string) => localizeChartNumericDisplayString(s, options?.chartLocale);
   if (v < 1000) {
     const body = Number.isInteger(v) ? String(v) : v.toFixed(1);
-    return sign + body;
+    return loc(sign + body);
   }
   for (const { min, div, suffix } of TIERS) {
     if (v >= min) {
       const scaled = v / div;
       let n = scaled.toFixed(1);
       if (options?.axisTicks && n.endsWith(".0")) n = n.slice(0, -2);
-      return sign + n + suffix;
+      return loc(sign + n + suffix);
     }
   }
-  return sign + v.toFixed(1);
+  return loc(sign + v.toFixed(1));
 }
 
 /** Levels chart values are already in billions of tomans (API). */
@@ -67,103 +73,122 @@ function isGdpMacroAbsoluteUsdUnit(unit: string): boolean {
 }
 
 /** Display-only: nearest integer billions + ``B`` for large macro US$; grouped below 1e9. */
-export function formatGdpMacroBillionsDisplay(value: number): string {
+export function formatGdpMacroBillionsDisplay(value: number, chartLocale?: ChartFormatLocale): string {
   if (!Number.isFinite(value)) return "—";
   const sign = value < 0 ? "-" : "";
   const abs = Math.abs(value);
   if (abs >= 1e9) {
-    return `${sign}${Math.round(abs / 1e9)}B`;
+    return localizeChartNumericDisplayString(`${sign}${Math.round(abs / 1e9)}B`, chartLocale);
   }
-  return sign + formatEconomicDisplay(Math.round(value), { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+  return (
+    sign +
+    formatEconomicDisplay(Math.round(value), { maximumFractionDigits: 0, minimumFractionDigits: 0, chartLocale })
+  );
 }
 
 /** Tooltip value fragment for GDP absolute-value charts (levels + nominal; no series label). */
-export function formatGdpLevelsTooltipValue(value: number, unit: string): string {
+export function formatGdpLevelsTooltipValue(value: number, unit: string, chartLocale?: ChartFormatLocale): string {
   if (!Number.isFinite(value)) return "—";
+  const loc = (s: string) => localizeChartNumericDisplayString(s, chartLocale);
   if (isBillionTomanUnit(unit)) {
-    return `${formatEconomicDisplay(value, { maximumFractionDigits: 2, minimumFractionDigits: 0 })} bn tomans (approx.)`;
+    return loc(
+      `${formatEconomicDisplay(value, { maximumFractionDigits: 2, minimumFractionDigits: 0, chartLocale })} bn tomans (approx.)`
+    );
   }
   const u = unit.toLowerCase();
   if (u.includes("%")) {
     const rounded = Math.round(value * 100) / 100;
-    return `${formatEconomicDisplay(rounded, { maximumFractionDigits: 2, minimumFractionDigits: 0 })} ${unit}`;
+    return loc(`${formatEconomicDisplay(rounded, { maximumFractionDigits: 2, minimumFractionDigits: 0, chartLocale })} ${unit}`);
   }
   if (isGdpMacroAbsoluteUsdUnit(unit)) {
-    const core = formatGdpMacroBillionsDisplay(value);
+    const core = formatGdpMacroBillionsDisplay(value, chartLocale);
     if (u.includes("constant") && u.includes("2015")) {
-      return `${core} USD (2015)`;
+      return loc(`${core} USD (2015)`);
     }
     if (u.includes("current") && u.includes("us$")) {
-      return `${core} USD`;
+      return loc(`${core} USD`);
     }
-    return `${core} ${unit}`;
+    return loc(`${core} ${unit}`);
   }
   const rounded = Math.round(value);
-  return `${formatEconomicDisplay(rounded, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} ${unit}`;
+  return loc(`${formatEconomicDisplay(rounded, { maximumFractionDigits: 0, minimumFractionDigits: 0, chartLocale })} ${unit}`);
 }
 
 /** Y-axis tick labels for GDP absolute-value charts (linear or log). */
-export function formatGdpLevelsAxisTick(value: number, unit: string): string {
+export function formatGdpLevelsAxisTick(value: number, unit: string, chartLocale?: ChartFormatLocale): string {
   if (!Number.isFinite(value)) return "";
   if (isBillionTomanUnit(unit)) {
     return formatEconomicDisplay(value, {
       maximumFractionDigits: value >= 100 ? 0 : 1,
       minimumFractionDigits: 0,
+      chartLocale,
     });
   }
   const u = unit.toLowerCase();
   if (u.includes("%")) {
     const rounded = Math.round(value * 10) / 10;
-    return formatEconomicDisplay(rounded, { maximumFractionDigits: 1, minimumFractionDigits: 0 });
+    return formatEconomicDisplay(rounded, { maximumFractionDigits: 1, minimumFractionDigits: 0, chartLocale });
   }
   if (isGdpMacroAbsoluteUsdUnit(unit)) {
-    return formatGdpMacroBillionsDisplay(value);
+    return formatGdpMacroBillionsDisplay(value, chartLocale);
   }
-  return formatEconomicDisplay(Math.round(value), { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+  return formatEconomicDisplay(Math.round(value), { maximumFractionDigits: 0, minimumFractionDigits: 0, chartLocale });
 }
 
 /**
  * Tooltip / secondary formatting for generic multi-series economic values (non-GDP-compact paths).
  */
-export function formatMultiSeriesEconomicTooltipValue(value: number, unit: string): string {
+export function formatMultiSeriesEconomicTooltipValue(
+  value: number,
+  unit: string,
+  chartLocale?: ChartFormatLocale
+): string {
   if (!Number.isFinite(value)) return "—";
   const u = unit.toLowerCase();
   if (u.includes("%")) {
     const rounded = Math.round(value * 100) / 100;
-    return formatEconomicDisplay(rounded, { maximumFractionDigits: 2, minimumFractionDigits: 0 });
+    return formatEconomicDisplay(rounded, { maximumFractionDigits: 2, minimumFractionDigits: 0, chartLocale });
   }
   const abs = Math.abs(value);
   if (abs >= 1000) {
-    return formatEconomicDisplay(Math.round(value), { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+    return formatEconomicDisplay(Math.round(value), { maximumFractionDigits: 0, minimumFractionDigits: 0, chartLocale });
   }
   const rounded2 = Math.round(value * 100) / 100;
   const maxFrac = Number.isInteger(rounded2) ? 0 : 2;
-  return formatEconomicDisplay(rounded2, { maximumFractionDigits: maxFrac, minimumFractionDigits: 0 });
+  return formatEconomicDisplay(rounded2, { maximumFractionDigits: maxFrac, minimumFractionDigits: 0, chartLocale });
 }
 
 /** Y-axis tick for indexed GDP levels (ratio vs base year; display only). */
-export function formatGdpIndexedAxisTick(value: number): string {
+export function formatGdpIndexedAxisTick(value: number, chartLocale?: ChartFormatLocale): string {
   if (!Number.isFinite(value)) return "";
   const r = Math.round(value * 10) / 10;
-  if (Math.abs(r - Math.round(r)) < 1e-9) return String(Math.round(r));
-  return r.toFixed(1);
+  const raw = Math.abs(r - Math.round(r)) < 1e-9 ? String(Math.round(r)) : r.toFixed(1);
+  return localizeChartNumericDisplayString(raw, chartLocale);
 }
 
 /** Tooltip line for indexed GDP levels, e.g. ``2.4× vs 2015`` or ``2.4× vs 1354`` (display only). */
-export function formatGdpIndexedTooltipValue(value: number, baseLabel: string): string {
+export function formatGdpIndexedTooltipValue(
+  value: number,
+  baseLabel: string,
+  chartLocale?: ChartFormatLocale
+): string {
   if (!Number.isFinite(value)) return "—";
   const r = Math.round(value * 10) / 10;
   const body = Math.abs(r - Math.round(r)) < 1e-9 ? String(Math.round(r)) : r.toFixed(1);
-  return `${body}× vs ${baseLabel}`;
+  return localizeChartNumericDisplayString(`${body}× vs ${baseLabel}`, chartLocale);
 }
 
 /** Default y-axis tick for linear economic scales (display only). */
-export function formatEconomicAxisTick(value: number): string {
+export function formatEconomicAxisTick(value: number, chartLocale?: ChartFormatLocale): string {
   if (!Number.isFinite(value)) return "";
   const abs = Math.abs(value);
   if (abs >= 1000) {
-    return formatEconomicDisplay(Math.round(value), { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+    return formatEconomicDisplay(Math.round(value), { maximumFractionDigits: 0, minimumFractionDigits: 0, chartLocale });
   }
   const r = Math.round(value * 100) / 100;
-  return formatEconomicDisplay(r, { maximumFractionDigits: Number.isInteger(r) ? 0 : 2, minimumFractionDigits: 0 });
+  return formatEconomicDisplay(r, {
+    maximumFractionDigits: Number.isInteger(r) ? 0 : 2,
+    minimumFractionDigits: 0,
+    chartLocale,
+  });
 }

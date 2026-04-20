@@ -5,10 +5,13 @@
 /** Slightly larger than tick labels for hierarchy on screen and PNG export. */
 export const CHART_Y_AXIS_NAME_FONT_SIZE = 14;
 export const CHART_Y_AXIS_TICK_FONT_SIZE = 12;
-/** Distance from axis line to the axis name (ECharts `nameGap`). */
-export const CHART_Y_AXIS_NAME_GAP = 32;
+/**
+ * Distance from axis line to the axis name (ECharts `nameGap`).
+ * Slightly generous so y-axis titles clear tick labels and the plot when using `nameLocation: "middle"`.
+ */
+export const CHART_Y_AXIS_NAME_GAP = 48;
 /** Extra space between tick numerals and the axis line / neighbor content (`axisLabel.margin`). */
-export const CHART_Y_AXIS_LABEL_MARGIN = 14;
+export const CHART_Y_AXIS_LABEL_MARGIN = 16;
 
 export const chartYAxisNameTextStyle = (color: string) =>
   ({
@@ -17,7 +20,16 @@ export const chartYAxisNameTextStyle = (color: string) =>
     fontWeight: 500 as const,
     align: "center" as const,
     lineHeight: 20,
-  }) satisfies { color: string; fontSize: number; fontWeight: 500; align: "center"; lineHeight: number };
+    /** Keeps rotated titles from sitting flush against the chart edge. */
+    padding: [4, 6, 4, 6] as [number, number, number, number],
+  }) satisfies {
+    color: string;
+    fontSize: number;
+    fontWeight: 500;
+    align: "center";
+    lineHeight: number;
+    padding: [number, number, number, number];
+  };
 
 /**
  * Splits titles like `Series (unit)` or `GDP (constant 2015 US$)` across two lines after the measure name.

@@ -208,10 +208,10 @@ export function FollowerGrowthChart({
         : {}),
       tooltip: { trigger: "axis", triggerOn: "mousemove|click" },
       grid: {
-        left: "8%",
-        right: "5%",
+        left: "10%",
+        right: "6%",
         bottom: "12%",
-        top: showChartControls ? "22%" : "18%",
+        top: showChartControls ? "24%" : "20%",
         containLabel: true,
       },
       xAxis: {
@@ -230,7 +230,8 @@ export function FollowerGrowthChart({
       yAxis: {
         type: "value",
         name: formatYAxisNameMultiline(metricLabel),
-        nameLocation: "end",
+        nameLocation: "middle",
+        nameRotate: 90,
         nameTextStyle: chartYAxisNameTextStyle(mutedFg),
         nameGap: CHART_Y_AXIS_NAME_GAP,
         axisLine: { show: false },
@@ -245,6 +246,7 @@ export function FollowerGrowthChart({
       series,
       legend: {
         show: true,
+        selectedMode: true,
         top: showChartControls ? "10%" : 0,
         left: "center",
         textStyle: { fontSize: 11, color: mutedFg },

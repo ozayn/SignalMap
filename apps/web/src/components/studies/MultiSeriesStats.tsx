@@ -16,8 +16,19 @@ type MultiSeriesStatsProps = {
   locale?: "en" | "fa";
 };
 
-function formatStatValue(value: number, unit: string): string {
-  return formatMultiSeriesEconomicTooltipValue(value, unit);
+function formatStatValue(value: number, unit: string, locale: "en" | "fa"): string {
+  return formatMultiSeriesEconomicTooltipValue(value, unit, locale);
+}
+
+function formatStatDateForLocale(dateStr: string, locale: "en" | "fa"): string {
+  if (locale !== "fa") return formatStatDate(dateStr);
+  const parts = dateStr.split("-");
+  const includeDay = parts.length >= 3 && /^\d{1,2}/.test(parts[2] ?? "");
+  return new Date(dateStr).toLocaleDateString("fa-IR", {
+    year: "numeric",
+    month: "short",
+    ...(includeDay ? { day: "numeric" as const } : {}),
+  });
 }
 
 function computeStats(points: Array<{ date: string; value: number }>, timeRange?: [string, string]) {
@@ -79,12 +90,12 @@ export function MultiSeriesStats({ series, timeRange, locale = "en" }: MultiSeri
           <span className="text-right">
             <span
               className="font-medium tabular-nums block"
-              title={date ? formatStatDate(date) : undefined}
+              title={date ? formatStatDateForLocale(date, locale) : undefined}
             >
-              {value != null ? formatStatValue(value, s.unit) : "—"}
+              {value != null ? formatStatValue(value, s.unit, locale) : "—"}
             </span>
             {showDates && date && (
-              <span className="text-xs text-muted-foreground block">{formatStatDate(date)}</span>
+              <span className="text-xs text-muted-foreground block">{formatStatDateForLocale(date, locale)}</span>
             )}
           </span>
         );
@@ -107,7 +118,7 @@ export function MultiSeriesStats({ series, timeRange, locale = "en" }: MultiSeri
             <StatCell value={stats.latestValue} date={stats.latestDate} />
             <span className="text-xs text-muted-foreground">{t("Avg", "میانگین")}</span>
             <span className="font-medium tabular-nums text-right">
-              {stats.avgValue != null ? formatStatValue(stats.avgValue, s.unit) : "—"}
+              {stats.avgValue != null ? formatStatValue(stats.avgValue, s.unit, locale) : "—"}
             </span>
             <span className="text-xs text-muted-foreground">{t("Min", "کمینه")}</span>
             <StatCell value={stats.minValue} date={stats.minDate} />
