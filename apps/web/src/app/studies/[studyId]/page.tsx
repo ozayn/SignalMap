@@ -20,7 +20,14 @@ import { OilTradeSankey } from "@/components/oil-trade-sankey";
 import LatestValueBanner from "@/components/studies/LatestValueBanner";
 import { MultiSeriesStats } from "@/components/studies/MultiSeriesStats";
 import { YoutubeDiscourseMaps } from "@/components/studies/youtube-discourse";
-import { getStudyById, getPrevNextStudies, YOUTUBE_DISCOURSE_VIDEOS_LIMIT, YOUTUBE_DISCOURSE_COMMENTS_PER_VIDEO } from "@/lib/studies";
+import {
+  getStudyById,
+  getPrevNextStudies,
+  studyUsesGlobalMacroOilLayer,
+  YOUTUBE_DISCOURSE_VIDEOS_LIMIT,
+  YOUTUBE_DISCOURSE_COMMENTS_PER_VIDEO,
+} from "@/lib/studies";
+import { iranGdpMacroEventsToTimeline } from "@/lib/gdp-composition-macro-events";
 import { fetchJson } from "@/lib/api";
 import { enrichOilPointsWithVolatility } from "@/lib/oil-volatility";
 import { filterForNetwork, filterForSankey } from "@/lib/oil-trade-network-filter";
@@ -59,9 +66,17 @@ type Event = {
   description?: string;
   confidence?: string;
   sources?: string[];
-  layer?: "iran_core" | "world_core" | "world_1900" | "sanctions" | "iran_presidents" | "opec_decisions";
+  layer?:
+    | "iran_core"
+    | "world_core"
+    | "world_1900"
+    | "sanctions"
+    | "iran_presidents"
+    | "opec_decisions"
+    | "global_macro_oil";
   scope?: "iran" | "world" | "sanctions" | "oil_exports";
   category?: string;
+  chartLabel?: string;
 };
 
 type EventsData = {
@@ -292,6 +307,8 @@ export default function StudyDetailPage() {
   const [showGeopoliticalWorld1900, setShowGeopoliticalWorld1900] = useState(true);
   const [showGeopoliticalSanctions, setShowGeopoliticalSanctions] = useState(true);
   const [showGeopoliticalOpec, setShowGeopoliticalOpec] = useState(true);
+  /** Curated global oil / macro vertical markers (layer ``global_macro_oil``). */
+  const [showGlobalMacroOil, setShowGlobalMacroOil] = useState(true);
   const [pppYAxisLog, setPppYAxisLog] = useState(true);
   const [showSanctionsPeriods, setShowSanctionsPeriods] = useState(false);
   const [showShocks, setShowShocks] = useState(true);
@@ -370,6 +387,9 @@ export default function StudyDetailPage() {
   const [gdpNominalPoints, setGdpNominalPoints] = useState<{ date: string; value: number }[]>([]);
   const [gdpCompositionSource, setGdpCompositionSource] = useState<{ name?: string; publisher?: string; url?: string } | null>(null);
   const [showGdpIranEvents, setShowGdpIranEvents] = useState(true);
+  const [showGdpMacroEvents, setShowGdpMacroEvents] = useState(true);
+  /** World curated anchors on GDP charts (off by default to keep Iran + WDI macro as default). */
+  const [showGdpGlobalMacroOil, setShowGdpGlobalMacroOil] = useState(false);
   const [gdpDataSpan, setGdpDataSpan] = useState<{
     first_year_any?: number | null;
     last_year_any?: number | null;
@@ -380,10 +400,10 @@ export default function StudyDetailPage() {
   const [gdpLevelConsumptionPoints, setGdpLevelConsumptionPoints] = useState<{ date: string; value: number }[]>([]);
   const [gdpLevelGdpPoints, setGdpLevelGdpPoints] = useState<{ date: string; value: number }[]>([]);
   const [gdpLevelInvestmentPoints, setGdpLevelInvestmentPoints] = useState<{ date: string; value: number }[]>([]);
-  const [gdpLevelsPriceBasis, setGdpLevelsPriceBasis] = useState<string | null>(null);
   const [gdpLevelsUnit, setGdpLevelsUnit] = useState<string | null>(null);
   const [gdpStudyView, setGdpStudyView] = useState<"composition" | "levels">("composition");
-  const [gdpLevelsCurrency, setGdpLevelsCurrency] = useState<"usd" | "toman">("usd");
+  const [gdpLevelsValueType, setGdpLevelsValueType] = useState<"real" | "usd" | "toman">("real");
+  const [gdpLevelsDisplayNote, setGdpLevelsDisplayNote] = useState<string | null>(null);
   const [gdpCalendarMode, setGdpCalendarMode] = useState<"gregorian" | "jalali">("gregorian");
   const [gdpLevelsConversionMeta, setGdpLevelsConversionMeta] = useState<{
     currency?: string;
@@ -558,14 +578,10 @@ export default function StudyDetailPage() {
       if (layer === "iran_core") return showIranEvents;
       if (layer === "sanctions") return showSanctionsEvents;
       if (layer === "opec_decisions") return showOpecEvents;
+      if (layer === "global_macro_oil") return showGlobalMacroOil;
       return true;
     });
-  }, [isOilProductionMajorExporters, events, showIranEvents, showSanctionsEvents, showOpecEvents]);
-
-  const gdpCompositionChartEvents = useMemo(() => {
-    if (!isGdpComposition) return [];
-    return showGdpIranEvents ? events : [];
-  }, [isGdpComposition, events, showGdpIranEvents]);
+  }, [isOilProductionMajorExporters, events, showIranEvents, showSanctionsEvents, showOpecEvents, showGlobalMacroOil]);
 
   const gdpCompositionChartTimeRange = useMemo((): [string, string] | null => {
     if (!isGdpComposition) return null;
@@ -589,6 +605,26 @@ export default function StudyDetailPage() {
     gdpLevelGdpPoints,
     gdpLevelInvestmentPoints,
     gdpCompositionTimeRange,
+  ]);
+
+  const gdpCompositionChartEvents = useMemo(() => {
+    if (!isGdpComposition) return [];
+    const range = gdpCompositionChartTimeRange ?? gdpCompositionTimeRange;
+    const macro =
+      showGdpMacroEvents && range
+        ? iranGdpMacroEventsToTimeline().filter((e) => e.date && e.date >= range[0] && e.date <= range[1])
+        : [];
+    const iranFromApi = showGdpIranEvents ? events.filter((e) => e.layer !== "global_macro_oil") : [];
+    const globalFromApi = showGdpGlobalMacroOil ? events.filter((e) => e.layer === "global_macro_oil") : [];
+    return [...macro, ...iranFromApi, ...globalFromApi];
+  }, [
+    isGdpComposition,
+    events,
+    showGdpIranEvents,
+    showGdpGlobalMacroOil,
+    showGdpMacroEvents,
+    gdpCompositionTimeRange,
+    gdpCompositionChartTimeRange,
   ]);
 
   /** Extend annual production series to current year for display; synthetic points flagged for tooltip. */
@@ -992,21 +1028,41 @@ export default function StudyDetailPage() {
     const hasEventLayers = isOverviewStub || isOilBrent || isOilGlobalLong || isGoldAndOil || isFxUsdToman || isOilAndFx || isRealOil || isOilPppIran || isOilExportCapacity || isOilProductionMajorExporters || isWageCpiReal || isEventsTimeline || isOilGeopoliticalReaction || isGdpComposition;
     if (hasEventLayers && !isEventsTimeline) {
       let layers: string[];
-      if (((isOilGlobalLong || isGoldAndOil || isRealOil || isOilExportCapacity || isOilProductionMajorExporters || isOilGeopoliticalReaction || isGdpComposition) && study.eventLayers?.length) || (hasTurkeyComparator && study.eventLayers !== undefined)) {
+      const studyLayersLen = study.eventLayers?.length ?? 0;
+      if (
+        ((isOilGlobalLong || isGoldAndOil || isRealOil || isOilExportCapacity || isOilProductionMajorExporters || isOilGeopoliticalReaction || isGdpComposition) &&
+          studyLayersLen > 0) ||
+        (hasTurkeyComparator && studyLayersLen > 0)
+      ) {
         if (isOilGeopoliticalReaction) {
           layers = [
             ...(showGeopoliticalWorldCore ? ["world_core"] : []),
             ...(showGeopoliticalWorld1900 ? ["world_1900"] : []),
             ...(showGeopoliticalSanctions ? ["sanctions"] : []),
             ...(showGeopoliticalOpec ? ["opec_decisions"] : []),
+            ...(showGlobalMacroOil ? ["global_macro_oil"] : []),
           ];
         } else if (isOilExportCapacity) {
           layers = showSanctionsPeriods ? ["sanctions"] : [];
         } else if (isOilProductionMajorExporters) {
-          // Study 14: always fetch all layers; filter client-side for instant toggle updates
-          layers = ["iran_core", "sanctions", "opec_decisions"];
+          // Study 14: fetch all toggled layers; filter client-side for instant toggle updates
+          layers = [
+            "iran_core",
+            "sanctions",
+            "opec_decisions",
+            ...(showGlobalMacroOil ? ["global_macro_oil"] : []),
+          ];
+        } else if (isGdpComposition) {
+          layers = [
+            ...(showGdpIranEvents ? ["iran_core"] : []),
+            ...(showGdpGlobalMacroOil ? ["global_macro_oil"] : []),
+          ];
         } else {
-          layers = study.eventLayers ?? [];
+          let base = [...(study.eventLayers ?? [])];
+          if (showGlobalMacroOil && studyUsesGlobalMacroOilLayer(study) && !base.includes("global_macro_oil")) {
+            base = [...base, "global_macro_oil"];
+          }
+          layers = base;
         }
       } else {
         layers = [
@@ -1014,6 +1070,7 @@ export default function StudyDetailPage() {
           ...(showWorldEvents ? ["world_core", "world_1900"] : []),
           ...(showSanctionsEvents ? ["sanctions"] : []),
           ...(showPresidentialTerms && (isFxUsdToman || isOilPppIran) ? ["iran_presidents"] : []),
+          ...(showGlobalMacroOil && studyUsesGlobalMacroOilLayer(study) ? ["global_macro_oil"] : []),
         ];
       }
       params.set("layers", layers.length ? layers.join(",") : "none");
@@ -1031,7 +1088,38 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [studyId, study, isOverviewStub, isOilBrent, isOilGlobalLong, isGoldAndOil, isFxUsdToman, isOilAndFx, isRealOil, isOilPppIran, isOilExportCapacity, isOilProductionMajorExporters, isOilGeopoliticalReaction, isWageCpiReal, isGdpComposition, hasTurkeyComparator, isEventsTimeline, showIranEvents, showWorldEvents, showSanctionsEvents, showPresidentialTerms, showSanctionsPeriods, showOpecEvents, showGeopoliticalWorldCore, showGeopoliticalWorld1900, showGeopoliticalSanctions, showGeopoliticalOpec]);
+  }, [
+    studyId,
+    study,
+    isOverviewStub,
+    isOilBrent,
+    isOilGlobalLong,
+    isGoldAndOil,
+    isFxUsdToman,
+    isOilAndFx,
+    isRealOil,
+    isOilPppIran,
+    isOilExportCapacity,
+    isOilProductionMajorExporters,
+    isOilGeopoliticalReaction,
+    isWageCpiReal,
+    isGdpComposition,
+    hasTurkeyComparator,
+    isEventsTimeline,
+    showIranEvents,
+    showWorldEvents,
+    showSanctionsEvents,
+    showPresidentialTerms,
+    showSanctionsPeriods,
+    showOpecEvents,
+    showGeopoliticalWorldCore,
+    showGeopoliticalWorld1900,
+    showGeopoliticalSanctions,
+    showGeopoliticalOpec,
+    showGlobalMacroOil,
+    showGdpIranEvents,
+    showGdpGlobalMacroOil,
+  ]);
 
   useEffect(() => {
     if (study && (isEventsTimeline || isFollowerGrowthDynamics || isYoutubeCommentAnalysis)) {
@@ -1253,9 +1341,9 @@ export default function StudyDetailPage() {
         setGdpLevelConsumptionPoints([]);
         setGdpLevelGdpPoints([]);
         setGdpLevelInvestmentPoints([]);
-        setGdpLevelsPriceBasis(null);
         setGdpLevelsUnit(null);
         setGdpLevelsConversionMeta(null);
+        setGdpLevelsDisplayNote(null);
       }
       return;
     }
@@ -1292,10 +1380,13 @@ export default function StudyDetailPage() {
         description?: string;
         display_unit?: string;
       } | null;
+      levels_value_type?: string;
+      levels_value_type_requested?: string;
+      levels_display_note?: string | null;
     }>(
       `/api/signals/macro/gdp-composition?start=${encodeURIComponent(start)}&end=${encodeURIComponent(
         end
-      )}&country=IRN&levels_currency=${isGdpIranLocal && gdpLevelsCurrency === "toman" ? "toman" : "usd"}`
+      )}&country=IRN&levels_value_type=${isGdpIranLocal ? gdpLevelsValueType : "real"}`
     )
       .then((res) => {
         if (!mounted) return;
@@ -1308,11 +1399,15 @@ export default function StudyDetailPage() {
         setGdpLevelConsumptionPoints(lvl?.consumption?.points ?? []);
         setGdpLevelGdpPoints(lvl?.gdp?.points ?? []);
         setGdpLevelInvestmentPoints(lvl?.investment?.points ?? []);
-        setGdpLevelsPriceBasis(res.levels?.price_basis ?? null);
         setGdpLevelsUnit(
           res.levels?.indicators?.consumption?.unit ?? res.levels?.indicators?.gdp?.unit ?? res.levels?.unit ?? null
         );
         setGdpLevelsConversionMeta(res.levels_conversion ?? null);
+        setGdpLevelsDisplayNote(
+          typeof res.levels_display_note === "string" && res.levels_display_note.length > 0
+            ? res.levels_display_note
+            : null
+        );
       })
       .catch((e) => {
         if (mounted) {
@@ -1324,9 +1419,9 @@ export default function StudyDetailPage() {
           setGdpLevelConsumptionPoints([]);
           setGdpLevelGdpPoints([]);
           setGdpLevelInvestmentPoints([]);
-          setGdpLevelsPriceBasis(null);
           setGdpLevelsUnit(null);
           setGdpLevelsConversionMeta(null);
+          setGdpLevelsDisplayNote(null);
           setError(e instanceof Error ? e.message : "GDP composition fetch failed");
         }
       })
@@ -1334,7 +1429,7 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [gdpCompositionTimeRange, isGdpComposition, isGdpIranLocal, gdpLevelsCurrency]);
+  }, [gdpCompositionTimeRange, isGdpComposition, isGdpIranLocal, gdpLevelsValueType]);
 
   const { exporterSaudiPoints, exporterRussiaPoints, exporterUsPoints, exporterIranPoints } = useMemo(() => {
     const empty = { exporterSaudiPoints: [], exporterRussiaPoints: [], exporterUsPoints: [], exporterIranPoints: [] };
@@ -2959,7 +3054,7 @@ export default function StudyDetailPage() {
                 timeRange={geopoliticalChartData.timeRange}
                 oilShockDates={oilShockDates}
                 showOilShocks
-                chartHeight="h-64"
+                chartHeight="h-72 md:h-80"
                 forceTimeAxis
               />
             </div>
@@ -3421,7 +3516,7 @@ export default function StudyDetailPage() {
             {isOilTradeNetwork
               ? "Oil trade flows between major exporters and importers. Nodes are countries/regions; edge width reflects trade volume (thousand barrels/day). Drag nodes, zoom, pan."
               : isGdpComposition
-              ? "Iran: Composition vs Levels; optional Toman (levels only) and Iranian (Solar Hijri) year labels on the Levels charts. Others: all panels without those toggles. Toggle Iran events when shown."
+              ? "Iran: Composition vs Levels; levels value type Real / USD / Toman; Iranian (Solar Hijri) year labels on Levels charts. Others: all panels without those toggles. Toggle Iran events when shown."
               : isOilExporterTimeseries
               ? "Annual crude oil exports for Saudi Arabia, Russia, United States, and Iran. Derived from bilateral trade flows (UN Comtrade HS 2709)."
               : isOilGeopoliticalReaction
@@ -3502,6 +3597,17 @@ export default function StudyDetailPage() {
                 Show gold price
               </label>
             )}
+            {(isGoldAndOil || isOilGlobalLong || isRealOil || (isOilPppIran && hasTurkeyComparator)) && (
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showGlobalMacroOil}
+                  onChange={(e) => setShowGlobalMacroOil(e.target.checked)}
+                  className="rounded border-border"
+                />
+                Global oil/macro (curated)
+              </label>
+            )}
             {isOilPppIran && (
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                 <input
@@ -3553,18 +3659,47 @@ export default function StudyDetailPage() {
                   />
                   Show OPEC decisions
                 </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showGlobalMacroOil}
+                    onChange={(e) => setShowGlobalMacroOil(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  Global oil/macro (curated)
+                </label>
               </>
             )}
             {isGdpComposition && (
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showGdpIranEvents}
-                  onChange={(e) => setShowGdpIranEvents(e.target.checked)}
-                  className="rounded border-border"
-                />
-                Show Iran events on charts
-              </label>
+              <>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showGdpMacroEvents}
+                    onChange={(e) => setShowGdpMacroEvents(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  Show events
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showGdpIranEvents}
+                    onChange={(e) => setShowGdpIranEvents(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  Show Iran event layers
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showGdpGlobalMacroOil}
+                    onChange={(e) => setShowGdpGlobalMacroOil(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  Global oil/macro (curated)
+                </label>
+              </>
             )}
             {isOilGeopoliticalReaction && (
               <>
@@ -3603,6 +3738,15 @@ export default function StudyDetailPage() {
                     className="rounded border-border"
                   />
                   OPEC decisions
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showGlobalMacroOil}
+                    onChange={(e) => setShowGlobalMacroOil(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  Global oil/macro (curated)
                 </label>
               </>
             )}
@@ -3928,13 +4072,24 @@ export default function StudyDetailPage() {
                   </div>
                   {gdpStudyView === "levels" ? (
                     <>
-                      <span className="text-muted-foreground shrink-0 ml-1">Currency</span>
+                      <span className="text-muted-foreground shrink-0 ml-1">Value type</span>
                       <div className="inline-flex rounded-md border border-border overflow-hidden">
                         <button
                           type="button"
-                          onClick={() => setGdpLevelsCurrency("usd")}
-                          className={`px-2.5 py-1.5 font-medium transition-colors ${
-                            gdpLevelsCurrency === "usd"
+                          onClick={() => setGdpLevelsValueType("real")}
+                          className={`px-2 py-1.5 text-sm font-medium transition-colors ${
+                            gdpLevelsValueType === "real"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                          }`}
+                        >
+                          Real
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGdpLevelsValueType("usd")}
+                          className={`px-2 py-1.5 text-sm font-medium transition-colors ${
+                            gdpLevelsValueType === "usd"
                               ? "bg-primary text-primary-foreground"
                               : "bg-transparent text-muted-foreground hover:bg-muted/60"
                           }`}
@@ -3943,9 +4098,9 @@ export default function StudyDetailPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setGdpLevelsCurrency("toman")}
-                          className={`px-2.5 py-1.5 font-medium transition-colors ${
-                            gdpLevelsCurrency === "toman"
+                          onClick={() => setGdpLevelsValueType("toman")}
+                          className={`px-2 py-1.5 text-sm font-medium transition-colors ${
+                            gdpLevelsValueType === "toman"
                               ? "bg-primary text-primary-foreground"
                               : "bg-transparent text-muted-foreground hover:bg-muted/60"
                           }`}
@@ -3998,6 +4153,7 @@ export default function StudyDetailPage() {
                     label="GDP composition (shares of GDP)"
                     events={gdpCompositionChartEvents}
                     anchorEventId={anchorEventId || undefined}
+                    chartHeight="h-80 md:h-[26rem]"
                     multiSeries={[
                       {
                         key: "pct_consumption",
@@ -4019,6 +4175,7 @@ export default function StudyDetailPage() {
                     timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
                     forceTimeRangeAxis
                     mutedEventLines
+                    categoryYearTickStep={5}
                   />
                 </>
               ) : null}
@@ -4048,24 +4205,26 @@ export default function StudyDetailPage() {
                     timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
                     forceTimeRangeAxis
                     yAxisLog
-                    chartHeight="h-52"
+                    chartHeight="h-64 md:h-80"
                     mutedEventLines
                     xAxisYearLabel={gdpLevelsXAxisYearLabel}
+                    categoryYearTickStep={5}
+                    multiSeriesValueFormat="gdp_absolute"
                   />
                   <p className="text-xs font-medium text-muted-foreground mb-1.5 mt-6">Levels (absolute size)</p>
+                  {gdpLevelsDisplayNote ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-500/90 mb-2">{gdpLevelsDisplayNote}</p>
+                  ) : null}
                   <p className="text-xs text-muted-foreground mb-2">
-                    Three lines in{" "}
+                    Three lines—Consumption (blue), GDP (red), Investment (green)—in{" "}
                     <span className="text-foreground font-medium">
-                      {gdpLevelsCurrency === "toman"
-                        ? "billion tomans (approx.): each year’s WDI USD level × that Gregorian year’s mean daily open-market toman/USD (merged Bonbast + rial archive + FRED pre-2012; same signal as the USD→toman study—not official)"
-                        : gdpLevelsPriceBasis === "constant_2015_usd"
-                          ? "constant 2015 US dollars (real-term levels comparable across years except for methodology breaks)"
-                          : gdpLevelsPriceBasis === "current_usd"
-                            ? "current US dollars (includes inflation and exchange-rate effects)"
-                            : "national-account levels"}
+                      {gdpLevelsValueType === "real"
+                        ? "constant 2015 US dollars (WDI NE.CON.TOTL.KD, NY.GDP.MKTP.KD, NE.GDI.TOTL.KD): real domestic scale without applying market FX"
+                        : gdpLevelsValueType === "toman"
+                          ? "billion tomans (approx.): current-US$ WDI levels (NE.CON.TOTL.CD, NY.GDP.MKTP.CD, NE.GDI.TOTL.CD) × that Gregorian year’s mean daily open-market toman/USD (merged Bonbast + rial archive + FRED pre-2012—not official)"
+                          : "current US dollars (NE.CON.TOTL.CD, NY.GDP.MKTP.CD, NE.GDI.TOTL.CD): headline international dollars, including inflation and exchange-rate moves in the WDI construction"}
                     </span>
-                    : Consumption (final consumption expenditure), GDP, and Investment (gross capital formation).
-                    Currency toggle applies to this chart only (not the % composition chart). Linear scale.
+                    . Value type applies to this chart only (not the % composition chart). Linear scale.
                   </p>
                   <TimelineChart
                     data={[]}
@@ -4101,10 +4260,11 @@ export default function StudyDetailPage() {
                     ]}
                     timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
                     forceTimeRangeAxis
-                    chartHeight="h-56"
+                    chartHeight="h-72 md:h-[26rem]"
                     mutedEventLines
                     xAxisYearLabel={gdpLevelsXAxisYearLabel}
-                    multiSeriesValueFormat="gdp_levels"
+                    categoryYearTickStep={5}
+                    multiSeriesValueFormat="gdp_absolute"
                   />
                 </>
               ) : null}
@@ -4115,10 +4275,10 @@ export default function StudyDetailPage() {
                     bullets: [
                       "Composition: each line is a share of GDP—how large consumption or investment is relative to GDP that year, not its dollar size. (Iran: open the Composition view.)",
                       "Nominal GDP: current US$ with a log scale—headline dollar size including inflation and exchange-rate moves.",
-                      "Levels: consumption, GDP, and investment in the same WDI price basis (constant 2015 US$ when available, else current US$). Toman view (Iran): each point’s year uses that year’s own FX—arithmetic mean of daily open-market tomans per USD in that Gregorian year (merged Bonbast + rial archive + FRED pre-2012; not official), then shown in billions of tomans.",
+                      "Levels value type (Iran): Real = constant 2015 US$ (*KD) aggregates—domestic real scale without market FX. USD = current US$ (*CD)—headline international dollars. Toman = current US$ × per-year mean open-market toman/USD (merged Bonbast + archive + FRED pre-2012; not official)—mixes economics with depreciation.",
                       "Shares can move even when dollar levels all rise; use Composition vs Levels to separate structure from scale.",
                       "Iran: Iranian year relabels x-axis tick years to Solar Hijri (UTC date mapping via Intl); underlying points stay Gregorian.",
-                      "Use “Show Iran events on charts” for optional context markers only.",
+                      "Show events: subtle vertical markers for a fixed Iran macro timeline (hover for notes). Show Iran event layers: separate timeline data from the study’s event feed. Global oil/macro (curated): optional small set of world oil-market anchors from the API (off by default).",
                     ],
                   },
                   {
@@ -4127,7 +4287,7 @@ export default function StudyDetailPage() {
                       "Annual national accounts; they do not capture informal activity fully and can be revised.",
                       "WDI series can begin in different years; early years may show only the series that already exists.",
                       "Constant-price series follow the World Bank’s 2015 base; switching to another constant-price basis later is a data configuration change, not a code rewrite.",
-                      "Toman levels: WDI USD × per-year mean daily open-market toman/USD (same merged USD→toman pipeline). Hybrid if WDI is constant 2015 US$: nominal market FX on real WDI dollars—illustrative only, not national accounts in tomans.",
+                      "Toman levels convert current-US$ WDI lines only (not the constant-price Real bundle), so they are not a substitute for official national-accounts tomans.",
                       "Event markers do not imply cause or forecast.",
                     ],
                   },
@@ -4141,11 +4301,14 @@ export default function StudyDetailPage() {
                     sourceName: gdpCompositionSource?.name ?? "World Bank World Development Indicators",
                     sourceUrl: gdpCompositionSource?.url ?? "https://data.worldbank.org/",
                     sourceDetail: gdpCompositionSource?.publisher ?? "World Bank",
-                    unitLabel: "% of GDP (composition); current US$ log (nominal GDP); level series (WDI + optional FX)",
+                    unitLabel:
+                      "% of GDP (composition); current US$ log (nominal GDP); levels by value type (Real / USD / Toman)",
                     unitNote:
-                      gdpLevelsPriceBasis === "constant_2015_usd"
-                        ? "Shares: NE.CON.TOTL.ZS, NE.GDI.TOTL.ZS. Nominal GDP: NY.GDP.MKTP.CD. Levels: NE.CON.TOTL.KD, NY.GDP.MKTP.KD, NE.GDI.TOTL.KD (constant 2015 US$). ISO3 IRN."
-                        : "Shares: NE.CON.TOTL.ZS, NE.GDI.TOTL.ZS. Nominal GDP: NY.GDP.MKTP.CD. Levels: NE.CON.TOTL.CD, NY.GDP.MKTP.CD, NE.GDI.TOTL.CD (current US$ fallback). ISO3 IRN.",
+                      gdpLevelsValueType === "real"
+                        ? "Shares: NE.CON.TOTL.ZS, NE.GDI.TOTL.ZS. Nominal GDP: NY.GDP.MKTP.CD. Levels (Real): NE.CON.TOTL.KD, NY.GDP.MKTP.KD, NE.GDI.TOTL.KD (constant 2015 US$). ISO3 IRN."
+                        : gdpLevelsValueType === "toman"
+                          ? "Shares: NE.CON.TOTL.ZS, NE.GDI.TOTL.ZS. Nominal GDP: NY.GDP.MKTP.CD. Levels (Toman): NE.CON.TOTL.CD, NY.GDP.MKTP.CD, NE.GDI.TOTL.CD × annual mean open-market toman/USD. ISO3 IRN."
+                          : "Shares: NE.CON.TOTL.ZS, NE.GDI.TOTL.ZS. Nominal GDP: NY.GDP.MKTP.CD. Levels (USD): NE.CON.TOTL.CD, NY.GDP.MKTP.CD, NE.GDI.TOTL.CD (current US$). ISO3 IRN.",
                   },
                 ]}
                 note={
@@ -4161,14 +4324,14 @@ export default function StudyDetailPage() {
               <InSimpleTerms>
                 <p>
                   Composition shows shares: of GDP counted in a year, how much is consumption and how much is
-                  investment—each as a percent of that GDP number. Levels show how large each aggregate is in money
-                  units (US dollars from WDI, or optional tomans for Iran: each Gregorian year uses that year’s mean
-                  daily open-market toman per USD from the merged USD→toman series—Bonbast, rial-exchange-rates-archive,
-                  and FRED pre-2012—not the official rate; approximate).
+                  investment—each as a percent of that GDP number. The levels chart can show the same three aggregates
+                  as Real (constant 2015 US$ from WDI, a domestic real-economy lens without applying market FX), as USD
+                  (current US$ for international comparison), or as Toman (current US$ converted with the project’s
+                  per-year open-market FX—illustrative; mixes real change with exchange-rate depreciation).
                 </p>
                 <p>
-                  Nominal GDP is always in current US dollars on a log scale. The % chart does not switch to tomans;
-                  only the three-line levels chart does.
+                  Nominal GDP is always in current US dollars on a log scale. The % chart does not use the levels value
+                  type; only the three-line levels chart does.
                 </p>
                 <p>
                   Iranian year labels on the axis are display-only (Solar Hijri year from each point’s Gregorian date,
@@ -4322,6 +4485,15 @@ export default function StudyDetailPage() {
                   className="rounded border-border"
                 />
                 Show sanctions
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showGlobalMacroOil}
+                  onChange={(e) => setShowGlobalMacroOil(e.target.checked)}
+                  className="rounded border-border"
+                />
+                Global oil/macro (curated)
               </label>
               {(isFxUsdToman || isOilPppIran) && (
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
@@ -5156,7 +5328,7 @@ export default function StudyDetailPage() {
                     label="Daily return"
                     unit="%"
                     timeRange={oilTimeRange ?? study.timeRange}
-                    chartHeight="h-48"
+                    chartHeight="h-56 md:h-64"
                     referenceLine={{ value: 0, label: "0%" }}
                     gridRight="12%"
                   />

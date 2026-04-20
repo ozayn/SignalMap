@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 
 const API_BASE = process.env.API_URL ?? "http://localhost:8000";
 
+const LEVELS_VALUE_TYPES = new Set(["real", "usd", "toman"]);
+
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = request.nextUrl;
-    const start = searchParams.get("start");
-    const end = searchParams.get("end");
-    const country = searchParams.get("country") ?? "IRN";
-    const levelsCurrency = searchParams.get("levels_currency") ?? "usd";
+    const reqParams = request.nextUrl.searchParams;
+    const start = reqParams.get("start");
+    const end = reqParams.get("end");
+    const country = reqParams.get("country") ?? "IRN";
+    const rawType = (reqParams.get("levels_value_type") ?? "real").toLowerCase();
+    const levelsValueType = LEVELS_VALUE_TYPES.has(rawType) ? rawType : "real";
     if (!start || !end) {
       return NextResponse.json(
         { error: "start and end (YYYY-MM-DD) required" },
@@ -19,7 +22,7 @@ export async function GET(request: NextRequest) {
       start,
       end,
       country,
-      levels_currency: levelsCurrency === "toman" ? "toman" : "usd",
+      levels_value_type: levelsValueType,
     });
     const res = await fetch(`${API_BASE}/api/signals/macro/gdp-composition?${params}`, {
       headers: { Accept: "application/json" },

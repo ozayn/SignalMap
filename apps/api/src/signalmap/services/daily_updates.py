@@ -268,6 +268,13 @@ def update_oil_production_exporters() -> dict[str, Any]:
         return {"rows_added": 0, "error": str(e)}
 
 
+def _run_macro_signals_refresh() -> dict[str, Any]:
+    """GDP composition WDI cache refresh (weekly, Sunday UTC); see ``jobs.update_macro_signals``."""
+    from jobs import update_macro_signals
+
+    return update_macro_signals()
+
+
 DATA_SOURCE_UPDATERS: dict[str, Callable[[], dict[str, Any]]] = {
     "oil": update_brent_prices,
     "fx": update_fx_usd_toman,
@@ -276,6 +283,7 @@ DATA_SOURCE_UPDATERS: dict[str, Callable[[], dict[str, Any]]] = {
     "oil_production_exporters": update_oil_production_exporters,
     "oil_trade_network": update_oil_trade_network,
     "youtube_followers": update_youtube_channel_snapshots,
+    "macro_signals": _run_macro_signals_refresh,
 }
 
 

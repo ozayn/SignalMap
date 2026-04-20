@@ -38,7 +38,7 @@ function isBillionTomanUnit(unit: string): boolean {
   return u.includes("billion") && u.includes("toman");
 }
 
-/** Tooltip value fragment for GDP composition levels (no series label). */
+/** Tooltip value fragment for GDP absolute-value charts (levels + nominal; no series label). */
 export function formatGdpLevelsTooltipValue(value: number, unit: string): string {
   if (!Number.isFinite(value)) return "—";
   if (isBillionTomanUnit(unit)) {
@@ -54,7 +54,7 @@ export function formatGdpLevelsTooltipValue(value: number, unit: string): string
   return `${formatCompactDecimal(value)} ${unit}`;
 }
 
-/** Y-axis tick labels for GDP composition levels chart. */
+/** Y-axis tick labels for GDP absolute-value charts (linear or log). */
 export function formatGdpLevelsAxisTick(value: number, unit: string): string {
   if (!Number.isFinite(value)) return "";
   if (isBillionTomanUnit(unit)) {

@@ -1,5 +1,6 @@
 """
-Event loading for study context. Layers: iran_core, world_core, world_1900, sanctions, iran_presidents.
+Event loading for study context. Layers: iran_core, world_core, world_1900, sanctions,
+iran_presidents, opec_decisions, global_macro_oil (curated global oil / macro anchors).
 """
 
 from datetime import date
@@ -147,6 +148,12 @@ def _get_opec_decisions():
     from signalmap.data.event_layers import EVENTS_OPEC_DECISIONS
     return EVENTS_OPEC_DECISIONS
 
+
+def _get_global_macro_oil():
+    from signalmap.data.events_global_macro_oil import get_events_global_macro_oil
+    return get_events_global_macro_oil()
+
+
 def _get_iran_core_events():
     return _get_iran_core()
 
@@ -157,6 +164,7 @@ _LAYER_REGISTRY = {
     "world_1900": _get_world_1900,
     "sanctions": SANCTIONS,
     "opec_decisions": _get_opec_decisions(),
+    "global_macro_oil": _get_global_macro_oil,
 }
 
 

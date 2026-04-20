@@ -76,7 +76,7 @@ These are the `signal_key` values used in `signal_points` and `signals.py`:
 |--------|----------|--------|-------------|-------|
 | **Gold** | `/api/signals/gold/global` | GOLD_ANNUAL (static) | annual | LBMA/Treasury/WGC. No daily source. |
 | **Iran wage/CPI** | `/api/signals/wage/iran-minimum-cpi` | IRAN_NOMINAL_MINIMUM_WAGE, IRAN_CPI_2010_BASE (static) | annual | Study 13: nominal + CPI for real wage. |
-| **GDP composition** | `/api/signals/macro/gdp-composition` | World Bank WDI: shares NE.CON.TOTL.ZS, NE.GDI.TOTL.ZS; nominal NY.GDP.MKTP.CD; levels prefer NE.CON.TOTL.KD, NY.GDP.MKTP.KD, NE.GDI.TOTL.KD else *CD | annual | Study 27: % GDP, nominal GDP log, absolute levels. Query `levels_currency` (`usd` or `toman`; toman IRN-only): levels scaled by calendar-year mean open-market tomans per USD; response includes `levels_conversion`. Cached per ISO3; `data_span` + `levels.price_basis`. |
+| **GDP composition** | `/api/signals/macro/gdp-composition` | World Bank WDI: shares NE.CON.TOTL.ZS, NE.GDI.TOTL.ZS; nominal NY.GDP.MKTP.CD; levels bundles **real** (*KD constant 2015 US$) and **usd** (*CD current US$) | annual | Query `levels_value_type`: `real` (default), `usd`, or `toman` (IRN-only; converts **current-US$** levels via calendar-year mean open-market toman/USD). Response: `levels`, `levels_value_type`, optional `levels_display_note`, `levels_conversion` (toman only). Cached per ISO3 (`full_v3`). |
 | **Brent current** | `/api/market/brent-current` | FMP (brent_market_price) | point-in-time | Cached 1h. Not in signal_points. |
 
 ---

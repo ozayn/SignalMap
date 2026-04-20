@@ -804,42 +804,56 @@ def _filter_indicator_points_by_year(
 
 def _gdp_composition_full_for_country(iso: str) -> dict:
     """
-    Fetch all available WDI years for the three indicators, build full points on the
-    combined natural span (earliest year any series starts through latest year any ends).
-    Cached per country (not per date window).
+    Fetch all available WDI years for the bundled indicators, build full points on the
+    combined natural span. Absolute levels are stored in ``levels_variants``:
+
+    - ``real``: NE.CON.TOTL.KD, NY.GDP.MKTP.KD, NE.GDI.TOTL.KD (constant 2015 US$).
+    - ``usd``: NE.CON.TOTL.CD, NY.GDP.MKTP.CD, NE.GDI.TOTL.CD (current US$).
+
+    Cached per country (not per date window). ``get_gdp_composition_series`` picks one
+    variant (and optionally applies IRN Toman FX to the current-USD bundle).
     """
     from signalmap.sources.world_bank_national_accounts import (
+        CURRENT_USD_LEVEL_IDS,
+        REAL_LEVEL_IDS,
+        WDI_FINAL_CONSUMPTION_CONST_USD,
+        WDI_FINAL_CONSUMPTION_CURRENT_USD,
         WDI_FINAL_CONSUMPTION_PCT_GDP,
+        WDI_GDP_CONST_USD,
         WDI_GDP_CURRENT_USD,
+        WDI_GROSS_CAPITAL_FORMATION_CONST_USD,
+        WDI_GROSS_CAPITAL_FORMATION_CURRENT_USD,
         WDI_GROSS_CAPITAL_FORMATION_PCT_GDP,
         WDI_LABELS,
+        build_wdi_levels_pack,
         combined_span_from_series,
         fetch_wdi_annual_indicator,
         points_for_chart,
-        resolve_national_account_levels_rows,
     )
 
     cons_raw = fetch_wdi_annual_indicator(iso, WDI_FINAL_CONSUMPTION_PCT_GDP)
     inv_raw = fetch_wdi_annual_indicator(iso, WDI_GROSS_CAPITAL_FORMATION_PCT_GDP)
     gdp_raw = fetch_wdi_annual_indicator(iso, WDI_GDP_CURRENT_USD)
 
-    level_pack = resolve_national_account_levels_rows(iso, gdp_raw)
-    lvl_rows = level_pack["rows"]
-    cons_lvl_raw = lvl_rows["consumption"]
-    gdp_lvl_raw = lvl_rows["gdp"]
-    inv_lvl_raw = lvl_rows["investment"]
-    lvl_ids = level_pack["ids"]
+    cons_kd = fetch_wdi_annual_indicator(iso, WDI_FINAL_CONSUMPTION_CONST_USD)
+    gdp_kd = fetch_wdi_annual_indicator(iso, WDI_GDP_CONST_USD)
+    inv_kd = fetch_wdi_annual_indicator(iso, WDI_GROSS_CAPITAL_FORMATION_CONST_USD)
+    cons_cd = fetch_wdi_annual_indicator(iso, WDI_FINAL_CONSUMPTION_CURRENT_USD)
+    inv_cd = fetch_wdi_annual_indicator(iso, WDI_GROSS_CAPITAL_FORMATION_CURRENT_USD)
 
     natural_start, natural_end, per_series = combined_span_from_series(
         [
             ("final_consumption_pct_gdp", cons_raw),
             ("gross_capital_formation_pct_gdp", inv_raw),
             ("gdp_current_usd", gdp_raw),
-            ("consumption_level", cons_lvl_raw),
-            ("gdp_level", gdp_lvl_raw),
-            ("investment_level", inv_lvl_raw),
+            ("consumption_kd", cons_kd),
+            ("gdp_kd", gdp_kd),
+            ("investment_kd", inv_kd),
+            ("consumption_cd", cons_cd),
+            ("investment_cd", inv_cd),
         ]
     )
+    empty_levels_variants = {"real": None, "usd": None}
     if natural_start is None or natural_end is None:
         return {
             "signal": GDP_COMPOSITION_SIGNAL,
@@ -874,24 +888,33 @@ def _gdp_composition_full_for_country(iso: str) -> dict:
                     "points": [],
                 },
             },
-            "levels": {
-                "price_basis": None,
-                "unit": None,
-                "indicators": {
-                    "consumption": {"id": None, "label": "", "display_label": "Consumption", "unit": "", "points": []},
-                    "gdp": {"id": None, "label": "", "display_label": "GDP", "unit": "", "points": []},
-                    "investment": {"id": None, "label": "", "display_label": "Investment", "unit": "", "points": []},
-                },
-            },
+            "levels_variants": empty_levels_variants,
         }
 
     cons_pts = points_for_chart(cons_raw, natural_start, natural_end)
     inv_pts = points_for_chart(inv_raw, natural_start, natural_end)
     gdp_pts = points_for_chart(gdp_raw, natural_start, natural_end)
 
-    cons_lvl_pts = points_for_chart(cons_lvl_raw, natural_start, natural_end)
-    gdp_lvl_pts = points_for_chart(gdp_lvl_raw, natural_start, natural_end)
-    inv_lvl_pts = points_for_chart(inv_lvl_raw, natural_start, natural_end)
+    real_pack = build_wdi_levels_pack(
+        natural_start,
+        natural_end,
+        cons_kd,
+        gdp_kd,
+        inv_kd,
+        REAL_LEVEL_IDS,
+        "constant_2015_usd",
+        "constant 2015 US$",
+    )
+    usd_pack = build_wdi_levels_pack(
+        natural_start,
+        natural_end,
+        cons_cd,
+        gdp_raw,
+        inv_cd,
+        CURRENT_USD_LEVEL_IDS,
+        "current_usd",
+        "current US$",
+    )
 
     return {
         "signal": GDP_COMPOSITION_SIGNAL,
@@ -926,36 +949,7 @@ def _gdp_composition_full_for_country(iso: str) -> dict:
                 "points": gdp_pts,
             },
         },
-        "levels": {
-            "price_basis": level_pack["price_basis"],
-            "unit": level_pack["unit"],
-            "indicators": {
-                "consumption": {
-                    "id": lvl_ids["consumption"],
-                    "label": WDI_LABELS.get(lvl_ids["consumption"], lvl_ids["consumption"]),
-                    "display_label": "Consumption",
-                    "underlying_label": "Final consumption expenditure",
-                    "unit": level_pack["unit"],
-                    "points": cons_lvl_pts,
-                },
-                "gdp": {
-                    "id": lvl_ids["gdp"],
-                    "label": WDI_LABELS.get(lvl_ids["gdp"], lvl_ids["gdp"]),
-                    "display_label": "GDP",
-                    "underlying_label": "Gross domestic product",
-                    "unit": level_pack["unit"],
-                    "points": gdp_lvl_pts,
-                },
-                "investment": {
-                    "id": lvl_ids["investment"],
-                    "label": WDI_LABELS.get(lvl_ids["investment"], lvl_ids["investment"]),
-                    "display_label": "Investment",
-                    "underlying_label": "Gross capital formation",
-                    "unit": level_pack["unit"],
-                    "points": inv_lvl_pts,
-                },
-            },
-        },
+        "levels_variants": {"real": real_pack, "usd": usd_pack},
     }
 
 
@@ -999,6 +993,48 @@ def _annual_average_open_market_toman_per_usd(year_start: int, year_end: int) ->
     return out, fx_meta
 
 
+def _levels_pack_has_points(pack: dict | None) -> bool:
+    if not pack or not isinstance(pack, dict):
+        return False
+    ind = pack.get("indicators") or {}
+    for key in ("consumption", "gdp", "investment"):
+        meta = ind.get(key)
+        if not isinstance(meta, dict):
+            return False
+        pts = meta.get("points")
+        if not isinstance(pts, list) or len(pts) == 0:
+            return False
+    return True
+
+
+def _slice_levels_pack(pack: dict, slice_start: int, slice_end: int) -> dict:
+    """Return a copy of a levels variant with points clipped to [slice_start, slice_end]."""
+    ind_in = pack.get("indicators") or {}
+    new_ind: dict = {}
+    for key, meta in ind_in.items():
+        if isinstance(meta, dict):
+            pts = meta.get("points") or []
+            new_ind[key] = {
+                **{k: v for k, v in meta.items() if k != "points"},
+                "points": _filter_indicator_points_by_year(pts, slice_start, slice_end),
+            }
+        else:
+            new_ind[key] = meta
+    return {**{k: v for k, v in pack.items() if k != "indicators"}, "indicators": new_ind}
+
+
+def _empty_levels_out() -> dict:
+    return {
+        "price_basis": None,
+        "unit": None,
+        "indicators": {
+            "consumption": {"id": None, "label": "", "display_label": "Consumption", "unit": "", "points": []},
+            "gdp": {"id": None, "label": "", "display_label": "GDP", "unit": "", "points": []},
+            "investment": {"id": None, "label": "", "display_label": "Investment", "unit": "", "points": []},
+        },
+    }
+
+
 def _levels_points_to_billion_toman(
     meta: dict, annual_avg_toman_per_usd: dict[int, float]
 ) -> dict:
@@ -1029,16 +1065,30 @@ def _levels_points_to_billion_toman(
 
 
 def get_gdp_composition_series(
-    country_iso3: str, start: str, end: str, levels_currency: str = "usd"
+    country_iso3: str,
+    start: str,
+    end: str,
+    levels_value_type: str = "real",
+    *,
+    force_refresh: bool = False,
 ) -> dict:
     """
     Annual GDP composition: final consumption and gross capital formation as % of GDP,
-    nominal GDP in current US$, and absolute levels for consumption / GDP / investment
-    (constant 2015 US$ when all WDI *KD series exist, else current US$ *CD).
+    nominal GDP in current US$, and absolute levels for consumption / GDP / investment.
 
-    Country via ISO 3166-1 alpha-3 (e.g. IRN, TUR). Full history is fetched once per
-    country (TTL cache). ``start``/``end`` clip returned points; if ``start`` is earlier
-    than WDI coverage, points begin at the earliest year any bundled series has data.
+    ``levels_value_type`` selects the levels bundle (before optional IRN Toman conversion):
+
+    - ``real``: WDI constant 2015 US$ (*KD) for all three aggregates.
+    - ``usd``: WDI current US$ (*CD / NY.GDP.MKTP.CD).
+    - ``toman``: IRN only; current-US$ levels converted to billion tomans via per-year
+      mean open-market toman/USD (same merged series as ``get_usd_toman_series``).
+
+    If ``real`` is requested but constant-price rows are incomplete, the API falls back
+    to ``usd`` and sets ``levels_display_note``.
+
+    Country via ISO 3166-1 alpha-3 (e.g. IRN, TUR). Full history is cached per country;
+    ``start``/``end`` clip returned points. When ``force_refresh`` is True, the per-country
+    WDI bundle is refetched and the cache entry is replaced (used by weekly cron).
     """
     iso = (country_iso3 or "IRN").strip().upper()
     if len(iso) != 3 or not iso.isalpha():
@@ -1047,8 +1097,14 @@ def get_gdp_composition_series(
     requested_start_year = int(start[:4])
     requested_end_year = int(end[:4])
 
-    ck_full = f"signal:{GDP_COMPOSITION_SIGNAL}:{iso}:full_v2"
-    full = cache_get(ck_full)
+    lvt = (levels_value_type or "real").strip().lower()
+    if lvt not in ("real", "usd", "toman"):
+        raise ValueError("levels_value_type must be one of: real, usd, toman")
+    if lvt == "toman" and iso != "IRN":
+        raise ValueError("levels_value_type=toman is only supported for country=IRN")
+
+    ck_full = f"signal:{GDP_COMPOSITION_SIGNAL}:{iso}:full_v3"
+    full = None if force_refresh else cache_get(ck_full)
     if full is None:
         full = _gdp_composition_full_for_country(iso)
         cache_set(ck_full, full, GDP_COMPOSITION_CACHE_TTL)
@@ -1057,7 +1113,12 @@ def get_gdp_composition_series(
     natural_start = span.get("first_year_any")
     natural_end = span.get("last_year_any")
     if natural_start is None or natural_end is None:
-        return {**full, "levels_conversion": None}
+        base = {**full, "levels_conversion": None}
+        base.pop("levels_variants", None)
+        base["levels"] = _empty_levels_out()
+        base["levels_value_type_requested"] = lvt
+        base["levels_value_type"] = lvt
+        return base
 
     slice_start = max(int(natural_start), requested_start_year)
     slice_end = min(int(natural_end), requested_end_year)
@@ -1075,22 +1136,37 @@ def get_gdp_composition_series(
             "points": _filter_indicator_points_by_year(pts, slice_start, slice_end),
         }
 
-    levels_full = full.get("levels") or {}
-    out_levels: dict = {k: v for k, v in levels_full.items() if k != "indicators"}
-    lvl_indicators = levels_full.get("indicators") or {}
-    out_lvl_indicators: dict = {}
-    for key, meta in lvl_indicators.items():
-        if not isinstance(meta, dict):
-            continue
-        pts = meta.get("points") or []
-        out_lvl_indicators[key] = {
-            **{k: v for k, v in meta.items() if k != "points"},
-            "points": _filter_indicator_points_by_year(pts, slice_start, slice_end),
-        }
-    out_levels["indicators"] = out_lvl_indicators
+    variants = full.get("levels_variants") or {}
+    real_pack = variants.get("real")
+    usd_pack = variants.get("usd")
+
+    requested = lvt
+    display_note: str | None = None
+    effective = lvt
+    base_pack: dict | None = None
+
+    if lvt == "real":
+        base_pack = real_pack if _levels_pack_has_points(real_pack) else None
+        if base_pack is None:
+            base_pack = usd_pack if _levels_pack_has_points(usd_pack) else None
+            effective = "usd"
+            display_note = (
+                "Constant-price WDI levels are not all available for this country; "
+                "showing current US$ levels instead."
+            )
+    elif lvt == "usd":
+        base_pack = usd_pack if _levels_pack_has_points(usd_pack) else None
+    else:
+        # toman (IRN): always convert current-US$ bundle
+        base_pack = usd_pack if _levels_pack_has_points(usd_pack) else None
+
+    if base_pack is None:
+        out_levels = _empty_levels_out()
+    else:
+        out_levels = _slice_levels_pack(base_pack, slice_start, slice_end)
 
     result = {
-        **{k: v for k, v in full.items() if k not in ("indicators", "data_span", "levels")},
+        **{k: v for k, v in full.items() if k not in ("indicators", "data_span", "levels_variants")},
         "data_span": {
             **span,
             "requested_start_year": requested_start_year,
@@ -1101,10 +1177,13 @@ def get_gdp_composition_series(
         "indicators": out_indicators,
         "levels": out_levels,
         "levels_conversion": None,
+        "levels_value_type_requested": requested,
+        "levels_value_type": effective,
     }
+    if display_note:
+        result["levels_display_note"] = display_note
 
-    lc = (levels_currency or "usd").strip().lower()
-    if lc == "toman" and iso == "IRN":
+    if effective == "toman" and iso == "IRN":
         annual, fx_src = _annual_average_open_market_toman_per_usd(slice_start, slice_end)
         lvl = result.get("levels") or {}
         ind = lvl.get("indicators") or {}
@@ -1120,11 +1199,12 @@ def get_gdp_composition_series(
             "display_unit": "billion tomans (approx.)",
             "basis": "open_market_annual_average",
             "description": (
-                "Each level point in US dollars is multiplied by the arithmetic mean of daily "
-                "open-market toman-per-USD rates in that Gregorian year (same merged series as "
-                "GET /api/signals/fx/usd-toman). Shown in billions of tomans. Missing FX years "
-                "omit points. Applying nominal FX to constant-2015-USD WDI levels is a hybrid, "
-                "illustrative local-currency view—not an official national-accounts series."
+                "Each level point in current US dollars (NE.CON.TOTL.CD, NY.GDP.MKTP.CD, "
+                "NE.GDI.TOTL.CD) is multiplied by the arithmetic mean of daily open-market "
+                "toman-per-USD rates in that Gregorian year (same merged series as "
+                "GET /api/signals/fx/usd-toman). Shown in billions of tomans. Missing FX "
+                "years omit points. Illustrative local-currency view—not official "
+                "national-accounts tomans."
             ),
             "fx_source": fx_src,
         }

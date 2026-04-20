@@ -240,6 +240,13 @@ def cron_update_all():
     return update_all_data_sources()
 
 
+@app.post("/api/jobs/daily-updates")
+def jobs_daily_updates():
+    """Same as POST /api/cron/update-all (oil, fx, gold, macro_signals weekly on Sunday UTC, …)."""
+    from signalmap.services.daily_updates import update_all_data_sources
+    return update_all_data_sources()
+
+
 @app.post("/api/cron/update-oil-trade")
 def cron_update_oil_trade():
     """Update oil trade network from UN Comtrade. Idempotent; fetches only missing years.
@@ -251,7 +258,10 @@ def cron_update_oil_trade():
 @app.get("/api/events")
 def get_events(
     study_id: str = "1",
-    layers: Optional[str] = Query(None, description="Comma-separated layers, e.g. iran_core,world_core"),
+    layers: Optional[str] = Query(
+        None,
+        description="Comma-separated layers, e.g. iran_core,world_core,global_macro_oil",
+    ),
 ):
     """Return contextual events for a study. Events are exogenous anchors, not outcome variables."""
     from signalmap.data.load_events import load_events, get_events_by_layers
@@ -605,9 +615,12 @@ def get_gdp_composition_signal(
     start: str = Query(..., description="Start date YYYY-MM-DD (year used)"),
     end: str = Query(..., description="End date YYYY-MM-DD (year used)"),
     country: str = Query("IRN", description="ISO 3166-1 alpha-3 (e.g. IRN, TUR)"),
-    levels_currency: Literal["usd", "toman"] = Query(
-        "usd",
-        description="Levels chart only: usd (default) or toman (IRN only; open-market annual average FX).",
+    levels_value_type: Literal["real", "usd", "toman"] = Query(
+        "real",
+        description=(
+            "Levels chart: real (WDI constant 2015 US$ *KD), usd (WDI current US$ *CD), "
+            "or toman (IRN only; current US$ × annual mean open-market toman/USD)."
+        ),
     ),
 ):
     """World Bank WDI: consumption and investment as % of GDP, plus nominal GDP (annual).
@@ -620,15 +633,15 @@ def get_gdp_composition_signal(
         raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
     if start > end:
         raise HTTPException(status_code=400, detail="start must be <= end")
-    if levels_currency == "toman" and country.strip().upper() != "IRN":
+    if levels_value_type == "toman" and country.strip().upper() != "IRN":
         raise HTTPException(
             status_code=400,
-            detail="levels_currency=toman is only supported for country=IRN",
+            detail="levels_value_type=toman is only supported for country=IRN",
         )
     try:
         from signalmap.services.signals import get_gdp_composition_series
 
-        return get_gdp_composition_series(country.strip(), start, end, levels_currency)
+        return get_gdp_composition_series(country.strip(), start, end, levels_value_type)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

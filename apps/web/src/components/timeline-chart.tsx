@@ -10,6 +10,11 @@ import {
 } from "@/lib/chart-axis-year";
 import { formatGdpLevelsAxisTick, formatGdpLevelsTooltipValue } from "@/lib/format-compact-decimal";
 
+/** GDP study: compact absolute values (levels + nominal); `gdp_levels` kept as alias. */
+function isGdpCompactMultiSeriesFormat(fmt?: string): boolean {
+  return fmt === "gdp_levels" || fmt === "gdp_absolute";
+}
+
 type DataPoint = { date: string; value: number; confidence?: number };
 
 export type TimelineEvent = {
@@ -22,8 +27,21 @@ export type TimelineEvent = {
   description?: string;
   confidence?: string;
   sources?: string[];
-  layer?: "iran_core" | "world_core" | "world_1900" | "sanctions" | "iran_presidents" | "opec_decisions";
+  layer?:
+    | "iran_core"
+    | "world_core"
+    | "world_1900"
+    | "sanctions"
+    | "iran_presidents"
+    | "opec_decisions"
+    | "global_macro_oil";
   scope?: "iran" | "world" | "sanctions" | "oil_exports";
+  /** Optional taxonomy (e.g. oil_market, global_macro, war) for curated world anchors. */
+  category?: string;
+  /** Subtle dashed line + short end label (GDP macro markers); tooltip uses `description`. */
+  macroMarker?: boolean;
+  /** Optional short text for the markLine caption; full title stays in `title` for tooltips. */
+  chartLabel?: string;
 };
 
 type OilPoint = { date: string; value: number };
@@ -81,7 +99,7 @@ type TimelineChartProps = {
   oilShockDates?: string[];
   /** When false, shock markers are hidden. Default true. */
   showOilShocks?: boolean;
-  /** Chart container height (default h-80). Use e.g. "h-48" for smaller charts. */
+  /** Chart container height (default h-80 md:h-96). Use e.g. "h-48" for smaller charts. */
   chartHeight?: string;
   /** Override grid.right (e.g. "12%") to align x-axis with another chart above. */
   gridRight?: string;
@@ -101,8 +119,10 @@ type TimelineChartProps = {
   yAxisMax?: number;
   /** X-axis tick year: Gregorian (default) or Iranian (Solar Hijri); display only. */
   xAxisYearLabel?: ChartAxisYearMode;
-  /** Compact USD / bn-toman tooltips and y-axis ticks (GDP composition levels only). */
-  multiSeriesValueFormat?: "gdp_levels";
+  /** When set with dense category axes, show a year label about every N calendar years (Gregorian year index; Jalali label still applies). */
+  categoryYearTickStep?: number;
+  /** Compact USD / bn-toman tooltips and y-axis ticks (GDP composition absolute-value charts). */
+  multiSeriesValueFormat?: "gdp_levels" | "gdp_absolute";
 };
 
 function findEventIndex(dates: string[], eventDate: string): number | null {
@@ -112,6 +132,66 @@ function findEventIndex(dates: string[], eventDate: string): number | null {
     if (dates[i] >= eventDate) return i;
   }
   return dates.length - 1;
+}
+
+/** Minimum Gregorian years between shown macro-marker captions (lines always draw). */
+const MIN_LABEL_GAP_YEARS = 5;
+
+/** Higher = earlier in sort when years tie (prefer war/sanctions captions). */
+function macroEventPriority(ev: TimelineEvent): number {
+  const t = ev.type;
+  if (t === "war") return 3;
+  if (t === "sanctions") return 2;
+  if (t === "political") return 1;
+  return 0;
+}
+
+function eventGregorianYear(ev: TimelineEvent): number {
+  const ds = ev.date ?? ev.date_start ?? "";
+  const y = parseInt(ds.slice(0, 4), 10);
+  return Number.isFinite(y) ? y : 0;
+}
+
+type MacroLabelLayout = { showLabel: boolean; staggerIndex: number };
+
+/**
+ * Macro-marker captions: at most one label per MIN_LABEL_GAP_YEARS (anchor always gets a label).
+ * Stagger index alternates ECharts label position (insideEndTop / insideStartTop).
+ */
+function buildMacroLabelLayout(args: {
+  macroMarkData: { xAxis: string; event: TimelineEvent }[];
+  anchorEventId?: string;
+}): Map<string, MacroLabelLayout> {
+  const { macroMarkData, anchorEventId } = args;
+  const layout = new Map<string, MacroLabelLayout>();
+  if (macroMarkData.length === 0) return layout;
+
+  for (const d of macroMarkData) {
+    layout.set(d.event.id, { showLabel: false, staggerIndex: 0 });
+  }
+
+  const sorted = [...macroMarkData].sort((a, b) => {
+    const ya = eventGregorianYear(a.event);
+    const yb = eventGregorianYear(b.event);
+    if (ya !== yb) return ya - yb;
+    return macroEventPriority(b.event) - macroEventPriority(a.event);
+  });
+
+  let lastLabeledYear = -Infinity;
+  let stagger = 0;
+
+  for (const d of sorted) {
+    const y = eventGregorianYear(d.event);
+    const isAnchor = anchorEventId === d.event.id;
+    const show = isAnchor || y - lastLabeledYear >= MIN_LABEL_GAP_YEARS;
+    if (show) {
+      layout.set(d.event.id, { showLabel: true, staggerIndex: stagger });
+      stagger += 1;
+      lastLabeledYear = y;
+    }
+  }
+
+  return layout;
 }
 
 function sparseDatesFromRange(start: string, end: string, stepMonths = 1): string[] {
@@ -184,7 +264,7 @@ export function TimelineChart({
   sanctionsPeriods = [],
   oilShockDates = [],
   showOilShocks = true,
-  chartHeight = "h-80",
+  chartHeight = "h-80 md:h-96",
   gridRight: gridRightOverride,
   extendedDates = [],
   lastOfficialDateForExtension,
@@ -194,6 +274,7 @@ export function TimelineChart({
   yAxisMin,
   yAxisMax,
   xAxisYearLabel,
+  categoryYearTickStep,
   multiSeriesValueFormat,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
@@ -231,7 +312,15 @@ export function TimelineChart({
     };
 
     const getEventScope = (ev: TimelineEvent): "iran" | "world" | "sanctions" =>
-      (ev.scope === "oil_exports" ? "sanctions" : ev.scope) ?? (ev.layer === "world_core" || ev.layer === "world_1900" || ev.layer === "opec_decisions" ? "world" : ev.layer === "sanctions" ? "sanctions" : "iran");
+      (ev.scope === "oil_exports" ? "sanctions" : ev.scope) ??
+      (ev.layer === "world_core" ||
+      ev.layer === "world_1900" ||
+      ev.layer === "opec_decisions" ||
+      ev.layer === "global_macro_oil"
+        ? "world"
+        : ev.layer === "sanctions"
+          ? "sanctions"
+          : "iran");
     const isPresidentialEvent = (ev: TimelineEvent) => ev.layer === "iran_presidents";
     const IranOpacity = mutedEventLines ? 0.35 : 0.5;
     const WorldOpacity = mutedEventLines ? 0.3 : 0.3;
@@ -476,6 +565,65 @@ export function TimelineChart({
       }
     }
 
+    const macroMarkLineData = markLineData.filter((d) => d.event.macroMarker === true);
+    const hasMacroMarkers = macroMarkLineData.length > 0;
+    const macroLabelLayout = buildMacroLabelLayout({
+      macroMarkData: macroMarkLineData,
+      anchorEventId,
+    });
+
+    type MarkLineDatum = { xAxis: string; event: TimelineEvent; isAnchor: boolean };
+    const verticalMarkLineItem = (d: MarkLineDatum) => {
+      if (d.event.macroMarker === true) {
+        const ml = macroLabelLayout.get(d.event.id) ?? { showLabel: false, staggerIndex: 0 };
+        const showMacroLabel = ml.showLabel;
+        const caption = (d.event.chartLabel ?? d.event.title).trim() || d.event.title;
+        const labelPosition =
+          ml.staggerIndex % 2 === 0 ? ("insideEndTop" as const) : ("insideStartTop" as const);
+        return {
+          xAxis: d.xAxis,
+          label: showMacroLabel
+            ? {
+                show: true,
+                formatter: caption,
+                fontSize: 10,
+                color: mutedFg,
+                distance: 6,
+                position: labelPosition,
+              }
+            : { show: false },
+          lineStyle: {
+            color: withAlphaHsl(muted, 0.28),
+            width: 1,
+            type: "dashed" as const,
+          },
+        };
+      }
+      const scope = getEventScope(d.event);
+      const isSanctions = scope === "sanctions";
+      const isWorld = scope === "world";
+      const opacity = isSanctions ? SanctionsOpacity : isWorld ? WorldOpacity : IranOpacity;
+      const lineColor = d.isAnchor ? mutedFg : withAlphaHsl(muted, opacity);
+      const lineWidth = d.isAnchor
+        ? mutedEventLines
+          ? 1
+          : 1.5
+        : mutedEventLines
+          ? isSanctions
+            ? SanctionsLineWidth
+            : EventLineWidth
+          : isSanctions
+            ? SanctionsLineWidth
+            : isWorld
+              ? 1
+              : 1.15;
+      return {
+        xAxis: d.xAxis,
+        label: { show: false },
+        lineStyle: { color: lineColor, width: lineWidth, type: "dashed" as const },
+      };
+    };
+
     const rangeBandData: { xStart: string; xEnd: string; event: TimelineEvent }[] = [];
     const presidentialBandData: { xStart: string; xEnd: string; event: TimelineEvent }[] = [];
     for (const ev of rangeEvents) {
@@ -580,7 +728,10 @@ export function TimelineChart({
                   ev: m.event,
                   dist: Math.abs(new Date(m.event.date!).getTime() - hoverTime),
                 }))
-                .filter((x) => x.dist <= dayMs * 7)
+                .filter((x) => {
+                  const win = x.ev.macroMarker === true ? dayMs * 220 : dayMs * 7;
+                  return x.dist <= win;
+                })
                 .sort((a, b) => a.dist - b.dist)[0]
             : null;
           const ev = rangeEv ?? nearestEv?.ev ?? markLineData.find(
@@ -595,7 +746,21 @@ export function TimelineChart({
             lines.push("—");
           }
           if (ev) {
-            if (rangeBand && isPresidentialEvent(ev)) {
+            if (ev.macroMarker === true) {
+              const mt = ev.type === "political" || ev.type === "war" || ev.type === "sanctions" ? ev.type : "";
+              const mtLabel =
+                mt === "political"
+                  ? "Political"
+                  : mt === "war"
+                    ? "War / security"
+                    : mt === "sanctions"
+                      ? "Sanctions"
+                      : "Macro context";
+              lines.push(`<span style="font-size:10px;color:#888">${mtLabel}</span>`);
+              lines.push(`<span style="font-weight:600">${ev.title}</span>`);
+              if (ev.date) lines.push(ev.date);
+              if (ev.description) lines.push(ev.description);
+            } else if (rangeBand && isPresidentialEvent(ev)) {
               lines.push(`<span style="font-size:10px;color:#888">Presidential term</span>`);
               lines.push(`<span style="font-weight:600">${ev.title}</span> ${ev.date_start} — ${ev.date_end}`);
             } else {
@@ -610,7 +775,7 @@ export function TimelineChart({
               }
               if (ev.description) lines.push(ev.description);
             }
-            if (!(rangeBand && isPresidentialEvent(ev))) {
+            if (!(rangeBand && isPresidentialEvent(ev)) && ev.macroMarker !== true) {
               if (ev.sources && ev.sources.length > 0) {
                 const urlSources = ev.sources.filter((s) => s.startsWith("http"));
                 const textSources = ev.sources.filter((s) => !s.startsWith("http"));
@@ -649,7 +814,7 @@ export function TimelineChart({
               const val = multiSeriesValues[i]?.[idx];
               const formatted =
                 val != null
-                  ? multiSeriesValueFormat === "gdp_levels"
+                  ? isGdpCompactMultiSeriesFormat(multiSeriesValueFormat)
                     ? formatGdpLevelsTooltipValue(Number(val), s.unit)
                     : `${Number(val).toLocaleString(undefined, { maximumFractionDigits: 20 })} ${s.unit}`
                   : "—";
@@ -700,7 +865,7 @@ export function TimelineChart({
           : (comparatorSeries && comparatorValuesForChart && hasOil) || (hasMultiSeries && multiSeries) || (hasOil && secondSeries && !comparatorSeries)
             ? "10%"
             : "3%",
-        top: "10%",
+        top: hasMacroMarkers ? "17%" : "10%",
         containLabel: true,
       },
       xAxis: useTimeAxis
@@ -737,8 +902,16 @@ export function TimelineChart({
               hasMultiSeries && !!timeRange && n > 12 && spanYears > 0;
             const timeLinearTickYears: number[] = useTimeLinearLabels
               ? (() => {
-                  const want = Math.min(10, Math.max(5, spanYears));
-                  const step = Math.max(1, Math.round(spanYears / want));
+                  const stepFromProp =
+                    categoryYearTickStep != null && categoryYearTickStep > 0
+                      ? Math.floor(categoryYearTickStep)
+                      : null;
+                  const step =
+                    stepFromProp ??
+                    (() => {
+                      const want = Math.min(10, Math.max(5, spanYears));
+                      return Math.max(1, Math.round(spanYears / want));
+                    })();
                   const out: number[] = [];
                   for (let y = firstYearNum; y <= lastYearNum; y += step) out.push(y);
                   if (out[out.length - 1] !== lastYearNum) out.push(lastYearNum);
@@ -771,7 +944,17 @@ export function TimelineChart({
                     return formatChartCategoryAxisYearLabel(value, axisYearMode);
                   }
                   const n2 = dates.length;
-                  if (n2 > 365) return formatChartCategoryAxisYearLabel(value, axisYearMode);
+                  if (n2 > 365) {
+                    if (categoryYearTickStep != null && categoryYearTickStep > 0 && !useTimeLinearLabels) {
+                      const y = parseInt(yearStr, 10);
+                      const yStart = parseInt((dates[0] ?? value).slice(0, 4), 10);
+                      const step = Math.floor(categoryYearTickStep);
+                      const rel = y - yStart;
+                      const isLast = index === dates.length - 1;
+                      if (rel % step !== 0 && !isLast) return "";
+                    }
+                    return formatChartCategoryAxisYearLabel(value, axisYearMode);
+                  }
                   if (n2 <= 100 || useSparseMultiSeriesDates)
                     return formatChartCategoryAxisYearLabel(value, axisYearMode);
                   if (n2 > 60) return value.slice(0, 7);
@@ -836,7 +1019,7 @@ export function TimelineChart({
                 axisLabel: {
                   color: mutedFg,
                   fontSize: 11,
-                  ...(multiSeriesValueFormat === "gdp_levels" && first.unit && !useLog
+                  ...(isGdpCompactMultiSeriesFormat(multiSeriesValueFormat) && first.unit
                     ? {
                         formatter: (v: number | string) => {
                           const n = typeof v === "number" ? v : Number(v);
@@ -930,19 +1113,7 @@ export function TimelineChart({
                         symbol: "none",
                         silent: false,
                         data: [
-                          ...markLineData.map((d) => {
-                            const scope = getEventScope(d.event);
-                            const isSanctions = scope === "sanctions";
-                            const isWorld = scope === "world";
-                            const opacity = isSanctions ? SanctionsOpacity : isWorld ? WorldOpacity : IranOpacity;
-                            const lineColor = d.isAnchor ? mutedFg : withAlphaHsl(muted, opacity);
-                            const lineWidth = d.isAnchor ? (mutedEventLines ? 1 : 1.5) : (mutedEventLines ? (isSanctions ? SanctionsLineWidth : EventLineWidth) : (isSanctions ? SanctionsLineWidth : isWorld ? 1 : 1.15));
-                            return {
-                              xAxis: d.xAxis,
-                              label: { show: false },
-                              lineStyle: { color: lineColor, width: lineWidth, type: "dashed" as const },
-                            };
-                          }),
+                          ...markLineData.map((d) => verticalMarkLineItem(d)),
                           ...(referenceLine
                             ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
                             : []),
@@ -1102,19 +1273,7 @@ export function TimelineChart({
                     ? {
                         symbol: "none",
                         data: [
-                          ...markLineData.map((d) => {
-                            const scope = getEventScope(d.event);
-                            const isSanctions = scope === "sanctions";
-                            const isWorld = scope === "world";
-                            const opacity = isSanctions ? SanctionsOpacity : isWorld ? WorldOpacity : IranOpacity;
-                            const lineColor = d.isAnchor ? mutedFg : withAlphaHsl(muted, opacity);
-                            const lineWidth = d.isAnchor ? (mutedEventLines ? 1 : 1.5) : (mutedEventLines ? (isSanctions ? SanctionsLineWidth : EventLineWidth) : (isSanctions ? SanctionsLineWidth : isWorld ? 1 : 1.15));
-                            return {
-                              xAxis: d.xAxis,
-                              label: { show: false },
-                              lineStyle: { color: lineColor, width: lineWidth, type: "dashed" as const },
-                            };
-                          }),
+                          ...markLineData.map((d) => verticalMarkLineItem(d)),
                           ...(referenceLine
                             ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
                             : []),
@@ -1169,19 +1328,7 @@ export function TimelineChart({
                     ? {
                         symbol: "none",
                         data: [
-                          ...markLineData.map((d) => {
-                            const scope = getEventScope(d.event);
-                            const isSanctions = scope === "sanctions";
-                            const isWorld = scope === "world";
-                            const opacity = isSanctions ? SanctionsOpacity : isWorld ? WorldOpacity : IranOpacity;
-                            const lineColor = d.isAnchor ? mutedFg : withAlphaHsl(muted, opacity);
-                            const lineWidth = d.isAnchor ? (mutedEventLines ? 1 : 1.5) : (mutedEventLines ? (isSanctions ? SanctionsLineWidth : EventLineWidth) : (isSanctions ? SanctionsLineWidth : isWorld ? 1 : 1.15));
-                            return {
-                              xAxis: d.xAxis,
-                              label: { show: false },
-                              lineStyle: { color: lineColor, width: lineWidth, type: "dashed" as const },
-                            };
-                          }),
+                          ...markLineData.map((d) => verticalMarkLineItem(d)),
                           ...(referenceLine
                             ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
                             : []),
@@ -1281,19 +1428,7 @@ export function TimelineChart({
                         symbol: "none",
                         silent: false,
                         data: [
-                          ...markLineData.map((d) => {
-                            const scope = getEventScope(d.event);
-                            const isSanctions = scope === "sanctions";
-                            const isWorld = scope === "world";
-                            const opacity = isSanctions ? SanctionsOpacity : isWorld ? WorldOpacity : IranOpacity;
-                            const lineColor = d.isAnchor ? mutedFg : withAlphaHsl(muted, opacity);
-                            const lineWidth = d.isAnchor ? (mutedEventLines ? 1 : 1.5) : (mutedEventLines ? (isSanctions ? SanctionsLineWidth : EventLineWidth) : (isSanctions ? SanctionsLineWidth : isWorld ? 1 : 1.15));
-                            return {
-                              xAxis: d.xAxis,
-                              label: { show: false },
-                              lineStyle: { color: lineColor, width: lineWidth, type: "dashed" as const },
-                            };
-                          }),
+                          ...markLineData.map((d) => verticalMarkLineItem(d)),
                           ...(referenceLine
                             ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: referenceLine.label ?? "" }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
                             : []),
@@ -1346,7 +1481,7 @@ export function TimelineChart({
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
     };
-  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, multiSeriesValueFormat, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods, oilShockDates, showOilShocks, gridRightOverride, xLabelRotate, extendedDates, lastOfficialDateForExtension, forceTimeRangeAxis, yAxisMin, yAxisMax, xAxisYearLabel]);
+  }, [data, valueKey, label, unit, events, anchorEventId, oilPoints, secondSeries, multiSeries, multiSeriesValueFormat, categoryYearTickStep, timeRange, mutedBands, yAxisLog, yAxisNameSuffix, mutedEventLines, referenceLine, regimeArea, useTimeRangeForDateAxis, comparatorSeries, indexComparator, sanctionsPeriods, oilShockDates, showOilShocks, gridRightOverride, xLabelRotate, extendedDates, lastOfficialDateForExtension, forceTimeRangeAxis, yAxisMin, yAxisMax, xAxisYearLabel]);
 
   useEffect(() => {
     return () => {

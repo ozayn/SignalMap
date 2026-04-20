@@ -30,6 +30,18 @@ WDI_LABELS: dict[str, str] = {
     WDI_GROSS_CAPITAL_FORMATION_CURRENT_USD: "Gross capital formation (current US$)",
 }
 
+# WDI indicator ids for absolute levels (used by GDP composition ``levels_value_type``).
+REAL_LEVEL_IDS: dict[str, str] = {
+    "consumption": WDI_FINAL_CONSUMPTION_CONST_USD,
+    "gdp": WDI_GDP_CONST_USD,
+    "investment": WDI_GROSS_CAPITAL_FORMATION_CONST_USD,
+}
+CURRENT_USD_LEVEL_IDS: dict[str, str] = {
+    "consumption": WDI_FINAL_CONSUMPTION_CURRENT_USD,
+    "gdp": WDI_GDP_CURRENT_USD,
+    "investment": WDI_GROSS_CAPITAL_FORMATION_CURRENT_USD,
+}
+
 
 def resolve_national_account_levels_rows(iso: str, gdp_current_usd_rows: list[dict[str, Any]]) -> dict[str, Any]:
     """
@@ -106,6 +118,58 @@ def fetch_wdi_annual_indicator(country_iso3: str, indicator_id: str) -> list[dic
             page += 1
     rows.sort(key=lambda r: r["year"])
     return rows
+
+
+def build_wdi_levels_pack(
+    natural_start: int,
+    natural_end: int,
+    cons_rows: list[dict[str, Any]],
+    gdp_rows: list[dict[str, Any]],
+    inv_rows: list[dict[str, Any]],
+    ids: dict[str, str],
+    price_basis: str,
+    unit: str,
+) -> dict[str, Any] | None:
+    """
+    Build the ``levels.indicators`` block for consumption, GDP, and investment.
+
+    Returns None if any of the three row lists is empty (caller decides fallback).
+    """
+    if not cons_rows or not gdp_rows or not inv_rows:
+        return None
+    cons_pts = points_for_chart(cons_rows, natural_start, natural_end)
+    gdp_pts = points_for_chart(gdp_rows, natural_start, natural_end)
+    inv_pts = points_for_chart(inv_rows, natural_start, natural_end)
+    return {
+        "price_basis": price_basis,
+        "unit": unit,
+        "indicators": {
+            "consumption": {
+                "id": ids["consumption"],
+                "label": WDI_LABELS.get(ids["consumption"], ids["consumption"]),
+                "display_label": "Consumption",
+                "underlying_label": "Final consumption expenditure",
+                "unit": unit,
+                "points": cons_pts,
+            },
+            "gdp": {
+                "id": ids["gdp"],
+                "label": WDI_LABELS.get(ids["gdp"], ids["gdp"]),
+                "display_label": "GDP",
+                "underlying_label": "Gross domestic product",
+                "unit": unit,
+                "points": gdp_pts,
+            },
+            "investment": {
+                "id": ids["investment"],
+                "label": WDI_LABELS.get(ids["investment"], ids["investment"]),
+                "display_label": "Investment",
+                "underlying_label": "Gross capital formation",
+                "unit": unit,
+                "points": inv_pts,
+            },
+        },
+    }
 
 
 def points_for_chart(rows: list[dict[str, Any]], start_year: int, end_year: int) -> list[dict[str, Any]]:

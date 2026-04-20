@@ -400,12 +400,30 @@ export const STUDIES: StudyMeta[] = [
       "The two shares do not sum to 100%: GDP also includes net exports, government investment nuances, and statistical discrepancies in national accounts.",
       "Nominal GDP (current US$) appears in a separate companion chart (log scale) so the dollar size of the economy is visible without compressing the % series.",
       "The level chart shows consumption, GDP, and investment in the same price basis (constant 2015 US$ when WDI has all three KD series; otherwise current US$).",
-      "This study can switch Composition vs Levels; in Levels, optional Toman view (approximate): each Gregorian year multiplies WDI USD levels by that year’s arithmetic mean of daily open-market tomans per USD—the same merged series as the USD→toman study (Bonbast + archive + FRED pre-2012), not the official rate. Iranian (Solar Hijri) year labels are display-only on the axis.",
+      "Levels value type: Real (WDI constant 2015 US$ *KD), USD (current US$ *CD), or Toman (current US$ × per-year mean open-market toman/USD, IRN only, approximate). Composition vs Levels views; Iranian (Solar Hijri) year labels on Levels are display-only.",
       "The series start in different years in WDI; the app uses the earliest year any bundled indicator has data through the latest available year.",
       "World Bank data are annual; revisions and methodology can shift recent years slightly.",
     ],
   },
 ];
+
+/** Primary signals that may attach the `global_macro_oil` event layer (curated world anchors). */
+const PRIMARY_KINDS_GLOBAL_MACRO_OIL: ReadonlyArray<PrimarySignal["kind"]> = [
+  "oil_brent",
+  "oil_global_long",
+  "gold_and_oil",
+  "real_oil",
+  "oil_ppp_iran",
+  "oil_and_fx",
+  "oil_production_major_exporters",
+  "oil_geopolitical_reaction",
+  "gdp_composition",
+];
+
+export function studyUsesGlobalMacroOilLayer(study: StudyMeta | undefined): boolean {
+  if (!study) return false;
+  return PRIMARY_KINDS_GLOBAL_MACRO_OIL.includes(study.primarySignal.kind);
+}
 
 export function getStudyById(id: string): StudyMeta | undefined {
   const byId = STUDIES.find((s) => s.id === id);

@@ -1639,3 +1639,52 @@ def get_youtube_channel_cache_first(
             ] if cache_rows else [],
             "meta": {"cache_rows": len(cache_rows), "api_calls": api_calls, "notes": notes},
         }
+
+
+# --- Macro signal cache refresh (GDP composition WDI; weekly on UTC Sunday) ---
+
+
+def update_macro_signals() -> dict:
+    """
+    Refresh GDP composition (World Bank WDI) in the per-country TTL cache.
+
+    Callers: unified cron via ``signalmap.services.daily_updates`` (``macro_signals`` key).
+    Runs only on **Sunday UTC** so daily cron stays lightweight; other days return immediately
+    with ``skipped: true``. Uses ``get_gdp_composition_series(..., force_refresh=True)`` once
+    per country so the shared ``full_v3`` cache blob is replaced, not duplicated.
+    """
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    if now.weekday() != 6:
+        return {
+            "skipped": True,
+            "reason": "only_sundays_utc",
+            "weekday_utc": now.weekday(),
+            "countries_refreshed": 0,
+            "countries": [],
+        }
+
+    from signalmap.services.signals import get_gdp_composition_series
+
+    end = now.strftime("%Y-%m-%d")
+    start = "1960-01-01"
+    countries = ["IRN"]
+    out: dict = {
+        "skipped": False,
+        "countries": {},
+        "countries_refreshed": 0,
+        "error": None,
+    }
+
+    for iso in countries:
+        try:
+            get_gdp_composition_series(iso, start, end, "real", force_refresh=True)
+            out["countries"][iso] = {"ok": True}
+            out["countries_refreshed"] += 1
+        except Exception as e:
+            out["countries"][iso] = {"ok": False, "error": str(e)}
+            if out["error"] is None:
+                out["error"] = str(e)
+
+    return out
