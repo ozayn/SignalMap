@@ -531,6 +531,28 @@ def get_wdi_gdp_global_comparison_signal(
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
+@app.get("/api/signals/wdi/isi-diagnostics")
+def get_wdi_isi_diagnostics_signal(
+    start: str | None = Query(None, description="Start date YYYY-MM-DD"),
+    end: str | None = Query(None, description="End date YYYY-MM-DD"),
+):
+    """Return World Bank annual trade/industry shares and GDP growth for ISI diagnostics panel countries."""
+    if start is None:
+        start = "1960-01-01"
+    if end is None:
+        end = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    try:
+        from signalmap.services.signals import get_isi_diagnostics
+
+        return get_isi_diagnostics(start, end)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
+
+
 @app.get("/api/signals/wdi/poverty-headcount-iran")
 def get_wdi_poverty_headcount_iran_signal(
     start: str | None = Query(None, description="Start date YYYY-MM-DD"),

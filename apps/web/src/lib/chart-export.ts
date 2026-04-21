@@ -202,6 +202,12 @@ export type DownloadEchartsRasterOptions = {
   exportSourceFooterColor?: string;
   /** Slide-style title above the chart (export only). */
   exportPresentationTitle?: string;
+  /** Second line under the title on the export canvas (e.g. selected countries + line-style hint). */
+  exportPresentationSubtitle?: string;
+  /** Drawn under the title when set with `exportPresentationLineStyleKey`: dot + label per visible country. */
+  exportPresentationCountryKey?: Array<{ label: string; color: string }>;
+  /** Solid/dashed row labels for export graphic (typically imports / exports). */
+  exportPresentationLineStyleKey?: { solidLabel: string; dashedLabel: string };
   /** Canvas `direction` for title/source text (e.g. `rtl` for FA charts). */
   exportPresentationDirection?: "ltr" | "rtl";
   /** Chart UI locale: Persian digits in export title/source when `fa`. */
@@ -603,9 +609,13 @@ async function exportPresentationPngFromLiveChart(
     /** Build patch from the snapshot before any `setOption` so the snapshot cannot be altered by the export instance merge. */
     const presentationPatch = buildPresentationEchartsPatch(exportSnapshot, {
       chartTitle: compactTitle,
+      chartSubtitle: opts.exportPresentationSubtitle?.trim(),
+      countryColorKey: opts.exportPresentationCountryKey,
+      lineStyleKey: opts.exportPresentationLineStyleKey,
       sourceFooter: opts.exportSourceFooter?.trim(),
       direction: opts.exportPresentationDirection ?? "ltr",
       chartLocale: opts.exportPresentationLocale ?? "en",
+      chartPixelHeight: layout.chartSlotBaseH,
     });
     exportChart.setOption(exportSnapshot as never, { notMerge: true });
     exportChart.setOption(presentationPatch as never, false);

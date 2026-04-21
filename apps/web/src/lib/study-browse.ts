@@ -52,6 +52,7 @@ export function getSignalTags(study: StudyMeta): string[] {
   }
   if (kind === "wage_cpi_real") tags.push("Wage");
   if (kind === "gdp_composition" || kind === "iran_gdp_accounts_dual" || kind === "gdp_global_comparison") tags.push("GDP");
+  if (kind === "isi_diagnostics") tags.push("Trade", "Industry");
   if (kind === "gini_inequality") tags.push("Inequality");
   if (kind === "inflation_cpi_yoy") tags.push("Inflation");
   if (kind === "poverty_headcount_iran") tags.push("Poverty");
@@ -268,6 +269,27 @@ function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
           "saudi arabia",
           "world aggregate",
           "indexed",
+        ],
+      };
+    case "isi_diagnostics":
+      return {
+        countries: ["iran", "global"],
+        themes: ["macro"],
+        tags: [],
+        keywords: [
+          "isi",
+          "import substitution",
+          "brazil",
+          "argentina",
+          "india",
+          "turkey",
+          "iran",
+          "wdi",
+          "imports",
+          "exports",
+          "manufacturing",
+          "industry",
+          "gdp growth",
         ],
       };
     case "poverty_headcount_iran":

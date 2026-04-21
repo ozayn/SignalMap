@@ -1,3 +1,4 @@
+import { axisNameLooksPercentShare, pickNiceYStepForPercentLike } from "@/lib/chart-axis-nice";
 import { localizeChartNumericDisplayString } from "@/lib/chart-numerals-fa";
 import {
   type ChartAxisNumeralLocale,
@@ -36,10 +37,21 @@ export const PRESENTATION_EXPORT_FONTS = {
 /** Context for slide-style PNG export: title + source are drawn on the offscreen ECharts canvas (not the outer composite). */
 export type PresentationEchartsExportContext = {
   chartTitle: string;
+  /** Second line under the slide title (export only), e.g. countries on + line-style hint. */
+  chartSubtitle?: string;
+  /** Export-only: colored dot + label row (typically countries still visible in the chart). */
+  countryColorKey?: Array<{ label: string; color: string }>;
+  /** Export-only: solid vs dashed metric labels drawn under the country row. */
+  lineStyleKey?: { solidLabel: string; dashedLabel: string };
   sourceFooter?: string;
   direction?: "ltr" | "rtl";
   /** Matches live chart `chartLocale` (Persian digits in title/source when `fa`). */
   chartLocale?: "en" | "fa";
+  /**
+   * Offscreen export chart height (px). Used to place the country + line-style legend band above the source line.
+   * Should match the height passed to `echarts.init` for presentation PNG export.
+   */
+  chartPixelHeight?: number;
 };
 
 /** Slide chrome in base (logical) pixels before `pixelRatio` scaling. */
@@ -411,18 +423,189 @@ export function formatStudyExportSourceLine(footer: string | undefined, chartLoc
   return localizeChartNumericDisplayString(`Source: ${body}`, chartLocale === "fa" ? "fa" : "en");
 }
 
+function exportAuxLegendHeight(ctx: PresentationEchartsExportContext): number {
+  const n = ctx.countryColorKey?.length ?? 0;
+  const ls = ctx.lineStyleKey;
+  if (n === 0 && !ls) return 0;
+  if (n > 0) {
+    return ls ? 50 + 10 + 36 : 50;
+  }
+  return ls ? 36 : 0;
+}
+
+/** Room below the aux legend for the corner `Source:` line + a small gap (export canvas px). */
+const EXPORT_AUX_LEGEND_SOURCE_RESERVE = 52;
+
+/**
+ * Bottom-band graphics for slide export: solid/dashed metric key sits just under the plot grid;
+ * country color key sits below that; both sit above the `Source:` graphic so the title stays uncluttered.
+ */
+function buildPresentationExportAuxGraphics(ctx: PresentationEchartsExportContext): unknown[] {
+  const countries = ctx.countryColorKey ?? [];
+  const ls = ctx.lineStyleKey;
+  if (countries.length === 0 && !ls) return [];
+
+  const H = ctx.chartPixelHeight ?? 800;
+  const bandH = exportAuxLegendHeight(ctx);
+  const bandTop = Math.max(8, H - EXPORT_AUX_LEGEND_SOURCE_RESERVE - bandH);
+
+  const W = PRESENTATION_EXPORT_CHART_WIDTH;
+  const locale = ctx.chartLocale ?? "en";
+  const rtl = (ctx.direction ?? "ltr") === "rtl";
+  const textFill = "#0f172a";
+  const stroke = "#0f172a";
+  const fontSize = Math.max(16, PRESENTATION_EXPORT_FONTS.legend - 4);
+  const font = `${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  const g: unknown[] = [];
+  const margin = 56;
+  const n = countries.length;
+
+  /** Line-style row upper in band (near plot); country row lower (see `exportAuxLegendHeight`). */
+  let rowLineTop: number;
+  let dividerTop: number;
+  let rowCountryTop: number;
+  if (n > 0 && ls) {
+    rowLineTop = bandTop + 20;
+    dividerTop = bandTop + 44;
+    rowCountryTop = bandTop + 62;
+  } else if (n > 0) {
+    rowLineTop = bandTop;
+    dividerTop = bandTop;
+    rowCountryTop = bandTop + Math.round(bandH / 2);
+  } else {
+    rowLineTop = bandTop + Math.round(bandH / 2);
+    dividerTop = bandTop;
+    rowCountryTop = bandTop;
+  }
+
+  if (ls) {
+    const solidText = localizeChartNumericDisplayString(ls.solidLabel, locale);
+    const dashText = localizeChartNumericDisplayString(ls.dashedLabel, locale);
+    const center = W / 2;
+    /** Two blocks centered on `center ± blockCenterOffset` so long labels (e.g. Manufacturing) do not hit the other swatch. */
+    const blockCenterOffset = 200;
+    const cSolid = rtl ? center + blockCenterOffset : center - blockCenterOffset;
+    const cDash = rtl ? center - blockCenterOffset : center + blockCenterOffset;
+    const swatchW = 40;
+    const gapAfterSwatch = 10;
+    const solidLineLeft = cSolid - swatchW;
+    const solidTextLeft = cSolid + gapAfterSwatch;
+    const dashLineLeft = cDash - swatchW;
+    const dashTextLeft = cDash + gapAfterSwatch;
+    g.push(
+      {
+        type: "line",
+        left: solidLineLeft,
+        top: rowLineTop,
+        shape: { x1: 0, y1: 0, x2: swatchW, y2: 0 },
+        style: { stroke, lineWidth: 3, lineCap: "round" as const },
+        z: 300,
+        silent: true,
+      },
+      {
+        type: "text",
+        left: solidTextLeft,
+        top: rowLineTop - 10,
+        style: {
+          text: solidText,
+          font,
+          fill: textFill,
+          textAlign: "left" as const,
+          textVerticalAlign: "middle" as const,
+        },
+        z: 300,
+        silent: true,
+      },
+      {
+        type: "line",
+        left: dashLineLeft,
+        top: rowLineTop,
+        shape: { x1: 0, y1: 0, x2: swatchW, y2: 0 },
+        style: { stroke, lineWidth: 3, lineCap: "round" as const, lineDash: [6, 5] },
+        z: 300,
+        silent: true,
+      },
+      {
+        type: "text",
+        left: dashTextLeft,
+        top: rowLineTop - 10,
+        style: {
+          text: dashText,
+          font,
+          fill: textFill,
+          textAlign: "left" as const,
+          textVerticalAlign: "middle" as const,
+        },
+        z: 300,
+        silent: true,
+      }
+    );
+  }
+
+  if (ls && n > 0 && dividerTop > bandTop) {
+    g.push({
+      type: "line",
+      left: margin,
+      top: dividerTop,
+      shape: { x1: 0, y1: 0, x2: W - 2 * margin, y2: 0 },
+      style: { stroke: "#cbd5e1", lineWidth: 1 },
+      z: 300,
+      silent: true,
+    });
+  }
+
+  if (n > 0) {
+    const inner = W - 2 * margin;
+    const step = inner / n;
+    for (let i = 0; i < n; i++) {
+      const vis = rtl ? n - 1 - i : i;
+      const cx = margin + (vis + 0.5) * step;
+      const label = localizeChartNumericDisplayString(countries[i]!.label, locale);
+      g.push({
+        type: "circle",
+        left: cx - 5,
+        top: rowCountryTop - 5,
+        shape: { cx: 5, cy: 5, r: 5 },
+        style: { fill: countries[i]!.color },
+        z: 300,
+        silent: true,
+      });
+      g.push({
+        type: "text",
+        left: cx + 8,
+        top: rowCountryTop - 10,
+        style: {
+          text: label,
+          font,
+          fill: textFill,
+          textAlign: "left" as const,
+          textVerticalAlign: "middle" as const,
+        },
+        z: 300,
+        silent: true,
+      });
+    }
+  }
+
+  return g;
+}
+
 function buildPresentationTitlePatch(opt: Record<string, unknown>, ctx: PresentationEchartsExportContext): Record<string, unknown> {
   const rawTitle = opt.title;
   const title0 = (Array.isArray(rawTitle) ? rawTitle[0] : rawTitle) as Record<string, unknown> | undefined;
   const prevTs = (title0?.textStyle ?? {}) as Record<string, unknown>;
   const displayTitle = localizeChartNumericDisplayString(ctx.chartTitle.trim(), ctx.chartLocale ?? "en");
   const fs = PRESENTATION_EXPORT_FONTS.title;
+  const subRaw = ctx.chartSubtitle?.trim();
+  const subtextDisplay = subRaw ? localizeChartNumericDisplayString(subRaw, ctx.chartLocale ?? "en") : "";
+  const subFs = Math.max(16, Math.round(fs * 0.48));
   return {
     ...(title0 ?? {}),
     show: true,
     text: displayTitle,
     left: "center",
     top: 8,
+    width: "86%",
     textStyle: {
       ...prevTs,
       fontSize: fs,
@@ -430,6 +613,18 @@ function buildPresentationTitlePatch(opt: Record<string, unknown>, ctx: Presenta
       lineHeight: Math.round(fs * 1.18),
       color: typeof prevTs.color === "string" ? prevTs.color : "#0f172a",
     },
+    ...(subtextDisplay
+      ? {
+          subtext: subtextDisplay,
+          itemGap: 10,
+          subtextStyle: {
+            fontSize: subFs,
+            fontWeight: 500,
+            lineHeight: Math.round(subFs * 1.38),
+            color: "#475569",
+          },
+        }
+      : {}),
   };
 }
 
@@ -617,6 +812,21 @@ export function buildExportDataFitAxisPatch(opt: Record<string, unknown>): Recor
           nymin = mid - minSpan / 2;
           nymax = mid + minSpan / 2;
         }
+      }
+    }
+
+    if (!logAxis) {
+      const nm = String(yAx?.name ?? "");
+      if (axisNameLooksPercentShare(nm) && lo >= 0 && Number.isFinite(hi)) {
+        const step = pickNiceYStepForPercentLike(hi);
+        const niceMax = Math.ceil(hi / step) * step;
+        yPatches.push({
+          min: 0,
+          max: niceMax,
+          interval: step,
+          scale: false,
+        });
+        continue;
       }
     }
 
@@ -823,11 +1033,28 @@ export function buildPresentationEchartsPatch(
         })()
       : null;
 
+  const gridBase =
+    typeof gridPatch === "object" && gridPatch != null && !Array.isArray(gridPatch)
+      ? ({ ...(gridPatch as Record<string, unknown>) } as Record<string, unknown>)
+      : { ...PRESENTATION_EXPORT_GRID };
+  const subtitleBump = ctx.chartSubtitle?.trim() ? 64 : 0;
+  const auxBump = exportAuxLegendHeight(ctx);
+  if (subtitleBump > 0) {
+    const curTop = typeof gridBase.top === "number" ? gridBase.top : PRESENTATION_EXPORT_GRID.top;
+    gridBase.top = curTop + subtitleBump;
+  }
+  if (auxBump > 0) {
+    const curBot = typeof gridBase.bottom === "number" ? gridBase.bottom : PRESENTATION_EXPORT_GRID.bottom;
+    gridBase.bottom = curBot + auxBump;
+  }
+
+  const auxGraphics = buildPresentationExportAuxGraphics(ctx);
+
   const out: Record<string, unknown> = {
     title: buildPresentationTitlePatch(opt, ctx),
     animation: false,
-    grid: gridPatch,
-    graphic: [...prevGraphics, ...sourceGraphic],
+    grid: gridBase,
+    graphic: [...prevGraphics, ...sourceGraphic, ...auxGraphics],
   };
   if (tooltipPatch) out.tooltip = tooltipPatch;
   if (xAxes.length) out.xAxis = xAxes.length === 1 ? xAxes[0] : xAxes;

@@ -861,6 +861,37 @@ def get_gdp_global_comparison(start: str, end: str) -> dict:
     return result
 
 
+ISI_DIAGNOSTICS_SOURCE = {
+    "name": "World Bank World Development Indicators",
+    "publisher": "World Bank",
+    "url": "https://data.worldbank.org/",
+}
+
+
+def get_isi_diagnostics(start: str, end: str) -> dict:
+    """
+    Annual WDI trade/industry shares and GDP growth for Brazil, Argentina, India, Turkey, and Iran
+    (ISI diagnostics — descriptive indicators only).
+    """
+    from signalmap.sources.world_bank_isi_diagnostics import fetch_isi_diagnostics_bundle
+
+    ck = f"signal:isi_diagnostics:v1:{start}:{end}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    bundle = fetch_isi_diagnostics_bundle(start_year, end_year)
+    result = {
+        **bundle,
+        "source": ISI_DIAGNOSTICS_SOURCE,
+        "resolution": "annual",
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
+
+
 POVERTY_HEADCOUNT_IRAN_SOURCE = {
     "name": "World Bank World Development Indicators",
     "publisher": "World Bank",

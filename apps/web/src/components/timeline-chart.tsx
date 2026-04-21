@@ -25,6 +25,7 @@ import {
   chartYAxisNameTextStyle,
   formatYAxisNameMultiline,
 } from "@/lib/chart-axis-label";
+import { nicePercentShareAxisRange } from "@/lib/chart-axis-nice";
 import {
   formatChartCategoryAxisYearLabel,
   formatChartTimeAxisYearLabel,
@@ -75,7 +76,7 @@ type LegendEndShape = ComparatorLineSymbol;
  * Legend entry icon: short line segment + small end marker (same geometry as series symbol),
  * instead of a large filled-only shape. Coordinates ~0–22 × 0–12; ECharts scales to ``itemWidth`` / ``itemHeight``.
  */
-function multiSeriesLegendLineMarkerPath(shape: LegendEndShape): string {
+function multiSeriesLegendLineMarkerPathD(shape: LegendEndShape): string {
   const line = "M0.3,5.45L12.8,5.45L12.8,6.65L0.3,6.65Z";
   let glyph = "";
   switch (shape) {
@@ -101,7 +102,11 @@ function multiSeriesLegendLineMarkerPath(shape: LegendEndShape): string {
     default:
       glyph = "M16.2,6m-2.35,0a2.35,2.35,0,1,1,4.71,0a2.35,2.35,0,1,1,-4.71,0";
   }
-  return `path://${line}${glyph}`;
+  return `${line}${glyph}`;
+}
+
+function multiSeriesLegendLineMarkerPath(shape: LegendEndShape): string {
+  return `path://${multiSeriesLegendLineMarkerPathD(shape)}`;
 }
 
 /** GDP study: compact absolute values, indexed ratios, or nominal; `gdp_levels` kept as alias. */
@@ -165,6 +170,14 @@ export type ChartSeries = {
   lineWidth?: number;
   /** When false, hides point markers along the line (line-only). */
   showSymbol?: boolean;
+  /** ECharts ``lineStyle.type`` for multi-series (e.g. dashed exports vs solid imports). */
+  linePattern?: "solid" | "dashed" | "dotted";
+  /**
+   * With ``multiSeriesLegendLayout="grouped"``: row label (e.g. country) and column header (e.g. Imports)
+   * for a table-style legend above the chart.
+   */
+  legendGroup?: string;
+  legendMetric?: string;
 };
 
 type TimelineChartProps = {
@@ -257,9 +270,226 @@ type TimelineChartProps = {
   indexedTooltipBaseLabel?: string;
   /** Override multi-series y-axis titles (key = ``yAxisIndex``), e.g. dual-axis reference layouts. */
   multiSeriesYAxisNameOverrides?: Partial<Record<number, string>>;
+  /**
+   * When ``grouped`` and every series defines ``legendGroup`` + ``legendMetric``, the default ECharts legend
+   * is hidden and a compact legend is rendered (toggle still drives the chart).
+   */
+  multiSeriesLegendLayout?: "default" | "grouped";
+  /**
+   * With ``multiSeriesLegendLayout="grouped"``: ``grid`` = country × metric cells; ``country`` = one toggle per
+   * ``legendGroup`` (all metrics in that group on/off together) plus an optional line-style key from metrics.
+   */
+  multiSeriesLegendGroupedVariant?: "grid" | "country";
   /** FA: tooltip chrome + LTR wrapper; series names still come from props (pass Persian labels from the page). */
   chartLocale?: "en" | "fa";
 };
+
+type GroupedLegendCell = {
+  label: string;
+  legendGroup: string;
+  legendMetric: string;
+  lineColor: string;
+  shape: LegendEndShape;
+};
+
+type GroupedLegendCountryRow = {
+  legendGroup: string;
+  lineColor: string;
+  seriesLabels: string[];
+};
+
+type GroupedLegendModel =
+  | { variant: "grid"; columnOrder: string[]; rowOrder: string[]; cells: GroupedLegendCell[] }
+  | { variant: "country"; countries: GroupedLegendCountryRow[]; lineStyleKey: { solidLabel: string; dashedLabel: string } | null };
+
+function buildCountryGroupedExportSubtitle(args: {
+  model: Extract<GroupedLegendModel, { variant: "country" }>;
+  selected: Record<string, boolean> | null;
+  chartLocale: "en" | "fa";
+}): string | undefined {
+  const { model, selected, chartLocale } = args;
+  const isGroupOn = (labels: string[]) =>
+    labels.length > 0 && labels.every((name) => selected == null || selected[name] !== false);
+  const on = model.countries.filter((c) => isGroupOn(c.seriesLabels));
+  const names = on.map((c) => c.legendGroup).join(chartLocale === "fa" ? "، " : ", ");
+  const key = model.lineStyleKey;
+  const linePart = key
+    ? chartLocale === "fa"
+      ? `${key.solidLabel}: خط پیوسته؛ ${key.dashedLabel}: خط منقطع`
+      : `${key.solidLabel}: solid; ${key.dashedLabel}: dashed`
+    : "";
+  const countryPart =
+    names.length > 0 ? (chartLocale === "fa" ? `کشورها: ${names}` : `Countries: ${names}`) : "";
+  const parts = [countryPart, linePart].filter(Boolean);
+  return parts.length > 0 ? parts.join(chartLocale === "fa" ? " — " : " — ") : undefined;
+}
+
+function ColoredLineSwatch({ color, dashed }: { color: string; dashed?: boolean }) {
+  return (
+    <svg viewBox="0 0 44 12" className="h-3 w-11 shrink-0" aria-hidden>
+      <line
+        x1="2"
+        y1="6"
+        x2="42"
+        y2="6"
+        stroke={color}
+        strokeWidth={2.35}
+        strokeLinecap="round"
+        {...(dashed ? { strokeDasharray: "5 4" } : {})}
+      />
+    </svg>
+  );
+}
+
+/** One centered row: neutral solid / dashed swatches + import / export labels only. */
+function GroupedMinimalLineStyleKey({
+  solidLabel,
+  dashedLabel,
+  chartLocale,
+  dir,
+}: {
+  solidLabel: string;
+  dashedLabel: string;
+  chartLocale: "en" | "fa";
+  dir: "ltr" | "rtl";
+}) {
+  return (
+    <div className="w-full border-t border-border/60 pt-2 text-foreground" dir={dir}>
+      <div className="flex w-full flex-wrap items-center justify-center gap-x-6 gap-y-1 text-xs sm:text-sm">
+        <span className="inline-flex items-center gap-2">
+          <ColoredLineSwatch color="currentColor" />
+          <span className="text-foreground/90">{localizeChartNumericDisplayString(solidLabel, chartLocale)}</span>
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <ColoredLineSwatch color="currentColor" dashed />
+          <span className="text-foreground/90">{localizeChartNumericDisplayString(dashedLabel, chartLocale)}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function GroupedMultiSeriesCountryLegendBar({
+  countries,
+  selected,
+  onToggleCountry,
+  dir,
+}: {
+  countries: GroupedLegendCountryRow[];
+  selected: Record<string, boolean> | null;
+  onToggleCountry: (seriesLabels: string[]) => void;
+  dir: "ltr" | "rtl";
+}) {
+  const isGroupOn = (labels: string[]) =>
+    labels.length > 0 && labels.every((name) => selected == null || selected[name] !== false);
+
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 sm:gap-x-4" dir={dir}>
+      {countries.map((c) => {
+        const on = isGroupOn(c.seriesLabels);
+        return (
+          <button
+            key={c.legendGroup}
+            type="button"
+            className={`inline-flex items-center gap-2 rounded-md border border-transparent px-2 py-1 text-xs transition hover:bg-muted/70 sm:text-sm ${
+              on ? "text-foreground opacity-100" : "text-muted-foreground opacity-50"
+            }`}
+            aria-pressed={on}
+            aria-label={c.legendGroup}
+            onClick={() => onToggleCountry(c.seriesLabels)}
+          >
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: c.lineColor }} aria-hidden />
+            <span className="whitespace-nowrap font-medium">{c.legendGroup}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function GroupedMultiSeriesLegendTable({
+  rowOrder,
+  columnOrder,
+  cells,
+  selected,
+  onToggleSeries,
+  dir,
+}: {
+  rowOrder: string[];
+  columnOrder: string[];
+  cells: GroupedLegendCell[];
+  selected: Record<string, boolean> | null;
+  onToggleSeries: (seriesName: string) => void;
+  dir: "ltr" | "rtl";
+}) {
+  const map = new Map<string, GroupedLegendCell>();
+  for (const c of cells) {
+    map.set(`${c.legendGroup}\t${c.legendMetric}`, c);
+  }
+
+  const isOn = (name: string) => selected == null || selected[name] !== false;
+
+  const toggle = (name: string) => {
+    onToggleSeries(name);
+  };
+
+  return (
+    <div className="rounded-md border border-border bg-muted/25 px-2 py-2 sm:px-3 text-xs sm:text-sm" dir={dir}>
+      <table className="w-full border-collapse text-muted-foreground">
+        <thead>
+          <tr>
+            <th
+              scope="col"
+              className="w-[1%] whitespace-nowrap py-1 pe-2 text-start font-normal text-foreground/80"
+            />
+            {columnOrder.map((col) => (
+              <th key={col} scope="col" className="px-1 py-1 text-center font-medium text-foreground/90">
+                {col}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rowOrder.map((row) => (
+            <tr key={row}>
+              <th scope="row" className="whitespace-nowrap py-1 pe-2 text-start font-medium text-foreground">
+                {row}
+              </th>
+              {columnOrder.map((col) => {
+                const cell = map.get(`${row}\t${col}`);
+                if (!cell) {
+                  return (
+                    <td key={col} className="px-1 py-0.5 text-center text-muted-foreground/35">
+                      <span aria-hidden>—</span>
+                    </td>
+                  );
+                }
+                const on = isOn(cell.label);
+                return (
+                  <td key={col} className="px-1 py-0.5 text-center">
+                    <button
+                      type="button"
+                      className={`inline-flex items-center justify-center rounded-sm p-1 transition hover:bg-muted/70 ${
+                        on ? "opacity-100" : "opacity-45"
+                      }`}
+                      aria-pressed={on}
+                      aria-label={cell.label}
+                      onClick={() => toggle(cell.label)}
+                    >
+                      <svg viewBox="0 0 22 12" className="h-[14px] w-[30px] shrink-0" aria-hidden>
+                        <path d={multiSeriesLegendLineMarkerPathD(cell.shape)} fill={cell.lineColor} />
+                      </svg>
+                    </button>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function findEventIndex(dates: string[], eventDate: string): number | null {
   const idx = dates.indexOf(eventDate);
@@ -516,6 +746,8 @@ export function TimelineChart({
   multiSeriesValueFormat,
   indexedTooltipBaseLabel,
   multiSeriesYAxisNameOverrides,
+  multiSeriesLegendLayout = "default",
+  multiSeriesLegendGroupedVariant = "grid",
   chartLocale,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
@@ -576,6 +808,101 @@ export function TimelineChart({
 
   const rangeInputGranularity = chartRangeGranularityProp ?? inferredChartRangeGranularity;
 
+  /** Stable identity for grouped series so we reset selection when labels/keys change, not on array ref churn. */
+  const groupedLegendSourceKey = useMemo(() => {
+    if (multiSeriesLegendLayout !== "grouped" || !multiSeries?.length) return "";
+    if (!multiSeries.every((s) => Boolean(s.legendGroup && s.legendMetric))) return "";
+    return `${multiSeriesLegendGroupedVariant}\u0000${multiSeries.map((s) => `${s.key}|${s.label}`).join("\u0001")}`;
+  }, [multiSeries, multiSeriesLegendLayout, multiSeriesLegendGroupedVariant]);
+
+  const groupedLegendModel = useMemo((): GroupedLegendModel | null => {
+    if (!groupedLegendSourceKey || !multiSeries || multiSeries.length === 0) return null;
+    const mutedFg = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
+
+    if (multiSeriesLegendGroupedVariant === "country") {
+      const byGroup = new Map<string, string[]>();
+      for (const s of multiSeries) {
+        const g = s.legendGroup!;
+        if (!byGroup.has(g)) byGroup.set(g, []);
+        byGroup.get(g)!.push(s.label);
+      }
+      const countries: GroupedLegendCountryRow[] = [];
+      const seen = new Set<string>();
+      for (const s of multiSeries) {
+        const g = s.legendGroup!;
+        if (seen.has(g)) continue;
+        seen.add(g);
+        const seriesLabels = byGroup.get(g) ?? [s.label];
+        const cmp = countryComparatorSeriesStyle(s.key);
+        const lineColor = s.color ?? cmp?.color ?? mutedFg;
+        countries.push({ legendGroup: g, lineColor, seriesLabels });
+      }
+      const dashed = multiSeries.find((x) => x.linePattern === "dashed");
+      const solid = multiSeries.find((x) => x.linePattern !== "dashed" && x.linePattern !== "dotted");
+      const lineStyleKey =
+        dashed?.legendMetric && solid?.legendMetric && dashed.legendMetric !== solid.legendMetric
+          ? { solidLabel: solid.legendMetric, dashedLabel: dashed.legendMetric }
+          : null;
+      return { variant: "country", countries, lineStyleKey };
+    }
+
+    const columnOrder: string[] = [];
+    const rowOrder: string[] = [];
+    for (const s of multiSeries) {
+      const m = s.legendMetric!;
+      const g = s.legendGroup!;
+      if (!columnOrder.includes(m)) columnOrder.push(m);
+      if (!rowOrder.includes(g)) rowOrder.push(g);
+    }
+    const cells: GroupedLegendCell[] = multiSeries.map((s, i) => {
+      const shape = s.symbol ?? MULTI_SERIES_FALLBACK_LEGEND_ICONS[i % MULTI_SERIES_FALLBACK_LEGEND_ICONS.length]!;
+      const cmp = countryComparatorSeriesStyle(s.key);
+      const lineColor = s.color ?? cmp?.color ?? mutedFg;
+      return {
+        label: s.label,
+        legendGroup: s.legendGroup!,
+        legendMetric: s.legendMetric!,
+        lineColor,
+        shape,
+      };
+    });
+    return { variant: "grid", columnOrder, rowOrder, cells };
+  }, [groupedLegendSourceKey, multiSeries, multiSeriesLegendGroupedVariant]);
+
+  const [groupedLegendSelected, setGroupedLegendSelected] = useState<Record<string, boolean> | null>(null);
+
+  useEffect(() => {
+    if (!groupedLegendSourceKey || !multiSeries?.length) {
+      setGroupedLegendSelected(null);
+      return;
+    }
+    setGroupedLegendSelected(Object.fromEntries(multiSeries.map((s) => [s.label, true])));
+  }, [groupedLegendSourceKey]);
+
+  const handleGroupedLegendToggle = useCallback((name: string) => {
+    setGroupedLegendSelected((prev) => {
+      const ms = multiSeries ?? [];
+      const base: Record<string, boolean> = prev ?? Object.fromEntries(ms.map((s) => [s.label, true]));
+      const visible = base[name] !== false;
+      return { ...base, [name]: !visible };
+    });
+  }, [multiSeries]);
+
+  const handleGroupedCountryToggle = useCallback((seriesLabels: string[]) => {
+    if (seriesLabels.length === 0) return;
+    setGroupedLegendSelected((prev) => {
+      const ms = multiSeries ?? [];
+      const base: Record<string, boolean> = prev ?? Object.fromEntries(ms.map((s) => [s.label, true]));
+      const allOn = seriesLabels.every((name) => base[name] !== false);
+      const target = !allOn;
+      const next = { ...base };
+      for (const name of seriesLabels) {
+        next[name] = target;
+      }
+      return next;
+    });
+  }, [multiSeries]);
+
   const exportFilenameCtx = useStudyChartExportFilenameContext();
 
   useEffect(() => {
@@ -617,6 +944,32 @@ export function TimelineChart({
         chartLocale: chartLocale ?? "en",
         yearAxisMode: xAxisYearLabel ?? "gregorian",
       });
+    const isCountryGroupOn = (labels: string[]) =>
+      labels.length > 0 && labels.every((name) => groupedLegendSelected == null || groupedLegendSelected[name] !== false);
+
+    const exportPresentationCountryKey =
+      groupedLegendModel?.variant === "country"
+        ? groupedLegendModel.countries
+            .filter((c) => isCountryGroupOn(c.seriesLabels))
+            .map((c) => ({ label: c.legendGroup, color: c.lineColor }))
+        : undefined;
+
+    const exportPresentationLineStyleKey =
+      groupedLegendModel?.variant === "country" && groupedLegendModel.lineStyleKey
+        ? groupedLegendModel.lineStyleKey
+        : undefined;
+
+    const useExportAuxLegend =
+      (exportPresentationCountryKey?.length ?? 0) > 0 && exportPresentationLineStyleKey != null;
+
+    const exportPresentationSubtitle =
+      groupedLegendModel?.variant === "country" && !useExportAuxLegend
+        ? buildCountryGroupedExportSubtitle({
+            model: groupedLegendModel,
+            selected: groupedLegendSelected,
+            chartLocale: chartLocale ?? "en",
+          })
+        : undefined;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         try {
@@ -624,6 +977,13 @@ export function TimelineChart({
             exportSourceFooter: exportSourceFooter?.trim(),
             exportSourceFooterColor: footerColor,
             exportPresentationTitle: resolvedTitle,
+            exportPresentationSubtitle,
+            ...(useExportAuxLegend
+              ? {
+                  exportPresentationCountryKey: exportPresentationCountryKey,
+                  exportPresentationLineStyleKey: exportPresentationLineStyleKey,
+                }
+              : {}),
             exportPresentationDirection: (chartLocale ?? "en") === "fa" ? "rtl" : "ltr",
             exportPresentationLocale: (chartLocale ?? "en") === "fa" ? "fa" : "en",
             exportPresentationTitleColor: titleColor,
@@ -646,6 +1006,8 @@ export function TimelineChart({
     rangeBounds,
     rangeInputGranularity,
     xAxisYearLabel,
+    groupedLegendModel,
+    groupedLegendSelected,
   ]);
 
   useEffect(() => {
@@ -768,10 +1130,16 @@ export function TimelineChart({
     const hasOil = oilPointsResolved.length > 0;
     const hasMultiSeries = multiSeries != null && multiSeries.length > 0;
     const multiSeriesCount = hasMultiSeries ? multiSeries!.length : 0;
-    /** Many country/series names: scrollable legend + extra bottom margin to reduce overlap. */
-    const legendUseScroll = hasMultiSeries && multiSeriesCount >= 4;
+    const useGroupedMultiSeriesLegend = groupedLegendModel != null;
     const legendTextFontSize = STUDY_CHART_LEGEND_FONT_PX;
-    const multiSeriesLegendItemGap = legendUseScroll ? (multiSeriesCount >= 6 ? 22 : 20) : 16;
+    /** Tighter gap so plain legends wrap onto multiple rows instead of one overcrowded line. */
+    const multiSeriesLegendItemGap = 10;
+    /** Extra grid space when many series may wrap to several legend rows (plain + width legend). */
+    const multiSeriesLegendBottomPct = hasMultiSeries
+      ? useGroupedMultiSeriesLegend
+        ? "11%"
+        : `${Math.min(28, Math.round(12 + Math.ceil(multiSeriesCount / 3) * 3.5))}%`
+      : "11%";
     const comparatorResolved = comparatorSeries
       ? {
           ...comparatorSeries,
@@ -1274,6 +1642,7 @@ export function TimelineChart({
               selectedMode: true,
               bottom: 2,
               left: "center",
+              width: "90%",
               itemGap: 12,
               itemWidth: 28,
               itemHeight: 11,
@@ -1294,21 +1663,29 @@ export function TimelineChart({
           }
         : hasMultiSeries && multiSeries
           ? {
-              legend: {
-                show: true,
-                type: legendUseScroll ? ("scroll" as const) : ("plain" as const),
-                selectedMode: true,
-                bottom: 1,
-                left: "center",
-                width: "88%",
-                itemWidth: 28,
-                itemHeight: 11,
-                itemGap: multiSeriesLegendItemGap,
-                textStyle: { color: mutedFg, fontSize: legendTextFontSize },
-                pageTextStyle: { color: mutedFg, fontSize: 12 },
-                pageIconSize: legendUseScroll ? 12 : 10,
-                data: multiSeriesLegendData,
-              },
+              legend: useGroupedMultiSeriesLegend
+                ? {
+                    show: false,
+                    selectedMode: true,
+                    data: multiSeries.map((s) => s.label),
+                    selected:
+                      groupedLegendSelected ??
+                      Object.fromEntries(multiSeries.map((s) => [s.label, true])),
+                  }
+                : {
+                    show: true,
+                    type: "plain",
+                    selectedMode: true,
+                    bottom: 1,
+                    left: "center",
+                    width: "92%",
+                    orient: "horizontal",
+                    itemWidth: 28,
+                    itemHeight: 11,
+                    itemGap: multiSeriesLegendItemGap,
+                    textStyle: { color: mutedFg, fontSize: legendTextFontSize },
+                    data: multiSeriesLegendData,
+                  },
             }
           : hasOil && secondSeries && !comparatorResolved
             ? {
@@ -1318,6 +1695,7 @@ export function TimelineChart({
                   selectedMode: true,
                   bottom: 2,
                   left: "center",
+                  width: "90%",
                   itemGap: 12,
                   itemWidth: 28,
                   itemHeight: 11,
@@ -1566,13 +1944,11 @@ export function TimelineChart({
         bottom: bumpGridBottomForDualYear(
           xLabelRotate
             ? "18%"
-            : (comparatorResolved && comparatorValuesForChart && hasOil) || (hasMultiSeries && multiSeries) || (hasOil && secondSeries && !comparatorResolved)
-              ? legendUseScroll
-                ? multiSeriesCount >= 6
-                  ? "18%"
-                  : "15%"
-                : "11%"
-              : "3%"
+            : hasMultiSeries && multiSeries
+              ? multiSeriesLegendBottomPct
+              : (comparatorResolved && comparatorValuesForChart && hasOil) || (hasOil && secondSeries && !comparatorResolved)
+                ? "13%"
+                : "3%"
         ),
         top: gridTopPct,
         containLabel: true,
@@ -1730,9 +2106,30 @@ export function TimelineChart({
                     : isGoldLogAxis
                       ? { min: 10, max: 3000 }
                       : {};
+              const pctEligible =
+                !useLog &&
+                Object.keys(fixedRange).length === 0 &&
+                yAxisMin == null &&
+                yAxisMax == null &&
+                !isGoldLogAxis &&
+                !isGdpCompactMultiSeriesFormat(multiSeriesValueFormat) &&
+                seriesOnAxis.every((s) => s.unit === "%");
+              let pctNice: ReturnType<typeof nicePercentShareAxisRange> = null;
+              if (pctEligible && multiSeriesValues) {
+                const nums: number[] = [];
+                for (const s of seriesOnAxis) {
+                  const si = multiSeries.indexOf(s);
+                  if (si < 0) continue;
+                  for (const v of multiSeriesValues[si] ?? []) {
+                    if (typeof v === "number" && Number.isFinite(v)) nums.push(v);
+                  }
+                }
+                pctNice = nicePercentShareAxisRange(nums);
+              }
               return {
                 type: (useLog ? "log" : "value") as "value" | "log",
                 ...fixedRange,
+                ...(pctNice ? { min: pctNice.min, max: pctNice.max, interval: pctNice.interval } : {}),
                 position: (isLeft ? "left" : "right") as "left" | "right",
                 offset: isRight ? rightOffset : 0,
                 name: formatYAxisNameMultiline(localizeChartNumericDisplayString(axisTitle, chartNumeralLocale)),
@@ -1760,9 +2157,9 @@ export function TimelineChart({
                           formatter: (v: number | string) => {
                             const n = typeof v === "number" ? v : Number(v);
                             if (!Number.isFinite(n)) return String(v);
-                            const r = Math.round(n * 10) / 10;
+                            const nearInt = Math.abs(n - Math.round(n)) < 0.06;
                             return localizeChartNumericDisplayString(
-                              Math.abs(r - Math.round(r)) < 1e-6 ? `${Math.round(r)}%` : `${r.toFixed(1)}%`,
+                              nearInt ? `${Math.round(n)}%` : `${(Math.round(n * 10) / 10).toFixed(1)}%`,
                               chartNumeralLocale
                             );
                           },
@@ -1992,7 +2389,13 @@ export function TimelineChart({
                 const defaultLineWidth =
                   isGold || isOil || isProductionKey ? 1.5 : hasMultiSeries && !isGold && !isOil && !isProductionKey ? 1.35 : 1;
                 const lineWidth = s.lineWidth ?? defaultLineWidth;
-                const lineType = isTotal ? ("dashed" as const) : undefined;
+                const patternLineType =
+                  s.linePattern === "dashed"
+                    ? ("dashed" as const)
+                    : s.linePattern === "dotted"
+                      ? ("dotted" as const)
+                      : undefined;
+                const lineType = isTotal ? ("dashed" as const) : patternLineType;
                 const seriesShape = endShapeForMultiSeriesSeries(s, i);
                 const symbolSize =
                   s.symbolSize ??
@@ -2350,6 +2753,9 @@ export function TimelineChart({
     yAxisMax,
     xAxisYearLabel,
     chartLocale,
+    groupedLegendModel,
+    groupedLegendSelected,
+    multiSeriesLegendGroupedVariant,
   ]);
 
   useEffect(() => {
@@ -2392,6 +2798,33 @@ export function TimelineChart({
         <p className={STUDY_CHART_TITLE_WRAP_CLASS} dir={chartLocaleResolved === "fa" ? "rtl" : "ltr"}>
           {studyTitleText}
         </p>
+      ) : null}
+      {groupedLegendModel?.variant === "grid" ? (
+        <GroupedMultiSeriesLegendTable
+          rowOrder={groupedLegendModel.rowOrder}
+          columnOrder={groupedLegendModel.columnOrder}
+          cells={groupedLegendModel.cells}
+          selected={groupedLegendSelected}
+          onToggleSeries={handleGroupedLegendToggle}
+          dir={chartLocaleResolved === "fa" ? "rtl" : "ltr"}
+        />
+      ) : groupedLegendModel?.variant === "country" ? (
+        <div className="min-w-0 rounded-md border border-border bg-muted/25 px-2 py-2 sm:px-3">
+          <GroupedMultiSeriesCountryLegendBar
+            countries={groupedLegendModel.countries}
+            selected={groupedLegendSelected}
+            onToggleCountry={handleGroupedCountryToggle}
+            dir={chartLocaleResolved === "fa" ? "rtl" : "ltr"}
+          />
+          {groupedLegendModel.lineStyleKey ? (
+            <GroupedMinimalLineStyleKey
+              solidLabel={groupedLegendModel.lineStyleKey.solidLabel}
+              dashedLabel={groupedLegendModel.lineStyleKey.dashedLabel}
+              chartLocale={chartLocaleResolved}
+              dir={chartLocaleResolved === "fa" ? "rtl" : "ltr"}
+            />
+          ) : null}
+        </div>
       ) : null}
       <div ref={chartRef} className={`chart-area ${chartHeight} w-full min-w-0`} />
       {sourceLine ? (

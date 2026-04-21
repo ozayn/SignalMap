@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { getStudyById, getVisibleStudies, STUDY_SECTIONS, type StudyCountry, type StudyTheme } from "@/lib/studies";
+import {
+  getStudyById,
+  getVisibleStudies,
+  isStudyListedForDeployment,
+  STUDY_SECTIONS,
+  type StudyCountry,
+  type StudyTheme,
+} from "@/lib/studies";
 import { StudyCard, StudyListRow } from "@/components/study-card";
 import {
   getSignalTags,
@@ -216,7 +223,7 @@ export default function StudiesPage() {
               .map((id) => getStudyById(id))
               .filter(
                 (s): s is NonNullable<typeof s> =>
-                  s != null && s.visible !== false && filteredIds.has(s.id)
+                  s != null && isStudyListedForDeployment(s) && filteredIds.has(s.id)
               );
             if (studies.length === 0) return null;
             const rows = studies.map((study) => {

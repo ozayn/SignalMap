@@ -52,19 +52,26 @@ export function LearningNote({
         </div>
         {links.length > 0 && (
           <p className="mt-4 text-xs text-muted-foreground break-words">
-            {links.map((link, i) => (
-              <span key={link.href}>
-                {i > 0 && " · "}
-                <a
-                  href={link.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                >
-                  {link.label}
-                </a>
-              </span>
-            ))}
+            {links.map((link, i) => {
+              const internal = link.href.startsWith("/") && !link.href.startsWith("//");
+              return (
+                <span key={link.href}>
+                  {i > 0 && " · "}
+                  <a
+                    href={link.href}
+                    {...(internal
+                      ? {}
+                      : {
+                          target: "_blank" as const,
+                          rel: "noopener noreferrer",
+                        })}
+                    className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  >
+                    {link.label}
+                  </a>
+                </span>
+              );
+            })}
           </p>
         )}
       </div>

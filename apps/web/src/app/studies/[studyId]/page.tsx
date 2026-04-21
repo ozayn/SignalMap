@@ -33,6 +33,7 @@ import { YoutubeDiscourseMaps } from "@/components/studies/youtube-discourse";
 import {
   getStudyById,
   getPrevNextStudies,
+  isStudyListedForDeployment,
   studyUsesGlobalMacroOilLayer,
   YOUTUBE_DISCOURSE_VIDEOS_LIMIT,
   YOUTUBE_DISCOURSE_COMMENTS_PER_VIDEO,
@@ -44,8 +45,19 @@ import {
   gdpGlobalComparisonLearningSections,
   giniLearningSections,
   inflationLearningSections,
+  isiDiagnosticsLearningSections,
   povertyLearningSections,
 } from "@/lib/wdi-macro-studies-learning";
+import {
+  ISI_COUNTRY_KEYS,
+  type IsiCountryKey,
+  type IsiDiagnosticsSeriesBundle,
+  buildIsiGdpGrowthMultiSeries,
+  buildIsiIndustrialMultiSeries,
+  buildIsiOverviewIndexedSeries,
+  buildIsiTradeStructureMultiSeries,
+  isiCountryLabel,
+} from "@/lib/isi-diagnostics-charts";
 import {
   baseYearToIsoDate,
   indexGdpComparisonTo100Base2000,
@@ -338,7 +350,7 @@ export default function StudyDetailPage() {
   const params = useParams();
   const studyId = params.studyId as string;
   const studyRaw = getStudyById(studyId);
-  const study = studyRaw?.visible !== false ? studyRaw : undefined;
+  const study = studyRaw && isStudyListedForDeployment(studyRaw) ? studyRaw : undefined;
   const faEligible = supportsIranStudyFa(studyId);
   const [studyLocale, setStudyLocale] = useState<StudyLocale>("en");
   const isFa = faEligible && studyLocale === "fa";
@@ -424,6 +436,12 @@ export default function StudyDetailPage() {
   );
   const [gdpGlobalDisplayMode, setGdpGlobalDisplayMode] = useState<"absolute" | "indexed">("indexed");
   const [gdpGlobalAbsoluteLog, setGdpGlobalAbsoluteLog] = useState(false);
+  const [isiDiagnosticsData, setIsiDiagnosticsData] = useState<{
+    series: IsiDiagnosticsSeriesBundle;
+    source?: { name?: string; url?: string; publisher?: string };
+    indicator_ids?: Record<string, string>;
+  } | null>(null);
+  const [isiFocusCountry, setIsiFocusCountry] = useState<IsiCountryKey>("brazil");
   const [povertyDdayPoints, setPovertyDdayPoints] = useState<{ date: string; value: number }[]>([]);
   const [povertyLmicPoints, setPovertyLmicPoints] = useState<{ date: string; value: number }[]>([]);
   const [povertyDdayLineLabel, setPovertyDdayLineLabel] = useState("");
@@ -595,6 +613,7 @@ export default function StudyDetailPage() {
   const isGiniInequality = study?.primarySignal.kind === "gini_inequality";
   const isInflationCpiYoy = study?.primarySignal.kind === "inflation_cpi_yoy";
   const isGdpGlobalComparison = study?.primarySignal.kind === "gdp_global_comparison";
+  const isIsiDiagnostics = study?.primarySignal.kind === "isi_diagnostics";
   const isPovertyHeadcountIran = study?.primarySignal.kind === "poverty_headcount_iran";
   const isDutchDiseaseDiagnostics = study?.primarySignal.kind === "dutch_disease_diagnostics_iran";
   /** WDI national-accounts levels bundle (composition study or dual-axis reference study). */
@@ -707,6 +726,20 @@ export default function StudyDetailPage() {
     return [start, resolvedEnd];
   }, [study, isGdpGlobalComparison, anchorEventId, events, effectiveWindowYears]);
 
+  const isiTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isIsiDiagnostics) return null;
+    if (anchorEventId) {
+      const ev = events.find((e) => e.id === anchorEventId);
+      if (ev) {
+        const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
+        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowYears);
+      }
+    }
+    const [start, end] = study.timeRange;
+    const resolvedEnd = end === "today" ? new Date().toISOString().slice(0, 10) : end;
+    return [start, resolvedEnd];
+  }, [study, isIsiDiagnostics, anchorEventId, events, effectiveWindowYears]);
+
   const povertyTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isPovertyHeadcountIran) return null;
     if (anchorEventId) {
@@ -810,6 +843,11 @@ export default function StudyDetailPage() {
     if (!isGdpGlobalComparison) return events;
     return events.filter((e) => isStudyEventLayerVisible(e.layer, chartEventToggleState));
   }, [isGdpGlobalComparison, events, chartEventToggleState]);
+
+  const isiFilteredEvents = useMemo(() => {
+    if (!isIsiDiagnostics) return events;
+    return events.filter((e) => isStudyEventLayerVisible(e.layer, chartEventToggleState));
+  }, [isIsiDiagnostics, events, chartEventToggleState]);
 
   const gdpGlobalDisplayed = useMemo(() => {
     if (!isGdpGlobalComparison) return null;
@@ -928,6 +966,24 @@ export default function StudyDetailPage() {
     dutchImportsPoints,
     dutchFxPoints,
   ]);
+
+  const isiSeriesTyped = isiDiagnosticsData?.series ?? null;
+  const isiOverviewIndexed = useMemo(
+    () => buildIsiOverviewIndexedSeries(isiSeriesTyped, isiFocusCountry, isFa),
+    [isiSeriesTyped, isiFocusCountry, isFa]
+  );
+  const isiTradeMultiSeries = useMemo(
+    () => buildIsiTradeStructureMultiSeries(isiSeriesTyped, isFa),
+    [isiSeriesTyped, isFa]
+  );
+  const isiIndustrialMultiSeries = useMemo(
+    () => buildIsiIndustrialMultiSeries(isiSeriesTyped, isFa),
+    [isiSeriesTyped, isFa]
+  );
+  const isiGdpGrowthMultiSeries = useMemo(
+    () => buildIsiGdpGrowthMultiSeries(isiSeriesTyped, isFa),
+    [isiSeriesTyped, isFa]
+  );
 
   const gdpCompositionChartTimeRange = useMemo((): [string, string] | null => {
     if (!isGdpMacroNationalAccounts) return null;
@@ -1500,6 +1556,7 @@ export default function StudyDetailPage() {
       isGiniInequality ||
       isInflationCpiYoy ||
       isGdpGlobalComparison ||
+      isIsiDiagnostics ||
       isPovertyHeadcountIran ||
       isDutchDiseaseDiagnostics;
     if (hasEventLayers && !isEventsTimeline) {
@@ -1517,6 +1574,7 @@ export default function StudyDetailPage() {
           isGiniInequality ||
           isInflationCpiYoy ||
           isGdpGlobalComparison ||
+          isIsiDiagnostics ||
           isPovertyHeadcountIran ||
           isDutchDiseaseDiagnostics) &&
           studyLayersLen > 0) ||
@@ -1549,6 +1607,7 @@ export default function StudyDetailPage() {
           isGiniInequality ||
           isInflationCpiYoy ||
           isGdpGlobalComparison ||
+          isIsiDiagnostics ||
           isPovertyHeadcountIran ||
           isDutchDiseaseDiagnostics
         ) {
@@ -1608,6 +1667,7 @@ export default function StudyDetailPage() {
     isGiniInequality,
     isInflationCpiYoy,
     isGdpGlobalComparison,
+    isIsiDiagnostics,
     isPovertyHeadcountIran,
     isDutchDiseaseDiagnostics,
     hasTurkeyComparator,
@@ -2399,6 +2459,42 @@ export default function StudyDetailPage() {
   }, [gdpGlobalTimeRange, isGdpGlobalComparison]);
 
   useEffect(() => {
+    if (!isIsiDiagnostics) {
+      setIsiDiagnosticsData(null);
+      return;
+    }
+    if (!isiTimeRange) return;
+    const [start, end] = isiTimeRange;
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+    fetchJson<{
+      series: IsiDiagnosticsSeriesBundle;
+      source?: { name?: string; url?: string; publisher?: string };
+      indicator_ids?: Record<string, string>;
+    }>(`/api/signals/wdi/isi-diagnostics?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+      .then((res) => {
+        if (mounted) {
+          setIsiDiagnosticsData({
+            series: res.series,
+            source: res.source,
+            indicator_ids: res.indicator_ids,
+          });
+        }
+      })
+      .catch((e) => {
+        if (mounted) {
+          setIsiDiagnosticsData(null);
+          setError(e instanceof Error ? e.message : "Signal fetch failed");
+        }
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => {
+      mounted = false;
+    };
+  }, [isiTimeRange, isIsiDiagnostics]);
+
+  useEffect(() => {
     if (!povertyTimeRange || !isPovertyHeadcountIran) {
       if (isPovertyHeadcountIran) {
         setPovertyDdayPoints([]);
@@ -2728,8 +2824,18 @@ export default function StudyDetailPage() {
     isGiniInequality ||
     isInflationCpiYoy ||
     isGdpGlobalComparison ||
+    isIsiDiagnostics ||
     isPovertyHeadcountIran ||
     isDutchDiseaseDiagnostics;
+
+  const isiDataReady = useMemo(() => {
+    if (!isiDiagnosticsData?.series) return false;
+    const s = isiDiagnosticsData.series;
+    return [s.imports_pct_gdp, s.exports_pct_gdp, s.manufacturing_pct_gdp, s.industry_pct_gdp, s.gdp_growth_pct].some(
+      (rec) => Object.values(rec).some((pts) => Array.isArray(pts) && pts.length > 0)
+    );
+  }, [isiDiagnosticsData]);
+
   const singleSignalReady =
     isGoldAndOil
       ? goldPoints.length > 0 && oilPoints.length > 0
@@ -2768,7 +2874,9 @@ export default function StudyDetailPage() {
                           gdpGlobalTurkeyPoints.length > 0 ||
                           gdpGlobalSaudiArabiaPoints.length > 0 ||
                           gdpGlobalWorldPoints.length > 0
-                      : isPovertyHeadcountIran
+                      : isIsiDiagnostics
+                        ? isiDataReady
+                        : isPovertyHeadcountIran
                         ? povertyDdayPoints.length > 0 || povertyLmicPoints.length > 0
                         : isDutchDiseaseDiagnostics
                           ? dutchOilRentsPoints.length > 0 ||
@@ -2878,6 +2986,13 @@ export default function StudyDetailPage() {
       if (gdpGlobalSaudiArabiaPoints.length > 0) allDates.push(...collect(gdpGlobalSaudiArabiaPoints));
       if (gdpGlobalWorldPoints.length > 0) allDates.push(...collect(gdpGlobalWorldPoints));
     }
+    if (isIsiDiagnostics && isiSeriesTyped) {
+      for (const rec of Object.values(isiSeriesTyped)) {
+        for (const pts of Object.values(rec)) {
+          if (pts.length > 0) allDates.push(...collect(pts));
+        }
+      }
+    }
     if (isPovertyHeadcountIran) {
       if (povertyDdayPoints.length > 0) allDates.push(...collect(povertyDdayPoints));
       if (povertyLmicPoints.length > 0) allDates.push(...collect(povertyLmicPoints));
@@ -2942,6 +3057,7 @@ export default function StudyDetailPage() {
       giniTimeRange ??
       inflationTimeRange ??
       gdpGlobalTimeRange ??
+      isiTimeRange ??
       povertyTimeRange ??
       exporterTimeRange ??
       gdpCompositionTimeRange ??
@@ -3061,6 +3177,13 @@ export default function StudyDetailPage() {
         if (gdpGlobalTurkeyPoints.length > 0) arrays.push(gdpGlobalTurkeyPoints);
         if (gdpGlobalSaudiArabiaPoints.length > 0) arrays.push(gdpGlobalSaudiArabiaPoints);
         if (gdpGlobalWorldPoints.length > 0) arrays.push(gdpGlobalWorldPoints);
+      }
+      if (isIsiDiagnostics && isiSeriesTyped) {
+        for (const rec of Object.values(isiSeriesTyped)) {
+          for (const pts of Object.values(rec)) {
+            if (pts.length > 0) arrays.push(pts);
+          }
+        }
       }
       if (isPovertyHeadcountIran) {
         if (povertyDdayPoints.length > 0) arrays.push(povertyDdayPoints);
@@ -4467,6 +4590,12 @@ export default function StudyDetailPage() {
                 ? "Network"
                 : isGdpGlobalComparison
                   ? L(isFa, "GDP comparison (World Bank WDI)", "مقایسهٔ GDP (WDI بانک جهانی)")
+                  : isIsiDiagnostics
+                    ? L(
+                        isFa,
+                        "Import substitution — trade & industry (WDI)",
+                        "جایگزینی واردات — تجارت و صنعت (WDI)"
+                      )
                   : isInflationCpiYoy
                   ? "Annual inflation rate (CPI)"
                   : isDutchDiseaseDiagnostics
@@ -4547,6 +4676,12 @@ export default function StudyDetailPage() {
                     "World Bank WDI total GDP (NY.GDP.MKTP.KD preferred; NY.GDP.MKTP.CD per economy when KD is missing). Default: indexed to 100 in 2000 (or earliest usable base year). Toggle absolute for dollar levels; optional log scale in absolute view. Toggle event layers below.",
                     "GDP کل WDI بانک جهانی (ترجیح NY.GDP.MKTP.KD؛ در صورت نبود KD برای هر اقتصار NY.GDP.MKTP.CD). پیش‌فرض: شاخص ۱۰۰ در ۲۰۰۰ میلادی (یا نزدیک‌ترین سال پایهٔ معتبر). برای سطح دلاری «مطلق» را بزنید؛ در نمای مطلق می‌توان مقیاس لگاریتمی را روشن کرد. لایه‌های رویداد را پایین تنظیم کنید."
                   )
+                : isIsiDiagnostics
+                  ? L(
+                      isFa,
+                      "Import substitution industrialization (ISI) uses trade openness and industrial shares of GDP as structural signals. The top chart indexes four shares to 100 in a common base year (preferring 2000) so you can compare co-movement; lower charts show raw % of GDP and annual GDP growth. Event markers are optional. Iranian calendar year labels are available when Persian UI is on.",
+                      "صنعتی‌سازی جایگزین واردات (ISI) با سیگنال‌های ساختاری سهم تجارت و صنعت از GDP بررسی می‌شود. نمودار بالا چهار سهم را در سال مبنای مشترک به ۱۰۰ شاخص می‌کند (ترجیح ۲۰۰۰ میلادی) تا هم‌حرکتی دیده شود؛ نمودارهای پایین٪ خام از GDP و رشد سالانهٔ GDP را نشان می‌دهند. رویدادها اختیاری‌اند؛ با رابط فارسی می‌توان محور سال را شمسی کرد."
+                    )
                 : isInflationCpiYoy
                 ? "World Bank WDI FP.CPI.TOTL.ZG: annual consumer price inflation (% change from a year earlier). Toggle event layers below."
                 : isDutchDiseaseDiagnostics
@@ -4650,6 +4785,7 @@ export default function StudyDetailPage() {
               !isGiniInequality &&
               !isInflationCpiYoy &&
               !isGdpGlobalComparison &&
+              !isIsiDiagnostics &&
               !isPovertyHeadcountIran &&
               !isDutchDiseaseDiagnostics && (
               <>
@@ -4740,6 +4876,7 @@ export default function StudyDetailPage() {
             {(isGiniInequality ||
               isInflationCpiYoy ||
               isGdpGlobalComparison ||
+              isIsiDiagnostics ||
               isPovertyHeadcountIran ||
               isDutchDiseaseDiagnostics) && (
               <>
@@ -7015,6 +7152,260 @@ export default function StudyDetailPage() {
                 )}
               </InSimpleTerms>
             </>
+          ) : isIsiDiagnostics && isiDataReady ? (
+            <>
+              <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
+                <span className="text-muted-foreground shrink-0">
+                  {L(isFa, "Overview country", "کشور برای نمای کلی")}
+                </span>
+                <select
+                  value={isiFocusCountry}
+                  onChange={(e) => setIsiFocusCountry(e.target.value as IsiCountryKey)}
+                  className="text-xs text-muted-foreground bg-transparent border border-border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {ISI_COUNTRY_KEYS.map((c) => (
+                    <option key={c} value={c}>
+                      {isiCountryLabel(c, isFa)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {isiOverviewIndexed ? (
+                <div className="space-y-2 mb-8 pb-8 border-b border-border">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {L(
+                      isFa,
+                      "Overview — indexed trade & industry shares",
+                      "نمای کلی — سهم‌های شاخص‌شدهٔ تجارت و صنعت"
+                    )}
+                  </h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
+                    {L(
+                      isFa,
+                      `Each series is indexed to 100 in calendar year ${isiOverviewIndexed.baseYear} when that year has valid data for every line shown (otherwise the earliest common year with valid values for all four). The chart compares co-movement of structure, not absolute levels.`,
+                      `هر سری به شاخص ۱۰۰ در سال ${localizeChartNumericDisplayString(String(isiOverviewIndexed.baseYear), "fa")} نرمال می‌شود (اگر آن سال برای همهٔ خطوط معتبر نباشد، نزدیک‌ترین سال مشترک با مقادیر معتبر). این نما هم‌حرکتی ساختار را نشان می‌دهد، نه سطح مطلق.`
+                    )}
+                  </p>
+                  <TimelineChart
+                    chartLocale={chartLocaleForCharts}
+                    exportPresentationStudyHeading={displayStudy.title}
+                    exportPresentationTitle={L(
+                      isFa,
+                      `${displayStudy.title} — overview (indexed)`,
+                      `${displayStudy.title} — نمای کلی (شاخص‌شده)`
+                    )}
+                    exportSourceFooter={studyChartExportSource(isFa, [
+                      isiDiagnosticsData?.source?.name ?? "World Bank World Development Indicators",
+                    ])}
+                    data={[]}
+                    valueKey="value"
+                    label={L(isFa, "Indexed overview (100 = base year)", "نمای شاخص‌شده (۱۰۰ = سال مبنا)")}
+                    events={isiFilteredEvents}
+                    anchorEventId={anchorEventId || undefined}
+                    multiSeries={isiOverviewIndexed.multiSeries.map((s) => ({
+                      ...s,
+                      symbolSize: CHART_LINE_SYMBOL_SIZE,
+                    }))}
+                    timeRange={isiTimeRange ?? study.timeRange}
+                    chartRangeGranularity="year"
+                    xAxisYearLabel={chartYearAxisLabel}
+                    multiSeriesYAxisNameOverrides={{
+                      0: isFa
+                        ? `شاخص (${localizeChartNumericDisplayString(String(isiOverviewIndexed.baseYear), "fa")} = ۱۰۰)`
+                        : `Index (${isiOverviewIndexed.baseYear} = 100)`,
+                    }}
+                    exportFileStem="isi-overview-indexed"
+                    chartHeight="h-80 md:h-96"
+                  />
+                </div>
+              ) : null}
+              <div className="space-y-8">
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {L(isFa, "1. Trade structure (imports vs exports, % of GDP)", "۱. ساختار تجارت (واردات در برابر صادرات، ٪ از GDP)")}
+                  </h3>
+                  <TimelineChart
+                    chartLocale={chartLocaleForCharts}
+                    exportPresentationStudyHeading={displayStudy.title}
+                    exportPresentationTitle={L(isFa, "ISI — Trade (% of GDP)", "ISI — تجارت (٪ GDP)")}
+                    exportSourceFooter={studyChartExportSource(isFa, [
+                      isiDiagnosticsData?.source?.name ?? "World Bank World Development Indicators",
+                    ])}
+                    data={[]}
+                    valueKey="value"
+                    label={L(isFa, "Trade, % of GDP", "تجارت، ٪ GDP")}
+                    events={isiFilteredEvents}
+                    anchorEventId={anchorEventId || undefined}
+                    multiSeries={isiTradeMultiSeries.map((s) => ({
+                      ...s,
+                      symbolSize: CHART_LINE_SYMBOL_SIZE,
+                    }))}
+                    timeRange={isiTimeRange ?? study.timeRange}
+                    chartRangeGranularity="year"
+                    xAxisYearLabel={chartYearAxisLabel}
+                    exportFileStem="isi-trade-structure"
+                    multiSeriesYAxisNameOverrides={{
+                      0: L(isFa, "Share of GDP (%)", "سهم از GDP (٪)"),
+                    }}
+                    multiSeriesLegendLayout="grouped"
+                    multiSeriesLegendGroupedVariant="country"
+                    chartHeight="h-80 md:h-96"
+                  />
+                </div>
+                <div className="space-y-2 border-t border-border pt-6">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {L(
+                      isFa,
+                      "2. Industrial structure (manufacturing & industry, % of GDP)",
+                      "۲. ساختار صنعتی (تولیدات کارخانه‌ای و صنعت، ٪ از GDP)"
+                    )}
+                  </h3>
+                  <TimelineChart
+                    chartLocale={chartLocaleForCharts}
+                    exportPresentationStudyHeading={displayStudy.title}
+                    exportPresentationTitle={L(isFa, "ISI — Industry (% of GDP)", "ISI — صنعت (٪ GDP)")}
+                    exportSourceFooter={studyChartExportSource(isFa, [
+                      isiDiagnosticsData?.source?.name ?? "World Bank World Development Indicators",
+                    ])}
+                    data={[]}
+                    valueKey="value"
+                    label={L(isFa, "Industry, % of GDP", "صنعت، ٪ GDP")}
+                    events={isiFilteredEvents}
+                    anchorEventId={anchorEventId || undefined}
+                    multiSeries={isiIndustrialMultiSeries.map((s) => ({
+                      ...s,
+                      symbolSize: CHART_LINE_SYMBOL_SIZE,
+                    }))}
+                    timeRange={isiTimeRange ?? study.timeRange}
+                    chartRangeGranularity="year"
+                    xAxisYearLabel={chartYearAxisLabel}
+                    exportFileStem="isi-industrial-structure"
+                    multiSeriesYAxisNameOverrides={{
+                      0: L(isFa, "Share of GDP (%)", "سهم از GDP (٪)"),
+                    }}
+                    multiSeriesLegendLayout="grouped"
+                    multiSeriesLegendGroupedVariant="country"
+                    chartHeight="h-80 md:h-96"
+                  />
+                </div>
+                <div className="space-y-2 border-t border-border pt-6">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {L(isFa, "3. Outcome — GDP growth (annual %)", "۳. پیامد — رشد GDP (٪ سالانه)")}
+                  </h3>
+                  <TimelineChart
+                    chartLocale={chartLocaleForCharts}
+                    exportPresentationStudyHeading={displayStudy.title}
+                    exportPresentationTitle={L(
+                      isFa,
+                      `${displayStudy.title} — GDP growth`,
+                      `${displayStudy.title} — رشد GDP`
+                    )}
+                    exportSourceFooter={studyChartExportSource(isFa, [
+                      isiDiagnosticsData?.source?.name ?? "World Bank World Development Indicators",
+                    ])}
+                    data={[]}
+                    valueKey="value"
+                    label={L(isFa, "GDP growth (annual %)", "رشد GDP (٪ سالانه)")}
+                    events={isiFilteredEvents}
+                    anchorEventId={anchorEventId || undefined}
+                    multiSeries={isiGdpGrowthMultiSeries.map((s) => ({
+                      ...s,
+                      symbolSize: CHART_LINE_SYMBOL_SIZE,
+                    }))}
+                    timeRange={isiTimeRange ?? study.timeRange}
+                    chartRangeGranularity="year"
+                    xAxisYearLabel={chartYearAxisLabel}
+                    exportFileStem="isi-gdp-growth"
+                    multiSeriesYAxisNameOverrides={{
+                      0: L(isFa, "Annual growth (%)", "رشد سالانه (٪)"),
+                    }}
+                    chartHeight="h-80 md:h-96"
+                  />
+                </div>
+              </div>
+              <LearningNote
+                locale={isFa ? "fa" : "en"}
+                sections={isiDiagnosticsLearningSections(isFa)}
+                links={[
+                  {
+                    label: L(isFa, "Learning: import substitution (ISI)", "یادگیری: جایگزینی واردات (ISI)"),
+                    href: "/learning#import-substitution-industrialization",
+                  },
+                ]}
+              />
+              {displayStudy.observations?.length ? (
+                <DataObservations locale={isFa ? "fa" : "en"} observations={displayStudy.observations ?? []} />
+              ) : null}
+              {study.concepts?.length ? <ConceptsUsed locale={isFa ? "fa" : "en"} conceptKeys={study.concepts} /> : null}
+              {isiDiagnosticsData?.source && isiDiagnosticsData.indicator_ids ? (
+                <SourceInfo
+                  items={[
+                    {
+                      label: L(isFa, "Imports (% of GDP)", "واردات (٪ از GDP)"),
+                      sourceName: isiDiagnosticsData.source.name ?? "World Bank World Development Indicators",
+                      sourceUrl: `https://data.worldbank.org/indicator/${isiDiagnosticsData.indicator_ids.imports_pct_gdp}`,
+                      sourceDetail: isiDiagnosticsData.source.publisher ?? "World Bank",
+                      unitLabel: L(isFa, "% of GDP", "٪ از GDP"),
+                      unitNote: L(isFa, "NE.IMP.GNFS.ZS", "NE.IMP.GNFS.ZS"),
+                    },
+                    {
+                      label: L(isFa, "Exports (% of GDP)", "صادرات (٪ از GDP)"),
+                      sourceName: isiDiagnosticsData.source.name ?? "World Bank World Development Indicators",
+                      sourceUrl: `https://data.worldbank.org/indicator/${isiDiagnosticsData.indicator_ids.exports_pct_gdp}`,
+                      sourceDetail: isiDiagnosticsData.source.publisher ?? "World Bank",
+                      unitLabel: L(isFa, "% of GDP", "٪ از GDP"),
+                      unitNote: L(isFa, "NE.EXP.GNFS.ZS", "NE.EXP.GNFS.ZS"),
+                    },
+                    {
+                      label: L(isFa, "Manufacturing (% of GDP)", "تولیدات کارخانه‌ای (٪ از GDP)"),
+                      sourceName: isiDiagnosticsData.source.name ?? "World Bank World Development Indicators",
+                      sourceUrl: `https://data.worldbank.org/indicator/${isiDiagnosticsData.indicator_ids.manufacturing_pct_gdp}`,
+                      sourceDetail: isiDiagnosticsData.source.publisher ?? "World Bank",
+                      unitLabel: L(isFa, "% of GDP", "٪ از GDP"),
+                      unitNote: L(isFa, "NV.IND.MANF.ZS", "NV.IND.MANF.ZS"),
+                    },
+                    {
+                      label: L(isFa, "Industry (% of GDP)", "صنعت (٪ از GDP)"),
+                      sourceName: isiDiagnosticsData.source.name ?? "World Bank World Development Indicators",
+                      sourceUrl: `https://data.worldbank.org/indicator/${isiDiagnosticsData.indicator_ids.industry_pct_gdp}`,
+                      sourceDetail: isiDiagnosticsData.source.publisher ?? "World Bank",
+                      unitLabel: L(isFa, "% of GDP", "٪ از GDP"),
+                      unitNote: L(isFa, "NV.IND.TOTL.ZS", "NV.IND.TOTL.ZS"),
+                    },
+                    {
+                      label: L(isFa, "GDP growth (annual %)", "رشد GDP (٪ سالانه)"),
+                      sourceName: isiDiagnosticsData.source.name ?? "World Bank World Development Indicators",
+                      sourceUrl: `https://data.worldbank.org/indicator/${isiDiagnosticsData.indicator_ids.gdp_growth_pct}`,
+                      sourceDetail: isiDiagnosticsData.source.publisher ?? "World Bank",
+                      unitLabel: L(isFa, "% change", "تغییر (٪)"),
+                      unitNote: L(isFa, "NY.GDP.MKTP.KD.ZG", "NY.GDP.MKTP.KD.ZG"),
+                    },
+                  ]}
+                />
+              ) : null}
+              <InSimpleTerms locale={isFa ? "fa" : "en"}>
+                {isFa && faRich?.simpleTermsParagraphs?.length ? (
+                  faRich.simpleTermsParagraphs.map((p, i) => <p key={i}>{p}</p>)
+                ) : (
+                  <>
+                    <p>
+                      {L(
+                        isFa,
+                        "Import substitution industrialization (ISI) is a development strategy that favors domestic production over imports—often supported by tariffs, licensing, or directed credit—so you might expect industrial shares to rise while import intensity falls, at least for a period.",
+                        "صنعتی‌سازی جایگزین واردات (ISI) تلاشی برای تقویت تولید داخلی در برابر واردات است—اغلب با تعرفه یا محدودیت—بنابراین ممکن است برای مدتی سهم صنعت بالا برود و شدت واردات کم شود."
+                      )}
+                    </p>
+                    <p>
+                      {L(
+                        isFa,
+                        "These charts do not prove causality. Use the indexed overview for pattern timing; use raw % of GDP panels for levels; GDP growth is a coarse outcome measure. Compare Brazil, Argentina, India, Turkey, and Iran on the same definitions from WDI.",
+                        "این نمودها علیت را ثابت نمی‌کنند. نمای شاخص‌شده برای زمان‌بندی الگو؛ پانل‌های خام٪ از GDP برای سطح؛ رشد GDP معیار خشن پیامد است. برزیل، آرژانتین، هند، ترکیه و ایران با تعاریف یکسان WDI مقایسه می‌شوند."
+                      )}
+                    </p>
+                  </>
+                )}
+              </InSimpleTerms>
+            </>
           ) : isPovertyHeadcountIran ? (
             <>
               <MultiSeriesStats
@@ -7327,7 +7718,16 @@ export default function StudyDetailPage() {
                   />
                 </div>
               </div>
-              <LearningNote locale={isFa ? "fa" : "en"} sections={dutchDiseaseDiagnosticsLearningSections(isFa)} />
+              <LearningNote
+                locale={isFa ? "fa" : "en"}
+                sections={dutchDiseaseDiagnosticsLearningSections(isFa)}
+                links={[
+                  {
+                    label: L(isFa, "Learning: Dutch disease", "یادگیری: بیم هلندی"),
+                    href: "/learning#dutch-disease",
+                  },
+                ]}
+              />
               {displayStudy.observations?.length ? (
                 <DataObservations locale={isFa ? "fa" : "en"} observations={displayStudy.observations ?? []} />
               ) : null}

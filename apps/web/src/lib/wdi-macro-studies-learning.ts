@@ -216,6 +216,50 @@ export function povertyLearningSections(isFa: boolean): LearningNoteSection[] {
   return isFa ? POVERTY_FA : POVERTY_EN;
 }
 
+const ISI_DIAGNOSTICS_EN: LearningNoteSection[] = [
+  {
+    heading: "What ISI refers to here",
+    bullets: [
+      "Import substitution industrialization (ISI) usually describes development strategies that emphasize domestic production behind trade barriers—often with rising industrial shares and compressed imports relative to earlier openness.",
+      "This page does not estimate a formal ISI regime index; it only plots standard WDI trade and industry shares plus GDP growth so you can look for patterns historically.",
+      "The overview chart indexes four structure series to 100 in a common base year (preferring 2000) for the country you select—use it for pattern comparison, not for reading absolute percentage levels.",
+    ],
+  },
+  {
+    heading: "How to read the charts",
+    bullets: [
+      "Trade structure: each country has two lines—imports and exports as % of GDP (same vertical scale).",
+      "Industrial structure: manufacturing value added and total industry value added are both % of GDP (manufacturing is a subset of industry in accounts).",
+      "Outcomes: annual real GDP growth (NY.GDP.MKTP.KD.ZG) in percent per year—not indexed.",
+      "Use the legend to hide lines when many series overlap; event markers default off.",
+    ],
+  },
+];
+
+const ISI_DIAGNOSTICS_FA: LearningNoteSection[] = [
+  {
+    heading: "ISI اینجا یعنی چه",
+    bullets: [
+      "صنعتی‌سازی جایگزین واردات (ISI) معمولاً به استراتژی‌هایی اشاره دارد که بر تولید داخلی پشت مانع تجاری تأکید دارند—اغلب با بالا رفتن سهم صنعت و فشرده شدن واردات نسبت به دوره‌های بازتر.",
+      "این صفحه شاخص رسمی «رژیم ISI» برآورد نمی‌کند؛ فقط سهم‌های استاندارد WDI بازرگانی و صنعت به‌همراه رشد GDP را می‌گذارد تا الگوهای تاریخی را ببینید.",
+      "نمای کلی چهار سری ساختاری را برای کشور انتخاب‌شده به شاخص ۱۰۰ در سال مبنای مشترک (ترجیحاً ۲۰۰۰) می‌برد—برای مقایسهٔ الگو است، نه خواندن سطح درصد مطلق.",
+    ],
+  },
+  {
+    heading: "چگونه بخوانید",
+    bullets: [
+      "ساختار تجارت: برای هر کشور دو خط — واردات و صادرات به‌صورت ٪ از GDP (یک مقیاس عمودی).",
+      "ساختار صنعتی: ارزش افزوده تولیدات کارخانه‌ای و ارزش افزوده کل صنعت هر دو ٪ از GDP هستند (کارخانه بخشی از صنعت در حساب‌های ملی است).",
+      "پیامدها: رشد سالانهٔ GDP واقعی (NY.GDP.MKTP.KD.ZG) به‌صورت درصد در سال — شاخص‌نشده.",
+      "از افسانه برای پنهان کردن خطوط در شلوغی استفاده کنید؛ نشانگرهای رویداد پیش‌فرض خاموش‌اند.",
+    ],
+  },
+];
+
+export function isiDiagnosticsLearningSections(isFa: boolean): LearningNoteSection[] {
+  return isFa ? ISI_DIAGNOSTICS_FA : ISI_DIAGNOSTICS_EN;
+}
+
 const DUTCH_DIAGNOSTICS_EN: LearningNoteSection[] = [
   {
     heading: "How to read these panels",

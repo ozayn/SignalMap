@@ -22,6 +22,7 @@ export type PrimarySignal =
   | { kind: "gini_inequality" }
   | { kind: "inflation_cpi_yoy" }
   | { kind: "gdp_global_comparison" }
+  | { kind: "isi_diagnostics" }
   | { kind: "poverty_headcount_iran" }
   | { kind: "dutch_disease_diagnostics_iran" };
 
@@ -50,6 +51,11 @@ export type StudyMeta = {
   eventLayers?: string[];
   /** When false, study is hidden from list and not directly accessible. Default: true. */
   visible?: boolean;
+  /**
+   * When true, study is omitted from browse and `/studies/[id]` in production builds (`NODE_ENV === "production"`).
+   * Local `next dev` still lists and opens it. Use for work-in-progress or staging-only studies.
+   */
+  hiddenInProduction?: boolean;
   /** Concepts used in this study for educational display. */
   concepts?: ConceptKey[];
   /** When set, show Turkey as a comparator (always-on for Study 8). */
@@ -212,6 +218,7 @@ export const STUDIES: StudyMeta[] = [
       "An exploratory analysis of historical follower growth using simple growth models.",
     status: "active",
     primarySignal: { kind: "follower_growth_dynamics" },
+    hiddenInProduction: true,
     concepts: ["linear_vs_exponential_growth", "logistic_growth_saturation", "model_fitting_intuition", "overfitting_simple"],
     observations: [
       "In this dataset, the raw follower count rises over the period shown.",
@@ -229,6 +236,7 @@ export const STUDIES: StudyMeta[] = [
       "A reference timeline of major political, economic, and geopolitical events used as context throughout SignalMap.",
     status: "active",
     primarySignal: { kind: "events_timeline" },
+    hiddenInProduction: true,
     concepts: ["event_overlay"],
   },
   {
@@ -394,6 +402,7 @@ export const STUDIES: StudyMeta[] = [
       "Nominal and CPI-adjusted (real) minimum wage in Iran. Emphasizes purchasing power and measurement limits.",
     status: "active",
     primarySignal: { kind: "wage_cpi_real" },
+    hiddenInProduction: true,
     concepts: ["real_price", "cpi", "purchasing_power", "nominal_minimum_wage", "real_wage", "measurement_vs_reality", "derived_series"],
     observations: [
       "Nominal minimum wage rises sharply in later years over the period shown.",
@@ -413,6 +422,7 @@ export const STUDIES: StudyMeta[] = [
       "Annual economic structure: consumption and investment as shares of GDP, nominal GDP (current US$), and absolute levels for consumption, GDP, and investment (constant 2015 US$ when available). Iran only in this version; the API supports other countries for future comparisons.",
     status: "active",
     primarySignal: { kind: "gdp_composition" },
+    hiddenInProduction: true,
     eventLayers: ["iran_core"],
     concepts: ["gdp_aggregate", "final_consumption_share", "gross_capital_formation", "event_overlay"],
     observations: [
@@ -576,6 +586,41 @@ export const STUDIES: StudyMeta[] = [
       "Annual data; revisions can shift recent levels slightly.",
     ],
   },
+  {
+    id: "isi-diagnostics",
+    number: 34,
+    title: "ISI diagnostics — trade and industry structure",
+    subtitle: "Brazil, Argentina, India, Turkey, and Iran (World Bank WDI)",
+    timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "Import substitution industrialization (ISI) is not a single measured variable: researchers look at trade openness, industrial shares, and growth together. This study plots annual WDI indicators for five large middle-income histories—imports, exports, manufacturing and industry value added (each as % of GDP), plus GDP growth—so you can compare broad patterns across countries. The overview chart re-bases four structure series to 100 in a common base year (preferring 2000) for one country at a time; detail charts show raw WDI percentages or growth rates.",
+    status: "active",
+    countries: ["iran", "global"],
+    themes: ["macro"],
+    tags: ["Trade", "Industry", "World Bank", "WDI", "ISI", "Brazil", "Argentina", "India", "Turkey"],
+    keywords: [
+      "isi",
+      "import substitution",
+      "ne.imp.gnfs.zs",
+      "ne.exp.gnfs.zs",
+      "nv.ind.manf.zs",
+      "nv.ind.totl.zs",
+      "ny.gdp.mktp.kd.zg",
+      "manufacturing",
+      "industry",
+      "trade",
+    ],
+    primarySignal: { kind: "isi_diagnostics" },
+    eventLayers: ["iran_core", "world_core", "sanctions"],
+    concepts: ["trade_networks", "gdp_aggregate", "measurement_vs_reality", "indexing"],
+    unitLabel: "% of GDP or % growth (see panels)",
+    observations: [
+      "Each panel uses World Bank WDI annual series; coverage and revisions differ by country and year.",
+      "The indexed overview normalizes each chosen structure series independently (100 × value ÷ value in the base year); it shows co-movement of shares, not levels comparable across different units of meaning.",
+      "Manufacturing value added is a subset of total industry value added in national accounts; both are shown as shares of GDP.",
+      "GDP growth (NY.GDP.MKTP.KD.ZG) is the annual percentage change of real GDP at constant national prices; it is not indexed in the outcomes chart.",
+    ],
+  },
 ];
 
 /** Studies page grouped sections (order + copy). Study ids must exist in `STUDIES`. */
@@ -606,6 +651,7 @@ export const STUDY_SECTIONS: { title: string; description: string; studyIds: str
       "gini-inequality",
       "inflation-rate",
       "global-gdp-comparison",
+      "isi-diagnostics",
       "poverty-rate",
     ],
   },
@@ -661,9 +707,16 @@ export function getStudyById(id: string): StudyMeta | undefined {
   return undefined;
 }
 
-/** Studies visible in the list. Excludes those with visible: false. */
+/** Listed on `/studies` and reachable at `/studies/[id]` for the current build (dev vs production). */
+export function isStudyListedForDeployment(study: StudyMeta | undefined): boolean {
+  if (!study || study.visible === false) return false;
+  if (typeof process !== "undefined" && process.env.NODE_ENV === "production" && study.hiddenInProduction) return false;
+  return true;
+}
+
+/** Studies visible in the list. Excludes those with visible: false and `hiddenInProduction` in production. */
 export function getVisibleStudies(): StudyMeta[] {
-  return STUDIES.filter((s) => s.visible !== false);
+  return STUDIES.filter((s) => isStudyListedForDeployment(s));
 }
 
 /** Prev/next study for navigation. Uses visible studies ordered by number. */

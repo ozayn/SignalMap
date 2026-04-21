@@ -13,7 +13,10 @@ export type CountryComparatorSeriesKey =
   | "germany"
   | "turkey"
   | "china"
-  | "saudi_arabia";
+  | "saudi_arabia"
+  | "brazil"
+  | "argentina"
+  | "india";
 
 export type CountryComparatorStyle = {
   color: string;
@@ -29,6 +32,9 @@ export const COUNTRY_COMPARATOR_STYLES: Record<CountryComparatorSeriesKey, Count
   turkey: { color: "#10b981", symbol: "diamond", legendIcon: "diamond" },
   china: { color: "#dc2626", symbol: "roundRect", legendIcon: "roundRect" },
   saudi_arabia: { color: "#9333ea", symbol: "arrow", legendIcon: "arrow" },
+  brazil: { color: "#059669", symbol: "circle", legendIcon: "circle" },
+  argentina: { color: "#0284c7", symbol: "rect", legendIcon: "rect" },
+  india: { color: "#ea580c", symbol: "roundRect", legendIcon: "roundRect" },
 };
 
 export function countryComparatorSeriesStyle(seriesKey: string): CountryComparatorStyle | undefined {
@@ -48,4 +54,7 @@ export const COUNTRY_COMPARATOR_SERIES_COLORS: Record<CountryComparatorSeriesKey
   turkey: COUNTRY_COMPARATOR_STYLES.turkey.color,
   china: COUNTRY_COMPARATOR_STYLES.china.color,
   saudi_arabia: COUNTRY_COMPARATOR_STYLES.saudi_arabia.color,
+  brazil: COUNTRY_COMPARATOR_STYLES.brazil.color,
+  argentina: COUNTRY_COMPARATOR_STYLES.argentina.color,
+  india: COUNTRY_COMPARATOR_STYLES.india.color,
 };
