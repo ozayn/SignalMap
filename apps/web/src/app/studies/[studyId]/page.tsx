@@ -90,6 +90,7 @@ import {
   toDisplayName,
 } from "@/lib/oil-trade-regions";
 import { joinExportSourceNames } from "@/lib/chart-export";
+import { normalizeChartRangeBound, toYearInputMinMax } from "@/lib/chart-study-range";
 import { CHART_LINE_SYMBOL_SIZE } from "@/lib/chart-series-markers";
 import {
   isStudyEventLayerVisible,
@@ -441,6 +442,9 @@ export default function StudyDetailPage() {
   const [oilEconomyPriceSource, setOilEconomyPriceSource] = useState<OilEconomyOverviewSource | null>(null);
   const [oilEconomyRevenueSource, setOilEconomyRevenueSource] = useState<OilEconomyOverviewSource | null>(null);
   const [oilEconomyProdHistoricalFill, setOilEconomyProdHistoricalFill] = useState<OilEconomyOverviewSource | null>(null);
+  /** When set, narrows the three oil-economy charts and indexed view (Export PNG uses the same timeRange). */
+  const [oilEconomyViewStart, setOilEconomyViewStart] = useState("");
+  const [oilEconomyViewEnd, setOilEconomyViewEnd] = useState("");
   const [productionUsPoints, setProductionUsPoints] = useState<{ date: string; value: number }[]>([]);
   const [productionSaudiPoints, setProductionSaudiPoints] = useState<{ date: string; value: number }[]>([]);
   const [productionRussiaPoints, setProductionRussiaPoints] = useState<{ date: string; value: number }[]>([]);
@@ -716,14 +720,66 @@ export default function StudyDetailPage() {
     return [start, resolvedEnd];
   }, [study, isOilEconomyOverview]);
 
+  const oilEconomyDataBounds = useMemo((): [string, string] | null => {
+    if (!isOilEconomyOverview) return null;
+    const collected: string[] = [];
+    for (const a of [oilEconomyProdPoints, oilEconomyPricePoints, oilEconomyRevenuePoints]) {
+      for (const p of a) collected.push(p.date.slice(0, 10));
+    }
+    if (collected.length === 0) return null;
+    collected.sort();
+    return [collected[0]!, collected[collected.length - 1]!];
+  }, [isOilEconomyOverview, oilEconomyProdPoints, oilEconomyPricePoints, oilEconomyRevenuePoints]);
+
+  const oilEconomyChartTimeRange = useMemo((): [string, string] | null => {
+    if (!oilEconomyTimeRange) return null;
+    const [s0, e0] = oilEconomyTimeRange;
+    let a = normalizeChartRangeBound(s0, false).slice(0, 10);
+    let b = normalizeChartRangeBound(e0, true).slice(0, 10);
+    const hasUser = Boolean(
+      (oilEconomyViewStart && oilEconomyViewStart.trim() !== "") ||
+        (oilEconomyViewEnd && oilEconomyViewEnd.trim() !== "")
+    );
+    if (oilEconomyViewStart && oilEconomyViewStart.trim() !== "") {
+      const t = normalizeChartRangeBound(oilEconomyViewStart, false).slice(0, 10);
+      if (t > a) a = t;
+    }
+    if (oilEconomyViewEnd && oilEconomyViewEnd.trim() !== "") {
+      const t = normalizeChartRangeBound(oilEconomyViewEnd, true).slice(0, 10);
+      if (t < b) b = t;
+    }
+    if (a > b) {
+      return [b, a] as [string, string];
+    }
+    if (hasUser && oilEconomyDataBounds) {
+      const d0 = oilEconomyDataBounds[0]!.slice(0, 10);
+      const d1 = oilEconomyDataBounds[1]!.slice(0, 10);
+      if (a < d0) a = d0;
+      if (b > d1) b = d1;
+      if (a > b) {
+        return [b, a] as [string, string];
+      }
+    }
+    return [a, b] as [string, string];
+  }, [oilEconomyTimeRange, oilEconomyDataBounds, oilEconomyViewStart, oilEconomyViewEnd]);
+
   const oilEconomyCategoryYearTickStep = useMemo(() => {
-    if (!oilEconomyTimeRange) return 3;
-    const a = parseInt(oilEconomyTimeRange[0].slice(0, 4), 10);
-    const b = parseInt(oilEconomyTimeRange[1].slice(0, 4), 10);
+    const tr = oilEconomyChartTimeRange ?? oilEconomyTimeRange;
+    if (!tr) return 3;
+    const a = parseInt(tr[0].slice(0, 4), 10);
+    const b = parseInt(tr[1].slice(0, 4), 10);
     const span = b - a;
     if (span > 50) return 2;
     if (span > 30) return 3;
     return 4;
+  }, [oilEconomyChartTimeRange, oilEconomyTimeRange]);
+
+  const oilEconomyYearInputMinMax = useMemo(() => {
+    if (!oilEconomyTimeRange) return { min: 1900, max: 2100 };
+    return toYearInputMinMax(
+      normalizeChartRangeBound(oilEconomyTimeRange[0], false).slice(0, 10),
+      normalizeChartRangeBound(oilEconomyTimeRange[1], true).slice(0, 10)
+    );
   }, [oilEconomyTimeRange]);
 
   const productionTimeRange = useMemo((): [string, string] | null => {
@@ -1025,17 +1081,23 @@ export default function StudyDetailPage() {
 
   const oilEconomyIndexed = useMemo(() => {
     if (!isOilEconomyOverview) return null;
+    const tr = oilEconomyChartTimeRange;
+    const filterToRange = (pts: { date: string; value: number }[]) => {
+      if (!tr) return pts;
+      const [lo, hi] = tr;
+      return pts.filter((p) => p.date >= lo && p.date <= hi);
+    };
     return buildOilEconomyIndexedMultiSeries(
-      oilEconomyProdPoints,
-      oilEconomyPricePoints,
-      oilEconomyRevenuePoints,
+      filterToRange(oilEconomyProdPoints),
+      filterToRange(oilEconomyPricePoints),
+      filterToRange(oilEconomyRevenuePoints),
       {
         production: L(isFa, "Iran production (mb/d)", "تولید ایران (میلیون بشکه/روز)"),
         price: L(isFa, "Global oil price (ann. avg., USD/bbl)", "قیمت نفت جهانی (میانگین سالانه، دلار/بشکه)"),
         revenue: L(isFa, "Estimated revenue (USD)", "درآمد تخمینی (دلار)"),
       }
     );
-  }, [isOilEconomyOverview, isFa, oilEconomyProdPoints, oilEconomyPricePoints, oilEconomyRevenuePoints]);
+  }, [isOilEconomyOverview, isFa, oilEconomyProdPoints, oilEconomyPricePoints, oilEconomyRevenuePoints, oilEconomyChartTimeRange]);
 
   const isiSeriesTyped = isiDiagnosticsData?.series ?? null;
   const isiOverviewIndexed = useMemo(
@@ -2360,6 +2422,13 @@ export default function StudyDetailPage() {
       mounted = false;
     };
   }, [oilEconomyTimeRange, isOilEconomyOverview]);
+
+  useEffect(() => {
+    if (isOilEconomyOverview) {
+      setOilEconomyViewStart("");
+      setOilEconomyViewEnd("");
+    }
+  }, [study?.id, isOilEconomyOverview]);
 
   useEffect(() => {
     if (!productionTimeRange || !isOilProductionMajorExporters) {
@@ -6656,6 +6725,72 @@ export default function StudyDetailPage() {
             </>
           ) : isOilEconomyOverview ? (
             <>
+              <div
+                className="mb-4 flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-border/40 pb-3"
+                dir={isFa ? "rtl" : "ltr"}
+              >
+                <span className="shrink-0 text-xs text-muted-foreground max-w-xs">
+                  {L(
+                    isFa,
+                    "Narrow the year range for all three panels and for PNG export (empty = study window).",
+                    "محدوده سال را برای هر سه نمودار و خروجی PNG ببندید؛ خالی = پنجره مطالعه."
+                  )}
+                </span>
+                <label className="flex w-[5.5rem] shrink-0 flex-col">
+                  <span className="mb-0.5 block min-h-[0.875rem] text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {L(isFa, "Start year", "سال شروع")}
+                  </span>
+                  <input
+                    type="number"
+                    min={oilEconomyYearInputMinMax.min}
+                    max={oilEconomyYearInputMinMax.max}
+                    step={1}
+                    value={
+                      oilEconomyViewStart
+                        ? parseInt(oilEconomyViewStart.slice(0, 4), 10) || ""
+                        : ""
+                    }
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === "") {
+                        setOilEconomyViewStart("");
+                        return;
+                      }
+                      const y = parseInt(raw, 10);
+                      if (!Number.isFinite(y)) return;
+                      const { min: yMin, max: yMax } = oilEconomyYearInputMinMax;
+                      const clamped = Math.min(yMax, Math.max(yMin, y));
+                      setOilEconomyViewStart(normalizeChartRangeBound(String(clamped), false));
+                    }}
+                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-sm outline-none transition-[box-shadow,border-color] focus-visible:border-ring/60 focus-visible:ring-2 focus-visible:ring-ring/25"
+                  />
+                </label>
+                <label className="flex w-[5.5rem] shrink-0 flex-col">
+                  <span className="mb-0.5 block min-h-[0.875rem] text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {L(isFa, "End year", "سال پایان")}
+                  </span>
+                  <input
+                    type="number"
+                    min={oilEconomyYearInputMinMax.min}
+                    max={oilEconomyYearInputMinMax.max}
+                    step={1}
+                    value={oilEconomyViewEnd ? parseInt(oilEconomyViewEnd.slice(0, 4), 10) || "" : ""}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === "") {
+                        setOilEconomyViewEnd("");
+                        return;
+                      }
+                      const y = parseInt(raw, 10);
+                      if (!Number.isFinite(y)) return;
+                      const { min: yMin, max: yMax } = oilEconomyYearInputMinMax;
+                      const clamped = Math.min(yMax, Math.max(yMin, y));
+                      setOilEconomyViewEnd(normalizeChartRangeBound(String(clamped), true));
+                    }}
+                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-sm outline-none transition-[box-shadow,border-color] focus-visible:border-ring/60 focus-visible:ring-2 focus-visible:ring-ring/25"
+                  />
+                </label>
+              </div>
               <MultiSeriesStats
                 locale={isFa ? "fa" : "en"}
                 series={[
@@ -6675,7 +6810,7 @@ export default function StudyDetailPage() {
                     points: oilEconomyRevenuePoints,
                   },
                 ]}
-                timeRange={oilEconomyTimeRange ?? undefined}
+                timeRange={oilEconomyChartTimeRange ?? undefined}
               />
               <div className="space-y-2 mb-6 pb-6 border-b border-border">
                 <h3 className="text-sm font-semibold text-foreground">
@@ -6707,7 +6842,7 @@ export default function StudyDetailPage() {
                   valueKey="value"
                   label={L(isFa, "Production and Brent", "تولید و برنت")}
                   events={[]}
-                  timeRange={oilEconomyTimeRange ?? study.timeRange}
+                  timeRange={oilEconomyChartTimeRange ?? study.timeRange}
                   chartRangeGranularity="year"
                   categoryYearTickStep={oilEconomyCategoryYearTickStep}
                   showChartControls={false}
@@ -6764,7 +6899,7 @@ export default function StudyDetailPage() {
                   valueKey="value"
                   label={L(isFa, "Estimated oil revenue (USD)", "درآمد تخمینی نفت (دلار)")}
                   events={[]}
-                  timeRange={oilEconomyTimeRange ?? study.timeRange}
+                  timeRange={oilEconomyChartTimeRange ?? study.timeRange}
                   chartRangeGranularity="year"
                   categoryYearTickStep={oilEconomyCategoryYearTickStep}
                   showChartControls={false}
@@ -6816,7 +6951,7 @@ export default function StudyDetailPage() {
                     label={L(isFa, "Indexed (100 = base year)", "شاخص‌شده (۱۰۰ = سال مبنا)")}
                     events={[]}
                     multiSeries={oilEconomyIndexed.multiSeries}
-                    timeRange={oilEconomyTimeRange ?? study.timeRange}
+                    timeRange={oilEconomyChartTimeRange ?? study.timeRange}
                     chartRangeGranularity="year"
                     categoryYearTickStep={oilEconomyCategoryYearTickStep}
                     xAxisYearLabel={chartYearAxisLabel}

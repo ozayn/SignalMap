@@ -782,7 +782,6 @@ export function TimelineChart({
   }, [timeRangeProp, data, oilPoints, secondSeries, multiSeries, comparatorSeries]);
 
   const chartRange = useMemo((): [string, string] | undefined => {
-    if (!showChartControls) return rangeBounds;
     if (!rangeBounds) return undefined;
     let [a, b] = rangeBounds;
     if (clipStart) {
@@ -797,7 +796,7 @@ export function TimelineChart({
       return [b, a];
     }
     return [a, b];
-  }, [showChartControls, rangeBounds, clipStart, clipEnd]);
+  }, [rangeBounds, clipStart, clipEnd]);
 
   const inferredChartRangeGranularity = useMemo((): ChartRangeGranularity => {
     const primary = data.map((p) => p.date);
@@ -1980,9 +1979,11 @@ export function TimelineChart({
             const spanDays = dateMax && dateMin ? (dateMax - dateMin) / 86400000 : 0;
             const isShortSpan = spanDays < 400;
             const dayMs = 86400000;
+            /** ~one Gregorian year: prevents multiple time ticks in the same year with a year-only label (USD→Toman, long spans). */
+            const approxYearMs = 365 * dayMs;
             const minIntervalMs = isShortSpan
               ? Math.max(dayMs, Math.ceil(spanDays / 6) * dayMs)
-              : undefined;
+              : approxYearMs;
             return {
               type: "time",
               min: dateMin,
@@ -1990,6 +1991,7 @@ export function TimelineChart({
               minInterval: minIntervalMs,
               axisLine: { lineStyle: { color: borderColor } },
               axisLabel: {
+                hideOverlap: true,
                 formatter: (value: number) =>
                   isShortSpan
                     ? new Date(value).toLocaleDateString(chartNumeralLocale === "fa" ? "fa-IR" : undefined, {
