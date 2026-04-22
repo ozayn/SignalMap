@@ -2,11 +2,13 @@
 
 import { useMemo, useState } from "react";
 import {
-  getStudyById,
+  getBrowseRowsForGroup,
   getVisibleStudies,
   isStudyListedForDeployment,
-  STUDY_SECTIONS,
+  STUDY_BROWSE_GROUP_ORDER,
+  STUDY_BROWSE_GROUP_TITLES,
   type StudyCountry,
+  type StudyGroup,
   type StudyTheme,
 } from "@/lib/studies";
 import { StudyCard, StudyListRow } from "@/components/study-card";
@@ -93,8 +95,8 @@ export default function StudiesPage() {
           className="mt-1 text-[#6b7280] dark:text-[#9ca3af] max-w-2xl"
           style={{ fontSize: "clamp(12px, 1.2vw, 14px)" }}
         >
-          Longitudinal research on macro signals, national accounts, oil and FX, inequality measures, and public
-          discourse—organized for scanning or targeted lookup.
+          Studies are grouped by theme (core, Iran, global, policy, welfare, discourse) using each study’s browse
+          metadata. Search and filters are unchanged; they are independent of these section names.
         </p>
       </header>
 
@@ -218,20 +220,15 @@ export default function StudiesPage() {
         </div>
       ) : (
         <div>
-          {STUDY_SECTIONS.map((section, sectionIndex) => {
-            const studies = section.studyIds
-              .map((id) => getStudyById(id))
-              .filter(
-                (s): s is NonNullable<typeof s> =>
-                  s != null && isStudyListedForDeployment(s) && filteredIds.has(s.id)
-              );
-            if (studies.length === 0) return null;
-            const rows = studies.map((study) => {
-              const row = indexed.find((x) => x.study.id === study.id);
-              return { study, signalTags: row?.signalTags ?? getSignalTags(study) };
-            });
+          {STUDY_BROWSE_GROUP_ORDER.map((group: StudyGroup, sectionIndex) => {
+            const meta = STUDY_BROWSE_GROUP_TITLES[group];
+            const listed = indexed
+              .map((x) => x.study)
+              .filter((s) => isStudyListedForDeployment(s));
+            const rows = getBrowseRowsForGroup(listed, group).filter(({ study }) => filteredIds.has(study.id));
+            if (rows.length === 0) return null;
             return (
-              <section key={section.title} className={sectionIndex === 0 ? "" : "section-block"}>
+              <section key={group} className={sectionIndex === 0 ? "" : "section-block"}>
                 <div
                   className={`${sectionIndex === 0 ? "mt-0 " : ""}border-b border-[#f1f5f9] dark:border-[#1f2937] pb-1.5 mb-3.5`}
                 >
@@ -239,19 +236,27 @@ export default function StudiesPage() {
                     className="font-semibold text-[#111827] dark:text-[#e5e7eb]"
                     style={{ fontSize: "clamp(16px, 1.8vw, 18px)" }}
                   >
-                    {section.title}
+                    {meta.title}
                   </h2>
                   <p
                     className="mt-0.5 text-[#6b7280] dark:text-[#9ca3af]"
                     style={{ fontSize: "clamp(12px, 1.2vw, 14px)" }}
                   >
-                    {section.description}
+                    {meta.description}
                   </p>
                 </div>
                 <div className="studies-grid">
-                  {rows.map(({ study, signalTags }) => (
-                    <StudyCard key={study.id} study={study} signalTags={signalTags} />
-                  ))}
+                  {rows.map(({ study, order }) => {
+                    const row = indexed.find((x) => x.study.id === study.id);
+                    const signalTags = row?.signalTags ?? getSignalTags(study);
+                    return (
+                      <StudyCard
+                        key={`${study.id}--${group}--${order}`}
+                        study={study}
+                        signalTags={signalTags}
+                      />
+                    );
+                  })}
                 </div>
               </section>
             );

@@ -5,6 +5,7 @@ import * as echarts from "echarts";
 import { cssHsl } from "@/lib/utils";
 import { CHART_LINE_SYMBOL_ITEM_OPACITY, CHART_LINE_SYMBOL_SIZE } from "@/lib/chart-series-markers";
 import { CHART_Y_AXIS_TICK_FONT_SIZE } from "@/lib/chart-axis-label";
+import { formatChartAxisNumber, formatChartTooltipNumber } from "@/lib/format-compact-decimal";
 
 export type FollowersPoint = {
   date: string;
@@ -20,9 +21,7 @@ type FollowersChartProps = {
 };
 
 function formatFollowers(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
+  return formatChartAxisNumber(n, "en");
 }
 
 function getXLabelRotate() {
@@ -60,7 +59,7 @@ export function FollowersChart({ data, username, metricLabel = "Followers" }: Fo
               const pt = data[idx];
               const followerLine =
                 pt.followers != null
-                  ? `${formatFollowers(pt.followers)} ${metricLabel.toLowerCase()} · Confidence: ${(pt.confidence * 100).toFixed(0)}%`
+                  ? `${formatChartTooltipNumber(pt.followers, "en")} ${metricLabel.toLowerCase()} · Confidence: ${(pt.confidence * 100).toFixed(0)}%`
                   : `No ${metricLabel.toLowerCase()} data extracted`;
               const lines = [pt.date, followerLine];
               if (pt.archived_url) {
@@ -159,7 +158,7 @@ export function FollowersChart({ data, username, metricLabel = "Followers" }: Fo
               <span
                 key={`${d.date}-${i}`}
                 className={d.followers != null ? undefined : "opacity-60"}
-                title={d.followers != null ? `${d.followers.toLocaleString()} ${metricLabel.toLowerCase()}` : `No ${metricLabel.toLowerCase()} data`}
+                title={d.followers != null ? `${formatChartTooltipNumber(d.followers, "en")} ${metricLabel.toLowerCase()}` : `No ${metricLabel.toLowerCase()} data`}
               >
                 {d.date}
               </span>

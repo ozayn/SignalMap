@@ -24,7 +24,8 @@ export type PrimarySignal =
   | { kind: "gdp_global_comparison" }
   | { kind: "isi_diagnostics" }
   | { kind: "poverty_headcount_iran" }
-  | { kind: "dutch_disease_diagnostics_iran" };
+  | { kind: "dutch_disease_diagnostics_iran" }
+  | { kind: "oil_economy_overview" };
 
 import type { ConceptKey } from "./concepts";
 
@@ -33,6 +34,10 @@ export type StudyCountry = "iran" | "us" | "global";
 
 /** Browse / filter: coarse theme. */
 export type StudyTheme = "macro" | "oil" | "fx" | "inequality" | "social";
+
+export type StudyGroup = "core" | "iran" | "global" | "policy" | "welfare" | "discourse";
+
+export type StudyGroupPlacement = { group: StudyGroup; order: number };
 
 /** YouTube discourse: videos and comments per video. Set here; all discourse studies use these. */
 export const YOUTUBE_DISCOURSE_VIDEOS_LIMIT = 10;
@@ -78,6 +83,11 @@ export type StudyMeta = {
   tags?: string[];
   /** Browse: extra searchable tokens (not shown unless also in `tags`). */
   keywords?: string[];
+  /**
+   * `/studies` grouped layout: one or more `{ group, order }` rows. Same study can appear in two sections
+   * (e.g. inflation: core + welfare) by listing two placements. Omit or leave empty to hide from grouped view.
+   */
+  groupPlacements?: StudyGroupPlacement[];
 };
 
 export const STUDIES: StudyMeta[] = [
@@ -97,9 +107,9 @@ export const STUDIES: StudyMeta[] = [
     number: 2,
     title: "Brent oil price as an exogenous context signal",
     timeRange: ["2021-01-15", new Date().toISOString().slice(0, 10)],
-    description:
-      "A baseline study illustrating event-anchored windows on a macroeconomic series.",
+    description: "Brent crude in USD: event-anchored windows, optional context markers.",
     status: "active",
+    groupPlacements: [{ group: "core", order: 2 }],
     primarySignal: { kind: "oil_brent" },
     concepts: ["nominal_price", "oil_benchmark", "event_overlay", "oil_price_shocks"],
     unitLabel: "USD per barrel",
@@ -109,9 +119,9 @@ export const STUDIES: StudyMeta[] = [
     number: 3,
     title: "USD→Toman (open market) as a socio-economic signal",
     timeRange: ["2018-01-01", new Date().toISOString().slice(0, 10)],
-    description:
-      "Open-market USD/toman rate as a lived economic pressure indicator.",
+    description: "Open-market toman per US dollar (Bonbast / archive; not the official rate).",
     status: "active",
+    groupPlacements: [{ group: "core", order: 1 }],
     primarySignal: { kind: "fx_usd_toman" },
     concepts: ["fx_rate", "event_overlay"],
     unitLabel: "toman per USD",
@@ -121,9 +131,9 @@ export const STUDIES: StudyMeta[] = [
     number: 4,
     title: "Oil and USD/toman: dual macroeconomic signals",
     timeRange: ["2021-01-15", new Date().toISOString().slice(0, 10)],
-    description:
-      "Brent oil price (left axis) and USD→toman open-market rate (right axis) overlaid for comparative context.",
+    description: "Brent and open-market USD/toman on two y-axes: oil vs. currency pressure together.",
     status: "active",
+    groupPlacements: [{ group: "core", order: 3 }],
     primarySignal: { kind: "oil_and_fx" },
     concepts: ["nominal_price", "oil_benchmark", "fx_rate", "event_overlay"],
   },
@@ -132,9 +142,9 @@ export const STUDIES: StudyMeta[] = [
     number: 5,
     title: "Global conflict and economic shocks (1900–present)",
     timeRange: ["1900-01-01", new Date().toISOString().slice(0, 10)],
-    description:
-      "A long-range view of global conflicts and structural shocks contextualized against gold (monetary stress) and oil (energy/geopolitical stress) prices.",
+    description: "1900+ gold and oil with a long event layer: big-picture global context.",
     status: "active",
+    groupPlacements: [{ group: "global", order: 2 }],
     primarySignal: { kind: "gold_and_oil" },
     eventLayers: ["world_1900"],
     concepts: ["nominal_price", "oil_benchmark", "gold_price", "event_overlay"],
@@ -144,9 +154,9 @@ export const STUDIES: StudyMeta[] = [
     number: 6,
     title: "Real oil prices and global economic burden",
     timeRange: ["1987-05-20", new Date().toISOString().slice(0, 10)],
-    description:
-      "Oil prices adjusted for inflation to examine long-term economic burden rather than market signaling.",
+    description: "Nominal Brent deflated with US CPI: real oil price and burden, not the spot headline.",
     status: "active",
+    groupPlacements: [{ group: "global", order: 6 }],
     primarySignal: { kind: "real_oil" },
     eventLayers: ["world_core", "world_1900"],
     concepts: ["real_price", "cpi", "real_oil_price", "derived_series", "event_overlay"],
@@ -157,9 +167,9 @@ export const STUDIES: StudyMeta[] = [
     number: 7,
     title: "Oil price burden in Iran (PPP-based)",
     timeRange: ["1990-01-01", new Date().toISOString().slice(0, 10)],
-    description:
-      "An estimate of the domestic economic burden of oil prices in Iran using purchasing power parity (PPP) rather than market exchange rates.",
+    description: "Oil in Iran as PPP toman per barrel: domestic purchasing-power burden, not the FX screen rate.",
     status: "active",
+    groupPlacements: [{ group: "iran", order: 7 }],
     primarySignal: { kind: "oil_ppp_iran" },
     eventLayers: ["iran_core", "world_core"],
     concepts: ["ppp", "ppp_oil_burden", "log_scale", "structural_break", "derived_series", "event_overlay"],
@@ -170,9 +180,9 @@ export const STUDIES: StudyMeta[] = [
     number: 8,
     title: "Iran and Turkey: comparative PPP oil burden",
     timeRange: ["1990-01-01", new Date().toISOString().slice(0, 10)],
-    description:
-      "Side-by-side comparison of PPP-adjusted oil burden in Iran and Turkey. Both series use identical methodology for contextual comparison.",
+    description: "Same PPP oil-burden methodology for Iran and Turkey: side-by-side comparison.",
     status: "active",
+    groupPlacements: [{ group: "iran", order: 8 }],
     primarySignal: { kind: "oil_ppp_iran" },
     eventLayers: [],
     concepts: ["ppp", "ppp_oil_burden", "log_scale", "structural_break", "derived_series"],
@@ -184,9 +194,9 @@ export const STUDIES: StudyMeta[] = [
     number: 9,
     title: "Iran oil export capacity: price and volume",
     timeRange: ["2010-01-01", "2024-12-31"],
-    description:
-      "A comparative view of global oil prices and Iran's estimated crude export capacity under constraints.",
+    description: "Brent vs. an estimated export-capacity index: price and tradable volume in one view (proxy, not revenue).",
     status: "active",
+    groupPlacements: [{ group: "iran", order: 4 }],
     primarySignal: { kind: "oil_export_capacity" },
     eventLayers: ["sanctions"],
     concepts: ["oil_benchmark", "price_vs_quantity", "oil_export_volume", "indexing", "export_capacity_proxy", "derived_series", "event_overlay"],
@@ -201,10 +211,10 @@ export const STUDIES: StudyMeta[] = [
     id: "oil_major_exporters",
     number: 14,
     title: "Major oil exporters: production levels",
-    timeRange: ["2000-01-01", "today"],
-    description:
-      "Crude oil production for Saudi Arabia, Russia, and Iran. Annual data in million barrels per day.",
+    timeRange: ["1960-01-01", "today"],
+    description: "US, Saudi Arabia, Russia, Iran: annual crude (mb/d). Iran backfilled 1965+ from EI/EIA when the live line has gaps.",
     status: "active",
+    groupPlacements: [{ group: "global", order: 4 }],
     primarySignal: { kind: "oil_production_major_exporters" },
     eventLayers: ["iran_core", "sanctions", "opec_decisions"],
     concepts: ["oil_production", "oil_production_vs_exports", "barrels_per_day", "supply_shocks"],
@@ -214,9 +224,10 @@ export const STUDIES: StudyMeta[] = [
     number: 10,
     title: "Follower growth dynamics over time",
     timeRange: ["2010-01-01", new Date().toISOString().slice(0, 10)],
-    description:
-      "An exploratory analysis of historical follower growth using simple growth models.",
+    description: "Follower count over time with optional linear, exponential, and logistic fits (exploratory).",
     status: "active",
+    tags: ["Platform", "Growth fit"],
+    groupPlacements: [{ group: "discourse", order: 1 }],
     primarySignal: { kind: "follower_growth_dynamics" },
     hiddenInProduction: true,
     concepts: ["linear_vs_exponential_growth", "logistic_growth_saturation", "model_fitting_intuition", "overfitting_simple"],
@@ -232,9 +243,9 @@ export const STUDIES: StudyMeta[] = [
     number: 11,
     title: "Historical events timeline (1900–present)",
     timeRange: ["1900-01-01", new Date().toISOString().slice(0, 10)],
-    description:
-      "A reference timeline of major political, economic, and geopolitical events used as context throughout SignalMap.",
+    description: "A scrollable 1900+ event list: reference context for other charts (not a price series).",
     status: "active",
+    groupPlacements: [{ group: "global", order: 5 }],
     primarySignal: { kind: "events_timeline" },
     hiddenInProduction: true,
     concepts: ["event_overlay"],
@@ -243,9 +254,11 @@ export const STUDIES: StudyMeta[] = [
     id: "iran_fx_spread",
     number: 12,
     title: "Dual Exchange Rates in Iran",
-    timeRange: ["2012-01-01", new Date().toISOString().slice(0, 10)],
-    description: "Official vs open-market USD/IRR.",
+    timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
+    description: "WDI official toman/USD vs. open market (archive + Bonbast from 2012). Annual spread where both years exist.",
     status: "active",
+    tags: ["Dual", "Spread"],
+    groupPlacements: [{ group: "iran", order: 5 }],
     primarySignal: { kind: "fx_usd_irr_dual" },
     concepts: ["multiple_exchange_rates", "official_exchange_rate", "fx_rate", "capital_controls", "price_controls", "measurement_vs_reality", "fx_spread", "derived_series"],
   },
@@ -257,9 +270,9 @@ export const STUDIES: StudyMeta[] = [
       new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10),
       new Date().toISOString().slice(0, 10),
     ],
-    description:
-      "Monitor recent oil price changes during periods of geopolitical stress. High-resolution Brent data with event markers for military escalation, sanctions, OPEC decisions, and major shocks.",
+    description: "Last ~90 days of Brent: short-horizon moves with optional shock and policy markers.",
     status: "active",
+    groupPlacements: [{ group: "global", order: 3 }],
     primarySignal: { kind: "oil_geopolitical_reaction" },
     eventLayers: ["world_core", "world_1900", "sanctions", "opec_decisions"],
     concepts: ["nominal_price", "oil_benchmark", "event_overlay", "oil_price_shocks"],
@@ -270,9 +283,9 @@ export const STUDIES: StudyMeta[] = [
     number: 15,
     title: "Oil trade network",
     timeRange: ["2010", String(new Date().getFullYear())],
-    description:
-      "Network view of crude oil trade between major exporting and importing countries. Nodes represent countries; edges show directional trade flows (thousand barrels per day).",
+    description: "Who ships crude to whom: Comtrade network (kb/d) by year, Sankey or node–link view.",
     status: "active",
+    groupPlacements: [{ group: "global", order: 7 }],
     primarySignal: { kind: "oil_trade_network" },
     concepts: ["trade_networks", "energy_geopolitics", "export_dependencies"],
   },
@@ -281,9 +294,9 @@ export const STUDIES: StudyMeta[] = [
     number: 17,
     title: "Major crude oil exporters: trade flows",
     timeRange: ["2000", "today"],
-    description:
-      "Annual crude oil export volumes for Saudi Arabia, Russia, United States, and Iran. Derived from bilateral trade flows (UN Comtrade HS 2709).",
+    description: "Annual crude exports (kb/d) for four majors from HS 2709 Comtrade, mirror-flow derived.",
     status: "active",
+    groupPlacements: [{ group: "global", order: 8 }],
     primarySignal: { kind: "oil_exporter_timeseries" },
     concepts: ["trade_networks", "energy_geopolitics", "export_dependencies"],
     unitLabel: "thousand barrels/day",
@@ -293,8 +306,10 @@ export const STUDIES: StudyMeta[] = [
     number: 18,
     title: "Bplus YouTube Discourse",
     timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
-    description: "Audience sentiment and discourse topics from Bplus Podcast YouTube comments.",
+    description: "Comment text on Bplus videos: topic clusters and tone (NLP, exploratory).",
     status: "active",
+    tags: ["Bplus", "Comments"],
+    groupPlacements: [{ group: "discourse", order: 2 }],
     primarySignal: { kind: "youtube_comment_analysis" },
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
   },
@@ -303,8 +318,10 @@ export const STUDIES: StudyMeta[] = [
     number: 19,
     title: "Breaking Points YouTube Discourse",
     timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
-    description: "Audience sentiment and discourse topics from Breaking Points YouTube comments.",
+    description: "Breaking Points: comment topics and tone on sampled videos (NLP).",
     status: "active",
+    tags: ["Breaking Points", "Comments"],
+    groupPlacements: [{ group: "discourse", order: 3 }],
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCDRIjKy6eZOvKtOELtTdeUA",
     youtubeLanguage: "English",
@@ -315,8 +332,10 @@ export const STUDIES: StudyMeta[] = [
     number: 20,
     title: "Tucker Carlson YouTube Discourse",
     timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
-    description: "Audience sentiment and discourse topics from Tucker Carlson YouTube comments.",
+    description: "Tucker Carlson channel: sample-video comments, topics and tone (NLP).",
     status: "active",
+    tags: ["Tucker C.", "Comments"],
+    groupPlacements: [{ group: "discourse", order: 4 }],
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCGttrUON87gWfU6dMWm1fcA",
     youtubeLanguage: "English",
@@ -327,8 +346,10 @@ export const STUDIES: StudyMeta[] = [
     number: 21,
     title: "CNN YouTube Discourse",
     timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
-    description: "Audience sentiment and discourse topics from CNN YouTube comments.",
+    description: "CNN: comment topics and tone on a sample of videos (NLP).",
     status: "active",
+    tags: ["CNN", "Comments"],
+    groupPlacements: [{ group: "discourse", order: 5 }],
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCupvZG-5ko_eiXAupbDfxWw",
     youtubeLanguage: "English",
@@ -339,8 +360,10 @@ export const STUDIES: StudyMeta[] = [
     number: 22,
     title: "Fox News YouTube Discourse",
     timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
-    description: "Audience sentiment and discourse topics from Fox News YouTube comments.",
+    description: "Fox News: comment topics and tone on a sample of videos (NLP).",
     status: "active",
+    tags: ["Fox", "Comments"],
+    groupPlacements: [{ group: "discourse", order: 6 }],
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCXIJgqnII2ZOINSWNOGFThA",
     youtubeLanguage: "English",
@@ -351,8 +374,10 @@ export const STUDIES: StudyMeta[] = [
     number: 23,
     title: "BBC News YouTube Discourse",
     timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
-    description: "Audience sentiment and discourse topics from BBC News YouTube comments.",
+    description: "BBC News (English): comment topics and tone on a sample of videos (NLP).",
     status: "active",
+    tags: ["BBC", "Comments"],
+    groupPlacements: [{ group: "discourse", order: 7 }],
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UC16niRr50-MSBwiO3YDb3RA",
     youtubeLanguage: "English",
@@ -363,8 +388,10 @@ export const STUDIES: StudyMeta[] = [
     number: 26,
     title: "The Rest Is Politics YouTube Discourse",
     timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
-    description: "Audience sentiment and discourse topics from The Rest Is Politics YouTube comments.",
+    description: "The Rest Is Politics: comment topics and tone on a sample of videos (NLP).",
     status: "active",
+    tags: ["TRIP", "Comments"],
+    groupPlacements: [{ group: "discourse", order: 8 }],
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCsufaClk5if2RGqABb-09Uw",
     youtubeLanguage: "English",
@@ -375,8 +402,10 @@ export const STUDIES: StudyMeta[] = [
     number: 24,
     title: "BBC Persian YouTube Discourse",
     timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
-    description: "Audience sentiment and discourse topics from BBC Persian YouTube comments.",
+    description: "BBC Persian: Farsi comment topics and tone (NLP).",
     status: "active",
+    tags: ["BBC Farsi", "Comments", "FA"],
+    groupPlacements: [{ group: "discourse", order: 9 }],
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCHZk9MrT3DGWmVqdsj5y0EA",
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
@@ -386,8 +415,10 @@ export const STUDIES: StudyMeta[] = [
     number: 25,
     title: "Iran International YouTube Discourse",
     timeRange: ["2020-01-01", new Date().toISOString().slice(0, 10)],
-    description: "Audience sentiment and discourse topics from Iran International YouTube comments.",
+    description: "Iran International: Farsi/English mix in comments, topics and tone (NLP).",
     status: "active",
+    tags: ["Iran Int'l", "Comments", "FA"],
+    groupPlacements: [{ group: "discourse", order: 10 }],
     primarySignal: { kind: "youtube_comment_analysis" },
     youtubeChannelId: "UCat6bC0Wrqq9Bcq7EkH_yQw",
     concepts: ["tf_idf", "dimensionality_reduction", "pca", "umap", "topic_grouping", "stopwords"],
@@ -398,9 +429,10 @@ export const STUDIES: StudyMeta[] = [
     title: "Real Minimum Wage in Iran",
     subtitle: "Inflation-adjusted minimum wage (CPI)",
     timeRange: ["2010-01-01", new Date().toISOString().slice(0, 10)],
-    description:
-      "Nominal and CPI-adjusted (real) minimum wage in Iran. Emphasizes purchasing power and measurement limits.",
+    description: "Nominal vs. CPI-deflated minimum wage: purchasing power of the wage, not a full labor market model.",
     status: "active",
+    tags: ["Wage", "CPI", "Real"],
+    groupPlacements: [{ group: "iran", order: 6 }],
     primarySignal: { kind: "wage_cpi_real" },
     hiddenInProduction: true,
     concepts: ["real_price", "cpi", "purchasing_power", "nominal_minimum_wage", "real_wage", "measurement_vs_reality", "derived_series"],
@@ -418,9 +450,9 @@ export const STUDIES: StudyMeta[] = [
     gdpCompositionIranLocalOptions: true,
     subtitle: "Consumption and investment as shares of GDP (World Bank)",
     timeRange: ["1900-01-01", new Date().toISOString().slice(0, 10)],
-    description:
-      "Annual economic structure: consumption and investment as shares of GDP, nominal GDP (current US$), and absolute levels for consumption, GDP, and investment (constant 2015 US$ when available). Iran only in this version; the API supports other countries for future comparisons.",
+    description: "Consumption and investment as GDP shares, plus level views (WDI; Iran; optional SHJ labels in levels).",
     status: "active",
+    groupPlacements: [{ group: "iran", order: 1 }],
     primarySignal: { kind: "gdp_composition" },
     hiddenInProduction: true,
     eventLayers: ["iran_core"],
@@ -442,9 +474,9 @@ export const STUDIES: StudyMeta[] = [
     subtitle: "Consumption and investment (left) vs GDP (right)",
     gdpCompositionIranLocalOptions: true,
     timeRange: ["1900-01-01", new Date().toISOString().slice(0, 10)],
-    description:
-      "Reference-style layout for Iran: final consumption and gross capital formation (investment) on the left y-axis, GDP on the right. Same World Bank WDI level units as the GDP composition study’s levels view (Real / USD / Toman). The two axes are not directly comparable—this chart is for visual comparison with common academic figures, not for ratio reading across axes.",
+    description: "Academic-style dual axis: C and I (left) vs. GDP (right). Scales are not directly comparable—pattern view only.",
     status: "active",
+    groupPlacements: [{ group: "iran", order: 2 }],
     primarySignal: { kind: "iran_gdp_accounts_dual" },
     eventLayers: ["iran_core"],
     concepts: ["gdp_aggregate", "final_consumption_share", "gross_capital_formation", "event_overlay"],
@@ -461,15 +493,15 @@ export const STUDIES: StudyMeta[] = [
     title: "Income inequality: Gini coefficient",
     subtitle: "World Bank annual estimates (Iran, United States, and comparators)",
     timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
-    description:
-      "The Gini coefficient summarizes how unequally income is distributed in a country. This study plots World Bank estimates over time for Iran, the United States, Germany, Turkey, China, and Saudi Arabia using the same indicator (SI.POV.GINI).",
+    description: "Gini (SI.POV.GINI) over time: Iran, US, DE, TR, CN, SA—descriptive; survey methods still differ by country.",
     status: "active",
     countries: ["iran", "us", "global"],
     themes: ["inequality", "macro"],
-    tags: ["Gini", "World Bank", "Cross-country"],
+    tags: ["Gini", "WDI", "6 countries"],
     keywords: ["si.pov.gini", "survey", "household income"],
     primarySignal: { kind: "gini_inequality" },
     eventLayers: ["iran_core", "world_core", "sanctions"],
+    groupPlacements: [{ group: "welfare", order: 1 }],
     concepts: ["event_overlay", "measurement_vs_reality"],
     unitLabel: "Gini coefficient (0–100)",
     observations: [
@@ -484,13 +516,16 @@ export const STUDIES: StudyMeta[] = [
     title: "Annual inflation rate",
     subtitle: "Inflation (CPI, % YoY) — Iran, United States, Germany, Turkey, China, and Saudi Arabia",
     timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
-    description:
-      "Year-on-year change in consumer prices (annual %) from the World Bank. Iran, the United States, Germany, Turkey, China, and Saudi Arabia use the same indicator (FP.CPI.TOTL.ZG) for comparability; levels still differ by methodology and shocks.",
+    description: "CPI inflation % YoY (WDI): same six economies; baskets and shocks still differ by country.",
     status: "active",
     countries: ["iran", "us", "global"],
     themes: ["macro"],
-    tags: ["CPI", "Consumer prices", "YoY"],
+    tags: ["CPI", "YoY", "6 countries"],
     keywords: ["fp.cpi.totl.zg", "prices"],
+    groupPlacements: [
+      { group: "core", order: 4 },
+      { group: "welfare", order: 3 },
+    ],
     primarySignal: { kind: "inflation_cpi_yoy" },
     eventLayers: ["iran_core", "world_core", "sanctions"],
     concepts: ["cpi", "event_overlay", "measurement_vs_reality"],
@@ -507,13 +542,13 @@ export const STUDIES: StudyMeta[] = [
     title: "Poverty headcount ratio",
     subtitle: "Iran — share of population below international poverty lines (World Bank WDI)",
     timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
-    description:
-      "The poverty headcount ratio is the percentage of the population living below a defined international poverty line. This study plots two World Bank WDI series for Iran (SI.POV.DDAY and SI.POV.LMIC); the exact dollar thresholds follow the Bank’s published indicator definitions and change when PPP bases are revised.",
+    description: "Two WDI headcount lines for Iran (day / LMIC thresholds). Dollar lines follow World Bank definitions and revisions.",
     status: "active",
     countries: ["iran"],
     themes: ["inequality", "macro"],
-    tags: ["WDI", "Poverty lines", "Headcount"],
+    tags: ["Poverty", "WDI", "Iran"],
     keywords: ["si.pov.dday", "si.pov.lmic", "international poverty line", "ppp"],
+    groupPlacements: [{ group: "welfare", order: 2 }],
     primarySignal: { kind: "poverty_headcount_iran" },
     eventLayers: ["iran_core", "world_core", "sanctions"],
     concepts: ["event_overlay", "measurement_vs_reality"],
@@ -530,12 +565,12 @@ export const STUDIES: StudyMeta[] = [
     title: "Dutch disease diagnostics — Iran (pattern view)",
     subtitle: "Oil rents, manufacturing share, imports, and open-market FX (exploratory)",
     timeRange: ["1970-01-01", new Date().toISOString().slice(0, 10)],
-    description:
-      "A multi-panel diagnostic view for Iran: World Bank oil rents and manufacturing value added as shares of GDP, imports as a share of GDP, and open-market USD→toman as macro pressure context. Dutch disease is a structural hypothesis about resource booms and tradables—not something this page measures as a single index.",
+    description: "Oil rents, manufacturing and import shares (WDI) plus open FX: pattern view for a resource–tradables story, not a single index.",
     status: "active",
     countries: ["iran"],
     themes: ["macro", "oil", "fx"],
-    tags: ["WDI", "Dutch disease", "Resource curse", "Structural change"],
+    tags: ["Dutch", "Rents", "WDI"],
+    groupPlacements: [{ group: "policy", order: 1 }],
     keywords: [
       "NY.GDP.PETR.RT.ZS",
       "NV.IND.MANF.ZS",
@@ -568,13 +603,13 @@ export const STUDIES: StudyMeta[] = [
     title: "Global GDP comparison",
     subtitle: "United States, China, Iran, Turkey, Saudi Arabia, and world total (World Bank WDI)",
     timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
-    description:
-      "Total GDP over time from the World Bank: constant 2015 US$ (NY.GDP.MKTP.KD) when available for each economy, otherwise current US$ (NY.GDP.MKTP.CD). Includes the WLD aggregate. Default view indexes each series to 100 in calendar year 2000 when that year exists (otherwise the earliest usable base year for that series) so very different economy sizes stay readable on one chart.",
+    description: "Total GDP (WDI): levels or index to 2000=100. US, China, IR, TR, SA + world—relative growth, not a ranking of size in index view.",
     status: "active",
     countries: ["iran", "us", "global"],
     themes: ["macro"],
-    tags: ["GDP", "World Bank", "Cross-country", "WDI"],
+    tags: ["GDP", "Index", "WDI"],
     keywords: ["ny.gdp.mktp.kd", "ny.gdp.mktp.cd", "aggregate", "china", "turkey", "saudi arabia", "world"],
+    groupPlacements: [{ group: "global", order: 1 }],
     primarySignal: { kind: "gdp_global_comparison" },
     eventLayers: ["iran_core", "world_core", "sanctions"],
     concepts: ["gdp_aggregate", "measurement_vs_reality", "indexing", "event_overlay"],
@@ -592,12 +627,12 @@ export const STUDIES: StudyMeta[] = [
     title: "ISI diagnostics — trade and industry structure",
     subtitle: "Brazil, Argentina, India, Turkey, and Iran (World Bank WDI)",
     timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
-    description:
-      "Import substitution industrialization (ISI) is not a single measured variable: researchers look at trade openness, industrial shares, and growth together. This study plots annual WDI indicators for five large middle-income histories—imports, exports, manufacturing and industry value added (each as % of GDP), plus GDP growth—so you can compare broad patterns across countries. The overview chart re-bases four structure series to 100 in a common base year (preferring 2000) for one country at a time; detail charts show raw WDI percentages or growth rates.",
+    description: "Trade and industry as % of GDP, plus real GDP growth: BR, AR, IN, TR, IR. Indexed overview + raw panels—broad ISI-relevant patterns.",
     status: "active",
     countries: ["iran", "global"],
     themes: ["macro"],
-    tags: ["Trade", "Industry", "World Bank", "WDI", "ISI", "Brazil", "Argentina", "India", "Turkey"],
+    tags: ["ISI", "5 countries", "WDI"],
+    groupPlacements: [{ group: "policy", order: 2 }],
     keywords: [
       "isi",
       "import substitution",
@@ -621,62 +656,82 @@ export const STUDIES: StudyMeta[] = [
       "GDP growth (NY.GDP.MKTP.KD.ZG) is the annual percentage change of real GDP at constant national prices; it is not indexed in the outcomes chart.",
     ],
   },
+  {
+    id: "oil-economy-overview",
+    number: 35,
+    title: "Oil economy overview — Iran",
+    subtitle: "Production, benchmark price, and estimated revenue",
+    timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
+    description: "Annual Iran production, benchmark price, and a simple prod×price line—how volume and market price line up, not state fiscal receipts.",
+    status: "active",
+    groupPlacements: [{ group: "iran", order: 3 }],
+    primarySignal: { kind: "oil_economy_overview" },
+    countries: ["iran", "global"],
+    themes: ["oil", "macro"],
+    tags: ["Iran", "Volume × price"],
+    concepts: ["nominal_price", "oil_benchmark", "price_vs_quantity", "derived_series"],
+    observations: [
+      "Revenue is annual barrels × annual average price (EIA global proxy 1980–86; FRED DCOILBRENTEU 1987+). Not government receipts or net export value.",
+      "1965–1999 production: embedded Energy Institute (1965–79) and EIA/BP-compatible annuals (1980–99) when the live EIA/IMF pipeline has no value for that year; 2000+ from the same pipeline as other oil production studies. Primary (EIA/IMF) wins when both exist.",
+      "When prices rise with flat production, the revenue line tends to rise; when production falls, revenue can fall even if price is high.",
+    ],
+  },
 ];
 
-/** Studies page grouped sections (order + copy). Study ids must exist in `STUDIES`. */
-export const STUDY_SECTIONS: { title: string; description: string; studyIds: string[] }[] = [
-  {
-    title: "Foundations (signals)",
-    description: "Core price and exchange-rate series that anchor later analysis.",
-    studyIds: ["iran", "usd-toman", "oil-and-fx", "iran-gdp-composition", "iran-gdp-accounts-dual", "dutch-disease-diagnostics"],
+/** Fixed section order for `/studies` grouped view. */
+export const STUDY_BROWSE_GROUP_ORDER: readonly StudyGroup[] = [
+  "core",
+  "iran",
+  "global",
+  "policy",
+  "welfare",
+  "discourse",
+] as const;
+
+export const STUDY_BROWSE_GROUP_TITLES: Record<StudyGroup, { title: string; description: string }> = {
+  core: {
+    title: "Core Signals",
+    description: "FX, spot oil, oil+FX, and cross-country inflation (CPI).",
   },
-  {
-    title: "Context (timelines)",
-    description: "Reference timelines for events and long-range price context.",
-    studyIds: ["events_timeline", "global_oil_1900", "oil_geopolitical_reaction"],
+  iran: {
+    title: "Iran Economy",
+    description: "National accounts, oil, exports, FX, and labor in the Iran view.",
   },
-  {
-    title: "Burden & adjustment (methods)",
-    description: "Inflation-adjusted and PPP-based measures of economic burden.",
-    studyIds: ["real_oil_price", "iran_oil_ppp", "iran_real_wage_cpi"],
+  global: {
+    title: "Global Context",
+    description: "GDP scale, long-run oil, events, production, and trade.",
   },
-  {
-    title: "Comparisons & constraints",
-    description: "Cross-country comparisons and capacity under constraints.",
-    studyIds: [
-      "iran_oil_ppp_turkey",
-      "iran_oil_export_capacity",
-      "oil_major_exporters",
-      "iran_fx_spread",
-      "gini-inequality",
-      "inflation-rate",
-      "global-gdp-comparison",
-      "isi-diagnostics",
-      "poverty-rate",
-    ],
+  policy: {
+    title: "Structural & Policy",
+    description: "Resource–tradable and import-substitution–style structure (WDI).",
   },
-  {
-    title: "Audience dynamics (growth & networks)",
-    description: "Follower growth, simple growth models, and network prototypes.",
-    studyIds: ["follower_growth_dynamics", "oil_trade_network", "oil_exporter_timeseries"],
+  welfare: {
+    title: "Inequality & Welfare",
+    description: "Inequality, poverty, and prices—welfare and purchasing power.",
   },
-  {
-    title: "Media discourse",
-    description:
-      "Language, narrative, and audience discourse extracted from YouTube comment sections.",
-    studyIds: [
-      "bplus-discourse",
-      "bbc_persian_discourse",
-      "iran_international_discourse",
-      "breaking_points_discourse",
-      "tucker_carlson_discourse",
-      "cnn_discourse",
-      "fox_news_discourse",
-      "bbc_discourse",
-      "rest_is_politics_discourse",
-    ],
+  discourse: {
+    title: "Discourse & Audience",
+    description: "Platform growth and YouTube comment analysis.",
   },
-];
+};
+
+/**
+ * Studies that belong in one browse group, sorted by that group’s `order` (inclusive of duplicate rows for
+ * the same study, e.g. inflation in core + welfare).
+ */
+export function getBrowseRowsForGroup(
+  studies: StudyMeta[],
+  group: StudyGroup
+): { study: StudyMeta; order: number }[] {
+  const out: { study: StudyMeta; order: number }[] = [];
+  for (const study of studies) {
+    for (const p of study.groupPlacements ?? []) {
+      if (p.group === group) out.push({ study, order: p.order });
+    }
+  }
+  out.sort((a, b) => a.order - b.order);
+  return out;
+}
 
 /** Primary signals that may attach the `global_macro_oil` event layer (curated world anchors). */
 const PRIMARY_KINDS_GLOBAL_MACRO_OIL: ReadonlyArray<PrimarySignal["kind"]> = [

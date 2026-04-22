@@ -1697,6 +1697,7 @@ def update_macro_signals() -> dict:
             "poverty_headcount_iran": invalidate_prefix("signal:poverty_headcount_iran:"),
             "dutch_disease_diagnostics_iran": invalidate_prefix("signal:dutch_disease_diagnostics_iran:"),
             "isi_diagnostics": invalidate_prefix("signal:isi_diagnostics:"),
+            "oil_economy_overview": invalidate_prefix("signal:oil_economy_overview:"),
         }
     except Exception as e:
         out["wdi_signal_cache_invalidated"] = {"error": str(e)}

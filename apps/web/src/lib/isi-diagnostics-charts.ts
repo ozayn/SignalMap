@@ -4,6 +4,7 @@
 
 import type { ChartSeries } from "@/components/timeline-chart";
 import { countryComparatorSeriesStyle } from "@/lib/chart-country-series-styles";
+import { SIGNAL_CONCEPT } from "@/lib/signalmap-chart-colors";
 import { indexSeriesTo100, resolveCommonIndexBaseYear } from "@/lib/dutch-disease-overview-index";
 import type { GdpLevelPoint } from "@/lib/gdp-levels-indexed";
 
@@ -92,7 +93,7 @@ export function buildIsiOverviewIndexedSeries(
     "Imports (% of GDP), indexed",
     "واردات (٪ GDP)، شاخص‌شده",
     imp,
-    "#6366f1",
+    SIGNAL_CONCEPT.isi_imports,
     "circle"
   );
   const b = mk(
@@ -100,7 +101,7 @@ export function buildIsiOverviewIndexedSeries(
     "Exports (% of GDP), indexed",
     "صادرات (٪ GDP)، شاخص‌شده",
     exp,
-    "#8b5cf6",
+    SIGNAL_CONCEPT.isi_exports,
     "diamond"
   );
   const c = mk(
@@ -108,7 +109,7 @@ export function buildIsiOverviewIndexedSeries(
     "Manufacturing (% of GDP), indexed",
     "تولیدات کارخانه‌ای (٪ GDP)، شاخص‌شده",
     mfg,
-    "#16a34a",
+    SIGNAL_CONCEPT.isi_manufacturing,
     "rect"
   );
   const d = mk(
@@ -116,7 +117,7 @@ export function buildIsiOverviewIndexedSeries(
     "Industry (% of GDP), indexed",
     "صنعت (٪ GDP)، شاخص‌شده",
     ind,
-    "#ca8a04",
+    SIGNAL_CONCEPT.isi_industry,
     "triangle"
   );
   for (const x of [a, b, c, d]) if (x) multi.push(x);

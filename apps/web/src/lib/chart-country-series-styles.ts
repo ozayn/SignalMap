@@ -5,6 +5,8 @@
  * Each country has a distinct (color, symbol) pair so multi-series charts stay readable
  * when printed or color is ambiguous. Keys match API `series` object names except USA → `us` on charts.
  */
+import { SIGNAL_COUNTRY } from "@/lib/signalmap-chart-colors";
+
 export type ComparatorLineSymbol = "circle" | "rect" | "diamond" | "triangle" | "roundRect" | "arrow";
 
 export type CountryComparatorSeriesKey =
@@ -26,15 +28,15 @@ export type CountryComparatorStyle = {
 };
 
 export const COUNTRY_COMPARATOR_STYLES: Record<CountryComparatorSeriesKey, CountryComparatorStyle> = {
-  iran: { color: "#f59e0b", symbol: "circle", legendIcon: "circle" },
-  us: { color: "#2563eb", symbol: "triangle", legendIcon: "triangle" },
-  germany: { color: "#6b7280", symbol: "rect", legendIcon: "rect" },
-  turkey: { color: "#10b981", symbol: "diamond", legendIcon: "diamond" },
-  china: { color: "#dc2626", symbol: "roundRect", legendIcon: "roundRect" },
-  saudi_arabia: { color: "#9333ea", symbol: "arrow", legendIcon: "arrow" },
-  brazil: { color: "#059669", symbol: "circle", legendIcon: "circle" },
-  argentina: { color: "#0284c7", symbol: "rect", legendIcon: "rect" },
-  india: { color: "#ea580c", symbol: "roundRect", legendIcon: "roundRect" },
+  iran: { color: SIGNAL_COUNTRY.iran, symbol: "circle", legendIcon: "circle" },
+  us: { color: SIGNAL_COUNTRY.us, symbol: "triangle", legendIcon: "triangle" },
+  germany: { color: SIGNAL_COUNTRY.germany, symbol: "rect", legendIcon: "rect" },
+  turkey: { color: SIGNAL_COUNTRY.turkey, symbol: "diamond", legendIcon: "diamond" },
+  china: { color: SIGNAL_COUNTRY.china, symbol: "roundRect", legendIcon: "roundRect" },
+  saudi_arabia: { color: SIGNAL_COUNTRY.saudi_arabia, symbol: "arrow", legendIcon: "arrow" },
+  brazil: { color: SIGNAL_COUNTRY.brazil, symbol: "circle", legendIcon: "circle" },
+  argentina: { color: SIGNAL_COUNTRY.argentina, symbol: "rect", legendIcon: "rect" },
+  india: { color: SIGNAL_COUNTRY.india, symbol: "roundRect", legendIcon: "roundRect" },
 };
 
 export function countryComparatorSeriesStyle(seriesKey: string): CountryComparatorStyle | undefined {

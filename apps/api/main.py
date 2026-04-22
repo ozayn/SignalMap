@@ -255,6 +255,29 @@ def cron_update_oil_trade():
     return update_oil_trade_network()
 
 
+@app.post("/api/cron/oil-economy/brent")
+def cron_oil_economy_brent():
+    """Append missing Brent (FRED DCOILBRENTEU) for oil-economy and other studies. Idempotent.
+
+    Revenue is **not** stored; it is always computed in the oil-economy API as production x price.
+    """
+    from signalmap.services.daily_updates import run_oil_economy_brent_cron
+
+    return run_oil_economy_brent_cron()
+
+
+@app.post("/api/cron/oil-economy/production")
+def cron_oil_economy_production():
+    """Append new oil production rows (EIA/IMF) for US, SA, RU, IR. Prefer monthly; idempotent.
+
+    Set ``DAILY_CRON_OIL_PRODUCTION=0`` and call this (or use ``cron_oil_production_monthly.py``) instead
+    of running production inside ``/api/cron/update-all`` daily.
+    """
+    from signalmap.services.daily_updates import run_oil_production_cron
+
+    return run_oil_production_cron()
+
+
 @app.get("/api/events")
 def get_events(
     study_id: str = "1",
@@ -640,6 +663,23 @@ def get_oil_export_capacity_signal(
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
+@app.get("/api/signals/oil/economy-overview")
+def get_oil_economy_overview_signal(
+    start: str = Query(..., description="Start date YYYY-MM-DD"),
+    end: str = Query(..., description="End date YYYY-MM-DD"),
+):
+    """Iran: annual production, Brent price, estimated revenue (production × Brent)."""
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    try:
+        from signalmap.services.signals import get_oil_economy_overview_iran
+        return get_oil_economy_overview_iran(start, end)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
+
+
 @app.get("/api/signals/oil/global-long")
 def get_oil_global_long_signal(
     start: str = Query(..., description="Start date YYYY-MM-DD"),
@@ -713,7 +753,7 @@ def get_usd_irr_dual_signal(
     start: str = Query(..., description="Start date YYYY-MM-DD"),
     end: str = Query(..., description="End date YYYY-MM-DD"),
 ):
-    """Return official (FRED proxy) and open-market USD/IRR for dual exchange rate study."""
+    """Return official (World Bank WDI FCRF + FRED PWT backfill) and open-market (Bonbast + rial archive, no FRED)."""
     if not _validate_date(start) or not _validate_date(end):
         raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
     if start > end:

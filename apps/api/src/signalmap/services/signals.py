@@ -12,6 +12,12 @@ from signalmap.data.iran_wage_cpi import (
     IRAN_NOMINAL_MINIMUM_WAGE,
     WAGE_CPI_BASE_YEAR,
 )
+from signalmap.data.iran_oil_production_annual_historical import (
+    HISTORICAL_EARLIEST_YEAR,
+    HISTORICAL_EXT_SOURCE,
+    apply_iran_historical_gaps,
+    merge_iran_historical_into_exporters_data,
+)
 from signalmap.data.oil_annual import BRENT_DAILY_START, OIL_ANNUAL_EIA
 from signalmap.sources.bonbast_usd_toman import fetch_usd_toman_series
 from signalmap.sources.brent_market_price import fetch_brent_market_price
@@ -20,6 +26,10 @@ from signalmap.sources.fred_cpi import fetch_cpi_series
 from signalmap.sources.world_bank_ppp import fetch_iran_ppp_series, fetch_turkey_ppp_series
 from signalmap.sources.fred_iran_fx import fetch_iran_fx_series
 from signalmap.sources.rial_archive_usd_toman import fetch_archive_usd_toman_series
+from signalmap.sources.world_bank_iran_fcrf import (
+    OFFICIAL_FX_WDI_FCRF_SOURCE,
+    build_iran_official_annual_toman_merged,
+)
 from signalmap.data.oil_production_exporters import SOURCE as OIL_PRODUCTION_SOURCE_NAME, UNIT as OIL_PRODUCTION_UNIT
 from signalmap.sources.oil_production_exporters import fetch_oil_production_exporters
 from signalmap.store.signals_repo import get_points, upsert_points
@@ -68,6 +78,18 @@ USD_TOMAN_SOURCE = {
     "notes": "Values in toman (1 toman = 10 rials). Daily: Bonbast archive. Pre-2012: FRED annual.",
 }
 
+# Open market only: **no** FRED/official — for dual-rate study to avoid a flat/misleading pre-2012 "open" line.
+OPEN_MARKET_USD_TOMAN_DUAL_SOURCE: dict = {
+    "name": "rial-archive (Bonbast) + Bonbast live",
+    "publisher": "SamadiPour/rial-exchange-rates-archive; Bonbast (high-frequency, recent days)",
+    "type": "open_market",
+    "url": "https://github.com/SamadiPour/rial-exchange-rates-archive",
+    "notes": (
+        "Toman per USD. Archive from 2012-10-09; Bonbast graph and/or live scrape for the latest window. "
+        "No FRED, no imputed pre-archive points."
+    ),
+}
+
 
 def _cache_key(signal_key: str, start: str, end: str) -> str:
     return f"signal:{signal_key}:{start}:{end}"
@@ -104,6 +126,29 @@ def fetch_usd_toman_merged() -> list[dict]:
     for p in bonbast:
         by_date[p["date"]] = p
     return sorted(by_date.values(), key=lambda x: x["date"])
+
+
+def fetch_open_market_usd_toman_merged() -> list[dict]:
+    """
+    Bonbast/rial archive only: **no** FRED official series, so the dual study “open” line
+    does not run flat against the WDI/official line before 2012.
+    """
+    archive: list[dict] = []
+    bonbast: list[dict] = []
+    try:
+        archive = fetch_archive_usd_toman_series()
+    except Exception:
+        pass
+    try:
+        bonbast = fetch_usd_toman_series()
+    except Exception:
+        pass
+    by_date: dict[str, float] = {}
+    for p in archive:
+        by_date[p["date"]] = p["value"]
+    for p in bonbast:
+        by_date[p["date"]] = p["value"]
+    return [{"date": d, "value": round(v, 2)} for d, v in sorted(by_date.items(), key=lambda x: x[0])]
 
 
 def get_brent_series(start: str, end: str) -> dict:
@@ -512,6 +557,99 @@ def get_export_revenue_proxy_series(start: str, end: str) -> dict:
     return result
 
 
+def get_oil_economy_overview_iran(start: str, end: str) -> dict:
+    """
+    Iran production (mb/d), global oil price (USD/bbl), revenue = production * days * price.
+    Primary: EIA/IMF bundle; gaps filled from embedded EI (1965–1979) + EIA/BP (1980–1999) annuals.
+    1980–86 price: EIA annual; 1987+ FRED DCOILBRENTEU. Revenue: stylized back-of-envelope.
+    """
+    ck = f"signal:oil_economy_overview:v3:{start}:{end}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    prod_bundle = get_oil_production_exporters_series(start, end)
+    iran_by_year: dict[int, float] = {}
+    for row in prod_bundle.get("data", []):
+        v = row.get("iran")
+        if v is not None and isinstance(v, (int, float)) and float(v) > 0:
+            iran_by_year[int(row["date"][:4])] = round(float(v), 4)
+    apply_iran_historical_gaps(iran_by_year, start_year, end_year)
+    iran_prod = [
+        {"date": f"{y}-01-01", "value": v}
+        for y, v in sorted(iran_by_year.items())
+        if start_year <= y <= end_year and v and v > 0
+    ]
+
+    oil_by_year = _get_oil_annual_avg_by_year(start_year, end_year)
+    price_pts = [
+        {"date": f"{y}-01-01", "value": v} for y, v in sorted(oil_by_year.items()) if start_year <= y <= end_year
+    ]
+    price_methodology = {
+        "pre_1987": (
+            "EIA U.S. crude first-purchase price (USD/bbl, annual) as global price proxy; "
+            "not Dated Brent. Same as other SignalMap pre-Brent annuals."
+        ),
+        "brent_1987_plus": f"FRED {BRENT_SOURCE['series_id']}: mean of daily USD/bbl; series starts {BRENT_DAILY_START}.",
+    }
+
+    by_p = {int(p["date"][:4]): float(p["value"]) for p in iran_prod}
+    by_r = {int(p["date"][:4]): float(p["value"]) for p in price_pts}
+    revenue: list[dict] = []
+    for y in range(start_year, end_year + 1):
+        mbd = by_p.get(y)
+        pr = by_r.get(y)
+        if mbd is None or pr is None or mbd <= 0:
+            continue
+        usd = mbd * 1_000_000.0 * 365.25 * pr
+        revenue.append({"date": f"{y}-01-01", "value": round(usd, 0)})
+
+    first_prod_y = min(iran_by_year) if iran_by_year else None
+    out = {
+        "country": "IRN",
+        "production": {
+            "unit": "million bbl/day",
+            "source": OIL_PRODUCTION_SOURCE,
+            "source_historical_fill": HISTORICAL_EXT_SOURCE,
+            "resolution": "annual",
+            "metadata": {
+                "earliest_year_achievable": HISTORICAL_EARLIEST_YEAR,
+                "earliest_year_in_range": first_prod_y,
+            },
+            "points": iran_prod,
+        },
+        "price": {
+            "unit": "USD/barrel",
+            "source": BRENT_SOURCE,
+            "resolution": "annual",
+            "methodology": price_methodology,
+            "points": price_pts,
+        },
+        "revenue": {
+            "unit": "USD/year (estimated)",
+            "source": {
+                "name": (
+                    "Derived: Energy Institute / EIA production (1965+ where filled) × annual oil price (EIA 1980–86; Brent 1987+)"
+                ),
+                "publisher": "SignalMap",
+                "url": "https://fred.stlouisfed.org/series/DCOILBRENTEU",
+            },
+            "points": revenue,
+            "methodology": {
+                "formula": "revenue_usd ≈ iran_mbd * 1e6 * 365.25 * annual_price_usd_per_bbl",
+                "note": (
+                    "Stylized gross: annual barrels × annual price. 1980–86 price = EIA proxy. "
+                    "Not government revenue, not realized export value, not net of cost or quality discounts."
+                ),
+            },
+        },
+    }
+    cache_set(ck, out, CACHE_TTL)
+    return out
+
+
 def get_oil_export_capacity_study(start: str, end: str) -> dict:
     """
     Combined response for Study 9: oil price (annual), export volume, export revenue proxy.
@@ -629,38 +767,64 @@ def get_usd_toman_series(start: str, end: str) -> dict:
     return result
 
 
-OFFICIAL_IRR_SOURCE = {
-    "name": "FRED XRNCUSIRA618NRUG",
-    "publisher": "Federal Reserve Bank of St. Louis (Penn World Table)",
-    "type": "official_proxy",
-    "url": "https://fred.stlouisfed.org/series/XRNCUSIRA618NRUG",
-    "notes": "Annual data, rials per USD converted to toman (÷10). Series ends 2019.",
-}
-
-
 def get_usd_irr_dual_series(start: str, end: str) -> dict:
     """
-    Return official (FRED proxy) and open-market USD/IRR series for dual exchange rate study.
-    official: annual, toman per USD (FRED). open_market: daily where available (Bonbast archive).
+    **Official** annual: World Bank WDI `PA.NUS.FCRF` in toman/USD, with FRED (PWT) for years WDI omits.
+    **Open market** daily/spot: rial archive + Bonbast only (no FRED) so pre-archive years are not
+    a misleading “open = official” line.
+
+    Series can start at different dates; the client should not force-align the level lines. Spread (%)
+    should use **within-year** mean of open (Gregorian) vs official for that year when both exist.
     """
-    official_points = []
+    ck = f"signal:fx_usd_irr_dual:v3:{start}:{end}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    full_official = build_iran_official_annual_toman_merged()
+    official_points = [p for p in full_official if start <= p["date"] <= end]
+
+    open_merged: list[dict] = []
     try:
-        fred_series = fetch_iran_fx_series()
-        official_points = [p for p in fred_series if start <= p["date"] <= end]
+        open_merged = fetch_open_market_usd_toman_merged()
     except Exception:
-        pass
-    open_result = get_usd_toman_series(start, end)
-    open_points = open_result.get("points", [])
-    return {
+        open_merged = []
+    open_points = [p for p in open_merged if start <= p["date"] <= end]
+
+    off_years = [int(p["date"][:4]) for p in official_points]
+    open_days = [p["date"] for p in open_points] if open_points else []
+    metadata = {
+        "official_earliest_year": min(off_years) if off_years else None,
+        "official_latest_year": max(off_years) if off_years else None,
+        "open_earliest_date": min(open_days) if open_days else None,
+        "open_latest_date": max(open_days) if open_days else None,
+        "unit": "toman per 1 USD (1 toman = 10 rials)",
+    }
+
+    out = {
         "official": {
             "points": official_points,
-            "source": OFFICIAL_IRR_SOURCE,
+            "source": OFFICIAL_FX_WDI_FCRF_SOURCE,
+            "metadata": {
+                "official_earliest_year": metadata.get("official_earliest_year"),
+                "official_latest_year": metadata.get("official_latest_year"),
+                "unit": metadata.get("unit"),
+                "resolution": "annual",
+            },
         },
         "open_market": {
             "points": open_points,
-            "source": open_result.get("source", USD_TOMAN_SOURCE),
+            "source": OPEN_MARKET_USD_TOMAN_DUAL_SOURCE,
+            "metadata": {
+                "open_earliest_date": metadata.get("open_earliest_date"),
+                "open_latest_date": metadata.get("open_latest_date"),
+                "unit": metadata.get("unit"),
+                "resolution": "daily" if open_points else "none",
+            },
         },
     }
+    cache_set(ck, out, CACHE_TTL)
+    return out
 
 
 OIL_PRODUCTION_SOURCE = {
@@ -684,7 +848,7 @@ def get_oil_production_exporters_series(start: str, end: str, nocache: bool = Fa
     Unit: million barrels per day. Annual resolution.
     Read path: cache → DB (if all 4 signals have data) → fetch.
     """
-    ck = f"signal:oil_production_exporters:{start}:{end}"
+    ck = f"signal:oil_production_exporters:v2:{start}:{end}"
     if not nocache:
         cached = cache_get(ck)
         if cached is not None:
@@ -723,6 +887,12 @@ def get_oil_production_exporters_series(start: str, end: str, nocache: bool = Fa
         data = [r for r in rows if start_year <= int(r["date"][:4]) <= effective_end]
         used_db = False
 
+    # Iran: fill pre-primary years (1965+ when missing) and gaps from embedded EI/EIA table; primary overwrites
+    # when it has a positive value. Run even if ``data`` is empty (static/API can yield no rows; Iran-only years).
+    start_year_ex = int(start[:4])
+    end_year_ex = int(end[:4])
+    data = merge_iran_historical_into_exporters_data(data, start_year_ex, end_year_ex)
+
     # Ensure current year is included when data ends before (both DB and fetch paths)
     if data:
         current_year = datetime.now(timezone.utc).year
@@ -735,6 +905,8 @@ def get_oil_production_exporters_series(start: str, end: str, nocache: bool = Fa
     result = {
         "data": data,
         "source": OIL_PRODUCTION_SOURCE,
+        "source_iran_historical": HISTORICAL_EXT_SOURCE,
+        "earliest_iran_historical_year": HISTORICAL_EARLIEST_YEAR,
         "unit": OIL_PRODUCTION_UNIT,
         "resolution": "annual",
     }

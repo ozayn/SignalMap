@@ -1,8 +1,15 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import { useTheme } from "next-themes";
 import * as echarts from "echarts";
+import { formatChartTooltipNumber } from "@/lib/format-compact-decimal";
+import { Button } from "@/components/ui/button";
+import { useStudyChartExportFilenameContext } from "@/components/study-chart-export-filename-context";
+import { downloadEchartsRaster, slugifyChartFilename, type DownloadEchartsRasterOptions } from "@/lib/chart-export";
+import { buildStudyChartExportFilenameStem } from "@/lib/chart-export-filename";
+import { buildPresentationExportTitle } from "@/lib/chart-export-presentation";
+import { cssHsl } from "@/lib/utils";
 
 export type SankeyEdge = { source: string; target: string; value: number };
 
@@ -36,12 +43,93 @@ type OilTradeSankeyProps = {
   nodeColorOrder?: string[];
   /** All data mode: tuned layout, tooltip with share. */
   isAllDataMode?: boolean;
+  exportFileStem?: string;
+  exportSourceFooter?: string;
+  exportPresentationTitle?: string;
+  exportPresentationStudyHeading?: string;
+  chartLocale?: "en" | "fa";
 };
 
-export function OilTradeSankey({ edges, year, exporterOrder = [], importerOrder = [], nodeColorOrder = [], isAllDataMode = false }: OilTradeSankeyProps) {
+const DEFAULT_SANKEY_EXPORT_STEM = "oil-trade-sankey";
+
+export function OilTradeSankey({
+  edges,
+  year,
+  exporterOrder = [],
+  importerOrder = [],
+  nodeColorOrder = [],
+  isAllDataMode = false,
+  exportFileStem = DEFAULT_SANKEY_EXPORT_STEM,
+  exportSourceFooter,
+  exportPresentationTitle: exportPresentationTitleProp,
+  exportPresentationStudyHeading,
+  chartLocale = "en",
+}: OilTradeSankeyProps) {
   const chartRef = useRef<HTMLDivElement>(null);
+  const chartInstanceRef = useRef<echarts.ECharts | null>(null);
+  const exportFilenameCtx = useStudyChartExportFilenameContext();
   const { resolvedTheme } = useTheme();
   const labelColor = resolvedTheme === "dark" ? "#9ca3af" : "#374151";
+
+  const handleExportPng = useCallback(() => {
+    const inst = chartInstanceRef.current;
+    if (!inst) return;
+    const y = (year && String(year).slice(0, 4)) || new Date().getFullYear().toString();
+    const yStart = `${y}-01-01`;
+    const yEnd = `${y}-12-31`;
+    const backgroundColor = cssHsl("--background", "hsl(0, 0%, 100%)");
+    const footerColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
+    const titleColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
+    const stem =
+      exportFilenameCtx && exportFileStem
+        ? buildStudyChartExportFilenameStem({
+            studySlug: exportFilenameCtx.studySlug,
+            chartFileStem: exportFileStem,
+            locale: exportFilenameCtx.locale,
+            yearAxisMode: "gregorian",
+            selectedStart: yStart,
+            selectedEnd: yEnd,
+            defaultStart: yStart,
+            defaultEnd: yEnd,
+            rangeGranularity: "year",
+          })
+        : slugifyChartFilename(exportFileStem ?? DEFAULT_SANKEY_EXPORT_STEM);
+    const resolvedTitle =
+      exportPresentationTitleProp?.trim() ||
+      buildPresentationExportTitle({
+        studyHeading: exportPresentationStudyHeading ?? "Oil trade",
+        metricLabel: `Sankey (${y})${isAllDataMode ? " · all data" : " · curated"}`,
+        timeRange: [yStart, yEnd],
+        chartLocale,
+        yearAxisMode: "gregorian",
+      });
+    const exportOpts: DownloadEchartsRasterOptions = {
+      exportSourceFooter: exportSourceFooter?.trim(),
+      exportSourceFooterColor: footerColor,
+      exportPresentationTitle: resolvedTitle,
+      exportPresentationDirection: chartLocale === "fa" ? "rtl" : "ltr",
+      exportPresentationLocale: chartLocale === "fa" ? "fa" : "en",
+      exportPresentationTitleColor: titleColor,
+    };
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        try {
+          downloadEchartsRaster(inst, "png", stem, backgroundColor, exportOpts);
+        } catch {
+          /* */
+        }
+      });
+    });
+  }, [
+    year,
+    exportFileStem,
+    exportFilenameCtx,
+    exportPresentationTitleProp,
+    exportPresentationStudyHeading,
+    exportSourceFooter,
+    isAllDataMode,
+    chartLocale,
+  ]);
 
   useEffect(() => {
     const el = chartRef.current;
@@ -53,6 +141,7 @@ export function OilTradeSankey({ edges, year, exporterOrder = [], importerOrder 
 
     let chart = echarts.getInstanceByDom(el);
     if (!chart) chart = echarts.init(el);
+    chartInstanceRef.current = chart;
 
     const validEdges = edges.filter((e) => Number.isFinite(e.value) && e.value > 0);
     const dagEdges = edgesToDag(validEdges);
@@ -120,11 +209,12 @@ export function OilTradeSankey({ edges, year, exporterOrder = [], importerOrder 
             const share = exporterTotals[src]
               ? ((v / exporterTotals[src]!) * 100).toFixed(1)
               : "—";
+            const flow = formatChartTooltipNumber(v, "en");
             return isAllDataMode
-              ? `<strong>Exporter:</strong> ${src}<br/><strong>Importer:</strong> ${tgt}<br/><strong>Flow:</strong> ${v.toLocaleString()} thousand bbl/day<br/><strong>Share of exporter total:</strong> ${share}%`
-              : `<strong>${src}</strong> → <strong>${tgt}</strong><br/>${v.toLocaleString()} thousand bbl/day`;
+              ? `<strong>Exporter:</strong> ${src}<br/><strong>Importer:</strong> ${tgt}<br/><strong>Flow:</strong> ${flow} thousand bbl/day<br/><strong>Share of exporter total:</strong> ${share}%`
+              : `<strong>${src}</strong> → <strong>${tgt}</strong><br/>${flow} thousand bbl/day`;
           }
-          return `${v.toLocaleString()} thousand bbl/day`;
+          return `${formatChartTooltipNumber(v, "en")} thousand bbl/day`;
         },
       },
       graphic: [
@@ -196,6 +286,7 @@ export function OilTradeSankey({ edges, year, exporterOrder = [], importerOrder 
     window.addEventListener("resize", resize);
     return () => {
       window.removeEventListener("resize", resize);
+      chartInstanceRef.current = null;
       chart.dispose();
     };
   }, [edges, year, exporterOrder, importerOrder, nodeColorOrder, labelColor, isAllDataMode]);
@@ -203,10 +294,23 @@ export function OilTradeSankey({ edges, year, exporterOrder = [], importerOrder 
   if (edges.length === 0) return null;
 
   return (
-    <div
-      ref={chartRef}
-      className="w-full h-[70vh] md:h-[520px]"
-      style={{ width: "100%", minHeight: 360 }}
-    />
+    <div className="w-full min-w-0">
+      <div className="mb-2 flex flex-wrap items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 shrink-0 rounded-md px-2.5 text-xs font-normal leading-none"
+          onClick={handleExportPng}
+        >
+          Export PNG
+        </Button>
+      </div>
+      <div
+        ref={chartRef}
+        className="w-full h-[70vh] md:h-[520px]"
+        style={{ width: "100%", minHeight: 360 }}
+      />
+    </div>
   );
 }

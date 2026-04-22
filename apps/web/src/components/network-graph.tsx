@@ -1,9 +1,15 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { useTheme } from "next-themes";
 import * as echarts from "echarts";
+import { Button } from "@/components/ui/button";
 import { OIL_TRADE_NODE_COLOR_PALETTE } from "@/components/oil-trade-sankey";
+import { useStudyChartExportFilenameContext } from "@/components/study-chart-export-filename-context";
+import { downloadEchartsRaster, slugifyChartFilename, type DownloadEchartsRasterOptions } from "@/lib/chart-export";
+import { buildStudyChartExportFilenameStem } from "@/lib/chart-export-filename";
+import { buildPresentationExportTitle } from "@/lib/chart-export-presentation";
+import { cssHsl } from "@/lib/utils";
 
 export type NetworkNode = { id: string };
 export type NetworkEdge = { source: string; target: string; value: number };
@@ -88,14 +94,38 @@ type NetworkGraphProps = {
   nodeOrder?: string[];
   /** All data mode: force layout, reduced clutter, top labels only. */
   isAllDataMode?: boolean;
+  /** PNG export (ECharts) — same pipeline as time-series studies. */
+  exportFileStem?: string;
+  exportSourceFooter?: string;
+  /** Override presentation title; defaults to `studyHeading` + network + year. */
+  exportPresentationTitle?: string;
+  exportPresentationStudyHeading?: string;
+  chartLocale?: "en" | "fa";
 };
+
+const DEFAULT_EXPORT_STEM = "oil-trade-network";
 
 const MIN_NODE_SIZE = 6;
 const MAX_NODE_SIZE = 42;
 const TOP_LABELS_COUNT = 15;
 
-export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder = [], nodeOrder = [], isAllDataMode = false }: NetworkGraphProps) {
+export function NetworkGraph({
+  nodes,
+  edges,
+  year,
+  onNodeClick,
+  nodeColorOrder = [],
+  nodeOrder = [],
+  isAllDataMode = false,
+  exportFileStem = DEFAULT_EXPORT_STEM,
+  exportSourceFooter,
+  exportPresentationTitle: exportPresentationTitleProp,
+  exportPresentationStudyHeading,
+  chartLocale = "en",
+}: NetworkGraphProps) {
   const chartRef = useRef<HTMLDivElement>(null);
+  const chartInstanceRef = useRef<echarts.ECharts | null>(null);
+  const exportFilenameCtx = useStudyChartExportFilenameContext();
   const { resolvedTheme } = useTheme();
   const [containerSize, setContainerSize] = useState({ width: 800, height: 720 });
   const exporterBorderColor = resolvedTheme === "dark" ? "#fff" : "#374151";
@@ -113,10 +143,71 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder =
     return () => observer.disconnect();
   }, []);
 
+  const handleExportPng = useCallback(() => {
+    const inst = chartInstanceRef.current;
+    if (!inst) return;
+    const y = (year && String(year).slice(0, 4)) || new Date().getFullYear().toString();
+    const yStart = `${y}-01-01`;
+    const yEnd = `${y}-12-31`;
+    const backgroundColor = cssHsl("--background", "hsl(0, 0%, 100%)");
+    const footerColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
+    const titleColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
+    const stem =
+      exportFilenameCtx && exportFileStem
+        ? buildStudyChartExportFilenameStem({
+            studySlug: exportFilenameCtx.studySlug,
+            chartFileStem: exportFileStem,
+            locale: exportFilenameCtx.locale,
+            yearAxisMode: "gregorian",
+            selectedStart: yStart,
+            selectedEnd: yEnd,
+            defaultStart: yStart,
+            defaultEnd: yEnd,
+            rangeGranularity: "year",
+          })
+        : slugifyChartFilename(exportFileStem ?? DEFAULT_EXPORT_STEM);
+    const resolvedTitle =
+      exportPresentationTitleProp?.trim() ||
+      buildPresentationExportTitle({
+        studyHeading: exportPresentationStudyHeading ?? "Oil trade",
+        metricLabel: `Network (${y})${isAllDataMode ? " · all data" : " · curated"}`,
+        timeRange: [yStart, yEnd],
+        chartLocale,
+        yearAxisMode: "gregorian",
+      });
+    const exportOpts: DownloadEchartsRasterOptions = {
+      exportSourceFooter: exportSourceFooter?.trim(),
+      exportSourceFooterColor: footerColor,
+      exportPresentationTitle: resolvedTitle,
+      exportPresentationDirection: chartLocale === "fa" ? "rtl" : "ltr",
+      exportPresentationLocale: chartLocale === "fa" ? "fa" : "en",
+      exportPresentationTitleColor: titleColor,
+    };
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        try {
+          downloadEchartsRaster(inst, "png", stem, backgroundColor, exportOpts);
+        } catch {
+          /* instance disposed */
+        }
+      });
+    });
+  }, [
+    year,
+    exportFileStem,
+    exportFilenameCtx,
+    exportPresentationTitleProp,
+    exportPresentationStudyHeading,
+    exportSourceFooter,
+    isAllDataMode,
+    chartLocale,
+  ]);
+
   useEffect(() => {
     if (!chartRef.current || nodes.length === 0) return;
 
     const chart = echarts.init(chartRef.current);
+    chartInstanceRef.current = chart;
     const { width, height } = containerSize;
     const isMobile = width < 768;
     const nodeSizeScale = isMobile ? 0.6 : 1;
@@ -344,6 +435,7 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder =
     window.addEventListener("resize", resizeChart);
 
     return () => {
+      chartInstanceRef.current = null;
       chart.off("click");
       window.removeEventListener("resize", resizeChart);
       chart.dispose();
@@ -353,13 +445,26 @@ export function NetworkGraph({ nodes, edges, year, onNodeClick, nodeColorOrder =
   if (nodes.length === 0) return null;
 
   return (
-    <div
-      ref={chartRef}
-      className="w-full h-[70vh] md:h-[520px]"
-      style={{
-        width: "100%",
-        minHeight: 360,
-      }}
-    />
+    <div className="w-full min-w-0">
+      <div className="mb-2 flex flex-wrap items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 shrink-0 rounded-md px-2.5 text-xs font-normal leading-none"
+          onClick={handleExportPng}
+        >
+          Export PNG
+        </Button>
+      </div>
+      <div
+        ref={chartRef}
+        className="w-full h-[70vh] md:h-[520px]"
+        style={{
+          width: "100%",
+          minHeight: 360,
+        }}
+      />
+    </div>
   );
 }

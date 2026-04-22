@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """
-Cron job: run daily update for oil, fx, gold, fx_dual, youtube_followers.
+Cron job: run daily update for oil (Brent), fx, gold, fx_dual, oil_production (optional), …
 
 Designed for Railway Cron. Same build as API; override Start Command to:
   python cron_daily_update.py
+
+- **Brent** (``oil`` key): append missing DCOILBRENTEU — used by oil-economy price.
+- **Oil production** (``oil_production_exporters``): set ``DAILY_CRON_OIL_PRODUCTION=0`` to skip
+  and use ``cron_oil_production_monthly.py`` or ``POST /api/cron/oil-economy/production`` monthly.
+- **Revenue** is never written here; oil-economy API computes it.
 
 Exits when done. Requires DATABASE_URL, FRED_API_KEY (for oil).
 """

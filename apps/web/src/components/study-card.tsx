@@ -35,7 +35,7 @@ export function StudyCard({ study, signalTags }: StudyCardProps) {
           </p>
         ) : null}
         <p
-          className="text-[#6b7280] dark:text-[#9ca3af] mt-1.5 line-clamp-3"
+          className="text-[#6b7280] dark:text-[#9ca3af] mt-1.5 line-clamp-2"
           style={{ fontSize: "clamp(12px, 1.2vw, 14px)" }}
         >
           {study.description}

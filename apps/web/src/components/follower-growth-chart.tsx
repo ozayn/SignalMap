@@ -32,13 +32,12 @@ import {
   STUDY_CHART_TITLE_WRAP_CLASS,
 } from "@/lib/chart-study-typography";
 import { localizeChartNumericDisplayString, localizeChartNumericDisplayStringSafe } from "@/lib/chart-numerals-fa";
+import { formatChartAxisNumber } from "@/lib/format-compact-decimal";
 
 export type FollowerGrowthPoint = { date: string; value: number };
 
 function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
+  return formatChartAxisNumber(n, "en");
 }
 
 function filterPointsByDateRange(points: [string | number, number][], start: string, end: string) {
@@ -55,6 +54,8 @@ type FollowerGrowthChartProps = {
   showExponential?: boolean;
   showLogistic?: boolean;
   showChartControls?: boolean;
+  /** @default true — when `showChartControls` is false, still show Export PNG if there is data. */
+  showPngExportWhenRangeHidden?: boolean;
   exportFileStem?: string;
   exportSourceFooter?: string;
   exportPresentationStudyHeading?: string;
@@ -68,6 +69,7 @@ export function FollowerGrowthChart({
   showExponential = true,
   showLogistic = true,
   showChartControls = true,
+  showPngExportWhenRangeHidden = true,
   exportFileStem,
   exportSourceFooter,
   exportPresentationStudyHeading,
@@ -338,7 +340,8 @@ export function FollowerGrowthChart({
 
   if (!data.length) return null;
 
-  const showToolbar = showChartControls && !!rangeBounds;
+  const showFullRangeToolbar = showChartControls && !!rangeBounds;
+  const showExportOnlyToolbar = !showChartControls && showPngExportWhenRangeHidden && !!rangeBounds;
   const chartLocaleResolved = chartLocale ?? "en";
   const titleText = localizeChartNumericDisplayString(metricLabel.trim(), chartLocaleResolved);
   const sourceText = formatStudyExportSourceLine(exportSourceFooter, chartLocaleResolved);
@@ -348,7 +351,7 @@ export function FollowerGrowthChart({
       <p className="text-xs leading-snug text-muted-foreground">
         Raw data (scatter + line). Fitted models are descriptive only; no extrapolation beyond last point.
       </p>
-      {showToolbar ? (
+      {showFullRangeToolbar ? (
         <StudyChartControls
           minDate={rangeBounds![0]}
           maxDate={rangeBounds![1]}
@@ -358,6 +361,19 @@ export function FollowerGrowthChart({
           onEndChange={setClipEnd}
           onExportPng={handleExportPng}
           granularity="day"
+          mode="full"
+        />
+      ) : showExportOnlyToolbar ? (
+        <StudyChartControls
+          minDate={rangeBounds![0]}
+          maxDate={rangeBounds![1]}
+          startValue={clipStart}
+          endValue={clipEnd}
+          onStartChange={setClipStart}
+          onEndChange={setClipEnd}
+          onExportPng={handleExportPng}
+          granularity="day"
+          mode="exportOnly"
         />
       ) : null}
       <p className={STUDY_CHART_TITLE_WRAP_CLASS} dir={chartLocaleResolved === "fa" ? "rtl" : "ltr"}>

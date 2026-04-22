@@ -11,6 +11,8 @@ import {
   toYearInputMinMax,
 } from "@/lib/chart-study-range";
 
+export type StudyChartControlsMode = "full" | "exportOnly";
+
 export type StudyChartControlsProps = {
   minDate: string;
   maxDate: string;
@@ -22,6 +24,11 @@ export type StudyChartControlsProps = {
   disabledExport?: boolean;
   /** Picker resolution; defaults to day (`type="date"`). */
   granularity?: ChartRangeGranularity;
+  /**
+   * `exportOnly`: single Export PNG button (e.g. when the parent page owns range controls or the chart is year-scoped).
+   * `full`: start/end + export (default).
+   */
+  mode?: StudyChartControlsMode;
 };
 
 /** Toolbar row: inputs and export share one baseline (bottom-aligned). */
@@ -53,6 +60,7 @@ export function StudyChartControls({
   onExportPng,
   disabledExport,
   granularity = "day",
+  mode = "full",
 }: StudyChartControlsProps) {
   const minD = minDate.slice(0, 10);
   const maxD = maxDate.slice(0, 10);
@@ -69,6 +77,14 @@ export function StudyChartControls({
       Export PNG
     </Button>
   );
+
+  if (mode === "exportOnly") {
+    return (
+      <div className={`${TOOLBAR_ROW} flex-wrap justify-end`} aria-label="Chart export">
+        {exportButton}
+      </div>
+    );
+  }
 
   if (granularity === "year") {
     const { min: yMin, max: yMax } = toYearInputMinMax(minD, maxD);

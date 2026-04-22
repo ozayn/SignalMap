@@ -69,6 +69,13 @@ import {
   indexSeriesTo100,
   resolveCommonIndexBaseYear,
 } from "@/lib/dutch-disease-overview-index";
+import {
+  buildOilEconomyIndexedMultiSeries,
+  OIL_ECONOMY_COLOR_PRICE,
+  OIL_ECONOMY_COLOR_PRODUCTION,
+  OIL_ECONOMY_COLOR_REVENUE,
+} from "@/lib/oil-economy-overview-charts";
+import { SIGNAL_CONCEPT, SIGNAL_COUNTRY } from "@/lib/signalmap-chart-colors";
 import { fetchJson } from "@/lib/api";
 import { enrichOilPointsWithVolatility } from "@/lib/oil-volatility";
 import { filterForNetwork, filterForSankey } from "@/lib/oil-trade-network-filter";
@@ -186,6 +193,30 @@ type OilPppIranSignalData = {
   source: { oil: string; ppp: string };
   resolution: string;
   points: Array<{ date: string; value: number }>;
+};
+
+type OilEconomyOverviewSource = { name: string; publisher?: string; url?: string; notes?: string };
+type OilEconomyOverviewApi = {
+  country: string;
+  production: {
+    unit: string;
+    source: OilEconomyOverviewSource;
+    source_historical_fill?: OilEconomyOverviewSource;
+    metadata?: { earliest_year_achievable?: number; earliest_year_in_range?: number | null };
+    points: Array<{ date: string; value: number }>;
+  };
+  price: {
+    unit: string;
+    source: OilEconomyOverviewSource;
+    methodology?: { pre_1987?: string; brent_1987_plus?: string };
+    points: Array<{ date: string; value: number }>;
+  };
+  revenue: {
+    unit: string;
+    source: OilEconomyOverviewSource;
+    points: Array<{ date: string; value: number }>;
+    methodology?: { formula?: string; note?: string };
+  };
 };
 
 const WINDOW_OPTIONS = [
@@ -403,6 +434,13 @@ export default function StudyDetailPage() {
   const [exportCapacityOilPoints, setExportCapacityOilPoints] = useState<{ date: string; value: number }[]>([]);
   const [exportCapacityProxyPoints, setExportCapacityProxyPoints] = useState<{ date: string; value: number }[]>([]);
   const [exportCapacityBaseYear, setExportCapacityBaseYear] = useState<number | null>(null);
+  const [oilEconomyProdPoints, setOilEconomyProdPoints] = useState<{ date: string; value: number }[]>([]);
+  const [oilEconomyPricePoints, setOilEconomyPricePoints] = useState<{ date: string; value: number }[]>([]);
+  const [oilEconomyRevenuePoints, setOilEconomyRevenuePoints] = useState<{ date: string; value: number }[]>([]);
+  const [oilEconomyProdSource, setOilEconomyProdSource] = useState<OilEconomyOverviewSource | null>(null);
+  const [oilEconomyPriceSource, setOilEconomyPriceSource] = useState<OilEconomyOverviewSource | null>(null);
+  const [oilEconomyRevenueSource, setOilEconomyRevenueSource] = useState<OilEconomyOverviewSource | null>(null);
+  const [oilEconomyProdHistoricalFill, setOilEconomyProdHistoricalFill] = useState<OilEconomyOverviewSource | null>(null);
   const [productionUsPoints, setProductionUsPoints] = useState<{ date: string; value: number }[]>([]);
   const [productionSaudiPoints, setProductionSaudiPoints] = useState<{ date: string; value: number }[]>([]);
   const [productionRussiaPoints, setProductionRussiaPoints] = useState<{ date: string; value: number }[]>([]);
@@ -616,6 +654,7 @@ export default function StudyDetailPage() {
   const isIsiDiagnostics = study?.primarySignal.kind === "isi_diagnostics";
   const isPovertyHeadcountIran = study?.primarySignal.kind === "poverty_headcount_iran";
   const isDutchDiseaseDiagnostics = study?.primarySignal.kind === "dutch_disease_diagnostics_iran";
+  const isOilEconomyOverview = study?.primarySignal.kind === "oil_economy_overview";
   /** WDI national-accounts levels bundle (composition study or dual-axis reference study). */
   const isGdpMacroNationalAccounts = isGdpComposition || isGdpIranAccountsDual;
   const isGdpIranLocal = study?.gdpCompositionIranLocalOptions === true;
@@ -669,6 +708,23 @@ export default function StudyDetailPage() {
     if (!study || !isOilExportCapacity) return null;
     return study.timeRange;
   }, [study, isOilExportCapacity]);
+
+  const oilEconomyTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isOilEconomyOverview) return null;
+    const [start, end] = study.timeRange;
+    const resolvedEnd = end === "today" ? new Date().toISOString().slice(0, 10) : end;
+    return [start, resolvedEnd];
+  }, [study, isOilEconomyOverview]);
+
+  const oilEconomyCategoryYearTickStep = useMemo(() => {
+    if (!oilEconomyTimeRange) return 3;
+    const a = parseInt(oilEconomyTimeRange[0].slice(0, 4), 10);
+    const b = parseInt(oilEconomyTimeRange[1].slice(0, 4), 10);
+    const span = b - a;
+    if (span > 50) return 2;
+    if (span > 30) return 3;
+    return 4;
+  }, [oilEconomyTimeRange]);
 
   const productionTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isOilProductionMajorExporters) return null;
@@ -930,21 +986,21 @@ export default function StudyDetailPage() {
       "dutch_ov_oil",
       L(isFa, "Oil rents (% of GDP), indexed", "اجاره نفت (٪ GDP)، شاخص‌شده"),
       dutchOilRentsPoints,
-      "#2563eb",
+      SIGNAL_CONCEPT.dutch_oil_rents,
       "circle"
     );
     pushIfFinite(
       "dutch_ov_mfg",
       L(isFa, "Manufacturing (% of GDP), indexed", "تولیدات کارخانه‌ای (٪ GDP)، شاخص‌شده"),
       dutchManufacturingPoints,
-      "#16a34a",
+      SIGNAL_CONCEPT.dutch_manufacturing,
       "rect"
     );
     pushIfFinite(
       "dutch_ov_imp",
       L(isFa, "Imports (% of GDP), indexed", "واردات (٪ GDP)، شاخص‌شده"),
       dutchImportsPoints,
-      "#a855f7",
+      SIGNAL_CONCEPT.dutch_imports,
       "diamond"
     );
     if (annualFx.length > 0) {
@@ -952,7 +1008,7 @@ export default function StudyDetailPage() {
         "dutch_ov_fx",
         L(isFa, "Open-market toman/USD (annual mean), indexed", "تومان/دلار بازار (میانگین سال)، شاخص‌شده"),
         annualFx,
-        "#64748b",
+        SIGNAL_CONCEPT.dutch_fx_index,
         "triangle"
       );
     }
@@ -966,6 +1022,20 @@ export default function StudyDetailPage() {
     dutchImportsPoints,
     dutchFxPoints,
   ]);
+
+  const oilEconomyIndexed = useMemo(() => {
+    if (!isOilEconomyOverview) return null;
+    return buildOilEconomyIndexedMultiSeries(
+      oilEconomyProdPoints,
+      oilEconomyPricePoints,
+      oilEconomyRevenuePoints,
+      {
+        production: L(isFa, "Iran production (mb/d)", "تولید ایران (میلیون بشکه/روز)"),
+        price: L(isFa, "Global oil price (ann. avg., USD/bbl)", "قیمت نفت جهانی (میانگین سالانه، دلار/بشکه)"),
+        revenue: L(isFa, "Estimated revenue (USD)", "درآمد تخمینی (دلار)"),
+      }
+    );
+  }, [isOilEconomyOverview, isFa, oilEconomyProdPoints, oilEconomyPricePoints, oilEconomyRevenuePoints]);
 
   const isiSeriesTyped = isiDiagnosticsData?.series ?? null;
   const isiOverviewIndexed = useMemo(
@@ -1341,8 +1411,28 @@ export default function StudyDetailPage() {
 
   const fxDualTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isFxUsdIrrDual) return null;
-    return study.timeRange;
+    const [start, end] = study.timeRange;
+    const resolvedEnd = end === "today" ? new Date().toISOString().slice(0, 10) : end;
+    return [start, resolvedEnd];
   }, [study, isFxUsdIrrDual]);
+
+  /** Spread (%) vs official *calendar year* date: open = mean of all open-market days in that Gregorian year. */
+  const fxDualYearSpreadPoints = useMemo(() => {
+    if (fxDualOfficialPoints.length === 0 || fxDualOpenPoints.length === 0) return [];
+    const meanOpenForYear = (year: string) => {
+      const pts = fxDualOpenPoints.filter((o) => o.date.slice(0, 4) === year);
+      if (pts.length === 0) return null;
+      return pts.reduce((s, p) => s + p.value, 0) / pts.length;
+    };
+    return fxDualOfficialPoints
+      .map((p) => {
+        const y = p.date.slice(0, 4);
+        const openAvg = meanOpenForYear(y);
+        if (openAvg == null || p.value === 0) return null;
+        return { date: p.date, value: ((openAvg - p.value) / p.value) * 100 };
+      })
+      .filter((q): q is { date: string; value: number } => q != null);
+  }, [fxDualOfficialPoints, fxDualOpenPoints]);
 
   const wageTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isWageCpiReal) return null;
@@ -2223,6 +2313,55 @@ export default function StudyDetailPage() {
   }, [exportCapacityTimeRange, isOilExportCapacity]);
 
   useEffect(() => {
+    if (!oilEconomyTimeRange || !isOilEconomyOverview) {
+      if (!isOilEconomyOverview) {
+        setOilEconomyProdPoints([]);
+        setOilEconomyPricePoints([]);
+        setOilEconomyRevenuePoints([]);
+        setOilEconomyProdSource(null);
+        setOilEconomyPriceSource(null);
+        setOilEconomyRevenueSource(null);
+        setOilEconomyProdHistoricalFill(null);
+      }
+      return;
+    }
+    const [start, end] = oilEconomyTimeRange;
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+    fetchJson<OilEconomyOverviewApi>(
+      `/api/signals/oil/economy-overview?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
+    )
+      .then((res) => {
+        if (mounted) {
+          setOilEconomyProdPoints(res.production?.points ?? []);
+          setOilEconomyPricePoints(res.price?.points ?? []);
+          setOilEconomyRevenuePoints(res.revenue?.points ?? []);
+          setOilEconomyProdSource(res.production?.source ?? null);
+          setOilEconomyPriceSource(res.price?.source ?? null);
+          setOilEconomyRevenueSource(res.revenue?.source ?? null);
+          setOilEconomyProdHistoricalFill(res.production?.source_historical_fill ?? null);
+        }
+      })
+      .catch((e) => {
+        if (mounted) {
+          setOilEconomyProdPoints([]);
+          setOilEconomyPricePoints([]);
+          setOilEconomyRevenuePoints([]);
+          setOilEconomyProdSource(null);
+          setOilEconomyPriceSource(null);
+          setOilEconomyRevenueSource(null);
+          setOilEconomyProdHistoricalFill(null);
+          setError(e instanceof Error ? e.message : "Signal fetch failed");
+        }
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => {
+      mounted = false;
+    };
+  }, [oilEconomyTimeRange, isOilEconomyOverview]);
+
+  useEffect(() => {
     if (!productionTimeRange || !isOilProductionMajorExporters) {
       if (isOilProductionMajorExporters) {
         setProductionUsPoints([]);
@@ -2826,7 +2965,8 @@ export default function StudyDetailPage() {
     isGdpGlobalComparison ||
     isIsiDiagnostics ||
     isPovertyHeadcountIran ||
-    isDutchDiseaseDiagnostics;
+    isDutchDiseaseDiagnostics ||
+    isOilEconomyOverview;
 
   const isiDataReady = useMemo(() => {
     if (!isiDiagnosticsData?.series) return false;
@@ -2851,6 +2991,10 @@ export default function StudyDetailPage() {
               ? pppIranPoints.length > 0
               : isOilExportCapacity
                 ? exportCapacityOilPoints.length > 0 && exportCapacityProxyPoints.length > 0
+                : isOilEconomyOverview
+                  ? oilEconomyProdPoints.length > 0 &&
+                    oilEconomyPricePoints.length > 0 &&
+                    oilEconomyRevenuePoints.length > 0
                 : isOilProductionMajorExporters
                   ? productionUsPoints.length > 0 || productionSaudiPoints.length > 0 || productionRussiaPoints.length > 0 || productionIranPoints.length > 0
                   : isGiniInequality
@@ -2956,6 +3100,11 @@ export default function StudyDetailPage() {
       if (exportCapacityOilPoints.length > 0) allDates.push(...collect(exportCapacityOilPoints));
       if (exportCapacityProxyPoints.length > 0) allDates.push(...collect(exportCapacityProxyPoints));
     }
+    if (isOilEconomyOverview) {
+      if (oilEconomyProdPoints.length > 0) allDates.push(...collect(oilEconomyProdPoints));
+      if (oilEconomyPricePoints.length > 0) allDates.push(...collect(oilEconomyPricePoints));
+      if (oilEconomyRevenuePoints.length > 0) allDates.push(...collect(oilEconomyRevenuePoints));
+    }
     if (isOilProductionMajorExporters) {
       if (productionUsPoints.length > 0) allDates.push(...collect(productionUsPoints));
       if (productionSaudiPoints.length > 0) allDates.push(...collect(productionSaudiPoints));
@@ -3002,6 +3151,11 @@ export default function StudyDetailPage() {
       if (dutchManufacturingPoints.length > 0) allDates.push(...collect(dutchManufacturingPoints));
       if (dutchImportsPoints.length > 0) allDates.push(...collect(dutchImportsPoints));
       if (dutchFxPoints.length > 0) allDates.push(...collect(dutchFxPoints));
+    }
+    if (isOilEconomyOverview) {
+      if (oilEconomyProdPoints.length > 0) allDates.push(...collect(oilEconomyProdPoints));
+      if (oilEconomyPricePoints.length > 0) allDates.push(...collect(oilEconomyPricePoints));
+      if (oilEconomyRevenuePoints.length > 0) allDates.push(...collect(oilEconomyRevenuePoints));
     }
     if (isOilExporterTimeseries) {
       if (exporterSaudiPoints.length > 0) allDates.push(...collect(exporterSaudiPoints));
@@ -3053,6 +3207,7 @@ export default function StudyDetailPage() {
       fxTimeRange ??
       dualTimeRange ??
       exportCapacityTimeRange ??
+      oilEconomyTimeRange ??
       productionTimeRange ??
       giniTimeRange ??
       inflationTimeRange ??
@@ -3092,6 +3247,11 @@ export default function StudyDetailPage() {
       if (isOilExportCapacity) {
         if (exportCapacityOilPoints.length > 0) arrays.push(exportCapacityOilPoints);
         if (exportCapacityProxyPoints.length > 0) arrays.push(exportCapacityProxyPoints);
+      }
+      if (isOilEconomyOverview) {
+        if (oilEconomyProdPoints.length > 0) arrays.push(oilEconomyProdPoints);
+        if (oilEconomyPricePoints.length > 0) arrays.push(oilEconomyPricePoints);
+        if (oilEconomyRevenuePoints.length > 0) arrays.push(oilEconomyRevenuePoints);
       }
       if (isOilProductionMajorExporters) {
         // Label = last date with actual data; exclude current year (projected) and synthetic extensions
@@ -3917,12 +4077,12 @@ export default function StudyDetailPage() {
               <MultiSeriesStats
                 series={[
                   {
-                    label: L(isFa, "Official (proxy)", "رسمی (نماینده)"),
+                    label: L(isFa, "Official (WDI, annual)", "رسمی (WDI، سالانه)"),
                     unit: L(isFa, "toman/USD", "تومان/دلار"),
                     points: fxDualOfficialPoints,
                   },
                   {
-                    label: L(isFa, "Open market", "بازار آزاد"),
+                    label: L(isFa, "Open market (archive + Bonbast)", "بازار آزاد (آرشیو + بان‌بست)"),
                     unit: L(isFa, "toman/USD", "تومان/دلار"),
                     points: fxDualOpenPoints,
                   },
@@ -3931,13 +4091,7 @@ export default function StudyDetailPage() {
                         {
                           label: L(isFa, "Spread", "شکاف"),
                           unit: "%",
-                          points: fxDualOfficialPoints
-                            .map((p) => {
-                              const openPt = fxDualOpenPoints.find((o) => o.date === p.date);
-                              if (!openPt || p.value === 0) return null;
-                              return { date: p.date, value: ((openPt.value - p.value) / p.value) * 100 };
-                            })
-                            .filter((q): q is { date: string; value: number } => q != null),
+                          points: fxDualYearSpreadPoints,
                         },
                       ]
                     : []),
@@ -3949,31 +4103,33 @@ export default function StudyDetailPage() {
                 exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
                 exportSourceFooter={studyChartExportSource(isFa, [
-                  fxDualOfficialSource?.name,
-                  fxDualOpenSource?.name,
+                  "World Bank (official rate, PA.NUS.FCRF); FRED PWT (XRNCUSIRA618NRUG) only where WDI has no year",
+                  "Bonbast + rial-archive (open market, daily; starts when archive has data)",
                 ])}
                 data={[]}
                 valueKey="value"
-                label={L(isFa, "Official", "رسمی")}
+                label={L(isFa, "Official (WDI)", "رسمی (WDI)")}
                 events={[]}
                 yAxisLog={fxDualYAxisLog}
                 yAxisNameSuffix={fxDualYAxisLog ? L(isFa, "log scale", "مقیاس لگاریتمی") : undefined}
                 multiSeries={[
                   {
                     key: "official",
-                    label: L(isFa, "Official (proxy)", "رسمی (نماینده)"),
+                    label: L(isFa, "Official (WDI, annual)", "رسمی (WDI، سالانه)"),
                     yAxisIndex: 0,
                     unit: L(isFa, "toman/USD", "تومان/دلار"),
                     points: fxDualOfficialPoints,
+                    color: SIGNAL_CONCEPT.fx_official,
                     symbol: "circle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   {
                     key: "open",
-                    label: L(isFa, "Open market", "بازار آزاد"),
+                    label: L(isFa, "Open market (from archive date)", "بازار آزاد (از تاریخ آرشیو)"),
                     yAxisIndex: 0,
                     unit: L(isFa, "toman/USD", "تومان/دلار"),
                     points: fxDualOpenPoints,
+                    color: SIGNAL_CONCEPT.fx_open,
                     symbol: "diamond",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -3984,21 +4140,10 @@ export default function StudyDetailPage() {
                           label: L(isFa, "Spread (%)", "شکاف (٪)"),
                           yAxisIndex: 1,
                           unit: "%",
+                          color: SIGNAL_CONCEPT.fx_spread,
                           symbol: "triangle",
                           symbolSize: CHART_LINE_SYMBOL_SIZE,
-                          points: (() => {
-                            const byDate: Record<string, number> = {};
-                            fxDualOfficialPoints.forEach((p) => {
-                              byDate[p.date] = p.value;
-                            });
-                            return fxDualOfficialPoints
-                              .map((p) => {
-                                const openPt = fxDualOpenPoints.find((o) => o.date === p.date);
-                                if (!openPt || p.value === 0) return null;
-                                return { date: p.date, value: ((openPt.value - p.value) / p.value) * 100 };
-                              })
-                              .filter((q): q is { date: string; value: number } => q != null);
-                          })(),
+                          points: fxDualYearSpreadPoints,
                         } as ChartSeries,
                       ]
                     : []),
@@ -4006,14 +4151,15 @@ export default function StudyDetailPage() {
                 timeRange={fxDualTimeRange ?? study.timeRange}
                 mutedBands={false}
                 chartRangeGranularity="month"
+                exportFileStem="iran-fx-dual-rates"
               />
               <LearningNote locale={isFa ? "fa" : "en"}
                 sections={[
                   {
                     heading: "How to read this chart",
                     bullets: [
-                      "Two lines: official rate (policy-set proxy, FRED annual) and open-market rate (toman per USD).",
-                      "Same unit on the y-axis: toman per USD. Higher values mean a weaker rial/toman.",
+                      "Official: World Bank WDI (PA.NUS.FCRF), period-average official rate, annual, in toman per 1 USD (1 toman = 10 rials). FRED (Penn World Table, XRNCUSIRA618NRUG) fills a calendar year only if WDI has no value for that year.",
+                      "Open market: Bonbast + rial-archive (from 2012-10-09) — daily, no FRED fill — so the open line does not look “fixed” in early years. Higher values = weaker rial/toman (more toman to buy 1 dollar).",
                     ],
                   },
                   {
@@ -4026,9 +4172,9 @@ export default function StudyDetailPage() {
                   {
                     heading: "Measurement choices & limitations",
                     bullets: [
-                      "Official series used here is a FRED proxy (Penn World Table); it is annual and ends 2019.",
-                      "Open-market data is from Bonbast/archive (daily where available). Different resolutions and sources imply the two series are not strictly comparable at each date.",
-                      "Spread (%) is computed only where both series have a value; interpretation should allow for measurement gaps.",
+                      "Official: WDI may be null in the most recent year until the Bank republishes; FRED (PWT) is annual through its own end. No imputed “flat” extension to today on the official line when WDI is missing.",
+                      "Open-market coverage starts when the public archive has daily Bonbast data (not extrapolated back). The two series need not start in the same year; do not read one line as a continuation of the other off-chart.",
+                      "Spread (%, optional): for each official calendar year, uses the mean of open-market toman/USD in that year vs official at YYYY-01-01, only when there is at least one open observation in that year.",
                     ],
                   },
                   {
@@ -4047,8 +4193,8 @@ export default function StudyDetailPage() {
                   ...(fxDualOfficialSource
                     ? [
                         {
-                          label: "Official (proxy)",
-                          sourceName: fxDualOfficialSource.name ?? "FRED",
+                          label: "Official (WDI + PWT backfill)",
+                          sourceName: fxDualOfficialSource.name ?? "World Bank WDI",
                           sourceUrl: fxDualOfficialSource.url || undefined,
                           sourceDetail: fxDualOfficialSource.publisher ?? "",
                           unitLabel: "toman/USD",
@@ -4060,7 +4206,7 @@ export default function StudyDetailPage() {
                     ? [
                         {
                           label: "Open market",
-                          sourceName: fxDualOpenSource.name ?? "",
+                          sourceName: fxDualOpenSource.name ?? "Bonbast + rial-archive",
                           sourceUrl: fxDualOpenSource.url || undefined,
                           sourceDetail: fxDualOpenSource.publisher ?? "",
                           unitLabel: "toman/USD",
@@ -4069,7 +4215,7 @@ export default function StudyDetailPage() {
                       ]
                     : []),
                 ]}
-                note="Official series is annual and ends 2019. Open-market data is daily where available. Do not infer causality from the spread."
+                note="Official: WDI (annual) + PWT (FRED) for missing years. Open: Bonbast + rial-archive (daily) from 2012-10-09, no synthetic pre-2012 open line. 1 toman = 10 rials."
               />
               <InSimpleTerms locale={isFa ? "fa" : "en"}>
                 <p>
@@ -4626,6 +4772,12 @@ export default function StudyDetailPage() {
                                   ? "Iran and Turkey: PPP oil burden"
                                   : isOilPppIran
                                     ? "Oil price burden (PPP)"
+                                    : isOilEconomyOverview
+                                      ? L(
+                                          isFa,
+                                          "Production, benchmark price, revenue (annual)",
+                                          "تولید، قیمت معیار، درآمد (سالانه)"
+                                        )
                                     : isOilExportCapacity
                                       ? "Oil price and export capacity proxy"
                                       : isFxUsdToman
@@ -4710,6 +4862,12 @@ export default function StudyDetailPage() {
                                 ? "Iran and Turkey indexed to first common year (= 100). Identical methodology and resolution."
                                 : isOilPppIran
                                   ? "PPP-adjusted oil burden in Iran (annual) with event overlays"
+                                  : isOilEconomyOverview
+                                    ? L(
+                                        isFa,
+                                        "Annual: Iran crude production (left), global Brent average (right), stylized revenue (separate panel), and an indexed view (100 = base year). Event layers off by default.",
+                                        "سالانه: تولید نفت خام ایران (چپ)، میانگین برنت جهانی (راست)، درآمد تخمینی (پنل جدا)، و نمای شاخصی (۱۰۰ = سال مبنا). لایهٔ رویدادها پیش‌فرض خاموش."
+                                      )
                                   : isOilExportCapacity
                                     ? "Oil price (left) and export capacity proxy (right, indexed). Sanctions markers."
                                     : isFxUsdToman
@@ -4777,6 +4935,7 @@ export default function StudyDetailPage() {
           <div className="flex flex-wrap items-center gap-3 pt-2">
             {!hasTurkeyComparator &&
               !isOilExportCapacity &&
+              !isOilEconomyOverview &&
               !isOilTradeNetwork &&
               !isOilExporterTimeseries &&
               !isOilGeopoliticalReaction &&
@@ -5097,6 +5256,15 @@ export default function StudyDetailPage() {
                     importerOrder={isAllDataMode ? sankeyImporterOrder : undefined}
                     nodeColorOrder={networkNodeColorOrder}
                     isAllDataMode={isAllDataMode}
+                    exportPresentationStudyHeading={displayStudy.title}
+                    exportPresentationTitle={L(
+                      isFa,
+                      `${displayStudy.title} — Sankey (${String((networkSelectedYear || networkYears[networkYears.length - 1]) ?? "…")})${isAllDataMode ? " · all data" : " · curated"}`,
+                      `${displayStudy.title} — Sankey (${String((networkSelectedYear || networkYears[networkYears.length - 1]) ?? "…")})${isAllDataMode ? " · همهٔ داده" : " · دادهٔ گزیده"}`
+                    )}
+                    chartLocale={chartLocaleForCharts}
+                    exportSourceFooter={studyChartExportSource(isFa, ["UN Comtrade HS 2709 (via SignalMap)"])}
+                    exportFileStem="oil-trade-sankey"
                   />
                 ) : (
                   <div className="flex h-[70vh] min-h-[360px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-center">
@@ -5118,6 +5286,15 @@ export default function StudyDetailPage() {
                   nodeColorOrder={networkNodeColorOrder}
                   nodeOrder={isAllDataMode ? networkNodeOrder : networkNodeColorOrder}
                   isAllDataMode={isAllDataMode}
+                  exportPresentationStudyHeading={displayStudy.title}
+                  exportPresentationTitle={L(
+                    isFa,
+                    `${displayStudy.title} — Network (${String((networkSelectedYear || networkYears[networkYears.length - 1]) ?? "…")})${isAllDataMode ? " · all data" : " · curated"}`,
+                    `${displayStudy.title} — Network (${String((networkSelectedYear || networkYears[networkYears.length - 1]) ?? "…")})${isAllDataMode ? " · همهٔ داده" : " · دادهٔ گزیده"}`
+                  )}
+                  chartLocale={chartLocaleForCharts}
+                  exportSourceFooter={studyChartExportSource(isFa, ["UN Comtrade HS 2709 (via SignalMap)"])}
+                  exportFileStem="oil-trade-network"
                 />
                 ) : (
                   <div className="flex h-[70vh] min-h-[360px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-center">
@@ -5437,7 +5614,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: gdpLevelsUnit ?? "US$",
                     points: gdpLevelsDisplaySeries.consumption,
-                    color: "#2563eb",
+                    color: SIGNAL_CONCEPT.consumption,
                     symbol: "circle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -5447,7 +5624,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: gdpLevelsUnit ?? "US$",
                     points: gdpLevelsDisplaySeries.investment,
-                    color: "#16a34a",
+                    color: SIGNAL_CONCEPT.investment,
                     symbol: "rect",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -5457,7 +5634,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 1,
                     unit: gdpLevelsUnit ?? "US$",
                     points: gdpLevelsDisplaySeries.gdp,
-                    color: "#dc2626",
+                    color: SIGNAL_CONCEPT.gdp,
                     symbol: "triangle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -5652,7 +5829,7 @@ export default function StudyDetailPage() {
                         yAxisIndex: 0,
                         unit: L(isFa, "% of GDP", "٪ از GDP"),
                         points: gdpConsumptionPoints,
-                        color: "#2563eb",
+                        color: SIGNAL_CONCEPT.consumption,
                         symbol: "circle",
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
@@ -5662,7 +5839,7 @@ export default function StudyDetailPage() {
                         yAxisIndex: 0,
                         unit: L(isFa, "% of GDP", "٪ از GDP"),
                         points: gdpInvestmentPoints,
-                        color: "#16a34a",
+                        color: SIGNAL_CONCEPT.investment,
                         symbol: "diamond",
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
@@ -5702,7 +5879,7 @@ export default function StudyDetailPage() {
                         yAxisIndex: 0,
                         unit: L(isFa, "current US$", "دلار جاری آمریکا"),
                         points: gdpNominalPoints,
-                        color: "#dc2626",
+                        color: SIGNAL_CONCEPT.gdp,
                         symbol: "circle",
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
@@ -5796,7 +5973,7 @@ export default function StudyDetailPage() {
                         yAxisIndex: 0,
                         unit: gdpLevelsUnit ?? "US$",
                         points: gdpLevelsDisplaySeries.consumption,
-                        color: "#2563eb",
+                        color: SIGNAL_CONCEPT.consumption,
                         symbol: "circle",
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
@@ -5806,7 +5983,7 @@ export default function StudyDetailPage() {
                         yAxisIndex: 0,
                         unit: gdpLevelsUnit ?? "US$",
                         points: gdpLevelsDisplaySeries.gdp,
-                        color: "#dc2626",
+                        color: SIGNAL_CONCEPT.gdp,
                         symbol: "triangle",
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
@@ -5816,7 +5993,7 @@ export default function StudyDetailPage() {
                         yAxisIndex: 0,
                         unit: gdpLevelsUnit ?? "US$",
                         points: gdpLevelsDisplaySeries.investment,
-                        color: "#16a34a",
+                        color: SIGNAL_CONCEPT.investment,
                         symbol: "rect",
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
@@ -5965,6 +6142,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: "thousand bbl/day",
                     points: exporterSaudiPoints,
+                    color: SIGNAL_COUNTRY.saudi,
                     symbol: "diamond",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -5974,6 +6152,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: "thousand bbl/day",
                     points: exporterRussiaPoints,
+                    color: SIGNAL_COUNTRY.russia,
                     symbol: "triangle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -5983,6 +6162,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: "thousand bbl/day",
                     points: exporterUsPoints,
+                    color: SIGNAL_COUNTRY.us,
                     symbol: "circle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -5992,6 +6172,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: "thousand bbl/day",
                     points: exporterIranPoints,
+                    color: SIGNAL_COUNTRY.iran,
                     symbol: "roundRect",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6358,6 +6539,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "USD/bbl", "دلار/بشکه"),
                     points: exportCapacityOilPoints,
+                    color: SIGNAL_CONCEPT.oil_price,
                     symbol: "triangle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6369,6 +6551,7 @@ export default function StudyDetailPage() {
                       ? L(isFa, `Index (base=${exportCapacityBaseYear})`, `شاخص (پایه=${exportCapacityBaseYear})`)
                       : L(isFa, "Index", "شاخص"),
                     points: exportCapacityProxyPoints,
+                    color: SIGNAL_CONCEPT.export_capacity,
                     symbol: "rect",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6377,6 +6560,7 @@ export default function StudyDetailPage() {
                 mutedBands={false}
                 sanctionsPeriods={sanctionsPeriodsFromEvents}
                 chartRangeGranularity="year"
+                exportFileStem="iran-oil-export-capacity"
               />
               <LearningNote locale={isFa ? "fa" : "en"}
                 sections={[
@@ -6470,6 +6654,316 @@ export default function StudyDetailPage() {
                 </p>
               </InSimpleTerms>
             </>
+          ) : isOilEconomyOverview ? (
+            <>
+              <MultiSeriesStats
+                locale={isFa ? "fa" : "en"}
+                series={[
+                  {
+                    label: L(isFa, "Iran production", "تولید ایران"),
+                    unit: L(isFa, "million bbl/day", "میلیون بشکه/روز"),
+                    points: oilEconomyProdPoints,
+                  },
+                  {
+                    label: L(isFa, "Oil price (ann. average)", "قیمت نفت (میانگین سالانه)"),
+                    unit: L(isFa, "USD/bbl", "دلار/بشکه"),
+                    points: oilEconomyPricePoints,
+                  },
+                  {
+                    label: L(isFa, "Est. revenue (stylized)", "درآمد تخمینی (تصویری)"),
+                    unit: L(isFa, "current US$ (annual est.)", "دلار جاری (تخمین سالانه)"),
+                    points: oilEconomyRevenuePoints,
+                  },
+                ]}
+                timeRange={oilEconomyTimeRange ?? undefined}
+              />
+              <div className="space-y-2 mb-6 pb-6 border-b border-border">
+                <h3 className="text-sm font-semibold text-foreground">
+                  {L(isFa, "1. Production and benchmark price (dual axis)", "۱. تولید و قیمت معیار (دو محور)")}
+                </h3>
+                <p className="text-xs text-muted-foreground max-w-3xl">
+                  {L(
+                    isFa,
+                    "Left: Iran oil production (EIA/IMF when available; Energy Institute 1965–79 + EIA/BP 1980–99 embedded annuals to fill gaps). Right: global oil price (EIA 1980–86; FRED DCOILBRENTEU 1987+). Two scales; vertical distance is not a ratio.",
+                    "چپ: تولید نفت ایران (EIA/IMF در صورت وجود؛ مؤسسه انرژی ۱۹۶۵–۷۹ و سالانه‌های EIA/BP ۱۹۸۰–۹۹ برای پر کردن شکاف). راست: قیمت نفت جهانی (EIA ۱۹۸۰–۸۶؛ FRED ۱۹۸۷+). دو مقیاس جداست؛ فاصلهٔ بصری نسبت مستقیم نمی‌دهد."
+                  )}
+                </p>
+                <TimelineChart
+                  chartLocale={chartLocaleForCharts}
+                  exportPresentationStudyHeading={displayStudy.title}
+                  exportPresentationTitle={L(
+                    isFa,
+                    `${displayStudy.title} — ${"Production and Brent"}`,
+                    `${displayStudy.title} — ${"تولید و برنت"}`
+                  )}
+                  xAxisYearLabel={chartYearAxisLabel}
+                  exportSourceFooter={studyChartExportSource(isFa, [
+                    oilEconomyProdSource?.name ?? "EIA/IMF Iran production (live) + Energy Institute 1965–79 backfill",
+                    oilEconomyPriceSource?.name
+                      ? `${oilEconomyPriceSource.name} DCOILBRENTEU`
+                      : "FRED DCOILBRENTEU (Brent annual mean)",
+                  ])}
+                  data={[]}
+                  valueKey="value"
+                  label={L(isFa, "Production and Brent", "تولید و برنت")}
+                  events={[]}
+                  timeRange={oilEconomyTimeRange ?? study.timeRange}
+                  chartRangeGranularity="year"
+                  categoryYearTickStep={oilEconomyCategoryYearTickStep}
+                  showChartControls={false}
+                  mutedEventLines
+                  exportFileStem="oil-economy-production-brent"
+                  multiSeries={[
+                    {
+                      key: "oe_prod",
+                      label: L(isFa, "Iran production", "تولید نفت ایران"),
+                      yAxisIndex: 0,
+                      unit: L(isFa, "million bbl/day", "میلیون بشکه/روز"),
+                      points: oilEconomyProdPoints,
+                      color: OIL_ECONOMY_COLOR_PRODUCTION,
+                      symbol: "circle",
+                      showSymbol: false,
+                      lineWidth: 2.25,
+                    },
+                    {
+                      key: "oe_price",
+                      label: L(isFa, "Global oil price (ann. avg.)", "قیمت نفت جهانی (میانگین سالانه)"),
+                      yAxisIndex: 1,
+                      unit: L(isFa, "USD/bbl", "دلار/بشکه"),
+                      points: oilEconomyPricePoints,
+                      color: OIL_ECONOMY_COLOR_PRICE,
+                      symbol: "triangle",
+                      showSymbol: false,
+                      lineWidth: 2.25,
+                    },
+                  ]}
+                />
+              </div>
+              <div className="space-y-2 mb-6 pb-6 border-b border-border">
+                <h3 className="text-sm font-semibold text-foreground">
+                  {L(isFa, "2. Stylized annual revenue (USD)", "۲. درآمد سالانهٔ تصویری (دلار)")}
+                </h3>
+                <p className="text-xs text-muted-foreground max-w-3xl">
+                  {L(
+                    isFa,
+                    "Rough annual scale: production (barrels/year) × annual price. Not government receipts or net export value.",
+                    "مقیاس سالانه تقریبی: تولید (بشکه/سال) × قیمت سالانه. نه دریافت دولت و نه ارزش خالص صادرات."
+                  )}
+                </p>
+                <TimelineChart
+                  chartLocale={chartLocaleForCharts}
+                  exportPresentationStudyHeading={displayStudy.title}
+                  exportPresentationTitle={L(
+                    isFa,
+                    `${displayStudy.title} — ${"Estimated revenue"}`,
+                    `${displayStudy.title} — ${"درآمد تخمینی"}`
+                  )}
+                  xAxisYearLabel={chartYearAxisLabel}
+                  exportSourceFooter={studyChartExportSource(isFa, [oilEconomyRevenueSource?.name ?? "Derived: production × price"])}
+                  data={[]}
+                  valueKey="value"
+                  label={L(isFa, "Estimated oil revenue (USD)", "درآمد تخمینی نفت (دلار)")}
+                  events={[]}
+                  timeRange={oilEconomyTimeRange ?? study.timeRange}
+                  chartRangeGranularity="year"
+                  categoryYearTickStep={oilEconomyCategoryYearTickStep}
+                  showChartControls={false}
+                  mutedEventLines
+                  exportFileStem="oil-economy-revenue"
+                  multiSeriesValueFormat="gdp_levels"
+                  multiSeries={[
+                    {
+                      key: "oe_rev",
+                      label: L(isFa, "Estimated revenue", "درآمد تخمینی"),
+                      yAxisIndex: 0,
+                      unit: L(isFa, "current US$ (annual est.)", "دلار جاری (تخمین سالانه)"),
+                      points: oilEconomyRevenuePoints,
+                      color: OIL_ECONOMY_COLOR_REVENUE,
+                      symbol: "diamond",
+                      showSymbol: false,
+                      lineWidth: 2.25,
+                    },
+                  ]}
+                />
+              </div>
+              {oilEconomyIndexed ? (
+                <div className="space-y-2 mb-8">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {L(isFa, "3. All three — indexed (100 = base year)", "۳. هر سه — شاخص‌شده (۱۰۰ = سال مبنا)")}
+                  </h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
+                    {L(
+                      isFa,
+                      `Each series is indexed to 100 in ${oilEconomyIndexed.baseYear} (or the earliest year where all three have values). Compares relative change, not levels.`,
+                      `هر سری به شاخص ۱۰۰ در سال ${localizeChartNumericDisplayString(String(oilEconomyIndexed.baseYear), "fa")} (یا نزدیک‌ترین سالی که هر سه مقدار دارند) نرمال شده است؛ تغییر نسبی را می‌سنجد نه سطح مطلق.`
+                    )}
+                  </p>
+                  <TimelineChart
+                    chartLocale={chartLocaleForCharts}
+                    exportPresentationStudyHeading={displayStudy.title}
+                    exportPresentationTitle={L(
+                      isFa,
+                      `${displayStudy.title} — ${"Indexed (100 = base year)"}`,
+                      `${displayStudy.title} — ${"شاخص‌شده (۱۰۰ = سال مبنا)"}`
+                    )}
+                    exportSourceFooter={studyChartExportSource(isFa, [
+                      oilEconomyProdSource?.name ?? "EIA/IMF",
+                      oilEconomyPriceSource?.name ?? "FRED Brent",
+                      oilEconomyRevenueSource?.name ?? "Derived",
+                    ])}
+                    data={[]}
+                    valueKey="value"
+                    label={L(isFa, "Indexed (100 = base year)", "شاخص‌شده (۱۰۰ = سال مبنا)")}
+                    events={[]}
+                    multiSeries={oilEconomyIndexed.multiSeries}
+                    timeRange={oilEconomyTimeRange ?? study.timeRange}
+                    chartRangeGranularity="year"
+                    categoryYearTickStep={oilEconomyCategoryYearTickStep}
+                    xAxisYearLabel={chartYearAxisLabel}
+                    multiSeriesYAxisNameOverrides={{
+                      0: isFa
+                        ? `شاخص (${localizeChartNumericDisplayString(String(oilEconomyIndexed.baseYear), "fa")} = ۱۰۰)`
+                        : `Index (${oilEconomyIndexed.baseYear} = 100)`,
+                    }}
+                    multiSeriesValueFormat="gdp_indexed"
+                    indexedTooltipBaseLabel={
+                      isFa
+                        ? localizeChartNumericDisplayString(String(oilEconomyIndexed.baseYear), "fa")
+                        : String(oilEconomyIndexed.baseYear)
+                    }
+                    yAxisMin={0}
+                    exportFileStem="oil-economy-indexed"
+                    showChartControls={false}
+                    mutedEventLines
+                    chartHeight="h-80 md:h-96"
+                  />
+                </div>
+              ) : null}
+              <LearningNote
+                locale={isFa ? "fa" : "en"}
+                sections={[
+                  {
+                    heading: L(isFa, "How price and production drive revenue", "قیمت و تولید چگونه درآمد را می‌سازند"),
+                    bullets: [
+                      L(
+                        isFa,
+                        "Stylized annual revenue is proportional to (barrels/day × days) × (price per barrel). If either production or price moves, the product moves.",
+                        "درآمد سالانهٔ تصویری متناسب است با (بشکه/روز × روزها) × (قیمت هر بشکه). اگر تولید یا قیمت جابه‌جا شود، حاصل‌ضرب هم تغییر می‌کند."
+                      ),
+                      L(
+                        isFa,
+                        "A price rally with flat production still raises the revenue line; production can fall even when price is high—then revenue may still drop.",
+                        "اگر قیمت بالا برود و تولید ثابت بماند، اغلب خط درآمد بالا می‌رود؛ اگر تولید کم شود حتی با قیمت بالا ممکن است درآمد بیفتد."
+                      ),
+                    ],
+                  },
+                  {
+                    heading: L(isFa, "Why this matters for oil economies", "چرا برای اقتصادهای نفتی مهم است"),
+                    bullets: [
+                      L(
+                        isFa,
+                        "Many oil-dependent budgets and trade balances are sensitive to the product of volume and price—not price alone.",
+                        "بودجه و ترازهای بسیاری از اقتصادهای وابسته به نفت به حاصل‌ضرب حجم و قیمت حساس‌اند—نه فقط قیمت."
+                      ),
+                      L(
+                        isFa,
+                        "This view is descriptive context: it is not a fiscal account, export contract table, or estimate of what accrues to the public sector.",
+                        "این نما زمینهٔ توصیفی است: حساب مالی دولت، جدول قرارداد صادرات، یا برآورد دریافت بخش عمومی نیست."
+                      ),
+                    ],
+                  },
+                  {
+                    heading: L(isFa, "Refreshing underlying data (ops)", "به‌روزرسانی دادهٔ پایه (عملیات)"),
+                    bullets: [
+                      L(
+                        isFa,
+                        "Brent: daily/append updates via the API’s FRED pipeline; cache for this signal is invalidated when oil price series are refreshed.",
+                        "برنت: به‌روزرسانی روزانه/الحاقی از مسیر FRED در API؛ با به‌روز شدن سری قیمت نفت، کش این سیگنال باطل می‌شود."
+                      ),
+                      L(
+                        isFa,
+                        "Production: EIA/IMF when the pipeline has a year; older gaps use embedded Energy Institute (1965–79) and EIA/BP (1980–99) annuals. Scheduled jobs update production tables; cache key prefix oil_economy_overview is invalidated on refresh.",
+                        "تولید: EIA/IMF اگر سال در خط لوله باشد؛ سال‌های قدیمی‌تر از جداول مؤسسه انرژی (۱۹۶۵–۷۹) و EIA/BP (۱۹۸۰–۹۹) جاسازی‌شده پر می‌شود. jobها جداول را به‌روز می‌کنند و کش oil_economy_overview باطل می‌شود."
+                      ),
+                    ],
+                  },
+                ]}
+                links={[
+                  { label: "FRED DCOILBRENTEU", href: "https://fred.stlouisfed.org/series/DCOILBRENTEU" },
+                  { label: "EIA World / Iran context", href: "https://www.eia.gov/international/data/world" },
+                  { label: "Energy Institute — Statistical Review", href: "https://www.energyinst.org/statistical-review" },
+                ]}
+              />
+              {displayStudy.observations?.length ? (
+                <DataObservations locale={isFa ? "fa" : "en"} observations={displayStudy.observations ?? []} />
+              ) : null}
+              {study.concepts?.length ? <ConceptsUsed locale={isFa ? "fa" : "en"} conceptKeys={study.concepts} /> : null}
+              <SourceInfo
+                items={[
+                  {
+                    label: L(isFa, "Production", "تولید"),
+                    sourceName: oilEconomyProdSource?.name ?? "EIA / IMF (via SignalMap oil production bundle)",
+                    sourceUrl: oilEconomyProdSource?.url,
+                    sourceDetail: oilEconomyProdSource?.publisher,
+                    unitLabel: L(isFa, "million barrels per day", "میلیون بشکه در روز"),
+                    unitNote: L(
+                      isFa,
+                        `2000+ from EIA/IMF when present. 1965–1999: ${oilEconomyProdHistoricalFill?.name ?? "Energy Institute 1965–79 + EIA/BP 1980–99"} to fill any year the live series lacks.`,
+                        `۲۰۰۰+ از EIA/IMF. ۱۹۶۵–۱۹۹۹: ${oilEconomyProdHistoricalFill?.name ?? "مؤسسه انرژی ۱۹۶۵–۷۹ + EIA/BP ۱۹۸۰–۹۹"} برای سال‌هایی که سری زنده ندارد.`
+                    ),
+                  },
+                  {
+                    label: L(isFa, "Price (benchmark)", "قیمت (معیار)"),
+                    sourceName: oilEconomyPriceSource?.name
+                      ? `${oilEconomyPriceSource.name} (DCOILBRENTEU)`
+                      : "FRED DCOILBRENTEU",
+                    sourceUrl: oilEconomyPriceSource?.url ?? "https://fred.stlouisfed.org/series/DCOILBRENTEU",
+                    sourceDetail: oilEconomyPriceSource?.publisher,
+                    unitLabel: L(isFa, "USD per barrel (annual average)", "دلار به بشکه (میانگین سالانه)"),
+                    unitNote: L(
+                      isFa,
+                      "1980–86: EIA annual U.S. first-purchase (global proxy). 1987+: FRED DCOILBRENTEU (mean of daily).",
+                      "۱۹۸۰–۸۶: EIA سالانه (پراکسی جهانی). ۱۹۸۷+: FRED DCOILBRENTEU (میانگین روزانه)."
+                    ),
+                  },
+                  {
+                    label: L(isFa, "Revenue (derived)", "درآمد (مشتق)"),
+                    sourceName: oilEconomyRevenueSource?.name ?? "Derived in API",
+                    sourceUrl: oilEconomyRevenueSource?.url,
+                    sourceDetail: oilEconomyRevenueSource?.publisher,
+                    unitLabel: L(isFa, "USD per year (stylized)", "دلار در سال (تصویری)"),
+                    unitNote: L(
+                      isFa,
+                      "revenue ≈ (mb/d × 1e6 × 365.25) × annual price. Not government revenue.",
+                      "درآمد ≈ (میلیون بشکه/روز × ۱e۶ × ۳۶۵٫۲۵) × قیمت سالانه. نه درآمد دولت."
+                    ),
+                  },
+                ]}
+                note={L(
+                  isFa,
+                  "Source line on chart export stays in English. Method: annual production × annual average price; descriptive only.",
+                  "خط Source در خروجی تصویر به انگلیسی می‌ماند. روش: تولید سالانه × قیمت سالانه؛ صرفاً توصیفی."
+                )}
+              />
+              <InSimpleTerms locale={isFa ? "fa" : "en"}>
+                {isFa && faRich?.simpleTermsParagraphs?.length ? (
+                  faRich.simpleTermsParagraphs.map((p, i) => <p key={i}>{p}</p>)
+                ) : (
+                  <>
+                    <p>
+                      This page puts three ideas on one timeline: how much oil Iran produced, what the global benchmark
+                      price averaged over each year, and a very simple “barrels times price” style revenue line.
+                    </p>
+                    <p>
+                      When people talk about oil income, they are usually gesturing at that kind of product: volume and
+                      price both matter. A high price does not help if production or sales fall sharply, and more barrels
+                      can offset softer prices. The green revenue line is a back-of-the-envelope scale for reading those
+                      forces together—not a budget line.
+                    </p>
+                  </>
+                )}
+              </InSimpleTerms>
+            </>
           ) : isOilProductionMajorExporters ? (
             <>
               <MultiSeriesStats
@@ -6507,6 +7001,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: "million bbl/day",
                     points: extendedProductionUsPoints,
+                    color: SIGNAL_COUNTRY.us,
                     symbol: "circle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6516,6 +7011,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: "million bbl/day",
                     points: extendedProductionSaudiPoints,
+                    color: SIGNAL_COUNTRY.saudi,
                     symbol: "diamond",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6525,6 +7021,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: "million bbl/day",
                     points: extendedProductionRussiaPoints,
+                    color: SIGNAL_COUNTRY.russia,
                     symbol: "triangle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6534,6 +7031,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: "million bbl/day",
                     points: extendedProductionIranPoints,
+                    color: SIGNAL_COUNTRY.iran,
                     symbol: "roundRect",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6545,6 +7043,7 @@ export default function StudyDetailPage() {
                           yAxisIndex: 0 as const,
                           unit: "million bbl/day",
                           points: extendedProductionTotalPoints,
+                          color: SIGNAL_COUNTRY.total,
                           symbol: "rect" as const,
                           symbolSize: CHART_LINE_SYMBOL_SIZE,
                         },
@@ -6674,6 +7173,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "Gini coefficient (0–100)", "ضریب جینی (۰–۱۰۰)"),
                     points: giniIranPoints,
+                    color: COUNTRY_COMPARATOR_STYLES.iran.color,
                     symbol: COUNTRY_COMPARATOR_STYLES.iran.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6683,6 +7183,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "Gini coefficient (0–100)", "ضریب جینی (۰–۱۰۰)"),
                     points: giniUsPoints,
+                    color: COUNTRY_COMPARATOR_STYLES.us.color,
                     symbol: COUNTRY_COMPARATOR_STYLES.us.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6692,6 +7193,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "Gini coefficient (0–100)", "ضریب جینی (۰–۱۰۰)"),
                     points: giniGermanyPoints,
+                    color: COUNTRY_COMPARATOR_STYLES.germany.color,
                     symbol: COUNTRY_COMPARATOR_STYLES.germany.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6701,6 +7203,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "Gini coefficient (0–100)", "ضریب جینی (۰–۱۰۰)"),
                     points: giniTurkeyPoints,
+                    color: COUNTRY_COMPARATOR_STYLES.turkey.color,
                     symbol: COUNTRY_COMPARATOR_STYLES.turkey.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6710,6 +7213,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "Gini coefficient (0–100)", "ضریب جینی (۰–۱۰۰)"),
                     points: giniChinaPoints,
+                    color: COUNTRY_COMPARATOR_STYLES.china.color,
                     symbol: COUNTRY_COMPARATOR_STYLES.china.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6719,6 +7223,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "Gini coefficient (0–100)", "ضریب جینی (۰–۱۰۰)"),
                     points: giniSaudiArabiaPoints,
+                    color: COUNTRY_COMPARATOR_STYLES.saudi_arabia.color,
                     symbol: COUNTRY_COMPARATOR_STYLES.saudi_arabia.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6831,6 +7336,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
                     points: inflationIranPoints,
+                    color: COUNTRY_COMPARATOR_STYLES.iran.color,
                     symbol: COUNTRY_COMPARATOR_STYLES.iran.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6840,6 +7346,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
                     points: inflationUsPoints,
+                    color: COUNTRY_COMPARATOR_STYLES.us.color,
                     symbol: COUNTRY_COMPARATOR_STYLES.us.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6849,6 +7356,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
                     points: inflationGermanyPoints,
+                    color: COUNTRY_COMPARATOR_STYLES.germany.color,
                     symbol: COUNTRY_COMPARATOR_STYLES.germany.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6858,6 +7366,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
                     points: inflationTurkeyPoints,
+                    color: COUNTRY_COMPARATOR_STYLES.turkey.color,
                     symbol: COUNTRY_COMPARATOR_STYLES.turkey.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6867,6 +7376,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
                     points: inflationChinaPoints,
+                    color: COUNTRY_COMPARATOR_STYLES.china.color,
                     symbol: COUNTRY_COMPARATOR_STYLES.china.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -6876,6 +7386,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
                     points: inflationSaudiArabiaPoints,
+                    color: COUNTRY_COMPARATOR_STYLES.saudi_arabia.color,
                     symbol: COUNTRY_COMPARATOR_STYLES.saudi_arabia.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -7082,7 +7593,7 @@ export default function StudyDetailPage() {
                         ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
                     points: gdpGlobalDisplayed.world,
-                    color: "#262626",
+                    color: SIGNAL_COUNTRY.world,
                     symbol: "circle",
                     showSymbol: false,
                     lineWidth: 2.65,
@@ -7446,7 +7957,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "% of population", "٪ از جمعیت"),
                     points: povertyDdayPoints,
-                    color: "#64748b",
+                    color: SIGNAL_CONCEPT.gini,
                     symbol: "circle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -7456,7 +7967,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: L(isFa, "% of population", "٪ از جمعیت"),
                     points: povertyLmicPoints,
-                    color: "#0d9488",
+                    color: SIGNAL_CONCEPT.poverty,
                     symbol: "diamond",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -7843,6 +8354,7 @@ export default function StudyDetailPage() {
                         yAxisIndex: 0,
                         unit: "k tomans/month",
                         points: wageNominalKTomans,
+                        color: SIGNAL_CONCEPT.wage_nominal,
                         symbol: "circle",
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
@@ -7852,6 +8364,7 @@ export default function StudyDetailPage() {
                         yAxisIndex: 0,
                         unit: `k tomans/month (${wageBaseYear ?? ""} prices)`,
                         points: wageRealKTomans,
+                        color: SIGNAL_CONCEPT.wage_real,
                         symbol: "diamond",
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
@@ -7863,6 +8376,7 @@ export default function StudyDetailPage() {
                               yAxisIndex: 1,
                               unit: "Index (base=100)",
                               points: wageIndexPoints,
+                              color: SIGNAL_CONCEPT.wage_index,
                               symbol: "triangle",
                               symbolSize: CHART_LINE_SYMBOL_SIZE,
                             } as ChartSeries,
@@ -8079,6 +8593,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit: "USD/oz",
                     points: goldPoints,
+                    color: SIGNAL_CONCEPT.gold_spot,
                     symbol: "circle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -8088,6 +8603,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 1,
                     unit: "USD/bbl",
                     points: oilPointsWithVolatility,
+                    color: SIGNAL_CONCEPT.oil_price,
                     symbol: "triangle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
@@ -8382,6 +8898,7 @@ export default function StudyDetailPage() {
                         yAxisIndex: 0,
                         unit: "USD/barrel",
                         points: oilPointsWithVolatility,
+                        color: SIGNAL_CONCEPT.oil_price,
                         symbol: "triangle",
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
@@ -8391,6 +8908,7 @@ export default function StudyDetailPage() {
                         yAxisIndex: 1,
                         unit: "toman/USD",
                         points: fxPoints,
+                        color: SIGNAL_CONCEPT.exchange_rate,
                         symbol: "diamond",
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
@@ -8400,6 +8918,7 @@ export default function StudyDetailPage() {
                         yAxisIndex: 2,
                         unit: "USD/oz",
                         points: goldPoints,
+                        color: SIGNAL_CONCEPT.gold_spot,
                         symbol: "circle",
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },

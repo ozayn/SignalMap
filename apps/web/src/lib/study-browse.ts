@@ -1,5 +1,5 @@
 import { CONCEPTS, type ConceptKey } from "./concepts";
-import { STUDY_SECTIONS, type StudyCountry, type StudyMeta, type StudyTheme } from "./studies";
+import { getStudyById, STUDY_BROWSE_GROUP_TITLES, type StudyCountry, type StudyMeta, type StudyTheme } from "./studies";
 
 export type BrowseProfile = {
   countries: StudyCountry[];
@@ -22,7 +22,7 @@ export const STUDY_THEME_OPTIONS: { id: StudyTheme; label: string }[] = [
   { id: "social", label: "Social / platform" },
 ];
 
-/** Signal-row tags (aligned with former studies page). */
+/** Signal-row tags. `study.tags` (when set) come first, then kind-derived tags (de-duplicated). */
 export function getSignalTags(study: StudyMeta): string[] {
   const tags: string[] = [];
   const kind = study.primarySignal.kind;
@@ -36,7 +36,8 @@ export function getSignalTags(study: StudyMeta): string[] {
     kind === "oil_production_major_exporters" ||
     kind === "oil_trade_network" ||
     kind === "oil_exporter_timeseries" ||
-    kind === "oil_geopolitical_reaction"
+    kind === "oil_geopolitical_reaction" ||
+    kind === "oil_economy_overview"
   ) {
     tags.push("Oil");
   }
@@ -44,30 +45,19 @@ export function getSignalTags(study: StudyMeta): string[] {
     tags.push("FX");
   }
   if (kind === "gold_and_oil") tags.push("Gold");
-  if (kind === "events_timeline") tags.push("Events");
-  if (kind === "follower_growth_dynamics") tags.push("Growth");
-  if (kind === "youtube_comment_analysis") {
-    tags.push("Discourse");
-    if (study.youtubeLanguage !== "English") tags.push("Persian");
-  }
-  if (kind === "wage_cpi_real") tags.push("Wage");
+  if (kind === "events_timeline") tags.push("Reference");
   if (kind === "gdp_composition" || kind === "iran_gdp_accounts_dual" || kind === "gdp_global_comparison") tags.push("GDP");
-  if (kind === "isi_diagnostics") tags.push("Trade", "Industry");
-  if (kind === "gini_inequality") tags.push("Inequality");
-  if (kind === "inflation_cpi_yoy") tags.push("Inflation");
-  if (kind === "poverty_headcount_iran") tags.push("Poverty");
-  if (kind === "dutch_disease_diagnostics_iran") tags.push("Macro", "Oil", "FX");
   if (kind === "oil_trade_network" || kind === "oil_exporter_timeseries") tags.push("Trade");
-  if (study.eventLayers && study.eventLayers.length > 0 && !tags.includes("Events")) {
-    tags.push("Events");
-  }
-  return [...new Set(tags)];
+  return [...new Set([...(study.tags ?? []), ...tags])];
 }
 
 function sectionTitlesForStudy(studyId: string): string[] {
+  const study = getStudyById(studyId);
+  if (!study?.groupPlacements?.length) return [];
   const out: string[] = [];
-  for (const sec of STUDY_SECTIONS) {
-    if (sec.studyIds.includes(studyId)) out.push(sec.title, sec.description);
+  for (const p of study.groupPlacements) {
+    const t = STUDY_BROWSE_GROUP_TITLES[p.group];
+    out.push(t.title, t.description);
   }
   return out;
 }
@@ -312,6 +302,22 @@ function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
           "imports",
           "wdi",
           "structural",
+        ],
+      };
+    case "oil_economy_overview":
+      return {
+        countries: ["iran", "global"],
+        themes: ["oil", "macro"],
+        tags: [],
+        keywords: [
+          "brent",
+          "production",
+          "revenue",
+          "iran",
+          "crude",
+          "barrels per day",
+          "eia",
+          "fred",
         ],
       };
     default:

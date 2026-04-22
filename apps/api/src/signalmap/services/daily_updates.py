@@ -1,5 +1,13 @@
 """Daily append-only updates for macro time-series signals.
-Idempotent: fetches only missing dates, never overwrites historical rows."""
+Idempotent: fetches only missing dates, never overwrites historical rows.
+
+Oil-economy overview: Brent is stored in ``signal_points`` (FRED:DCOILBRENTEU);
+Iran+exporter production is in ``signal_points`` (IMF:EIA:oil_production).
+**Revenue is not stored** — it is always computed in ``get_oil_economy_overview_iran`` as production × price.
+
+**Unified daily** ``update_all_data_sources`` includes oil production by default. Set
+``DAILY_CRON_OIL_PRODUCTION=0`` to skip it (e.g. use monthly ``cron_oil_production_monthly.py`` only).
+"""
 
 import logging
 import os
@@ -10,6 +18,15 @@ from signalmap.data.oil_annual import BRENT_DAILY_START
 from signalmap.store.signals_repo import get_max_date, insert_points_ignore_conflict, _has_db
 
 logger = logging.getLogger(__name__)
+
+
+def _include_oil_production_in_daily() -> bool:
+    """When false, update_all does not run oil_production_exporters (use monthly cron)."""
+    return (os.getenv("DAILY_CRON_OIL_PRODUCTION") or "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    )
 
 SIGNAL_BRENT = "brent_oil_price"
 SIGNAL_FX_USD_TOMAN = "usd_toman_open_market"
@@ -25,12 +42,15 @@ def _add_days(date_str: str, days: int) -> str:
 
 
 def update_brent_prices() -> dict[str, Any]:
-    """Append-only update for Brent oil. Fetches only missing dates."""
+    """Append-only update for Brent oil. Fetches only missing dates.
+    Drives the oil-economy-overview **price** series in DB; revenue remains API-computed only.
+    """
     if not _has_db():
         logger.warning("brent: DATABASE_URL not set, skipping")
         return {"rows_added": 0, "start_date": None, "end_date": None, "error": "no db"}
 
     try:
+        logger.info("oil_economy: brent_cron start (FRED DCOILBRENTEU, append missing dates)")
         last = get_max_date(SIGNAL_BRENT)
         start_date = _add_days(last, 1) if last else BRENT_DAILY_START
         end_date = datetime.now().date().strftime("%Y-%m-%d")
@@ -48,8 +68,16 @@ def update_brent_prices() -> dict[str, Any]:
             metadata={"ingested_by": "daily_update"},
         )
         logger.info("brent: rows_added=%s start=%s end=%s", rows, start_date, end_date)
+        logger.info("oil_economy: brent_cron success rows=%s", rows)
+        try:
+            from signalmap.utils.ttl_cache import invalidate_prefix
+
+            invalidate_prefix("signal:oil_economy_overview:")
+        except Exception:
+            pass
         return {"rows_added": rows, "start_date": start_date, "end_date": end_date}
     except Exception as e:
+        logger.error("oil_economy: brent_cron failed: %s", e)
         logger.exception("brent: %s", e)
         return {"rows_added": 0, "start_date": None, "end_date": None, "error": str(e)}
 
@@ -211,7 +239,11 @@ def update_oil_trade_network() -> dict[str, Any]:
 
 
 def update_oil_production_exporters() -> dict[str, Any]:
-    """Append-only update for oil production (Saudi, Russia, Iran). Idempotent."""
+    """Append for oil production (US, SAU, RUS, IRN) via ``ON CONFLICT DO NOTHING`` (no duplicate dates).
+
+    One EIA/static pull per run; most rows usually no-op after first backfill. Prefer **monthly** scheduling
+    (this module does not re-ingest the embedded 1980–1999 static — that is Python only for gap years).
+    """
     if not _has_db():
         logger.warning("oil_production_exporters: DATABASE_URL not set, skipping")
         return {"rows_added": 0, "error": "no db"}
@@ -225,6 +257,7 @@ def update_oil_production_exporters() -> dict[str, Any]:
             SIGNAL_OIL_PRODUCTION_IRAN,
         )
 
+        logger.info("oil_economy: production_cron start (EIA/static → append rows, conflict-safe)")
         rows = fetch_oil_production_exporters()
         total = 0
         for r in rows:
@@ -233,7 +266,7 @@ def update_oil_production_exporters() -> dict[str, Any]:
                     SIGNAL_OIL_PRODUCTION_US,
                     [{"date": r["date"], "value": r["us"]}],
                     source="IMF:EIA:oil_production",
-                    metadata={"ingested_by": "daily_update"},
+                    metadata={"ingested_by": "daily_or_monthly_update"},
                 )
                 total += n
             if r.get("saudi_arabia") is not None:
@@ -241,7 +274,7 @@ def update_oil_production_exporters() -> dict[str, Any]:
                     SIGNAL_OIL_PRODUCTION_SAUDI,
                     [{"date": r["date"], "value": r["saudi_arabia"]}],
                     source="IMF:EIA:oil_production",
-                    metadata={"ingested_by": "daily_update"},
+                    metadata={"ingested_by": "daily_or_monthly_update"},
                 )
                 total += n
             if r.get("russia") is not None:
@@ -249,7 +282,7 @@ def update_oil_production_exporters() -> dict[str, Any]:
                     SIGNAL_OIL_PRODUCTION_RUSSIA,
                     [{"date": r["date"], "value": r["russia"]}],
                     source="IMF:EIA:oil_production",
-                    metadata={"ingested_by": "daily_update"},
+                    metadata={"ingested_by": "daily_or_monthly_update"},
                 )
                 total += n
             if r.get("iran") is not None:
@@ -257,13 +290,20 @@ def update_oil_production_exporters() -> dict[str, Any]:
                     SIGNAL_OIL_PRODUCTION_IRAN,
                     [{"date": r["date"], "value": r["iran"]}],
                     source="IMF:EIA:oil_production",
-                    metadata={"ingested_by": "daily_update"},
+                    metadata={"ingested_by": "daily_or_monthly_update"},
                 )
                 total += n
-        logger.info("oil_production_exporters: rows_added=%s", total)
-        logger.info("Oil production exporters updated")
+        logger.info("oil_production_exporters: rows_inserted=%s (0 expected after backfill; conflict-safe)", total)
+        logger.info("oil_economy: production_cron success rows=%s", total)
+        try:
+            from signalmap.utils.ttl_cache import invalidate_prefix
+
+            invalidate_prefix("signal:oil_economy_overview:")
+        except Exception:
+            pass
         return {"rows_added": total}
     except Exception as e:
+        logger.error("oil_economy: production_cron failed: %s", e)
         logger.exception("oil_production_exporters: %s", e)
         return {"rows_added": 0, "error": str(e)}
 
@@ -273,6 +313,16 @@ def _run_macro_signals_refresh() -> dict[str, Any]:
     from jobs import update_macro_signals
 
     return update_macro_signals()
+
+
+def run_oil_economy_brent_cron() -> dict[str, Any]:
+    """Brent (FRED) only — for oil-economy-overview and other Brent consumers."""
+    return update_brent_prices()
+
+
+def run_oil_production_cron() -> dict[str, Any]:
+    """EIA/IMF oil production (US, SA, RU, IR) only. Safe for monthly schedule."""
+    return update_oil_production_exporters()
 
 
 DATA_SOURCE_UPDATERS: dict[str, Callable[[], dict[str, Any]]] = {
@@ -288,9 +338,19 @@ DATA_SOURCE_UPDATERS: dict[str, Callable[[], dict[str, Any]]] = {
 
 
 def update_all_data_sources() -> dict[str, Any]:
-    """Execute all registered updaters. Catches per-source exceptions."""
+    """Execute all registered updaters. Catches per-source exceptions.
+    Set ``DAILY_CRON_OIL_PRODUCTION=0`` to skip oil_production_exporters in this run.
+    """
     results: dict[str, Any] = {}
     for name, fn in DATA_SOURCE_UPDATERS.items():
+        if name == "oil_production_exporters" and not _include_oil_production_in_daily():
+            logger.info("oil_economy: skipping oil_production_exporters in update_all (DAILY_CRON_OIL_PRODUCTION=0)")
+            results[name] = {
+                "rows_added": 0,
+                "skipped": True,
+                "reason": "DAILY_CRON_OIL_PRODUCTION=0; use monthly cron or run_oil_production_cron()",
+            }
+            continue
         try:
             results[name] = fn()
         except Exception as e:
