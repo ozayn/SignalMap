@@ -96,6 +96,19 @@ function isGdpMacroAbsoluteUsdUnit(unit: string): boolean {
 /**
  * WDI or stylized “levels”: raw international dollars, or when `unit` names “billion” for the numeric column, plain mantissa on the axis.
  */
+/**
+ * When the axis / series `unit` names “billion (USD/…)” but the dataset is still in **raw**
+ * international units (e.g. `1.5e11` for $150B), `valueScale: "billions"` must receive the mantissa in billions.
+ * World Bank and oil-economy APIs often return raw dollars; WDI absolute levels are sometimes raw scale too.
+ */
+function toBillionsMantissaIfRawMajorUnit(value: number, inBillions: boolean): number {
+  if (!inBillions) return value;
+  const a = Math.abs(value);
+  /** Raw $ totals are typically ≥ 1e6; “already billions” store values like 0.5–5e3. */
+  if (a < 1e6) return value;
+  return value / 1e9;
+}
+
 export function formatGdpMacroBillionsDisplay(
   value: number,
   chartLocale?: ChartFormatLocale,
@@ -105,10 +118,41 @@ export function formatGdpMacroBillionsDisplay(
   const inBillions =
     unit != null &&
     (unitSuggestsValuesAreInBillionsOfMajorUnit(unit) || unitSuggestsValuesInBillionsOfToman(unit));
+  const v = toBillionsMantissaIfRawMajorUnit(value, inBillions);
   if (inBillions) {
-    return formatNumberCompact(value, { locale: chartLocale ?? "en", mode: "axis", valueScale: "billions" });
+    return formatNumberCompact(v, { locale: chartLocale ?? "en", mode: "axis", valueScale: "billions" });
   }
-  return formatNumberCompact(value, { locale: chartLocale ?? "en", mode: "axis", valueScale: "absolute" });
+  return formatNumberCompact(v, { locale: chartLocale ?? "en", mode: "axis", valueScale: "absolute" });
+}
+
+/**
+ * ECharts `getOption()` may omit `axisLabel.formatter` in export. Reconstruct compact ticks from the
+ * y-axis `name` (mirrors `ChartSeries.unit` + title hints used in `TimelineChart`).
+ */
+export function formatYAxisTickPresentationExportFallback(
+  value: number,
+  axisName: string,
+  chartLocale: ChartFormatLocale = "en"
+): string {
+  if (!Number.isFinite(value)) return "";
+  const n = axisName.trim();
+  if (!n) {
+    return formatChartAxisNumber(value, chartLocale);
+  }
+  const low = n.toLowerCase();
+  if (/\b(oz|ounce|\/oz)\b|bbl|barrel|per barrel|بشکه|دلار\/بشکه|\/بشکه|gold/i.test(n)) {
+    return formatChartAxisNumber(value, chartLocale);
+  }
+  if (/toman\/?(usd|us\$)|\busd\/?[\/]\s*rial|نرخ.*(دلار|فروش)|\b(fx|irr)\b/i.test(low) && /toman|دلار|تومان|rial/i.test(n)) {
+    return formatChartAxisNumber(value, chartLocale);
+  }
+  if (
+    (/\bindex\b|شاخص|base\s*=\s*|\(\s*100|=\s*100\b|پایه\s*=/i.test(n) && !/billion|میلیارد|revenue|income|وارد|gdp|brent|toman\//i.test(low)) ||
+    /\bindex \(base/i.test(low)
+  ) {
+    return formatGdpIndexedAxisTick(value, chartLocale);
+  }
+  return formatGdpLevelsAxisTick(value, n, chartLocale);
 }
 
 /** GDP / macro / oil multi-series: single tooltip line, no `1.2B` + “billion” duplication. */
@@ -117,8 +161,9 @@ export function formatGdpLevelsTooltipValue(value: number, unit: string, chartLo
   const loc = (s: string) => localizeChartNumericDisplayString(s, chartLocale);
   const u = unit.toLowerCase();
   if (isBillionTomanUnit(unit)) {
+    const v = toBillionsMantissaIfRawMajorUnit(value, true);
     return loc(
-      formatNumberCompact(value, {
+      formatNumberCompact(v, {
         locale: chartLocale ?? "en",
         mode: "tooltip",
         valueScale: "billions",
@@ -142,7 +187,8 @@ export function formatGdpLevelsTooltipValue(value: number, unit: string, chartLo
     }
     const inBillions = unitSuggestsValuesAreInBillionsOfMajorUnit(unit);
     const valScale: "absolute" | "billions" = inBillions ? "billions" : "absolute";
-    const core = formatNumberCompact(value, {
+    const v = valScale === "billions" ? toBillionsMantissaIfRawMajorUnit(value, true) : value;
+    const core = formatNumberCompact(v, {
       locale: chartLocale ?? "en",
       mode: "tooltip",
       valueScale: valScale,

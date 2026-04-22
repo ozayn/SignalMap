@@ -3,6 +3,7 @@ import {
   computeNiceAxisBounds,
   pickNiceYStepForPercentLike,
 } from "@/lib/chart-axis-nice";
+import { formatYAxisTickPresentationExportFallback } from "@/lib/format-compact-decimal";
 import { localizeChartNumericDisplayString } from "@/lib/chart-numerals-fa";
 import {
   type ChartAxisNumeralLocale,
@@ -400,7 +401,8 @@ function scaleRichForPresentation(rich: Record<string, unknown> | undefined): Re
 
 /** Grid margins (logical px @ 1920 wide): room for title, long FA axis names, dual Y, legend, and source. */
 const PRESENTATION_EXPORT_GRID = {
-  left: 80,
+  /** Wider for Y-axis name vs tick space (billion-scaled $ axes, Farsi). */
+  left: 100,
   right: 100,
   top: 80,
   bottom: 70,
@@ -909,27 +911,64 @@ export function buildPresentationEchartsPatch(
 ): Record<string, unknown> {
   const fonts = PRESENTATION_EXPORT_FONTS;
   const gridPatch = normalizePresentationGridPatch(opt);
+  const chartLocale: "en" | "fa" = ctx.chartLocale === "fa" ? "fa" : "en";
 
-  const patchAxis = (ax: Record<string, unknown>): Record<string, unknown> => {
-    const al = (ax.axisLabel ?? {}) as Record<string, unknown>;
+  /**
+   * `echarts` may omit `axisLabel.formatter` on `getOption()`. Y value axes get a built-in compact tick
+   * that matches live `formatGdpLevels` / per-unit heuristics (and avoids 12-digit “150000000000” labels).
+   */
+  const patchAxis = (isY: boolean) => (ax: Record<string, unknown>): Record<string, unknown> => {
+    const al = (ax.axisLabel ?? {}) as Record<string, unknown> & { formatter?: unknown };
     const nt = (ax.nameTextStyle ?? {}) as Record<string, unknown>;
     const rich = al.rich as Record<string, unknown> | undefined;
     const hasName = typeof ax.name === "string" && ax.name.trim() !== "";
+    const axisType: string =
+      typeof ax.type === "string" ? ax.type : isY ? "value" : "category";
+    const isValueY = isY && (axisType === "value" || axisType === "log");
+    const nameStr = typeof ax.name === "string" ? ax.name : "";
+    const nameGapBase = isY && isValueY && hasName ? 108 : 86;
     const nameGapPatch =
       typeof ax.nameGap === "number"
-        ? { nameGap: Math.max(86, Math.round(ax.nameGap * 1.1)) }
+        ? { nameGap: Math.max(nameGapBase, Math.round(ax.nameGap * (isY && hasName ? 1.22 : 1.1))) }
         : hasName
-          ? { nameGap: 86 }
+          ? { nameGap: nameGapBase }
           : {};
+    const origFormatter = al.formatter;
+    let nextFormatter: unknown;
+    if (!isY || !isValueY) {
+      nextFormatter = origFormatter;
+    } else if (typeof origFormatter === "function") {
+      nextFormatter = origFormatter;
+    } else if (origFormatter != null) {
+      nextFormatter = origFormatter;
+    } else {
+      nextFormatter = (v: string | number) => {
+        const n = typeof v === "number" ? v : Number(v);
+        if (!Number.isFinite(n)) return String(v);
+        return formatYAxisTickPresentationExportFallback(n, nameStr, chartLocale);
+      };
+    }
+    const margin =
+      isY && isValueY
+        ? typeof al.margin === "number"
+          ? Math.max(al.margin, 14)
+          : 14
+        : typeof al.margin === "number"
+          ? Math.max(al.margin, 12)
+          : 12;
+    const axisLabelOut: Record<string, unknown> = {
+      ...al,
+      fontSize: fonts.axisLabel,
+      margin,
+      ...(rich ? { rich: scaleRichForPresentation(rich) } : {}),
+    };
+    if (isY && isValueY) {
+      axisLabelOut.formatter = nextFormatter;
+    }
     return {
       ...ax,
       ...nameGapPatch,
-      axisLabel: {
-        ...al,
-        fontSize: fonts.axisLabel,
-        margin: typeof al.margin === "number" ? Math.max(al.margin, 12) : 12,
-        ...(rich ? { rich: scaleRichForPresentation(rich) } : {}),
-      },
+      axisLabel: axisLabelOut,
       nameTextStyle: {
         ...nt,
         fontSize: fonts.axisName,
@@ -939,8 +978,8 @@ export function buildPresentationEchartsPatch(
     };
   };
 
-  const xAxes = asArray(opt.xAxis).map((ax) => patchAxis(ax as Record<string, unknown>));
-  const yAxes = asArray(opt.yAxis).map((ax) => patchAxis(ax as Record<string, unknown>));
+  const xAxes = asArray(opt.xAxis).map((ax) => patchAxis(false)(ax as Record<string, unknown>));
+  const yAxes = asArray(opt.yAxis).map((ax) => patchAxis(true)(ax as Record<string, unknown>));
 
   const legends = asArray(opt.legend).map((leg) => {
     const legRec = leg as Record<string, unknown>;
@@ -1012,7 +1051,6 @@ export function buildPresentationEchartsPatch(
   });
 
   const dir = ctx.direction ?? "ltr";
-  const chartLocale = ctx.chartLocale ?? "en";
   const sourceText = formatStudyExportSourceLine(ctx.sourceFooter ?? "", chartLocale) || undefined;
   const sourceGraphic = sourceText
     ? [

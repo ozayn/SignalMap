@@ -4307,7 +4307,11 @@ export default function StudyDetailPage() {
                     points: fxDualOfficialPoints,
                   },
                   {
-                    label: L(isFa, "Open market (archive + Bonbast)", "بازار آزاد (آرشیو + بان‌بست)"),
+                    label: L(
+                      isFa,
+                      "Open market (FRED + archive + Bonbast, same as USD→Toman)",
+                      "بازار آزاد (FRED + آرشیو + بان‌بست — همان سری اصلی)"
+                    ),
                     unit: L(isFa, "toman/USD", "تومان/دلار"),
                     points: fxDualOpenPoints,
                   },
@@ -4329,7 +4333,7 @@ export default function StudyDetailPage() {
                 xAxisYearLabel={chartYearAxisLabel}
                 exportSourceFooter={studyChartExportSource(isFa, [
                   "World Bank (official rate, PA.NUS.FCRF); FRED PWT (XRNCUSIRA618NRUG) only where WDI has no year",
-                  "Bonbast + rial-archive (open market, daily; starts when archive has data)",
+                  "Open market: same merged series as the USD→Toman study (FRED pre-2012; rial-archive + Bonbast when available)",
                 ])}
                 data={[]}
                 valueKey="value"
@@ -4350,7 +4354,7 @@ export default function StudyDetailPage() {
                   },
                   {
                     key: "open",
-                    label: L(isFa, "Open market (from archive date)", "بازار آزاد (از تاریخ آرشیو)"),
+                    label: L(isFa, "Open market (merged, same as USD→Toman)", "بازار آزاد (ادغام‌شده، همان مطالعهٔ اصلی)"),
                     yAxisIndex: 0,
                     unit: L(isFa, "toman/USD", "تومان/دلار"),
                     points: fxDualOpenPoints,
@@ -4384,7 +4388,7 @@ export default function StudyDetailPage() {
                     heading: "How to read this chart",
                     bullets: [
                       "Official: World Bank WDI (PA.NUS.FCRF), period-average official rate, annual, in toman per 1 USD (1 toman = 10 rials). FRED (Penn World Table, XRNCUSIRA618NRUG) fills a calendar year only if WDI has no value for that year.",
-                      "Open market: Bonbast + rial-archive (from 2012-10-09) — daily, no FRED fill — so the open line does not look “fixed” in early years. Higher values = weaker rial/toman (more toman to buy 1 dollar).",
+                      "Open market: the same merged open-market history as the main USD→Toman study — FRED (annual) before the public archive, then rial-archive + Bonbast for higher-frequency points. The two level series are not cut to a common start date; use spread only as a comparison when both are defined in a year.",
                     ],
                   },
                   {
@@ -4398,8 +4402,8 @@ export default function StudyDetailPage() {
                     heading: "Measurement choices & limitations",
                     bullets: [
                       "Official: WDI may be null in the most recent year until the Bank republishes; FRED (PWT) is annual through its own end. No imputed “flat” extension to today on the official line when WDI is missing.",
-                      "Open-market coverage starts when the public archive has daily Bonbast data (not extrapolated back). The two series need not start in the same year; do not read one line as a continuation of the other off-chart.",
-                      "Spread (%, optional): for each official calendar year, uses the mean of open-market toman/USD in that year vs official at YYYY-01-01, only when there is at least one open observation in that year.",
+                      "Open market: where the merge has an annual FRED point before 2012, that year’s open line uses that value; from the archive window onward, daily/spot values apply. The official line can start or end in a different year than the open line without truncating the other series.",
+                      "Spread (%, optional): for each official calendar year, mean open-market toman/USD in that year vs official at YYYY-01-01, only when there is at least one open observation in that year.",
                     ],
                   },
                   {
@@ -4440,7 +4444,7 @@ export default function StudyDetailPage() {
                       ]
                     : []),
                 ]}
-                note="Official: WDI (annual) + PWT (FRED) for missing years. Open: Bonbast + rial-archive (daily) from 2012-10-09, no synthetic pre-2012 open line. 1 toman = 10 rials."
+                note="Official: WDI (annual) + PWT (FRED) for missing years. Open: same merge as the USD→Toman study (FRED pre-2012; rial-archive + Bonbast). 1 toman = 10 rials."
               />
               <InSimpleTerms locale={isFa ? "fa" : "en"}>
                 <p>

@@ -84,18 +84,6 @@ USD_TOMAN_SOURCE = {
     "notes": "Values in toman (1 toman = 10 rials). Daily: Bonbast archive. Pre-2012: FRED annual.",
 }
 
-# Open market only: **no** FRED/official — for dual-rate study to avoid a flat/misleading pre-2012 "open" line.
-OPEN_MARKET_USD_TOMAN_DUAL_SOURCE: dict = {
-    "name": "rial-archive (Bonbast) + Bonbast live",
-    "publisher": "SamadiPour/rial-exchange-rates-archive; Bonbast (high-frequency, recent days)",
-    "type": "open_market",
-    "url": "https://github.com/SamadiPour/rial-exchange-rates-archive",
-    "notes": (
-        "Toman per USD. Archive from 2012-10-09; Bonbast graph and/or live scrape for the latest window. "
-        "No FRED, no imputed pre-archive points."
-    ),
-}
-
 
 def _cache_key(signal_key: str, start: str, end: str) -> str:
     return f"signal:{signal_key}:{start}:{end}"
@@ -132,29 +120,6 @@ def fetch_usd_toman_merged() -> list[dict]:
     for p in bonbast:
         by_date[p["date"]] = p
     return sorted(by_date.values(), key=lambda x: x["date"])
-
-
-def fetch_open_market_usd_toman_merged() -> list[dict]:
-    """
-    Bonbast/rial archive only: **no** FRED official series, so the dual study “open” line
-    does not run flat against the WDI/official line before 2012.
-    """
-    archive: list[dict] = []
-    bonbast: list[dict] = []
-    try:
-        archive = fetch_archive_usd_toman_series()
-    except Exception:
-        pass
-    try:
-        bonbast = fetch_usd_toman_series()
-    except Exception:
-        pass
-    by_date: dict[str, float] = {}
-    for p in archive:
-        by_date[p["date"]] = p["value"]
-    for p in bonbast:
-        by_date[p["date"]] = p["value"]
-    return [{"date": d, "value": round(v, 2)} for d, v in sorted(by_date.items(), key=lambda x: x[0])]
 
 
 def get_brent_series(start: str, end: str) -> dict:
@@ -875,13 +840,16 @@ def get_usd_toman_series(start: str, end: str) -> dict:
 def get_usd_irr_dual_series(start: str, end: str) -> dict:
     """
     **Official** annual: World Bank WDI `PA.NUS.FCRF` in toman/USD, with FRED (PWT) for years WDI omits.
-    **Open market** daily/spot: rial archive + Bonbast only (no FRED) so pre-archive years are not
-    a misleading “open = official” line.
 
-    Series can start at different dates; the client should not force-align the level lines. Spread (%)
-    should use **within-year** mean of open (Gregorian) vs official for that year when both exist.
+    **Open market** uses the **same** merged build as `GET /api/signals/fx/usd-toman` — FRED annual
+    (pre-2012) + rial archive + Bonbast — so dual-rate and single-rate studies share time coverage
+    and stitching. Official years without open data still show a full open line where the merge
+    has points; spread (%) is computed per calendar year only when that year has both an official
+    value and at least one open observation (client).
+
+    The two level series are **not** truncated to their date intersection.
     """
-    ck = f"signal:fx_usd_irr_dual:v3:{start}:{end}"
+    ck = f"signal:fx_usd_irr_dual:v4:{start}:{end}"
     cached = cache_get(ck)
     if cached is not None:
         return cached
@@ -891,10 +859,14 @@ def get_usd_irr_dual_series(start: str, end: str) -> dict:
 
     open_merged: list[dict] = []
     try:
-        open_merged = fetch_open_market_usd_toman_merged()
+        open_merged = fetch_usd_toman_merged()
     except Exception:
         open_merged = []
-    open_points = [p for p in open_merged if start <= p["date"] <= end]
+    open_by: dict[str, dict] = {}
+    for p in open_merged:
+        if start <= p["date"] <= end:
+            open_by[p["date"]] = p
+    open_points = sorted(open_by.values(), key=lambda x: x["date"])
 
     off_years = [int(p["date"][:4]) for p in official_points]
     open_days = [p["date"] for p in open_points] if open_points else []
@@ -919,12 +891,12 @@ def get_usd_irr_dual_series(start: str, end: str) -> dict:
         },
         "open_market": {
             "points": open_points,
-            "source": OPEN_MARKET_USD_TOMAN_DUAL_SOURCE,
+            "source": USD_TOMAN_SOURCE,
             "metadata": {
                 "open_earliest_date": metadata.get("open_earliest_date"),
                 "open_latest_date": metadata.get("open_latest_date"),
                 "unit": metadata.get("unit"),
-                "resolution": "daily" if open_points else "none",
+                "resolution": "merged (FRED annual pre-archive; daily when archive+Bonbast)",
             },
         },
     }

@@ -256,7 +256,8 @@ export const STUDIES: StudyMeta[] = [
     number: 12,
     title: "Dual Exchange Rates in Iran",
     timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
-    description: "WDI official toman/USD vs. open market (archive + Bonbast from 2012). Annual spread where both years exist.",
+    description:
+      "WDI official toman/USD vs. open market on the same merged history as the USD→Toman study (FRED + rial archive + Bonbast). Spread (%) only where a calendar year has both official and open data.",
     status: "active",
     tags: ["Dual", "Spread"],
     groupPlacements: [{ group: "iran", order: 5 }],
