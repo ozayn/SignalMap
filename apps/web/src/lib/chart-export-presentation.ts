@@ -405,16 +405,33 @@ const PRESENTATION_EXPORT_GRID = {
   left: 100,
   right: 100,
   top: 80,
-  /** Base space below the plot (x-axis + legend + gap above multi-line `Source:`). Tuned in `buildPresentationEchartsPatch` when a footer exists. */
-  bottom: 80,
+  /** Base space below the plot: x-axis band, legend, and (when used) a lower source zone without squashing. */
+  bottom: 86,
   containLabel: true as const,
 };
 
-/** Pixels from canvas bottom to last line of source; gap between legend and source is handled via `legend.bottom`. */
-const PRESENTATION_SOURCE_TEXT_BOTTOM = 16;
-const PRESENTATION_LEGEND_MIN_BOTTOM = 36;
-const PRESENTATION_SOURCE_LEGEND_GAP = 20;
-const PRESENTATION_FOOTER_EXTRA_GRID_PER_WRAPPED_LINE = 10;
+/** Pixels from canvas bottom to the bottom edge of the source text block. */
+const PRESENTATION_SOURCE_TEXT_BOTTOM = 20;
+/** Min gap so ECharts legend and source never overlap. */
+const PRESENTATION_SOURCE_LEGEND_GAP = 24;
+const PRESENTATION_LEGEND_MIN_BOTTOM = 40;
+/** One horizontal legend row height (est., px). */
+const PRESENTATION_EST_LEGEND_HEIGHT_PX = 42;
+/** Gap from legend top to x-axis / category labels band. */
+const PRESENTATION_LEGEND_TO_PLOT_GAP_PX = 20;
+const PRESENTATION_PLOT_FOOTER_EXTRA_PAD_PX = 12;
+/** `grid.bottom` bump per line beyond the first (tighter when wrapped). */
+const PRESENTATION_FOOTER_EXTRA_GRID_PER_WRAPPED_LINE = 6;
+/**
+ * Source is a **compact** lower-left block (not full chart width) so the slide keeps balance.
+ * ~50% of slide; cap avoids ultra-wide one-line on huge canvases.
+ */
+const PRESENTATION_SOURCE_WRAP_WIDTH_RATIO = 0.5;
+const PRESENTATION_SOURCE_WRAP_WIDTH_CAP_PX = 980;
+/** At most 4 body lines to avoid a tall, messy footer. */
+const PRESENTATION_SOURCE_MAX_WRAP_LINES = 4;
+/** Break long “list” clauses after a comma only when a segment is still this long. */
+const PRESENTATION_SOURCE_COMMA_BREAK_MIN = 80;
 
 /** Strip any existing source prefixes so we can apply a single English `Source:` label. */
 function stripExportSourcePrefixes(raw: string): string {
@@ -482,9 +499,38 @@ function layoutExportSourceTextLineToWidth(
 }
 
 /**
- * Splits a formatted `Source: …` string into multiple ECharts `graphic` lines: prefers `;` / `؛` boundaries,
- * then width-aware word wrap per segment (export canvas = slide width with horizontal padding).
- * Only used for presentation PNG; keeps logical source chunks together.
+ * Greedy regrouping of a comma‑separated clause into lines that fit; only used when the whole string is long.
+ */
+function groupCommaListForWidth(
+  ctx: CanvasRenderingContext2D,
+  segment: string,
+  maxWidth: number
+): string[] {
+  if (ctx.measureText(segment).width <= maxWidth) return [segment];
+  if (segment.length < PRESENTATION_SOURCE_COMMA_BREAK_MIN) return [segment];
+  const bits = segment
+    .split(/,\s+/u)
+    .map((b) => b.trim())
+    .filter(Boolean);
+  if (bits.length <= 1) return [segment];
+  const out: string[] = [];
+  let cur = bits[0] ?? "";
+  for (let i = 1; i < bits.length; i += 1) {
+    const trial = `${cur}, ${bits[i]!}`;
+    if (ctx.measureText(trial).width <= maxWidth) {
+      cur = trial;
+    } else {
+      out.push(cur);
+      cur = bits[i]!;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+/**
+ * Splits a formatted `Source: …` string for ECharts `graphic`: `;` / `؛` first, then in long
+ * sub-clusters optional comma breaks, then width-aware word wrap. Keeps “Source:” reads logical.
  */
 export function buildPresentationExportSourceLines(
   fullLine: string,
@@ -500,33 +546,44 @@ export function buildPresentationExportSourceLines(
   }
   ctx.font = `${fontSize}px ${MEASURE_CANVAS_FONT}`;
 
-  const parts = fullLine
+  const semicolonParts = fullLine
     .split(/\s*[;؛]\s*/u)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 
-  if (parts.length === 0) {
+  if (semicolonParts.length === 0) {
     return [fullLine];
   }
 
   const lines: string[] = [];
-  for (const part of parts) {
+  for (const rawPart of semicolonParts) {
     if (lines.length >= maxLines) {
-      if (lines.length > 0) {
-        const last = lines[lines.length - 1]!;
-        lines[lines.length - 1] = /…$/.test(last) ? last : `${last}…`;
-      }
+      const last = lines[lines.length - 1]!;
+      lines[lines.length - 1] = /…$/.test(last) ? last : `${last}…`;
       return lines;
     }
-    const remaining = maxLines - lines.length;
-    if (ctx.measureText(part).width <= maxWidth) {
-      lines.push(part);
-      continue;
-    }
-    const wrapped = layoutExportSourceTextLineToWidth(ctx, part, maxWidth, Math.max(1, remaining));
-    for (const w of wrapped) {
-      if (lines.length >= maxLines) break;
-      lines.push(w);
+    const subParts = groupCommaListForWidth(ctx, rawPart, maxWidth);
+    for (const part of subParts) {
+      if (lines.length >= maxLines) {
+        const last0 = lines[lines.length - 1]!;
+        lines[lines.length - 1] = /…$/.test(last0) ? last0 : `${last0}…`;
+        return lines;
+      }
+      const remaining = maxLines - lines.length;
+      if (ctx.measureText(part).width <= maxWidth) {
+        lines.push(part);
+        continue;
+      }
+      const wrapped = layoutExportSourceTextLineToWidth(
+        ctx,
+        part,
+        maxWidth,
+        Math.max(1, remaining)
+      );
+      for (const w of wrapped) {
+        if (lines.length >= maxLines) break;
+        lines.push(w);
+      }
     }
   }
   return lines.slice(0, maxLines);
@@ -1021,29 +1078,41 @@ export function buildPresentationEchartsPatch(
   const gridPatch = normalizePresentationGridPatch(opt);
   const chartLocale: "en" | "fa" = ctx.chartLocale === "fa" ? "fa" : "en";
   const dir = ctx.direction ?? "ltr";
-  const maxSourceTextWidth = PRESENTATION_EXPORT_CHART_WIDTH - 2 * PRESENTATION_COMPOSITE.horizontalPadding;
-  const PRESENTATION_SOURCE_MAX_LINES = 5;
+  /** Compact block (~half slide width) so the chart dominates and text isn’t a full‑width bar. */
+  const compactSourceWrapWidthPx = Math.min(
+    PRESENTATION_SOURCE_WRAP_WIDTH_CAP_PX,
+    Math.floor(PRESENTATION_EXPORT_CHART_WIDTH * PRESENTATION_SOURCE_WRAP_WIDTH_RATIO)
+  );
   const sourceOneLine = formatStudyExportSourceLine(ctx.sourceFooter ?? "", chartLocale) || "";
   const sourceLinesList = sourceOneLine
     ? buildPresentationExportSourceLines(
         sourceOneLine,
-        maxSourceTextWidth,
+        compactSourceWrapWidthPx,
         fonts.sourceGraphic,
-        PRESENTATION_SOURCE_MAX_LINES
+        PRESENTATION_SOURCE_MAX_WRAP_LINES
       )
     : [];
-  const sourceLineHeightPx = Math.round(fonts.sourceGraphic * 1.42);
+  const sourceLineHeightPx = Math.round(fonts.sourceGraphic * 1.38);
   const sourceTextBlockH = sourceLinesList.length * sourceLineHeightPx;
   const hasExportSource = sourceLinesList.length > 0;
   const sourceTextForGraphic = hasExportSource ? sourceLinesList.join("\n") : undefined;
+  /**
+   * Footer zones (bottom → top): source (bottom‑aligned) → gap → ECharts legend (centered) → x‑axis.
+   * `bottom` is distance from **container** bottom to the **bottom** of the legend; legend grows upward.
+   */
   const legendBottomPx = hasExportSource
     ? Math.max(
         PRESENTATION_LEGEND_MIN_BOTTOM,
         PRESENTATION_SOURCE_TEXT_BOTTOM + sourceTextBlockH + PRESENTATION_SOURCE_LEGEND_GAP
       )
     : 36;
+  /** Aux band (country/line key) must sit **above** legend+source, not in the zoned text band. */
   const sourceBottomReserveForAux = hasExportSource
-    ? PRESENTATION_SOURCE_TEXT_BOTTOM + sourceTextBlockH + 10
+    ? PRESENTATION_SOURCE_TEXT_BOTTOM +
+      sourceTextBlockH +
+      PRESENTATION_SOURCE_LEGEND_GAP +
+      PRESENTATION_EST_LEGEND_HEIGHT_PX +
+      10
     : EXPORT_AUX_LEGEND_SOURCE_RESERVE_MIN;
 
   /**
@@ -1120,7 +1189,10 @@ export function buildPresentationEchartsPatch(
     const pts = (legRec.pageTextStyle ?? {}) as Record<string, unknown>;
     return {
       ...legRec,
+      left: "center" as const,
+      orient: "horizontal" as const,
       bottom: legendBottomPx,
+      itemGap: 10,
       itemWidth: 32,
       itemHeight: 16,
       textStyle: { ...ts, fontSize: fonts.legend },
@@ -1187,10 +1259,13 @@ export function buildPresentationEchartsPatch(
     ? [
         {
           type: "text" as const,
-          ...(dir === "rtl" ? { left: PRESENTATION_COMPOSITE.horizontalPadding } : { right: PRESENTATION_COMPOSITE.horizontalPadding }),
+          ...(dir === "rtl"
+            ? { right: PRESENTATION_COMPOSITE.horizontalPadding }
+            : { left: PRESENTATION_COMPOSITE.horizontalPadding }),
           bottom: PRESENTATION_SOURCE_TEXT_BOTTOM,
           style: {
             text: sourceTextForGraphic,
+            width: compactSourceWrapWidthPx,
             lineHeight: sourceLineHeightPx,
             fontSize: fonts.sourceGraphic,
             fill: "#666666",
@@ -1247,11 +1322,19 @@ export function buildPresentationEchartsPatch(
     gridBase.bottom = curBot + auxBump;
   }
   if (hasExportSource) {
-    const n = sourceLinesList.length;
-    const add =
-      8 + Math.max(0, n - 1) * PRESENTATION_FOOTER_EXTRA_GRID_PER_WRAPPED_LINE;
     const curB = typeof gridBase.bottom === "number" ? gridBase.bottom : PRESENTATION_EXPORT_GRID.bottom;
-    gridBase.bottom = curB + add;
+    const n = sourceLinesList.length;
+    const perLineNudge = 8 + Math.max(0, n - 1) * PRESENTATION_FOOTER_EXTRA_GRID_PER_WRAPPED_LINE;
+    const zonedExportFooterMinBottom = Math.max(
+      curB + perLineNudge,
+      PRESENTATION_SOURCE_TEXT_BOTTOM +
+        sourceTextBlockH +
+        PRESENTATION_SOURCE_LEGEND_GAP +
+        PRESENTATION_EST_LEGEND_HEIGHT_PX +
+        PRESENTATION_LEGEND_TO_PLOT_GAP_PX +
+        PRESENTATION_PLOT_FOOTER_EXTRA_PAD_PX
+    );
+    gridBase.bottom = zonedExportFooterMinBottom;
   }
 
   const auxGraphics = buildPresentationExportAuxGraphics(ctx, sourceBottomReserveForAux);
