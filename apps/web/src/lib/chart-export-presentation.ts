@@ -1,4 +1,8 @@
-import { axisNameLooksPercentShare, pickNiceYStepForPercentLike } from "@/lib/chart-axis-nice";
+import {
+  axisNameLooksPercentShare,
+  computeNiceAxisBounds,
+  pickNiceYStepForPercentLike,
+} from "@/lib/chart-axis-nice";
 import { localizeChartNumericDisplayString } from "@/lib/chart-numerals-fa";
 import {
   type ChartAxisNumeralLocale,
@@ -21,17 +25,17 @@ export const PRESENTATION_EXPORT_PIXEL_RATIO = 3;
 
 /** Target typography on the export chart surface (px at base slide width). Single source for all study PNG exports. */
 export const PRESENTATION_EXPORT_FONTS = {
-  title: 38,
-  /** x/y axis value tick labels */
-  axisLabel: 22,
-  axisName: 26,
-  axisNameLineHeight: 31,
-  legend: 21,
+  title: 32,
+  /** x/y axis value tick labels (slide legibility) */
+  axisLabel: 21,
+  axisName: 23,
+  axisNameLineHeight: 28,
+  legend: 20,
   legendPage: 18,
   markLineLabel: 20,
-  tooltip: 20,
+  tooltip: 19,
   sourceGraphic: 17,
-  seriesLabel: 18,
+  seriesLabel: 19,
 } as const;
 
 /** Context for slide-style PNG export: title + source are drawn on the offscreen ECharts canvas (not the outer composite). */
@@ -384,7 +388,7 @@ function scaleRichForPresentation(rich: Record<string, unknown> | undefined): Re
     const o = v as Record<string, unknown>;
     const fs = typeof o.fontSize === "number" ? o.fontSize : 12;
     const lh = typeof o.lineHeight === "number" ? o.lineHeight : Math.round(fs * 1.25);
-    const factor = PRESENTATION_EXPORT_FONTS.axisLabel / 12; // scale rich-text vs default 12px baseline
+    const factor = PRESENTATION_EXPORT_FONTS.axisLabel / 12;
     out[k] = {
       ...o,
       fontSize: Math.round(fs * factor),
@@ -394,12 +398,12 @@ function scaleRichForPresentation(rich: Record<string, unknown> | undefined): Re
   return out;
 }
 
-/** Grid margins (logical px @ 1920 wide): room for larger title, axis names, legend, and corner source without clipping. */
+/** Grid margins (logical px @ 1920 wide): room for title, long FA axis names, dual Y, legend, and source. */
 const PRESENTATION_EXPORT_GRID = {
-  left: 112,
-  right: 68,
-  top: 108,
-  bottom: 112,
+  left: 80,
+  right: 100,
+  top: 80,
+  bottom: 70,
   containLabel: true as const,
 };
 
@@ -609,7 +613,7 @@ function buildPresentationTitlePatch(opt: Record<string, unknown>, ctx: Presenta
     textStyle: {
       ...prevTs,
       fontSize: fs,
-      fontWeight: 700,
+      fontWeight: 600,
       lineHeight: Math.round(fs * 1.18),
       color: typeof prevTs.color === "string" ? prevTs.color : "#0f172a",
     },
@@ -700,7 +704,19 @@ function yAxisUsesLog(yAxis: Record<string, unknown> | undefined): boolean {
  * (legend-hidden series excluded via `show: false` on the export instance) with small padding.
  * Returns `null` when there is no usable numeric range.
  */
-export function buildExportDataFitAxisPatch(opt: Record<string, unknown>): Record<string, unknown> | null {
+export type BuildExportDataFitOptions = {
+  /**
+   * When true, Y bounds use `computeNiceAxisBounds` + fixed `interval` (slide export only).
+   * The live chart + simple PNG fallback keep raw padded min/max from data.
+   */
+  presentationSlide?: boolean;
+};
+
+export function buildExportDataFitAxisPatch(
+  opt: Record<string, unknown>,
+  fit?: BuildExportDataFitOptions
+): Record<string, unknown> | null {
+  const niceSlide = fit?.presentationSlide === true;
   const seriesList = asArray(opt.series).filter((s) => s != null) as Record<string, unknown>[];
   const xAxes = asArray(opt.xAxis) as Record<string, unknown>[];
   const yAxes = asArray(opt.yAxis) as Record<string, unknown>[];
@@ -830,6 +846,18 @@ export function buildExportDataFitAxisPatch(opt: Record<string, unknown>): Recor
       }
     }
 
+    if (!logAxis && niceSlide) {
+      // `nymin`/`nymax` already include `EXPORT_Y_PAD_FRACTION`; only snap to clean min/max/interval here.
+      const n = computeNiceAxisBounds(nymin, nymax, { maxTicks: 6, padFraction: 0 });
+      yPatches.push({
+        min: n.min,
+        max: n.max,
+        interval: n.interval,
+        scale: false,
+      });
+      continue;
+    }
+
     yPatches.push({
       min: nymin,
       max: nymax,
@@ -889,9 +917,9 @@ export function buildPresentationEchartsPatch(
     const hasName = typeof ax.name === "string" && ax.name.trim() !== "";
     const nameGapPatch =
       typeof ax.nameGap === "number"
-        ? { nameGap: Math.max(76, Math.round(ax.nameGap * 1.08)) }
+        ? { nameGap: Math.max(86, Math.round(ax.nameGap * 1.1)) }
         : hasName
-          ? { nameGap: 76 }
+          ? { nameGap: 86 }
           : {};
     return {
       ...ax,
@@ -899,7 +927,7 @@ export function buildPresentationEchartsPatch(
       axisLabel: {
         ...al,
         fontSize: fonts.axisLabel,
-        margin: typeof al.margin === "number" ? Math.max(al.margin, 16) : 16,
+        margin: typeof al.margin === "number" ? Math.max(al.margin, 12) : 12,
         ...(rich ? { rich: scaleRichForPresentation(rich) } : {}),
       },
       nameTextStyle: {
@@ -920,9 +948,9 @@ export function buildPresentationEchartsPatch(
     const pts = (legRec.pageTextStyle ?? {}) as Record<string, unknown>;
     return {
       ...legRec,
-      bottom: 26,
-      itemWidth: 38,
-      itemHeight: 19,
+      bottom: 28,
+      itemWidth: 32,
+      itemHeight: 16,
       textStyle: { ...ts, fontSize: fonts.legend },
       pageTextStyle: { ...pts, fontSize: fonts.legendPage },
     };

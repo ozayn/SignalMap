@@ -1,20 +1,20 @@
 /**
- * Human-readable compact display for chart axes, tooltips, and exports.
- * - Values with |v| < 1_000: plain numbers (no K/M/B), minimal decimals.
- * - |v| ≥ 1_000: K, M, B, T (FA uses same Latin suffixes for consistency).
- * - At most one fractional digit; integers never show a trailing .0 (e.g. 2B not 2.0B).
+ * Back-compat re-exports and chart helpers. Core logic: `format-number-compact`.
  */
 
 import { localizeChartNumericDisplayString } from "@/lib/chart-numerals-fa";
+import {
+  formatNumberCompact,
+  unitSuggestsValuesAreInBillionsOfMajorUnit,
+  unitSuggestsValuesInBillionsOfToman,
+} from "./format-number-compact";
 
 const DISPLAY_LOCALE = "en-US";
 
 export type ChartFormatLocale = "en" | "fa";
 
 /**
- * Economic chart display numbers: grouped thousands, no scientific notation (display only).
- * Used when compact suffixes are not wanted (e.g. small magnitudes, some tables).
- * Examples: 1_500_000 → "1,500,000"; 20_000_000 → "20,000,000".
+ * Grouped thousands (1,500,000). Kept for tables/notes; charts prefer `formatNumberCompact` / `formatCompactDecimal`.
  */
 export function formatEconomicDisplay(
   value: number,
@@ -31,132 +31,144 @@ export function formatEconomicDisplay(
   return localizeChartNumericDisplayString(raw, options?.chartLocale);
 }
 
-const COMPACT_TIERS = [
-  { min: 1e12, div: 1e12, suffix: "T" as const },
-  { min: 1e9, div: 1e9, suffix: "B" as const },
-  { min: 1e6, div: 1e6, suffix: "M" as const },
-  { min: 1e3, div: 1e3, suffix: "K" as const },
-] as const;
-
-/** |v| < 1_000: no K/M/B; clean presentation (axis/tooltip), preserves sign. */
-function formatShortPlain(value: number): string {
-  if (!Number.isFinite(value)) return "—";
-  if (value === 0) return "0";
-  if (Number.isInteger(value) || Math.abs(value - Math.round(value)) < 1e-9) {
-    return String(Math.round(value));
-  }
-  const a = Math.abs(value);
-  const r = a >= 10 ? Math.round(value * 10) / 10 : Math.round(value * 100) / 100;
-  if (Number.isInteger(r) || Math.abs(r - Math.round(r)) < 1e-6) {
-    return String(Math.round(r));
-  }
-  const t = a >= 10 ? r.toFixed(1) : r.toFixed(2);
-  return String(Number.parseFloat(t));
-}
-
-/**
- * Strips a single trailing “.0” (and “.00”) for compact output.
- */
-function trimOneDecimal(n: string): string {
-  if (n.endsWith(".0")) return n.slice(0, -2);
-  if (n.endsWith(".00")) return n.slice(0, -3);
-  if (/\.[1-9]0$/.test(n)) return n.replace(/0$/, "");
-  return n;
-}
-
 export type FormatCompactOptions = { axisTicks?: boolean; chartLocale?: ChartFormatLocale };
 
 /**
- * Compact metric for charts: 1.2B, 45K, etc. Does **not** apply K/M/B when |v| < 1_000.
- * Pass `axisTicks: true` to prefer the same style on axis labels (strips 2.0 → 2 for integers).
+ * @deprecated Use `formatNumberCompact` for new code. Y-axis: k/M/B/T (EN) or Farsi words (FA).
  */
 export function formatCompactDecimal(value: number, options?: FormatCompactOptions): string {
   if (!Number.isFinite(value)) return "—";
-  const sign = value < 0 ? "-" : "";
-  const v = Math.abs(value);
-  const loc = (s: string) => localizeChartNumericDisplayString(s, options?.chartLocale);
-  if (v < 1_000) {
-    return loc(formatShortPlain(value));
-  }
-  for (const { min, div, suffix } of COMPACT_TIERS) {
-    if (v >= min) {
-      const scaled = v / div;
-      let s = scaled.toFixed(1);
-      s = trimOneDecimal(s);
-      return loc(sign + s + suffix);
-    }
-  }
-  return loc(formatShortPlain(value));
+  return formatNumberCompact(value, {
+    locale: options?.chartLocale ?? "en",
+    mode: "axis",
+    valueScale: "absolute",
+    compactTiers: true,
+  });
 }
 
-/** Y-axis and shared tick formatting (compact for |v| ≥ 1_000). */
+/** Y-axis: compact; EN uses k, M, B, T. */
 export function formatChartAxisNumber(value: number, chartLocale?: ChartFormatLocale): string {
-  return formatCompactDecimal(value, { axisTicks: true, chartLocale });
+  if (!Number.isFinite(value)) return "—";
+  return formatNumberCompact(value, {
+    locale: chartLocale ?? "en",
+    mode: "axis",
+    valueScale: "absolute",
+    compactTiers: true,
+  });
 }
 
-/** Tooltips: same rules as `formatChartAxisNumber` (export uses the same ECharts option). */
+/** Tooltips: expanded English words / Farsi words (e.g. “1.2 million”, not “1.2M”); no “USD” unless a caller adds a unit. */
 export function formatChartTooltipNumber(value: number, chartLocale?: ChartFormatLocale): string {
-  return formatCompactDecimal(value, { axisTicks: true, chartLocale });
+  if (!Number.isFinite(value)) return "—";
+  return formatNumberCompact(value, {
+    locale: chartLocale ?? "en",
+    mode: "tooltip",
+    valueScale: "absolute",
+    currency: "none",
+    compactTiers: true,
+    decimals: 1,
+  });
 }
 
-/** Levels chart values are already in billions of tomans (API). */
 function isBillionTomanUnit(unit: string): boolean {
   const u = unit.toLowerCase();
   return u.includes("billion") && u.includes("toman");
 }
 
-/** GDP / consumption / investment levels in raw US$ (WDI): show integer billions + ``B`` when |value| ≥ 1e9. */
+/** WDI / national-accounts $ levels, oil revenue in billions, etc. — not per-barrel or FX toman/USD. */
 function isGdpMacroAbsoluteUsdUnit(unit: string): boolean {
   const u = unit.toLowerCase();
   if (u.includes("%")) return false;
   if (isBillionTomanUnit(unit)) return false;
-  return u.includes("us$") || u.includes("usd") || u.includes("constant") || u.includes("current");
+  if (
+    u.includes("bbl") ||
+    u.includes("barrel") ||
+    u.includes("per barrel") ||
+    /بشکه/.test(unit) ||
+    /تومان\s*\/\s*(usd|us\$|دلار|rial)/.test(u) ||
+    (u.includes("toman/") && (u.includes("usd") || u.includes("dollar") || u.includes("دلار")))
+  ) {
+    return false;
+  }
+  return u.includes("us$") || u.includes("usd") || u.includes("constant") || u.includes("current") || /دلار/.test(unit);
 }
 
 /**
- * Macro US$ levels in raw US$ (WDI). Uses same K/M/B rules as other charts (not “billions only”).
+ * WDI or stylized “levels”: raw international dollars, or when `unit` names “billion” for the numeric column, plain mantissa on the axis.
  */
-export function formatGdpMacroBillionsDisplay(value: number, chartLocale?: ChartFormatLocale): string {
+export function formatGdpMacroBillionsDisplay(
+  value: number,
+  chartLocale?: ChartFormatLocale,
+  unit?: string
+): string {
   if (!Number.isFinite(value)) return "—";
-  return formatCompactDecimal(value, { axisTicks: true, chartLocale });
+  const inBillions =
+    unit != null &&
+    (unitSuggestsValuesAreInBillionsOfMajorUnit(unit) || unitSuggestsValuesInBillionsOfToman(unit));
+  if (inBillions) {
+    return formatNumberCompact(value, { locale: chartLocale ?? "en", mode: "axis", valueScale: "billions" });
+  }
+  return formatNumberCompact(value, { locale: chartLocale ?? "en", mode: "axis", valueScale: "absolute" });
 }
 
-/** Tooltip value fragment for GDP absolute-value charts (levels + nominal; no series label). */
+/** GDP / macro / oil multi-series: single tooltip line, no `1.2B` + “billion” duplication. */
 export function formatGdpLevelsTooltipValue(value: number, unit: string, chartLocale?: ChartFormatLocale): string {
   if (!Number.isFinite(value)) return "—";
   const loc = (s: string) => localizeChartNumericDisplayString(s, chartLocale);
+  const u = unit.toLowerCase();
   if (isBillionTomanUnit(unit)) {
     return loc(
-      `${formatEconomicDisplay(value, { maximumFractionDigits: 2, minimumFractionDigits: 0, chartLocale })} bn tomans (approx.)`
+      formatNumberCompact(value, {
+        locale: chartLocale ?? "en",
+        mode: "tooltip",
+        valueScale: "billions",
+        currency: "toman",
+        decimals: 1,
+      })
     );
   }
-  const u = unit.toLowerCase();
   if (u.includes("%")) {
     const rounded = Math.round(value * 100) / 100;
-    return loc(`${formatEconomicDisplay(rounded, { maximumFractionDigits: 2, minimumFractionDigits: 0, chartLocale })} ${unit}`);
+    return loc(
+      `${formatEconomicDisplay(rounded, { maximumFractionDigits: 2, minimumFractionDigits: 0, chartLocale })} ${unit}`
+    );
   }
   if (isGdpMacroAbsoluteUsdUnit(unit)) {
-    const core = formatGdpMacroBillionsDisplay(value, chartLocale);
-    if (u.includes("constant") && u.includes("2015")) {
-      return loc(`${core} USD (2015)`);
+    const inUSD =
+      unitSuggestsValuesAreInBillionsOfMajorUnit(unit) ||
+      (!u.includes("toman") && (u.includes("usd") || u.includes("us$") || u.includes("dollar") || u.includes("دلار")));
+    if (!inUSD) {
+      return loc(`${formatChartTooltipNumber(value, chartLocale)} ${unit}`);
     }
-    if (u.includes("current") && u.includes("us$")) {
-      return loc(`${core} USD`);
+    const inBillions = unitSuggestsValuesAreInBillionsOfMajorUnit(unit);
+    const valScale: "absolute" | "billions" = inBillions ? "billions" : "absolute";
+    const core = formatNumberCompact(value, {
+      locale: chartLocale ?? "en",
+      mode: "tooltip",
+      valueScale: valScale,
+      currency: "USD",
+      decimals: 1,
+    });
+    if (u.includes("constant") && (u.includes("2015") || u.includes("kd"))) {
+      return loc(`${core} (constant 2015 US$)`);
     }
-    return loc(`${core} ${unit}`);
+    if (u.includes("current") && (u.includes("us$") || u.includes("cd") || u === "current us$" || u.includes("current us"))) {
+      return loc(`${core} (current US$)`);
+    }
+    if (u.includes("constant") && u.match(/20\d{2}/) && inBillions) {
+      const y = unit.match(/(20\d{2})/);
+      if (y) return loc(`${core} (constant ${y[1]} US$)`);
+    }
+    return loc(core);
   }
-  return loc(`${formatChartTooltipNumber(value, chartLocale)} ${unit}`);
+  const t = formatChartTooltipNumber(value, chartLocale);
+  return loc(unit.trim() ? `${t} ${unit}` : t);
 }
 
-/** Y-axis tick labels for GDP absolute-value charts (linear or log). */
 export function formatGdpLevelsAxisTick(value: number, unit: string, chartLocale?: ChartFormatLocale): string {
   if (!Number.isFinite(value)) return "";
   if (isBillionTomanUnit(unit)) {
-    return formatEconomicDisplay(value, {
-      maximumFractionDigits: value >= 100 ? 0 : 1,
-      minimumFractionDigits: 0,
-      chartLocale,
-    });
+    return formatGdpMacroBillionsDisplay(value, chartLocale, unit);
   }
   const u = unit.toLowerCase();
   if (u.includes("%")) {
@@ -164,14 +176,11 @@ export function formatGdpLevelsAxisTick(value: number, unit: string, chartLocale
     return formatEconomicDisplay(rounded, { maximumFractionDigits: 1, minimumFractionDigits: 0, chartLocale });
   }
   if (isGdpMacroAbsoluteUsdUnit(unit)) {
-    return formatGdpMacroBillionsDisplay(value, chartLocale);
+    return formatGdpMacroBillionsDisplay(value, chartLocale, unit);
   }
   return formatChartAxisNumber(value, chartLocale);
 }
 
-/**
- * Tooltip / secondary formatting for generic multi-series economic values (non-GDP-compact paths).
- */
 export function formatMultiSeriesEconomicTooltipValue(
   value: number,
   unit: string,
@@ -183,10 +192,15 @@ export function formatMultiSeriesEconomicTooltipValue(
     const rounded = Math.round(value * 100) / 100;
     return formatEconomicDisplay(rounded, { maximumFractionDigits: 2, minimumFractionDigits: 0, chartLocale });
   }
+  if (u.includes("billion") && (u.includes("usd") || u.includes("toman") || u.includes("دلار") || u.includes("تومان"))) {
+    return formatGdpLevelsTooltipValue(value, unit, chartLocale);
+  }
+  if (u.includes("usd") && (u.includes("billion") || u.includes("constant") || u.includes("current"))) {
+    return formatGdpLevelsTooltipValue(value, unit, chartLocale);
+  }
   return formatChartTooltipNumber(value, chartLocale);
 }
 
-/** Y-axis tick for indexed GDP levels (ratio vs base year; display only). */
 export function formatGdpIndexedAxisTick(value: number, chartLocale?: ChartFormatLocale): string {
   if (!Number.isFinite(value)) return "";
   const r = Math.round(value * 10) / 10;
@@ -194,7 +208,6 @@ export function formatGdpIndexedAxisTick(value: number, chartLocale?: ChartForma
   return localizeChartNumericDisplayString(raw, chartLocale);
 }
 
-/** Tooltip line for indexed GDP levels, e.g. ``2.4× vs 2015`` or ``2.4× vs 1354`` (display only). */
 export function formatGdpIndexedTooltipValue(
   value: number,
   baseLabel: string,
@@ -206,8 +219,28 @@ export function formatGdpIndexedTooltipValue(
   return localizeChartNumericDisplayString(`${body}× vs ${baseLabel}`, chartLocale);
 }
 
-/** Default y-axis tick for linear economic scales (display only). */
 export function formatEconomicAxisTick(value: number, chartLocale?: ChartFormatLocale): string {
   if (!Number.isFinite(value)) return "";
   return formatChartAxisNumber(value, chartLocale);
 }
+
+/**
+ * Single entry point for values that carry a `seriesUnit` (same strings as `ChartSeries.unit`):
+ * routes through GDP/macro heuristics when appropriate, else plain compact formatting.
+ * Use for study UI lines that echo chart scales.
+ */
+export function formatValueWithUnits(
+  value: number,
+  options: { locale: "en" | "fa"; context: "axis" | "tooltip"; seriesUnit: string; decimals?: number }
+): string {
+  if (!Number.isFinite(value)) return "—";
+  const { locale, context, seriesUnit, decimals = 1 } = options;
+  if (context === "axis") {
+    const t = formatGdpLevelsAxisTick(value, seriesUnit, locale);
+    return t || "—";
+  }
+  return formatGdpLevelsTooltipValue(value, seriesUnit, locale);
+}
+
+// Re-export for `import { formatNumberCompact } from "@/lib/format-compact-decimal"` in callers
+export { formatNumberCompact, unitSuggestsValuesAreInBillionsOfMajorUnit } from "./format-number-compact";

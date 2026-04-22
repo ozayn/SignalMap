@@ -3,6 +3,7 @@ Signal series orchestration.
 Read path: cache → Postgres → fetcher (with upsert).
 """
 
+import logging
 from datetime import datetime, timezone
 
 from signalmap.data.gold_annual import GOLD_ANNUAL
@@ -30,6 +31,8 @@ from signalmap.sources.world_bank_iran_fcrf import (
     OFFICIAL_FX_WDI_FCRF_SOURCE,
     build_iran_official_annual_toman_merged,
 )
+
+logger = logging.getLogger(__name__)
 from signalmap.data.oil_production_exporters import SOURCE as OIL_PRODUCTION_SOURCE_NAME, UNIT as OIL_PRODUCTION_UNIT
 from signalmap.sources.oil_production_exporters import fetch_oil_production_exporters
 from signalmap.store.signals_repo import get_points, upsert_points
@@ -48,6 +51,9 @@ CACHE_TTL = 21600  # 6 hours
 # Base year for inflation adjustment (CPI reference month)
 CPI_BASE_YEAR = 2015
 CPI_BASE_MONTH = "2015-01"
+
+# Oil-economy overview: real (constant) USD via US annual CPI; base calendar year (fallback if missing)
+OIL_ECONOMY_CPI_BASE_YEAR = 2020
 
 BRENT_SOURCE = {
     "name": "FRED",
@@ -317,6 +323,18 @@ def _get_cpi_by_month() -> dict[str, float]:
     return by_month
 
 
+def _cpi_annual_average_by_year() -> dict[int, float]:
+    """Calendar-year average of US CPIAUCSL (monthly index, 1982-84=100)."""
+    cpi_by_month = _get_cpi_by_month()
+    buckets: dict[int, list[float]] = {}
+    for mk, v in cpi_by_month.items():
+        if v is None or v <= 0:
+            continue
+        y = int(mk[:4])
+        buckets.setdefault(y, []).append(float(v))
+    return {y: sum(vals) / len(vals) for y, vals in sorted(buckets.items()) if vals}
+
+
 def get_real_oil_series(start: str, end: str) -> dict:
     """
     Real oil price: nominal (Brent) / CPI * CPI_base.
@@ -563,7 +581,7 @@ def get_oil_economy_overview_iran(start: str, end: str) -> dict:
     Primary: EIA/IMF bundle; gaps filled from embedded EI (1965–1979) + EIA/BP (1980–1999) annuals.
     1980–86 price: EIA annual; 1987+ FRED DCOILBRENTEU. Revenue: stylized back-of-envelope.
     """
-    ck = f"signal:oil_economy_overview:v3:{start}:{end}"
+    ck = f"signal:oil_economy_overview:v4:{start}:{end}"
     cached = cache_get(ck)
     if cached is not None:
         return cached
@@ -606,7 +624,60 @@ def get_oil_economy_overview_iran(start: str, end: str) -> dict:
         usd = mbd * 1_000_000.0 * 365.25 * pr
         revenue.append({"date": f"{y}-01-01", "value": round(usd, 0)})
 
+    cpi_annual = _cpi_annual_average_by_year()
+    cpi_base_val = cpi_annual.get(OIL_ECONOMY_CPI_BASE_YEAR)
+    base_year_used = OIL_ECONOMY_CPI_BASE_YEAR
+    if cpi_base_val is None or cpi_base_val <= 0:
+        for alt in (2019, 2021, 2018, 2015):
+            cpi_base_val = cpi_annual.get(alt)
+            if cpi_base_val and cpi_base_val > 0:
+                base_year_used = alt
+                break
+    price_real: list[dict] = []
+    revenue_real: list[dict] = []
+    if cpi_base_val and cpi_base_val > 0:
+        for p in price_pts:
+            y = int(p["date"][:4])
+            cpi_y = cpi_annual.get(y)
+            if cpi_y is None or cpi_y <= 0:
+                continue
+            nom = float(p["value"])
+            price_real.append(
+                {"date": p["date"], "value": round(nom * cpi_base_val / cpi_y, 4)}
+            )
+        for y in range(start_year, end_year + 1):
+            mbd = by_p.get(y)
+            pr_nom = by_r.get(y)
+            cpi_y = cpi_annual.get(y)
+            if mbd is None or pr_nom is None or mbd <= 0 or cpi_y is None or cpi_y <= 0:
+                continue
+            pr_r = float(pr_nom) * cpi_base_val / cpi_y
+            usd_r = mbd * 1_000_000.0 * 365.25 * pr_r
+            revenue_real.append({"date": f"{y}-01-01", "value": round(usd_r, 0)})
+
+    inflation = {
+        "deflator": "CPIAUCSL",
+        "deflator_name": "US Consumer Price Index for All Urban Consumers",
+        "base_year": base_year_used,
+        "cpi_at_base_year": round(cpi_base_val, 4) if cpi_base_val and cpi_base_val > 0 else None,
+        "source": {
+            "name": "FRED CPIAUCSL",
+            "url": "https://fred.stlouisfed.org/series/CPIAUCSL",
+            "publisher": "BLS (via FRED)",
+        },
+        "methodology": {
+            "cpi_aggregation": "Annual average of monthly CPIAUCSL for each calendar year",
+            "base_note": f"CPI in base year = annual average; index level (1982-84=100) not re-normalized to 100",
+            "price_formula": "real_price = nominal_price × (CPI_base / CPI_year)",
+            "revenue_formula": "real_revenue ≈ mbd × 1e6 × 365.25 × real_price",
+        },
+    }
+    if not (cpi_base_val and cpi_base_val > 0):
+        inflation["methodology"]["unavailable"] = "US CPI not available; real series omitted"
+
     first_prod_y = min(iran_by_year) if iran_by_year else None
+    cpi_ok = bool(cpi_base_val and cpi_base_val > 0)
+    const_usd = f"constant {base_year_used} USD"
     out = {
         "country": "IRN",
         "production": {
@@ -644,6 +715,24 @@ def get_oil_economy_overview_iran(start: str, end: str) -> dict:
                     "Not government revenue, not realized export value, not net of cost or quality discounts."
                 ),
             },
+        },
+        "inflation": inflation,
+        "price_real": {
+            "unit": f"USD/barrel ({const_usd})" if cpi_ok else "USD/barrel (CPI-adjusted)",
+            "base_year": base_year_used,
+            "source": BRENT_SOURCE,
+            "cpi": {"name": "FRED CPIAUCSL", "url": "https://fred.stlouisfed.org/series/CPIAUCSL"},
+            "points": price_real,
+        },
+        "revenue_real": {
+            "unit": f"USD/year ({const_usd}, estimated)" if cpi_ok else "USD/year (CPI-adjusted, estimated)",
+            "base_year": base_year_used,
+            "source": {
+                "name": "Derived: production × real oil price; CPI: FRED CPIAUCSL",
+                "publisher": "SignalMap",
+                "url": "https://fred.stlouisfed.org/series/CPIAUCSL",
+            },
+            "points": revenue_real,
         },
     }
     cache_set(ck, out, CACHE_TTL)
@@ -721,47 +810,63 @@ def get_oil_ppp_turkey_series(start: str, end: str) -> dict:
 
 def get_usd_toman_series(start: str, end: str) -> dict:
     """
-    Return USD→Toman points in [start, end].
-    Read path: cache → Postgres (if covers range from start) → fetchers (with upsert).
-    If DB has points but only from a later date (e.g. 2022+), we fetch merged so
-    open market can show from archive start (2012-10-09) instead of DB start.
+    Return USD→Toman **open-market proxy** points in [start, end] plus optional **official** annual.
+
+    Always built from the live merge (FRED PWT annual pre-archive + rial archive + Bonbast) so a Postgres
+    slice that only covered recent years cannot hide 1950s+ history. The merged series is best-effort
+    upserted for caching/offline use.
+
+    ``official_annual`` is WDI FCRF (+ FRED fill) — use to compare with the open line when they diverge.
     """
-    ck = _cache_key(SIGNAL_USD_TOMAN, start, end)
+    ck = f"signal:{SIGNAL_USD_TOMAN}:v2:{start}:{end}"
     cached = cache_get(ck)
     if cached is not None:
         return cached
 
-    db_points = get_points(SIGNAL_USD_TOMAN, start, end)
-    db_covers_range = (
-        db_points
-        and db_points[0].get("date")
-        and db_points[0]["date"] <= start
-    )
-    if db_covers_range:
-        result = {
-            "signal": SIGNAL_USD_TOMAN,
-            "unit": "toman_per_usd",
-            "source": USD_TOMAN_SOURCE,
-            "points": _to_response_points(db_points),
-        }
-        cache_set(ck, result, CACHE_TTL)
-        return result
-
     merged = fetch_usd_toman_merged()
-    points = [p for p in merged if start <= p["date"] <= end]
+    by_date: dict[str, dict] = {}
+    for p in merged:
+        if start <= p["date"] <= end:
+            by_date[p["date"]] = p
+    points = sorted(by_date.values(), key=lambda x: x["date"])
+
+    official_annual: list[dict] = []
+    try:
+        full = build_iran_official_annual_toman_merged()
+        official_annual = [p for p in full if start <= p["date"] <= end]
+    except Exception:
+        official_annual = []
+
     if points:
-        upsert_points(
-            SIGNAL_USD_TOMAN,
-            points,
-            source="bonbast_archive_fred",
-            metadata={"source": USD_TOMAN_SOURCE},
+        logger.info(
+            "usd_toman: %s..%s points=%d earliest=%s latest=%s",
+            start,
+            end,
+            len(points),
+            points[0]["date"],
+            points[-1]["date"],
         )
+    else:
+        logger.info("usd_toman: no open-market points in %s..%s", start, end)
+
+    if points:
+        try:
+            upsert_points(
+                SIGNAL_USD_TOMAN,
+                points,
+                source="bonbast_archive_fred",
+                metadata={"source": USD_TOMAN_SOURCE},
+            )
+        except Exception:
+            pass
 
     result = {
         "signal": SIGNAL_USD_TOMAN,
         "unit": "toman_per_usd",
         "source": USD_TOMAN_SOURCE,
         "points": points,
+        "official_annual": official_annual,
+        "official_source": OFFICIAL_FX_WDI_FCRF_SOURCE,
     }
     cache_set(ck, result, CACHE_TTL)
     return result

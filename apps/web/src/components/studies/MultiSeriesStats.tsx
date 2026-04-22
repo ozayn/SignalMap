@@ -1,6 +1,6 @@
 "use client";
 
-import { formatMultiSeriesEconomicTooltipValue } from "@/lib/format-compact-decimal";
+import { formatChartAxisNumber, formatGdpLevelsAxisTick } from "@/lib/format-compact-decimal";
 import { formatStatDate } from "@/lib/utils";
 
 type SeriesStatInput = {
@@ -16,8 +16,12 @@ type MultiSeriesStatsProps = {
   locale?: "en" | "fa";
 };
 
+/** Stats row: same compact rules as chart y-axes (k/M/B; Farsi words + digits). */
 function formatStatValue(value: number, unit: string, locale: "en" | "fa"): string {
-  return formatMultiSeriesEconomicTooltipValue(value, unit, locale);
+  if (!Number.isFinite(value)) return "—";
+  const t = formatGdpLevelsAxisTick(value, unit || "—", locale);
+  if (t !== "") return t;
+  return formatChartAxisNumber(value, locale);
 }
 
 function formatStatDateForLocale(dateStr: string, locale: "en" | "fa"): string {

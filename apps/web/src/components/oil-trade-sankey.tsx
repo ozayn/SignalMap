@@ -3,7 +3,7 @@
 import { useRef, useEffect, useCallback } from "react";
 import { useTheme } from "next-themes";
 import * as echarts from "echarts";
-import { formatChartTooltipNumber } from "@/lib/format-compact-decimal";
+import { formatNumberCompact } from "@/lib/format-number-compact";
 import { Button } from "@/components/ui/button";
 import { useStudyChartExportFilenameContext } from "@/components/study-chart-export-filename-context";
 import { downloadEchartsRaster, slugifyChartFilename, type DownloadEchartsRasterOptions } from "@/lib/chart-export";
@@ -209,12 +209,18 @@ export function OilTradeSankey({
             const share = exporterTotals[src]
               ? ((v / exporterTotals[src]!) * 100).toFixed(1)
               : "—";
-            const flow = formatChartTooltipNumber(v, "en");
+            const flow = formatNumberCompact(v, {
+              locale: "en",
+              mode: "tooltip",
+              valueScale: "absolute",
+              compactTiers: false,
+              decimals: 0,
+            });
             return isAllDataMode
               ? `<strong>Exporter:</strong> ${src}<br/><strong>Importer:</strong> ${tgt}<br/><strong>Flow:</strong> ${flow} thousand bbl/day<br/><strong>Share of exporter total:</strong> ${share}%`
               : `<strong>${src}</strong> → <strong>${tgt}</strong><br/>${flow} thousand bbl/day`;
           }
-          return `${formatChartTooltipNumber(v, "en")} thousand bbl/day`;
+          return `${formatNumberCompact(v, { locale: "en", mode: "tooltip", valueScale: "absolute", compactTiers: false, decimals: 0 })} thousand bbl/day`;
         },
       },
       graphic: [

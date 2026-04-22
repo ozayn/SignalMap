@@ -633,7 +633,9 @@ async function exportPresentationPngFromLiveChart(
       if (respectLegend) {
         restore = beginEchartsExportWithVisibleLegendSeriesOnly(exportChart);
       }
-      const axisFitPatch = buildExportDataFitAxisPatch(exportChart.getOption() as Record<string, unknown>);
+      const axisFitPatch = buildExportDataFitAxisPatch(exportChart.getOption() as Record<string, unknown>, {
+        presentationSlide: true,
+      });
       if (axisFitPatch) {
         exportChart.setOption(axisFitPatch as never, false);
       }

@@ -736,7 +736,7 @@ def get_usd_toman_signal(
     start: str = Query(..., description="Start date YYYY-MM-DD"),
     end: str = Query(..., description="End date YYYY-MM-DD"),
 ):
-    """Return USD→Toman open-market rate (Bonbast) for date range."""
+    """Return USD→Toman open-market merge (archive + Bonbast + FRED pre-archive) and optional official annual (WDI)."""
     if not _validate_date(start) or not _validate_date(end):
         raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
     if start > end:

@@ -75,6 +75,22 @@ import {
   OIL_ECONOMY_COLOR_PRODUCTION,
   OIL_ECONOMY_COLOR_REVENUE,
 } from "@/lib/oil-economy-overview-charts";
+import {
+  buildOilEconomyExportSourceBody,
+  oilEconomyIndexedExportTitle,
+  oilEconomyIndexedPriceSeriesLabel,
+  oilEconomyIndexedRevenueSeriesLabel,
+  oilEconomyPanel1ChartLabel,
+  oilEconomyPanel1ExportTitle,
+  oilEconomyPriceSeriesLabel,
+  oilEconomyPriceSeriesUnitForTicks,
+  oilEconomyPriceYAxisName,
+  oilEconomyRevenueLineLegendLabel,
+  oilEconomyRevenueSeriesUnitForTicks,
+  oilEconomyRevenueTitle,
+  oilEconomyRevenueYAxisName,
+  resolveOilEconomyCpiBaseYear,
+} from "@/lib/oil-economy-labels";
 import { SIGNAL_CONCEPT, SIGNAL_COUNTRY } from "@/lib/signalmap-chart-colors";
 import { fetchJson } from "@/lib/api";
 import { enrichOilPointsWithVolatility } from "@/lib/oil-volatility";
@@ -97,6 +113,7 @@ import {
   studyEventLayersForFetch,
   type StudyEventLayerToggleState,
 } from "@/lib/study-event-layer-toggles";
+import { withTimeSeriesEventOverlay } from "@/lib/time-series-event-overlay";
 import { trackEvent } from "@/lib/analytics";
 import { formatStatDate, decodeHtmlEntities } from "@/lib/utils";
 import {
@@ -105,6 +122,7 @@ import {
   type ChartAxisYearMode,
 } from "@/lib/chart-axis-year";
 import { localizeChartNumericDisplayString } from "@/lib/chart-numerals-fa";
+import { formatChartAxisNumber } from "@/lib/format-compact-decimal";
 import { StudyYearDisplayToggle } from "@/components/study-year-display-toggle";
 import { useIranStudyChartYearMode } from "@/hooks/use-iran-study-chart-year-mode";
 
@@ -177,6 +195,9 @@ type FxUsdTomanSignalData = {
   unit: string;
   source: FxUsdTomanSource;
   points: Array<{ date: string; value: number }>;
+  /** WDI FCRF (+ FRED backfill) annual; same chart, dashed. */
+  official_annual?: Array<{ date: string; value: number }>;
+  official_source?: FxUsdTomanSource;
 };
 
 type RealOilSignalData = {
@@ -197,6 +218,13 @@ type OilPppIranSignalData = {
 };
 
 type OilEconomyOverviewSource = { name: string; publisher?: string; url?: string; notes?: string };
+type OilEconomyInflationBlock = {
+  deflator: string;
+  deflator_name?: string;
+  base_year: number;
+  source?: { name: string; url?: string; publisher?: string };
+};
+
 type OilEconomyOverviewApi = {
   country: string;
   production: {
@@ -217,6 +245,20 @@ type OilEconomyOverviewApi = {
     source: OilEconomyOverviewSource;
     points: Array<{ date: string; value: number }>;
     methodology?: { formula?: string; note?: string };
+  };
+  inflation?: OilEconomyInflationBlock;
+  price_real?: {
+    unit: string;
+    base_year: number;
+    source: OilEconomyOverviewSource;
+    cpi?: { name: string; url?: string };
+    points: Array<{ date: string; value: number }>;
+  };
+  revenue_real?: {
+    unit: string;
+    base_year: number;
+    source: OilEconomyOverviewSource;
+    points: Array<{ date: string; value: number }>;
   };
 };
 
@@ -307,29 +349,27 @@ function computeFxKpis(points: { date: string; value: number }[]) {
   };
 }
 
-function formatCompactNumber(value: number): string {
-  const abs = Math.abs(value);
-  if (abs >= 1_000_000_000)
-    return (value / 1_000_000_000).toFixed(2).replace(/\.?0+$/, "") + "B";
-  if (abs >= 1_000_000)
-    return (value / 1_000_000).toFixed(2).replace(/\.?0+$/, "") + "M";
-  if (abs >= 10_000)
-    return Math.round(value / 1000) + "k";
-  if (abs >= 1_000)
-    return (value / 1000).toFixed(1).replace(/\.0$/, "") + "k";
-  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
-}
-
-/** Renders a stat value with compact formatting (k, M, B) for large numbers; exact value in tooltip. */
-function CompactStatValue({ value, unit, prefix = "" }: { value: number | null; unit: string; prefix?: string }) {
+/** Renders a stat value with the same k/M/B format as chart axes. */
+function CompactStatValue({
+  value,
+  unit,
+  prefix = "",
+  chartLocale = "en",
+}: {
+  value: number | null;
+  unit: string;
+  prefix?: string;
+  /** Same as chart: Persian numerals and Farsi unit words when Farsi. */
+  chartLocale?: "en" | "fa";
+}) {
   if (value === null || value === undefined) return <>—</>;
-  const exactStr = value.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  const displayStr = formatCompactNumber(value);
+  const exactStr = value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  const displayStr = formatChartAxisNumber(value, chartLocale);
   const title = unit ? `${exactStr} ${unit}` : exactStr;
   return (
-    <span title={title}>
+    <span title={localizeChartNumericDisplayString(title, chartLocale === "fa" ? "fa" : "en")}>
       {prefix}
-      {displayStr}
+      {localizeChartNumericDisplayString(displayStr, chartLocale === "fa" ? "fa" : "en")}
     </span>
   );
 }
@@ -340,16 +380,18 @@ function StatValueWithDate({
   unit,
   prefix = "",
   date,
+  chartLocale = "en",
 }: {
   value: number | null;
   unit: string;
   prefix?: string;
   date?: string | null;
+  chartLocale?: "en" | "fa";
 }) {
   return (
     <div>
       <p className="metric-value text-foreground">
-        <CompactStatValue value={value} unit={unit} prefix={prefix} />
+        <CompactStatValue value={value} unit={unit} prefix={prefix} chartLocale={chartLocale} />
       </p>
       {date && (
         <p className="metric-label mt-0.5">{formatStatDate(date)}</p>
@@ -391,6 +433,7 @@ export default function StudyDetailPage() {
     return mergeIranStudyDisplay(study, studyId, isFa);
   }, [study, studyId, isFa]);
   const chartLocaleForCharts = faEligible ? (isFa ? ("fa" as const) : ("en" as const)) : undefined;
+  const statChartLocale: "en" | "fa" = faEligible && isFa ? "fa" : "en";
   const { yearAxisMode, setYearAxisMode } = useIranStudyChartYearMode();
   const chartYearAxisLabel = faEligible ? yearAxisMode : undefined;
   const faRich = IRAN_STUDY_FA_DISPLAY[studyId];
@@ -412,6 +455,8 @@ export default function StudyDetailPage() {
   const [showGeopoliticalOpec, setShowGeopoliticalOpec] = useState(false);
   /** Curated global oil / macro vertical markers (layer ``global_macro_oil``). */
   const [showGlobalMacroOil, setShowGlobalMacroOil] = useState(false);
+  /** Master time-series event overlay: default off; sub-layer checkboxes apply only when on. */
+  const [showTimeSeriesEventOverlay, setShowTimeSeriesEventOverlay] = useState(false);
   const [pppYAxisLog, setPppYAxisLog] = useState(true);
   const [showSanctionsPeriods, setShowSanctionsPeriods] = useState(false);
   const [showShocks, setShowShocks] = useState(true);
@@ -425,6 +470,8 @@ export default function StudyDetailPage() {
   const [goldSource, setGoldSource] = useState<OilSource | null>(null);
   const [fxPoints, setFxPoints] = useState<FxUsdTomanSignalData["points"]>([]);
   const [fxSource, setFxSource] = useState<FxUsdTomanSource | null>(null);
+  const [fxOfficialPoints, setFxOfficialPoints] = useState<FxUsdTomanSignalData["points"]>([]);
+  const [fxOfficialSource, setFxOfficialSource] = useState<FxUsdTomanSource | null>(null);
   const [realOilPoints, setRealOilPoints] = useState<RealOilSignalData["points"]>([]);
   const [realOilSource, setRealOilSource] = useState<RealOilSignalData["source"] | null>(null);
   const [realOilMetadata, setRealOilMetadata] = useState<RealOilSignalData["metadata"] | null>(null);
@@ -445,6 +492,10 @@ export default function StudyDetailPage() {
   /** When set, narrows the three oil-economy charts and indexed view (Export PNG uses the same timeRange). */
   const [oilEconomyViewStart, setOilEconomyViewStart] = useState("");
   const [oilEconomyViewEnd, setOilEconomyViewEnd] = useState("");
+  const [oilEconomyPriceRealPoints, setOilEconomyPriceRealPoints] = useState<{ date: string; value: number }[]>([]);
+  const [oilEconomyRevenueRealPoints, setOilEconomyRevenueRealPoints] = useState<{ date: string; value: number }[]>([]);
+  const [oilEconomyInflation, setOilEconomyInflation] = useState<OilEconomyInflationBlock | null>(null);
+  const [oilEconomyUsdMode, setOilEconomyUsdMode] = useState<"nominal" | "real">("nominal");
   const [productionUsPoints, setProductionUsPoints] = useState<{ date: string; value: number }[]>([]);
   const [productionSaudiPoints, setProductionSaudiPoints] = useState<{ date: string; value: number }[]>([]);
   const [productionRussiaPoints, setProductionRussiaPoints] = useState<{ date: string; value: number }[]>([]);
@@ -675,6 +726,10 @@ export default function StudyDetailPage() {
     }
   }, [studyId, isOilBrent, isOilGlobalLong]);
 
+  useEffect(() => {
+    setShowTimeSeriesEventOverlay(false);
+  }, [studyId]);
+
   const useShortWindowOptions = isOilBrent || isFxUsdToman || isOilAndFx || isRealOil;
   const windowOptions = useShortWindowOptions
     ? WINDOW_OPTIONS_FX
@@ -720,16 +775,37 @@ export default function StudyDetailPage() {
     return [start, resolvedEnd];
   }, [study, isOilEconomyOverview]);
 
+  const oilEconomyDisplayPricePoints = useMemo((): { date: string; value: number }[] => {
+    if (oilEconomyUsdMode === "real" && oilEconomyPriceRealPoints.length > 0) {
+      return oilEconomyPriceRealPoints;
+    }
+    return oilEconomyPricePoints;
+  }, [oilEconomyUsdMode, oilEconomyPriceRealPoints, oilEconomyPricePoints]);
+
+  const oilEconomyDisplayRevenuePoints = useMemo((): { date: string; value: number }[] => {
+    if (oilEconomyUsdMode === "real" && oilEconomyRevenueRealPoints.length > 0) {
+      return oilEconomyRevenueRealPoints;
+    }
+    return oilEconomyRevenuePoints;
+  }, [oilEconomyUsdMode, oilEconomyRevenueRealPoints, oilEconomyRevenuePoints]);
+
+  const oilEconomyRealUsdActive = oilEconomyUsdMode === "real" && oilEconomyPriceRealPoints.length > 0;
+
+  const oilCpiBaseYear = useMemo(
+    () => resolveOilEconomyCpiBaseYear(oilEconomyInflation),
+    [oilEconomyInflation]
+  );
+
   const oilEconomyDataBounds = useMemo((): [string, string] | null => {
     if (!isOilEconomyOverview) return null;
     const collected: string[] = [];
-    for (const a of [oilEconomyProdPoints, oilEconomyPricePoints, oilEconomyRevenuePoints]) {
+    for (const a of [oilEconomyProdPoints, oilEconomyDisplayPricePoints, oilEconomyDisplayRevenuePoints]) {
       for (const p of a) collected.push(p.date.slice(0, 10));
     }
     if (collected.length === 0) return null;
     collected.sort();
     return [collected[0]!, collected[collected.length - 1]!];
-  }, [isOilEconomyOverview, oilEconomyProdPoints, oilEconomyPricePoints, oilEconomyRevenuePoints]);
+  }, [isOilEconomyOverview, oilEconomyProdPoints, oilEconomyDisplayPricePoints, oilEconomyDisplayRevenuePoints]);
 
   const oilEconomyChartTimeRange = useMemo((): [string, string] | null => {
     if (!oilEconomyTimeRange) return null;
@@ -1087,17 +1163,36 @@ export default function StudyDetailPage() {
       const [lo, hi] = tr;
       return pts.filter((p) => p.date >= lo && p.date <= hi);
     };
+    const real = oilEconomyUsdMode === "real" && oilEconomyPriceRealPoints.length > 0;
     return buildOilEconomyIndexedMultiSeries(
       filterToRange(oilEconomyProdPoints),
-      filterToRange(oilEconomyPricePoints),
-      filterToRange(oilEconomyRevenuePoints),
+      filterToRange(oilEconomyDisplayPricePoints),
+      filterToRange(oilEconomyDisplayRevenuePoints),
       {
         production: L(isFa, "Iran production (mb/d)", "تولید ایران (میلیون بشکه/روز)"),
-        price: L(isFa, "Global oil price (ann. avg., USD/bbl)", "قیمت نفت جهانی (میانگین سالانه، دلار/بشکه)"),
-        revenue: L(isFa, "Estimated revenue (USD)", "درآمد تخمینی (دلار)"),
+        price: L(
+          isFa,
+          oilEconomyIndexedPriceSeriesLabel(false, real, oilCpiBaseYear),
+          oilEconomyIndexedPriceSeriesLabel(true, real, oilCpiBaseYear)
+        ),
+        revenue: L(
+          isFa,
+          oilEconomyIndexedRevenueSeriesLabel(false, real, oilCpiBaseYear),
+          oilEconomyIndexedRevenueSeriesLabel(true, real, oilCpiBaseYear)
+        ),
       }
     );
-  }, [isOilEconomyOverview, isFa, oilEconomyProdPoints, oilEconomyPricePoints, oilEconomyRevenuePoints, oilEconomyChartTimeRange]);
+  }, [
+    isOilEconomyOverview,
+    isFa,
+    oilCpiBaseYear,
+    oilEconomyProdPoints,
+    oilEconomyDisplayPricePoints,
+    oilEconomyDisplayRevenuePoints,
+    oilEconomyChartTimeRange,
+    oilEconomyUsdMode,
+    oilEconomyPriceRealPoints.length,
+  ]);
 
   const isiSeriesTyped = isiDiagnosticsData?.series ?? null;
   const isiOverviewIndexed = useMemo(
@@ -1590,7 +1685,7 @@ export default function StudyDetailPage() {
   );
 
   const sanctionsPeriodsFromEvents = useMemo(() => {
-    if (!isOilExportCapacity || !showSanctionsPeriods || !study) return undefined;
+    if (!isOilExportCapacity || !showSanctionsPeriods || !showTimeSeriesEventOverlay || !study) return undefined;
     const rangeEnd = exportCapacityTimeRange?.[1] ?? study.timeRange[1];
     return events
       .filter((e): e is Event & { date_start: string } => e.scope === "oil_exports" && !!e.date_start)
@@ -1600,7 +1695,7 @@ export default function StudyDetailPage() {
         title: e.title,
         scope: "Oil exports" as const,
       }));
-  }, [isOilExportCapacity, showSanctionsPeriods, study, events, exportCapacityTimeRange]);
+  }, [isOilExportCapacity, showSanctionsPeriods, showTimeSeriesEventOverlay, study, events, exportCapacityTimeRange]);
 
   const oilPointsWithVolatility = useMemo(
     () => enrichOilPointsWithVolatility(oilPoints),
@@ -1710,79 +1805,92 @@ export default function StudyDetailPage() {
       isGdpGlobalComparison ||
       isIsiDiagnostics ||
       isPovertyHeadcountIran ||
-      isDutchDiseaseDiagnostics;
+      isDutchDiseaseDiagnostics ||
+      isOilEconomyOverview ||
+      isFxUsdIrrDual ||
+      isOilExporterTimeseries;
     if (hasEventLayers && !isEventsTimeline) {
       let layers: string[];
-      const studyLayersLen = study.eventLayers?.length ?? 0;
-      if (
-        ((isOilGlobalLong ||
-          isGoldAndOil ||
-          isRealOil ||
-          isOilExportCapacity ||
-          isOilProductionMajorExporters ||
-          isOilGeopoliticalReaction ||
-          isGdpComposition ||
-          isGdpIranAccountsDual ||
-          isGiniInequality ||
-          isInflationCpiYoy ||
-          isGdpGlobalComparison ||
-          isIsiDiagnostics ||
-          isPovertyHeadcountIran ||
-          isDutchDiseaseDiagnostics) &&
-          studyLayersLen > 0) ||
-        (hasTurkeyComparator && studyLayersLen > 0)
-      ) {
-        if (isOilGeopoliticalReaction) {
-          layers = [
-            ...(showGeopoliticalWorldCore ? ["world_core"] : []),
-            ...(showGeopoliticalWorld1900 ? ["world_1900"] : []),
-            ...(showGeopoliticalSanctions ? ["sanctions"] : []),
-            ...(showGeopoliticalOpec ? ["opec_decisions"] : []),
-            ...(showGlobalMacroOil ? ["global_macro_oil"] : []),
-          ];
-        } else if (isOilExportCapacity) {
-          layers = showSanctionsPeriods ? ["sanctions"] : [];
-        } else if (isOilProductionMajorExporters) {
-          // Study 14: fetch all toggled layers; filter client-side for instant toggle updates
-          layers = [
-            "iran_core",
-            "sanctions",
-            "opec_decisions",
-            ...(showGlobalMacroOil ? ["global_macro_oil"] : []),
-          ];
-        } else if (isGdpComposition || isGdpIranAccountsDual) {
-          layers = [
-            ...(showGdpIranEvents ? ["iran_core"] : []),
-            ...(showGdpGlobalMacroOil ? ["global_macro_oil"] : []),
-          ];
-        } else if (
-          isGiniInequality ||
-          isInflationCpiYoy ||
-          isGdpGlobalComparison ||
-          isIsiDiagnostics ||
-          isPovertyHeadcountIran ||
-          isDutchDiseaseDiagnostics
+      if (!showTimeSeriesEventOverlay) {
+        layers = [];
+      } else if (isFxUsdIrrDual) {
+        layers = ["iran_core", "global_macro_oil", "world_core", "sanctions"];
+      } else if (isOilExporterTimeseries) {
+        layers = ["global_macro_oil", "world_core", "opec_decisions"];
+      } else if (isOilEconomyOverview) {
+        layers = ["iran_core", "global_macro_oil", "opec_decisions", "sanctions", "world_core"];
+      } else {
+        const studyLayersLen = study.eventLayers?.length ?? 0;
+        if (
+          ((isOilGlobalLong ||
+            isGoldAndOil ||
+            isRealOil ||
+            isOilExportCapacity ||
+            isOilProductionMajorExporters ||
+            isOilGeopoliticalReaction ||
+            isGdpComposition ||
+            isGdpIranAccountsDual ||
+            isGiniInequality ||
+            isInflationCpiYoy ||
+            isGdpGlobalComparison ||
+            isIsiDiagnostics ||
+            isPovertyHeadcountIran ||
+            isDutchDiseaseDiagnostics) &&
+            studyLayersLen > 0) ||
+          (hasTurkeyComparator && studyLayersLen > 0)
         ) {
+          if (isOilGeopoliticalReaction) {
+            layers = [
+              ...(showGeopoliticalWorldCore ? ["world_core"] : []),
+              ...(showGeopoliticalWorld1900 ? ["world_1900"] : []),
+              ...(showGeopoliticalSanctions ? ["sanctions"] : []),
+              ...(showGeopoliticalOpec ? ["opec_decisions"] : []),
+              ...(showGlobalMacroOil ? ["global_macro_oil"] : []),
+            ];
+          } else if (isOilExportCapacity) {
+            layers = showSanctionsPeriods ? ["sanctions"] : [];
+          } else if (isOilProductionMajorExporters) {
+            // Study 14: fetch all toggled layers; filter client-side for instant toggle updates
+            layers = [
+              "iran_core",
+              "sanctions",
+              "opec_decisions",
+              ...(showGlobalMacroOil ? ["global_macro_oil"] : []),
+            ];
+          } else if (isGdpComposition || isGdpIranAccountsDual) {
+            layers = [
+              ...(showGdpIranEvents ? ["iran_core"] : []),
+              ...(showGdpGlobalMacroOil ? ["global_macro_oil"] : []),
+            ];
+          } else if (
+            isGiniInequality ||
+            isInflationCpiYoy ||
+            isGdpGlobalComparison ||
+            isIsiDiagnostics ||
+            isPovertyHeadcountIran ||
+            isDutchDiseaseDiagnostics
+          ) {
+            layers = [
+              ...(showIranEvents ? ["iran_core"] : []),
+              ...(showWorldEvents ? ["world_core"] : []),
+              ...(showSanctionsEvents ? ["sanctions"] : []),
+            ];
+          } else {
+            layers = studyEventLayersForFetch(study.eventLayers, chartEventToggleState, {
+              allowPresidentialLayer: isFxUsdToman || isOilPppIran,
+              appendGlobalMacroOilIfMissing: true,
+              studyUsesGlobalMacroOilLayer: studyUsesGlobalMacroOilLayer(study),
+            });
+          }
+        } else {
           layers = [
             ...(showIranEvents ? ["iran_core"] : []),
-            ...(showWorldEvents ? ["world_core"] : []),
+            ...(showWorldEvents ? ["world_core", "world_1900"] : []),
             ...(showSanctionsEvents ? ["sanctions"] : []),
+            ...(showPresidentialTerms && (isFxUsdToman || isOilPppIran) ? ["iran_presidents"] : []),
+            ...(showGlobalMacroOil && studyUsesGlobalMacroOilLayer(study) ? ["global_macro_oil"] : []),
           ];
-        } else {
-          layers = studyEventLayersForFetch(study.eventLayers, chartEventToggleState, {
-            allowPresidentialLayer: isFxUsdToman || isOilPppIran,
-            appendGlobalMacroOilIfMissing: true,
-            studyUsesGlobalMacroOilLayer: studyUsesGlobalMacroOilLayer(study),
-          });
         }
-      } else {
-        layers = [
-          ...(showIranEvents ? ["iran_core"] : []),
-          ...(showWorldEvents ? ["world_core", "world_1900"] : []),
-          ...(showSanctionsEvents ? ["sanctions"] : []),
-          ...(showPresidentialTerms && (isFxUsdToman || isOilPppIran) ? ["iran_presidents"] : []),
-          ...(showGlobalMacroOil && studyUsesGlobalMacroOilLayer(study) ? ["global_macro_oil"] : []),
-        ];
       }
       params.set("layers", layers.length ? layers.join(",") : "none");
     }
@@ -1822,10 +1930,14 @@ export default function StudyDetailPage() {
     isIsiDiagnostics,
     isPovertyHeadcountIran,
     isDutchDiseaseDiagnostics,
+    isOilEconomyOverview,
+    isFxUsdIrrDual,
+    isOilExporterTimeseries,
     hasTurkeyComparator,
     isEventsTimeline,
     chartEventToggleState,
     showSanctionsPeriods,
+    showTimeSeriesEventOverlay,
     showGeopoliticalWorldCore,
     showGeopoliticalWorld1900,
     showGeopoliticalSanctions,
@@ -2380,6 +2492,9 @@ export default function StudyDetailPage() {
         setOilEconomyProdPoints([]);
         setOilEconomyPricePoints([]);
         setOilEconomyRevenuePoints([]);
+        setOilEconomyPriceRealPoints([]);
+        setOilEconomyRevenueRealPoints([]);
+        setOilEconomyInflation(null);
         setOilEconomyProdSource(null);
         setOilEconomyPriceSource(null);
         setOilEconomyRevenueSource(null);
@@ -2399,6 +2514,13 @@ export default function StudyDetailPage() {
           setOilEconomyProdPoints(res.production?.points ?? []);
           setOilEconomyPricePoints(res.price?.points ?? []);
           setOilEconomyRevenuePoints(res.revenue?.points ?? []);
+          setOilEconomyPriceRealPoints(res.price_real?.points ?? []);
+          setOilEconomyRevenueRealPoints(res.revenue_real?.points ?? []);
+          setOilEconomyInflation(
+            res.inflation?.base_year != null
+              ? { deflator: res.inflation.deflator, deflator_name: res.inflation.deflator_name, base_year: res.inflation.base_year, source: res.inflation.source }
+              : null
+          );
           setOilEconomyProdSource(res.production?.source ?? null);
           setOilEconomyPriceSource(res.price?.source ?? null);
           setOilEconomyRevenueSource(res.revenue?.source ?? null);
@@ -2410,6 +2532,9 @@ export default function StudyDetailPage() {
           setOilEconomyProdPoints([]);
           setOilEconomyPricePoints([]);
           setOilEconomyRevenuePoints([]);
+          setOilEconomyPriceRealPoints([]);
+          setOilEconomyRevenueRealPoints([]);
+          setOilEconomyInflation(null);
           setOilEconomyProdSource(null);
           setOilEconomyPriceSource(null);
           setOilEconomyRevenueSource(null);
@@ -2427,6 +2552,7 @@ export default function StudyDetailPage() {
     if (isOilEconomyOverview) {
       setOilEconomyViewStart("");
       setOilEconomyViewEnd("");
+      setOilEconomyUsdMode("nominal");
     }
   }, [study?.id, isOilEconomyOverview]);
 
@@ -2922,8 +3048,11 @@ export default function StudyDetailPage() {
         if (mounted) {
           setOilPoints(results[0].points ?? []);
           setOilSource((results[0] as OilSignalData).source ?? null);
-          setFxPoints((results[1] as FxUsdTomanSignalData).points ?? []);
-          setFxSource((results[1] as FxUsdTomanSignalData).source ?? null);
+          const fx = results[1] as FxUsdTomanSignalData;
+          setFxPoints(fx.points ?? []);
+          setFxSource(fx.source ?? null);
+          setFxOfficialPoints(fx.official_annual ?? []);
+          setFxOfficialSource(fx.official_source ?? null);
           if (showGold && results[2]) {
             setGoldPoints(results[2].points ?? []);
           } else {
@@ -2937,6 +3066,8 @@ export default function StudyDetailPage() {
           setOilSource(null);
           setFxPoints([]);
           setFxSource(null);
+          setFxOfficialPoints([]);
+          setFxOfficialSource(null);
           setGoldPoints([]);
           setError(e instanceof Error ? e.message : "Signal fetch failed");
         }
@@ -2952,6 +3083,8 @@ export default function StudyDetailPage() {
       if (isFxUsdToman || isOilAndFx) {
         setFxPoints([]);
         setFxSource(null);
+        setFxOfficialPoints([]);
+        setFxOfficialSource(null);
       }
       return;
     }
@@ -2965,12 +3098,16 @@ export default function StudyDetailPage() {
         if (mounted) {
           setFxPoints(res.points ?? []);
           setFxSource(res.source ?? null);
+          setFxOfficialPoints(res.official_annual ?? []);
+          setFxOfficialSource(res.official_source ?? null);
         }
       })
       .catch((e) => {
         if (mounted) {
           setFxPoints([]);
           setFxSource(null);
+          setFxOfficialPoints([]);
+          setFxOfficialSource(null);
           setError(e instanceof Error ? e.message : "Signal fetch failed");
         }
       })
@@ -3036,6 +3173,13 @@ export default function StudyDetailPage() {
     isPovertyHeadcountIran ||
     isDutchDiseaseDiagnostics ||
     isOilEconomyOverview;
+
+  const hasTimeSeriesEventOverlayControl =
+    isSingleSignalStudy &&
+    !isOilTradeNetwork &&
+    !isFollowerGrowthDynamics &&
+    !isYoutubeCommentAnalysis &&
+    !isEventsTimeline;
 
   const isiDataReady = useMemo(() => {
     if (!isiDiagnosticsData?.series) return false;
@@ -3171,8 +3315,8 @@ export default function StudyDetailPage() {
     }
     if (isOilEconomyOverview) {
       if (oilEconomyProdPoints.length > 0) allDates.push(...collect(oilEconomyProdPoints));
-      if (oilEconomyPricePoints.length > 0) allDates.push(...collect(oilEconomyPricePoints));
-      if (oilEconomyRevenuePoints.length > 0) allDates.push(...collect(oilEconomyRevenuePoints));
+      if (oilEconomyDisplayPricePoints.length > 0) allDates.push(...collect(oilEconomyDisplayPricePoints));
+      if (oilEconomyDisplayRevenuePoints.length > 0) allDates.push(...collect(oilEconomyDisplayRevenuePoints));
     }
     if (isOilProductionMajorExporters) {
       if (productionUsPoints.length > 0) allDates.push(...collect(productionUsPoints));
@@ -3223,8 +3367,8 @@ export default function StudyDetailPage() {
     }
     if (isOilEconomyOverview) {
       if (oilEconomyProdPoints.length > 0) allDates.push(...collect(oilEconomyProdPoints));
-      if (oilEconomyPricePoints.length > 0) allDates.push(...collect(oilEconomyPricePoints));
-      if (oilEconomyRevenuePoints.length > 0) allDates.push(...collect(oilEconomyRevenuePoints));
+      if (oilEconomyDisplayPricePoints.length > 0) allDates.push(...collect(oilEconomyDisplayPricePoints));
+      if (oilEconomyDisplayRevenuePoints.length > 0) allDates.push(...collect(oilEconomyDisplayRevenuePoints));
     }
     if (isOilExporterTimeseries) {
       if (exporterSaudiPoints.length > 0) allDates.push(...collect(exporterSaudiPoints));
@@ -3319,8 +3463,8 @@ export default function StudyDetailPage() {
       }
       if (isOilEconomyOverview) {
         if (oilEconomyProdPoints.length > 0) arrays.push(oilEconomyProdPoints);
-        if (oilEconomyPricePoints.length > 0) arrays.push(oilEconomyPricePoints);
-        if (oilEconomyRevenuePoints.length > 0) arrays.push(oilEconomyRevenuePoints);
+        if (oilEconomyDisplayPricePoints.length > 0) arrays.push(oilEconomyDisplayPricePoints);
+        if (oilEconomyDisplayRevenuePoints.length > 0) arrays.push(oilEconomyDisplayRevenuePoints);
       }
       if (isOilProductionMajorExporters) {
         // Label = last date with actual data; exclude current year (projected) and synthetic extensions
@@ -4122,6 +4266,18 @@ export default function StudyDetailPage() {
                 {displayStudy.description}
               </p>
               <div className="flex flex-wrap items-center gap-3 pt-2">
+                <label
+                  className="flex items-center gap-1.5 text-xs font-medium text-foreground/90 cursor-pointer"
+                  title={L(isFa, "Show vertical event markers on the chart", "نمایش علامت‌های رویداد روی نمودار")}
+                >
+                  <input
+                    type="checkbox"
+                    checked={showTimeSeriesEventOverlay}
+                    onChange={(e) => setShowTimeSeriesEventOverlay(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  {L(isFa, "Event overlay", "نمایش رویدادها")}
+                </label>
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                   <input
                     type="checkbox"
@@ -4178,7 +4334,7 @@ export default function StudyDetailPage() {
                 data={[]}
                 valueKey="value"
                 label={L(isFa, "Official (WDI)", "رسمی (WDI)")}
-                events={[]}
+                events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                 yAxisLog={fxDualYAxisLog}
                 yAxisNameSuffix={fxDualYAxisLog ? L(isFa, "log scale", "مقیاس لگاریتمی") : undefined}
                 multiSeries={[
@@ -4313,7 +4469,7 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <StatValueWithDate
+                <StatValueWithDate chartLocale={statChartLocale}
                   value={geopoliticalStats.current}
                   unit="USD/barrel"
                   prefix="$"
@@ -4376,6 +4532,16 @@ export default function StudyDetailPage() {
             </Card>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-1.5 text-sm font-medium text-foreground/90 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showTimeSeriesEventOverlay}
+                onChange={(e) => setShowTimeSeriesEventOverlay(e.target.checked)}
+                className="rounded border-border"
+              />
+              {L(isFa, "Event overlay", "نمایش رویدادها")}
+            </label>
+            <span className="text-muted-foreground">|</span>
             <span className="text-sm text-muted-foreground">Chart window:</span>
             {GEOPOLITICAL_WINDOW_OPTIONS.map((opt) => (
               <label key={opt.value} className="flex items-center gap-1.5 text-sm cursor-pointer">
@@ -4401,7 +4567,7 @@ export default function StudyDetailPage() {
                 valueKey="value"
                 label="Brent oil"
                 unit="USD/barrel"
-                events={events}
+                events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                 timeRange={geopoliticalChartData.timeRange}
                 oilShockDates={oilShockDates}
                 showOilShocks
@@ -4473,7 +4639,7 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <StatValueWithDate
+                <StatValueWithDate chartLocale={statChartLocale}
                   value={oilKpis.latest}
                   unit="USD/barrel"
                   prefix="$"
@@ -4489,7 +4655,7 @@ export default function StudyDetailPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold text-foreground">
-                  <CompactStatValue value={oilKpis.avg} unit="USD/barrel" prefix="$" />
+                  <CompactStatValue chartLocale={statChartLocale} value={oilKpis.avg} unit="USD/barrel" prefix="$" />
                 </p>
               </CardContent>
             </Card>
@@ -4500,7 +4666,7 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <StatValueWithDate
+                <StatValueWithDate chartLocale={statChartLocale}
                   value={oilKpis.min}
                   unit="USD/barrel"
                   prefix="$"
@@ -4515,7 +4681,7 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <StatValueWithDate
+                <StatValueWithDate chartLocale={statChartLocale}
                   value={oilKpis.max}
                   unit="USD/barrel"
                   prefix="$"
@@ -4540,7 +4706,7 @@ export default function StudyDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <StatValueWithDate
+              <StatValueWithDate chartLocale={statChartLocale}
                 value={realOilKpis.latest}
                 unit="USD/bbl (2015)"
                 prefix="$"
@@ -4556,7 +4722,7 @@ export default function StudyDetailPage() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-semibold text-foreground">
-                <CompactStatValue value={realOilKpis.avg} unit="USD/bbl (2015)" prefix="$" />
+                <CompactStatValue chartLocale={statChartLocale} value={realOilKpis.avg} unit="USD/bbl (2015)" prefix="$" />
               </p>
             </CardContent>
           </Card>
@@ -4567,7 +4733,7 @@ export default function StudyDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <StatValueWithDate
+              <StatValueWithDate chartLocale={statChartLocale}
                 value={realOilKpis.min}
                 unit="USD/bbl (2015)"
                 prefix="$"
@@ -4582,7 +4748,7 @@ export default function StudyDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <StatValueWithDate
+              <StatValueWithDate chartLocale={statChartLocale}
                 value={realOilKpis.max}
                 unit="USD/bbl (2015)"
                 prefix="$"
@@ -4607,7 +4773,7 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <StatValueWithDate
+                <StatValueWithDate chartLocale={statChartLocale}
                   value={pppIranKpis.latest}
                   unit="toman/bbl (PPP)"
                   date={pppIranKpis.latestDate}
@@ -4622,7 +4788,7 @@ export default function StudyDetailPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold text-foreground">
-                  <CompactStatValue value={pppIranKpis.avg} unit="toman/bbl (PPP)" />
+                  <CompactStatValue chartLocale={statChartLocale} value={pppIranKpis.avg} unit="toman/bbl (PPP)" />
                 </p>
               </CardContent>
             </Card>
@@ -4633,7 +4799,7 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <StatValueWithDate
+                <StatValueWithDate chartLocale={statChartLocale}
                   value={pppIranKpis.min}
                   unit="toman/bbl (PPP)"
                   date={pppIranKpis.minDate}
@@ -4647,7 +4813,7 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <StatValueWithDate
+                <StatValueWithDate chartLocale={statChartLocale}
                   value={pppIranKpis.max}
                   unit="toman/bbl (PPP)"
                   date={pppIranKpis.maxDate}
@@ -4672,7 +4838,7 @@ export default function StudyDetailPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold text-foreground">
-                  <CompactStatValue value={pppIranKpis.avg} unit="toman/bbl (PPP)" />
+                  <CompactStatValue chartLocale={statChartLocale} value={pppIranKpis.avg} unit="toman/bbl (PPP)" />
                 </p>
               </CardContent>
             </Card>
@@ -4683,7 +4849,7 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <StatValueWithDate
+                <StatValueWithDate chartLocale={statChartLocale}
                   value={pppIranKpis.min}
                   unit="toman/bbl (PPP)"
                   date={pppIranKpis.minDate}
@@ -4697,7 +4863,7 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <StatValueWithDate
+                <StatValueWithDate chartLocale={statChartLocale}
                   value={pppIranKpis.max}
                   unit="toman/bbl (PPP)"
                   date={pppIranKpis.maxDate}
@@ -4721,7 +4887,7 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <StatValueWithDate
+                <StatValueWithDate chartLocale={statChartLocale}
                   value={fxKpis.latest}
                   unit="toman/USD"
                   date={fxKpis.latestDate}
@@ -4736,7 +4902,7 @@ export default function StudyDetailPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold text-foreground">
-                  <CompactStatValue value={fxKpis.avg} unit="toman/USD" />
+                  <CompactStatValue chartLocale={statChartLocale} value={fxKpis.avg} unit="toman/USD" />
                 </p>
               </CardContent>
             </Card>
@@ -4747,7 +4913,7 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <StatValueWithDate
+                <StatValueWithDate chartLocale={statChartLocale}
                   value={fxKpis.min}
                   unit="toman/USD"
                   date={fxKpis.minDate}
@@ -4761,7 +4927,7 @@ export default function StudyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <StatValueWithDate
+                <StatValueWithDate chartLocale={statChartLocale}
                   value={fxKpis.max}
                   unit="toman/USD"
                   date={fxKpis.maxDate}
@@ -4781,13 +4947,13 @@ export default function StudyDetailPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-medium">
-                  {typeof kpi.value === "number" && Number.isInteger(kpi.value)
-                    ? kpi.value.toLocaleString()
-                    : kpi.value}
+                  {typeof kpi.value === "number" && Number.isFinite(kpi.value) ? (
+                    formatChartAxisNumber(kpi.value, statChartLocale)
+                  ) : (
+                    kpi.value
+                  )}
                   {kpi.unit && (
-                    <span className="ml-1 text-sm font-normal text-muted-foreground">
-                      {kpi.unit}
-                    </span>
+                    <span className="ml-1 text-sm font-normal text-muted-foreground">{kpi.unit}</span>
                   )}
                 </p>
               </CardContent>
@@ -5002,6 +5168,20 @@ export default function StudyDetailPage() {
             </p>
           ) : null}
           <div className="flex flex-wrap items-center gap-3 pt-2">
+            {hasTimeSeriesEventOverlayControl && (
+              <label
+                className="flex items-center gap-1.5 text-xs font-medium text-foreground/90 cursor-pointer"
+                title={L(isFa, "Show vertical event markers on time-series charts", "نمایش علامت‌های رویداد روی نمودارهای سری زمانی")}
+              >
+                <input
+                  type="checkbox"
+                  checked={showTimeSeriesEventOverlay}
+                  onChange={(e) => setShowTimeSeriesEventOverlay(e.target.checked)}
+                  className="rounded border-border"
+                />
+                {L(isFa, "Event overlay", "نمایش رویدادها")}
+              </label>
+            )}
             {!hasTurkeyComparator &&
               !isOilExportCapacity &&
               !isOilEconomyOverview &&
@@ -5394,7 +5574,7 @@ export default function StudyDetailPage() {
                     const looksLikeUsd = maxEdge.value > 1_000_000;
                     return (
                       <span className={looksLikeUsd ? "text-amber-600 dark:text-amber-500" : ""} title={looksLikeUsd ? "Values >1M suggest old TradeValue (USD) data. Re-run ingestion with --force." : "Values in thousand bbl/day (physical barrels)"}>
-                        Max flow: {maxEdge.value.toLocaleString()} {maxEdge.source}→{maxEdge.target}
+                        Max flow: {formatChartAxisNumber(maxEdge.value, "en")} {maxEdge.source}→{maxEdge.target}
                       </span>
                     );
                   })()}
@@ -5674,7 +5854,7 @@ export default function StudyDetailPage() {
                   "National accounts (dual-axis reference)",
                   "حساب‌های ملی (مرجع دو محوره)"
                 )}
-                events={gdpCompositionChartEvents}
+                events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, gdpCompositionChartEvents)}
                 anchorEventId={anchorEventId || undefined}
                 multiSeries={[
                   {
@@ -5888,7 +6068,7 @@ export default function StudyDetailPage() {
                     data={[]}
                     valueKey="value"
                     label={L(isFa, "GDP composition (shares of GDP)", "ترکیب GDP (سهم‌ها)")}
-                    events={gdpCompositionChartEvents}
+                    events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, gdpCompositionChartEvents)}
                     anchorEventId={anchorEventId || undefined}
                     chartHeight="h-80 md:h-[26rem]"
                     multiSeries={[
@@ -5939,7 +6119,7 @@ export default function StudyDetailPage() {
                     data={[]}
                     valueKey="value"
                     label={L(isFa, "GDP (nominal)", "GDP اسمی")}
-                    events={gdpCompositionChartEvents}
+                    events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, gdpCompositionChartEvents)}
                     anchorEventId={anchorEventId || undefined}
                     multiSeries={[
                       {
@@ -6033,7 +6213,7 @@ export default function StudyDetailPage() {
                     data={[]}
                     valueKey="value"
                     label={L(isFa, "National accounts (levels)", "حساب‌های ملی (سطوح)")}
-                    events={gdpCompositionChartEvents}
+                    events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, gdpCompositionChartEvents)}
                     anchorEventId={anchorEventId || undefined}
                     multiSeries={[
                       {
@@ -6203,7 +6383,7 @@ export default function StudyDetailPage() {
                 data={[]}
                 valueKey="value"
                 label="Crude oil exports"
-                events={[]}
+                events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                 multiSeries={[
                   {
                     key: "saudi",
@@ -6382,7 +6562,7 @@ export default function StudyDetailPage() {
                 data={[]}
                 valueKey="value"
                 label="Oil price burden"
-                events={events}
+                events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                 anchorEventId={anchorEventId || undefined}
                 secondSeries={{
                   label: hasTurkeyComparator ? "Iran (PPP)" : "Oil price burden",
@@ -6600,7 +6780,7 @@ export default function StudyDetailPage() {
                 data={[]}
                 valueKey="value"
                 label={L(isFa, "Oil price", "قیمت نفت")}
-                events={events}
+                events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                 multiSeries={[
                   {
                     key: "oil",
@@ -6791,6 +6971,58 @@ export default function StudyDetailPage() {
                   />
                 </label>
               </div>
+              {oilEconomyPriceRealPoints.length > 0 ? (
+                <div
+                  className="mb-3 flex flex-wrap items-center gap-2"
+                  dir={isFa ? "rtl" : "ltr"}
+                >
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {L(isFa, "Dollar values:", "ارقام دلاری:")}
+                  </span>
+                  <div className="inline-flex overflow-hidden rounded-md border border-border">
+                    <button
+                      type="button"
+                      onClick={() => setOilEconomyUsdMode("nominal")}
+                      className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                        oilEconomyUsdMode === "nominal"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                      }`}
+                    >
+                      {L(isFa, "Nominal USD", "دلار اسمی")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOilEconomyUsdMode("real")}
+                      className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                        oilEconomyUsdMode === "real"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-transparent text-muted-foreground hover:bg-muted/60"
+                      }`}
+                    >
+                      {L(
+                        isFa,
+                        `Constant ${oilCpiBaseYear} USD`,
+                        `دلار ثابت ${localizeChartNumericDisplayString(String(oilCpiBaseYear), "fa")}`
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {oilEconomyRealUsdActive && oilEconomyInflation ? (
+                <p className="mb-3 max-w-3xl text-xs text-muted-foreground" dir={isFa ? "rtl" : "ltr"}>
+                  {L(
+                    isFa,
+                    `FRED CPIAUCSL. Price and revenue are deflated to ${oilCpiBaseYear} USD. ` +
+                      "Real value = nominal × (CPI at the base year ÷ CPI in that year). " +
+                      "Stylized revenue = production × real annual price.",
+                    `CPIAUCSL (FRED)؛ سطح ثابت ${localizeChartNumericDisplayString(
+                      String(oilCpiBaseYear),
+                      "fa"
+                    )} دلار. مقدار واقعی = اسمی × (CPI در سال مبنا ÷ CPI همان سال). درآمد تقریبی = تولید × قیمت واقعی.`
+                  )}
+                </p>
+              ) : null}
               <MultiSeriesStats
                 locale={isFa ? "fa" : "en"}
                 series={[
@@ -6800,14 +7032,26 @@ export default function StudyDetailPage() {
                     points: oilEconomyProdPoints,
                   },
                   {
-                    label: L(isFa, "Oil price (ann. average)", "قیمت نفت (میانگین سالانه)"),
-                    unit: L(isFa, "USD/bbl", "دلار/بشکه"),
-                    points: oilEconomyPricePoints,
+                    label: L(
+                      isFa,
+                      "Oil price (ann. average)",
+                      "قیمت نفت (میانگین سالانه)"
+                    ),
+                    unit: L(
+                      isFa,
+                      oilEconomyPriceSeriesUnitForTicks(false, oilEconomyRealUsdActive, oilCpiBaseYear),
+                      oilEconomyPriceSeriesUnitForTicks(true, oilEconomyRealUsdActive, oilCpiBaseYear)
+                    ),
+                    points: oilEconomyDisplayPricePoints,
                   },
                   {
-                    label: L(isFa, "Est. revenue (stylized)", "درآمد تخمینی (تصویری)"),
-                    unit: L(isFa, "current US$ (annual est.)", "دلار جاری (تخمین سالانه)"),
-                    points: oilEconomyRevenuePoints,
+                    label: L(isFa, "Est. oil revenue", "درآمد تخمینی"),
+                    unit: L(
+                      isFa,
+                      oilEconomyRevenueSeriesUnitForTicks(false, oilEconomyRealUsdActive, oilCpiBaseYear),
+                      oilEconomyRevenueSeriesUnitForTicks(true, oilEconomyRealUsdActive, oilCpiBaseYear)
+                    ),
+                    points: oilEconomyDisplayRevenuePoints,
                   },
                 ]}
                 timeRange={oilEconomyChartTimeRange ?? undefined}
@@ -6819,8 +7063,12 @@ export default function StudyDetailPage() {
                 <p className="text-xs text-muted-foreground max-w-3xl">
                   {L(
                     isFa,
-                    "Left: Iran oil production (EIA/IMF when available; Energy Institute 1965–79 + EIA/BP 1980–99 embedded annuals to fill gaps). Right: global oil price (EIA 1980–86; FRED DCOILBRENTEU 1987+). Two scales; vertical distance is not a ratio.",
-                    "چپ: تولید نفت ایران (EIA/IMF در صورت وجود؛ مؤسسه انرژی ۱۹۶۵–۷۹ و سالانه‌های EIA/BP ۱۹۸۰–۹۹ برای پر کردن شکاف). راست: قیمت نفت جهانی (EIA ۱۹۸۰–۸۶؛ FRED ۱۹۸۷+). دو مقیاس جداست؛ فاصلهٔ بصری نسبت مستقیم نمی‌دهد."
+                    oilEconomyRealUsdActive
+                      ? "Left: Iran oil production. Right: global oil price in constant dollars (US CPI deflator; same Brent/EIA path as nominal). Two scales; vertical distance is not a ratio."
+                      : "Left: Iran oil production (EIA/IMF when available; Energy Institute 1965–79 + EIA/BP 1980–99 embedded annuals to fill gaps). Right: global oil price (EIA 1980–86; FRED DCOILBRENTEU 1987+). Two scales; vertical distance is not a ratio.",
+                    oilEconomyRealUsdActive
+                      ? "چپ: تولید نفت ایران. راست: قیمت نفت به دلار ثابت (تعدیل با CPI ایالات متحده؛ همان مسیر برنت/دادهٔ اسمی). دو مقیاس جدا."
+                      : "چپ: تولید نفت ایران (EIA/IMF در صورت وجود؛ مؤسسه انرژی ۱۹۶۵–۷۹ و سالانه‌های EIA/BP ۱۹۸۰–۹۹ برای پر کردن شکاف). راست: قیمت نفت جهانی (EIA ۱۹۸۰–۸۶؛ FRED ۱۹۸۷+). دو مقیاس جداست؛ فاصلهٔ بصری نسبت مستقیم نمی‌دهد."
                   )}
                 </p>
                 <TimelineChart
@@ -6828,26 +7076,49 @@ export default function StudyDetailPage() {
                   exportPresentationStudyHeading={displayStudy.title}
                   exportPresentationTitle={L(
                     isFa,
-                    `${displayStudy.title} — ${"Production and Brent"}`,
-                    `${displayStudy.title} — ${"تولید و برنت"}`
+                    oilEconomyPanel1ExportTitle(
+                      displayStudy.title,
+                      false,
+                      oilEconomyRealUsdActive,
+                      oilCpiBaseYear
+                    ),
+                    oilEconomyPanel1ExportTitle(
+                      displayStudy.title,
+                      true,
+                      oilEconomyRealUsdActive,
+                      oilCpiBaseYear
+                    )
                   )}
                   xAxisYearLabel={chartYearAxisLabel}
                   exportSourceFooter={studyChartExportSource(isFa, [
-                    oilEconomyProdSource?.name ?? "EIA/IMF Iran production (live) + Energy Institute 1965–79 backfill",
-                    oilEconomyPriceSource?.name
-                      ? `${oilEconomyPriceSource.name} DCOILBRENTEU`
-                      : "FRED DCOILBRENTEU (Brent annual mean)",
+                    buildOilEconomyExportSourceBody(
+                      isFa,
+                      "productionBrent",
+                      oilEconomyRealUsdActive,
+                      oilCpiBaseYear
+                    ),
                   ])}
                   data={[]}
                   valueKey="value"
-                  label={L(isFa, "Production and Brent", "تولید و برنت")}
-                  events={[]}
+                  label={L(
+                    isFa,
+                    oilEconomyPanel1ChartLabel(false, oilEconomyRealUsdActive, oilCpiBaseYear),
+                    oilEconomyPanel1ChartLabel(true, oilEconomyRealUsdActive, oilCpiBaseYear)
+                  )}
+                  events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                   timeRange={oilEconomyChartTimeRange ?? study.timeRange}
                   chartRangeGranularity="year"
                   categoryYearTickStep={oilEconomyCategoryYearTickStep}
                   showChartControls={false}
                   mutedEventLines
                   exportFileStem="oil-economy-production-brent"
+                  multiSeriesYAxisNameOverrides={{
+                    1: L(
+                      isFa,
+                      oilEconomyPriceYAxisName(false, oilEconomyRealUsdActive, oilCpiBaseYear),
+                      oilEconomyPriceYAxisName(true, oilEconomyRealUsdActive, oilCpiBaseYear)
+                    ),
+                  }}
                   multiSeries={[
                     {
                       key: "oe_prod",
@@ -6862,10 +7133,14 @@ export default function StudyDetailPage() {
                     },
                     {
                       key: "oe_price",
-                      label: L(isFa, "Global oil price (ann. avg.)", "قیمت نفت جهانی (میانگین سالانه)"),
+                      label: oilEconomyPriceSeriesLabel(isFa),
                       yAxisIndex: 1,
-                      unit: L(isFa, "USD/bbl", "دلار/بشکه"),
-                      points: oilEconomyPricePoints,
+                      unit: L(
+                        isFa,
+                        oilEconomyPriceSeriesUnitForTicks(false, oilEconomyRealUsdActive, oilCpiBaseYear),
+                        oilEconomyPriceSeriesUnitForTicks(true, oilEconomyRealUsdActive, oilCpiBaseYear)
+                      ),
+                      points: oilEconomyDisplayPricePoints,
                       color: OIL_ECONOMY_COLOR_PRICE,
                       symbol: "triangle",
                       showSymbol: false,
@@ -6876,13 +7151,21 @@ export default function StudyDetailPage() {
               </div>
               <div className="space-y-2 mb-6 pb-6 border-b border-border">
                 <h3 className="text-sm font-semibold text-foreground">
-                  {L(isFa, "2. Stylized annual revenue (USD)", "۲. درآمد سالانهٔ تصویری (دلار)")}
+                  {L(
+                    isFa,
+                    `2. ${oilEconomyRevenueTitle(false, oilEconomyRealUsdActive, oilCpiBaseYear)}`,
+                    `۲. ${oilEconomyRevenueTitle(true, oilEconomyRealUsdActive, oilCpiBaseYear)}`
+                  )}
                 </h3>
                 <p className="text-xs text-muted-foreground max-w-3xl">
                   {L(
                     isFa,
-                    "Rough annual scale: production (barrels/year) × annual price. Not government receipts or net export value.",
-                    "مقیاس سالانه تقریبی: تولید (بشکه/سال) × قیمت سالانه. نه دریافت دولت و نه ارزش خالص صادرات."
+                    oilEconomyRealUsdActive
+                      ? "Rough annual scale: production (barrels/year) × real annual price (CPI-deflated to base year). Not government receipts or net export value."
+                      : "Rough annual scale: production (barrels/year) × annual price. Not government receipts or net export value.",
+                    oilEconomyRealUsdActive
+                      ? "مقیاس سالانه تقریبی: تولید (بشکه/سال) × قیمت واقعی سالانه (تعدیل با CPI نسبت به سال مبنا). نه دریافت دولت و نه ارزش خالص صادرات."
+                      : "مقیاس سالانه تقریبی: تولید (بشکه/سال) × قیمت سالانه. نه دریافت دولت و نه ارزش خالص صادرات."
                   )}
                 </p>
                 <TimelineChart
@@ -6890,15 +7173,34 @@ export default function StudyDetailPage() {
                   exportPresentationStudyHeading={displayStudy.title}
                   exportPresentationTitle={L(
                     isFa,
-                    `${displayStudy.title} — ${"Estimated revenue"}`,
-                    `${displayStudy.title} — ${"درآمد تخمینی"}`
+                    `${displayStudy.title} — ${oilEconomyRevenueTitle(
+                      false,
+                      oilEconomyRealUsdActive,
+                      oilCpiBaseYear
+                    )}`,
+                    `${displayStudy.title} — ${oilEconomyRevenueTitle(
+                      true,
+                      oilEconomyRealUsdActive,
+                      oilCpiBaseYear
+                    )}`
                   )}
                   xAxisYearLabel={chartYearAxisLabel}
-                  exportSourceFooter={studyChartExportSource(isFa, [oilEconomyRevenueSource?.name ?? "Derived: production × price"])}
+                  exportSourceFooter={studyChartExportSource(isFa, [
+                    buildOilEconomyExportSourceBody(
+                      isFa,
+                      "revenue",
+                      oilEconomyRealUsdActive,
+                      oilCpiBaseYear
+                    ),
+                  ])}
                   data={[]}
                   valueKey="value"
-                  label={L(isFa, "Estimated oil revenue (USD)", "درآمد تخمینی نفت (دلار)")}
-                  events={[]}
+                  label={L(
+                    isFa,
+                    oilEconomyRevenueTitle(false, oilEconomyRealUsdActive, oilCpiBaseYear),
+                    oilEconomyRevenueTitle(true, oilEconomyRealUsdActive, oilCpiBaseYear)
+                  )}
+                  events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                   timeRange={oilEconomyChartTimeRange ?? study.timeRange}
                   chartRangeGranularity="year"
                   categoryYearTickStep={oilEconomyCategoryYearTickStep}
@@ -6906,13 +7208,28 @@ export default function StudyDetailPage() {
                   mutedEventLines
                   exportFileStem="oil-economy-revenue"
                   multiSeriesValueFormat="gdp_levels"
+                  multiSeriesYAxisNameOverrides={{
+                    0: L(
+                      isFa,
+                      oilEconomyRevenueYAxisName(false, oilEconomyRealUsdActive, oilCpiBaseYear),
+                      oilEconomyRevenueYAxisName(true, oilEconomyRealUsdActive, oilCpiBaseYear)
+                    ),
+                  }}
                   multiSeries={[
                     {
                       key: "oe_rev",
-                      label: L(isFa, "Estimated revenue", "درآمد تخمینی"),
+                      label: L(
+                        isFa,
+                        oilEconomyRevenueLineLegendLabel(false, oilEconomyRealUsdActive),
+                        oilEconomyRevenueLineLegendLabel(true, oilEconomyRealUsdActive)
+                      ),
                       yAxisIndex: 0,
-                      unit: L(isFa, "current US$ (annual est.)", "دلار جاری (تخمین سالانه)"),
-                      points: oilEconomyRevenuePoints,
+                      unit: L(
+                        isFa,
+                        oilEconomyRevenueSeriesUnitForTicks(false, oilEconomyRealUsdActive, oilCpiBaseYear),
+                        oilEconomyRevenueSeriesUnitForTicks(true, oilEconomyRealUsdActive, oilCpiBaseYear)
+                      ),
+                      points: oilEconomyDisplayRevenuePoints,
                       color: OIL_ECONOMY_COLOR_REVENUE,
                       symbol: "diamond",
                       showSymbol: false,
@@ -6929,8 +7246,26 @@ export default function StudyDetailPage() {
                   <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
                     {L(
                       isFa,
-                      `Each series is indexed to 100 in ${oilEconomyIndexed.baseYear} (or the earliest year where all three have values). Compares relative change, not levels.`,
-                      `هر سری به شاخص ۱۰۰ در سال ${localizeChartNumericDisplayString(String(oilEconomyIndexed.baseYear), "fa")} (یا نزدیک‌ترین سالی که هر سه مقدار دارند) نرمال شده است؛ تغییر نسبی را می‌سنجد نه سطح مطلق.`
+                      (() => {
+                        const b = String(oilEconomyIndexed.baseYear);
+                        if (oilEconomyRealUsdActive) {
+                          return `Each series is set to 100 in ${b}. Price and revenue are in constant ${oilCpiBaseYear} USD (US CPI, FRED CPIAUCSL). Compares relative change, not levels.`;
+                        }
+                        return `Each series is set to 100 in ${b} (or the earliest year where all three have values). Compares relative change, not levels.`;
+                      })(),
+                      (() => {
+                        const b = String(oilEconomyIndexed.baseYear);
+                        if (oilEconomyRealUsdActive) {
+                          return `هر سری در ${localizeChartNumericDisplayString(
+                            b,
+                            "fa"
+                          )} بر شاخص ۱۰۰ نرمال می‌شود؛ قیمت و درآمد به دلار ثابت ${localizeChartNumericDisplayString(
+                            String(oilCpiBaseYear),
+                            "fa"
+                          )} (CPIAUCSL، FRED) می‌باشد؛ تغییر نسبی را می‌سنجد نه سطح مطلق.`;
+                        }
+                        return `هر سری به شاخص ۱۰۰ در سال ${localizeChartNumericDisplayString(b, "fa")} (یا نزدیک‌ترین سالی که هر سه مقدار دارند) نرمال شده است؛ تغییر نسبی را می‌سنجد نه سطح مطلق.`;
+                      })()
                     )}
                   </p>
                   <TimelineChart
@@ -6938,18 +7273,33 @@ export default function StudyDetailPage() {
                     exportPresentationStudyHeading={displayStudy.title}
                     exportPresentationTitle={L(
                       isFa,
-                      `${displayStudy.title} — ${"Indexed (100 = base year)"}`,
-                      `${displayStudy.title} — ${"شاخص‌شده (۱۰۰ = سال مبنا)"}`
+                      oilEconomyIndexedExportTitle(
+                        displayStudy.title,
+                        false,
+                        oilEconomyRealUsdActive,
+                        oilEconomyIndexed.baseYear,
+                        oilCpiBaseYear
+                      ),
+                      oilEconomyIndexedExportTitle(
+                        displayStudy.title,
+                        true,
+                        oilEconomyRealUsdActive,
+                        oilEconomyIndexed.baseYear,
+                        oilCpiBaseYear
+                      )
                     )}
                     exportSourceFooter={studyChartExportSource(isFa, [
-                      oilEconomyProdSource?.name ?? "EIA/IMF",
-                      oilEconomyPriceSource?.name ?? "FRED Brent",
-                      oilEconomyRevenueSource?.name ?? "Derived",
+                      buildOilEconomyExportSourceBody(
+                        isFa,
+                        "indexed",
+                        oilEconomyRealUsdActive,
+                        oilCpiBaseYear
+                      ),
                     ])}
                     data={[]}
                     valueKey="value"
                     label={L(isFa, "Indexed (100 = base year)", "شاخص‌شده (۱۰۰ = سال مبنا)")}
-                    events={[]}
+                    events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                     multiSeries={oilEconomyIndexed.multiSeries}
                     timeRange={oilEconomyChartTimeRange ?? study.timeRange}
                     chartRangeGranularity="year"
@@ -7025,6 +7375,7 @@ export default function StudyDetailPage() {
                 ]}
                 links={[
                   { label: "FRED DCOILBRENTEU", href: "https://fred.stlouisfed.org/series/DCOILBRENTEU" },
+                  { label: "FRED CPIAUCSL (US CPI)", href: "https://fred.stlouisfed.org/series/CPIAUCSL" },
                   { label: "EIA World / Iran context", href: "https://www.eia.gov/international/data/world" },
                   { label: "Energy Institute — Statistical Review", href: "https://www.energyinst.org/statistical-review" },
                 ]}
@@ -7066,18 +7417,50 @@ export default function StudyDetailPage() {
                     sourceName: oilEconomyRevenueSource?.name ?? "Derived in API",
                     sourceUrl: oilEconomyRevenueSource?.url,
                     sourceDetail: oilEconomyRevenueSource?.publisher,
-                    unitLabel: L(isFa, "USD per year (stylized)", "دلار در سال (تصویری)"),
+                    unitLabel: L(
+                      isFa,
+                      oilEconomyPriceRealPoints.length > 0
+                        ? `USD per year, constant ${oilCpiBaseYear} (stylized)`
+                        : "USD per year (stylized)",
+                      oilEconomyPriceRealPoints.length > 0
+                        ? `دلار در سال (ثابت ${localizeChartNumericDisplayString(String(oilCpiBaseYear), "fa")}، تصویری)`
+                        : "دلار در سال (تصویری)"
+                    ),
                     unitNote: L(
                       isFa,
                       "revenue ≈ (mb/d × 1e6 × 365.25) × annual price. Not government revenue.",
                       "درآمد ≈ (میلیون بشکه/روز × ۱e۶ × ۳۶۵٫۲۵) × قیمت سالانه. نه درآمد دولت."
                     ),
                   },
+                  ...(oilEconomyPriceRealPoints.length > 0
+                    ? [
+                        {
+                          label: L(
+                            isFa,
+                            `US CPI (deflator, ${oilCpiBaseYear} USD)`,
+                            `CPI ایالات متحده (تعدیل‌گر، دلار ثابت ${localizeChartNumericDisplayString(String(oilCpiBaseYear), "fa")})`
+                          ),
+                          sourceName: "FRED CPIAUCSL",
+                          sourceUrl: "https://fred.stlouisfed.org/series/CPIAUCSL",
+                          sourceDetail: "BLS (via FRED); annual average of monthly CPI; used to deflate to base year",
+                          unitLabel: L(
+                            isFa,
+                            "Index (1982–84 = 100)",
+                            "شاخص (۱۹۸۲–۸۴ = ۱۰۰)"
+                          ),
+                          unitNote: L(
+                            isFa,
+                            `Constant‑dollar base year: ${oilCpiBaseYear}.`,
+                            `سال پایهٔ دلار ثابت: ${localizeChartNumericDisplayString(String(oilCpiBaseYear), "fa")}.`
+                          ),
+                        },
+                      ]
+                    : []),
                 ]}
                 note={L(
                   isFa,
-                  "Source line on chart export stays in English. Method: annual production × annual average price; descriptive only.",
-                  "خط Source در خروجی تصویر به انگلیسی می‌ماند. روش: تولید سالانه × قیمت سالانه؛ صرفاً توصیفی."
+                  "Chart export uses the English “Source:” line. Semicolon‑separated list; FRED CPIAUCSL (inflation adjustment) with the shown base year. Descriptive only.",
+                  "«Source:» در خروجی همیشه به انگلیسی است؛ بخش‌ها با ؛ . FRED CPIAUCSL (تعدیل تورم) و سال پایهٔ نمایش‌داده‌شده. صرفاً توصیفی."
                 )}
               />
               <InSimpleTerms locale={isFa ? "fa" : "en"}>
@@ -7127,7 +7510,7 @@ export default function StudyDetailPage() {
                 data={[]}
                 valueKey="value"
                 label="Oil production"
-                events={study14FilteredEvents}
+                events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, study14FilteredEvents)}
                 anchorEventId={anchorEventId || undefined}
                 multiSeries={[
                   {
@@ -7299,7 +7682,7 @@ export default function StudyDetailPage() {
                 data={[]}
                 valueKey="value"
                 label={L(isFa, "Gini coefficient", "ضریب جینی")}
-                events={giniFilteredEvents}
+                events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, giniFilteredEvents)}
                 anchorEventId={anchorEventId || undefined}
                 multiSeries={[
                   {
@@ -7462,7 +7845,7 @@ export default function StudyDetailPage() {
                 data={[]}
                 valueKey="value"
                 label={L(isFa, "Inflation rate", "نرخ تورم")}
-                events={inflationFilteredEvents}
+                events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, inflationFilteredEvents)}
                 anchorEventId={anchorEventId || undefined}
                 multiSeries={[
                   {
@@ -7644,7 +8027,7 @@ export default function StudyDetailPage() {
                 data={[]}
                 valueKey="value"
                 label={L(isFa, "GDP (total)", "GDP (کل)")}
-                events={gdpGlobalFilteredEvents}
+                events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, gdpGlobalFilteredEvents)}
                 anchorEventId={anchorEventId || undefined}
                 yAxisLog={gdpGlobalDisplayMode === "absolute" && gdpGlobalAbsoluteLog}
                 yAxisNameSuffix={
@@ -7846,7 +8229,7 @@ export default function StudyDetailPage() {
                     data={[]}
                     valueKey="value"
                     label={L(isFa, "Indexed overview (100 = base year)", "نمای شاخص‌شده (۱۰۰ = سال مبنا)")}
-                    events={isiFilteredEvents}
+                    events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, isiFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
                     multiSeries={isiOverviewIndexed.multiSeries.map((s) => ({
                       ...s,
@@ -7880,7 +8263,7 @@ export default function StudyDetailPage() {
                     data={[]}
                     valueKey="value"
                     label={L(isFa, "Trade, % of GDP", "تجارت، ٪ GDP")}
-                    events={isiFilteredEvents}
+                    events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, isiFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
                     multiSeries={isiTradeMultiSeries.map((s) => ({
                       ...s,
@@ -7916,7 +8299,7 @@ export default function StudyDetailPage() {
                     data={[]}
                     valueKey="value"
                     label={L(isFa, "Industry, % of GDP", "صنعت، ٪ GDP")}
-                    events={isiFilteredEvents}
+                    events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, isiFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
                     multiSeries={isiIndustrialMultiSeries.map((s) => ({
                       ...s,
@@ -7952,7 +8335,7 @@ export default function StudyDetailPage() {
                     data={[]}
                     valueKey="value"
                     label={L(isFa, "GDP growth (annual %)", "رشد GDP (٪ سالانه)")}
-                    events={isiFilteredEvents}
+                    events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, isiFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
                     multiSeries={isiGdpGrowthMultiSeries.map((s) => ({
                       ...s,
@@ -8203,7 +8586,7 @@ export default function StudyDetailPage() {
                     data={[]}
                     valueKey="value"
                     label={L(isFa, "Indexed overview (100 = base year)", "نمای شاخص‌شده (۱۰۰ = سال مبنا)")}
-                    events={[]}
+                    events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, dutchFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
                     multiSeries={dutchOverviewIndexed.multiSeries}
                     timeRange={dutchTimeRange ?? study.timeRange}
@@ -8249,7 +8632,7 @@ export default function StudyDetailPage() {
                     valueKey="value"
                     label={L(isFa, "Oil rents (% of GDP)", "اجاره نفت (٪ از GDP)")}
                     unit="%"
-                    events={dutchFilteredEvents}
+                    events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, dutchFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
                     timeRange={dutchTimeRange ?? study.timeRange}
                     chartRangeGranularity="year"
@@ -8285,7 +8668,7 @@ export default function StudyDetailPage() {
                     valueKey="value"
                     label={L(isFa, "Manufacturing (% of GDP)", "تولیدات کارخانه‌ای (٪ از GDP)")}
                     unit="%"
-                    events={dutchFilteredEvents}
+                    events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, dutchFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
                     timeRange={dutchTimeRange ?? study.timeRange}
                     chartRangeGranularity="year"
@@ -8321,7 +8704,7 @@ export default function StudyDetailPage() {
                     valueKey="value"
                     label={L(isFa, "Imports (% of GDP)", "واردات (٪ از GDP)")}
                     unit="%"
-                    events={dutchFilteredEvents}
+                    events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, dutchFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
                     timeRange={dutchTimeRange ?? study.timeRange}
                     chartRangeGranularity="year"
@@ -8354,7 +8737,7 @@ export default function StudyDetailPage() {
                     valueKey="value"
                     label={L(isFa, "Open-market toman per USD", "تومان بازار آزاد به ازای هر دلار")}
                     unit={L(isFa, "toman/USD", "تومان/دلار")}
-                    events={dutchFilteredEvents}
+                    events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, dutchFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
                     timeRange={dutchFxTimeRange ?? study.timeRange}
                     xAxisYearLabel={chartYearAxisLabel}
@@ -8480,7 +8863,7 @@ export default function StudyDetailPage() {
                     data={[]}
                     valueKey="value"
                     label="Nominal"
-                    events={events}
+                    events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                     anchorEventId={anchorEventId || undefined}
                     multiSeries={[
                       {
@@ -8614,7 +8997,7 @@ export default function StudyDetailPage() {
                 data={[]}
                 valueKey="value"
                 label="Real oil price"
-                events={events}
+                events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                 anchorEventId={anchorEventId || undefined}
                 secondSeries={{
                   label: "Oil price",
@@ -8720,7 +9103,7 @@ export default function StudyDetailPage() {
                 data={[]}
                 valueKey="value"
                 label="Gold"
-                events={events}
+                events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                 multiSeries={[
                   {
                     key: "gold",
@@ -8877,7 +9260,7 @@ export default function StudyDetailPage() {
                   data={[]}
                   valueKey="value"
                   label={isOilGlobalLong ? "Oil price" : "Brent oil"}
-                  events={events}
+                  events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                   anchorEventId={anchorEventId || undefined}
                   secondSeries={{
                     label: isOilGlobalLong ? "Oil price" : "Brent oil",
@@ -9024,7 +9407,7 @@ export default function StudyDetailPage() {
                     data={[]}
                     valueKey="value"
                     label="Brent oil"
-                    events={events}
+                    events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                     anchorEventId={anchorEventId || undefined}
                     multiSeries={[
                       {
@@ -9082,7 +9465,7 @@ export default function StudyDetailPage() {
                   valueKey="value"
                   label="Brent oil"
                   unit="USD/barrel"
-                  events={events}
+                  events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                   anchorEventId={anchorEventId || undefined}
                   secondSeries={{
                     label: "USD→Toman",
@@ -9167,45 +9550,97 @@ export default function StudyDetailPage() {
                 chartLocale={chartLocaleForCharts}
                 exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
-                exportSourceFooter={studyChartExportSource(isFa, [fxSource?.name])}
+                exportSourceFooter={studyChartExportSource(
+                  isFa,
+                  [fxSource?.name, fxOfficialSource?.name].filter(Boolean) as string[]
+                )}
                 data={[]}
                 valueKey="value"
-                label="USD→Toman"
-                events={events}
+                label={L(isFa, "Open market (USD→Toman)", "بازار آزاد (دلار→تومان)")}
+                events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                 anchorEventId={anchorEventId || undefined}
-                secondSeries={{
-                  label: "USD→Toman",
-                  unit: "toman/USD",
-                  points: fxPoints,
-                  yAxisIndex: 1,
-                }}
                 timeRange={fxTimeRange ?? study.timeRange}
                 highlightLatestPoint
-                chartRangeGranularity="year"
+                forceTimeAxis
+                multiSeries={[
+                  {
+                    key: "fx_open",
+                    label: L(
+                      isFa,
+                      "Open market (archive + Bonbast; FRED annual pre-2012)",
+                      "بازار آزاد (آرشیو + بان‌بست؛ FRED سالانه پیش از ۲۰۱۲)"
+                    ),
+                    yAxisIndex: 0,
+                    unit: L(isFa, "toman/USD", "تومان/دلار"),
+                    points: fxPoints,
+                    color: SIGNAL_CONCEPT.exchange_rate,
+                    symbol: "circle",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                    showSymbol: false,
+                    lineWidth: 2.25,
+                    linePattern: "solid",
+                  },
+                  ...(fxOfficialPoints.length > 0
+                    ? [
+                        {
+                          key: "fx_official",
+                          label: L(
+                            isFa,
+                            "Official annual (WDI FCRF + FRED backfill)",
+                            "رسمی سالانه (WDI FCRF + FRED اگر WDI نبود)"
+                          ),
+                          yAxisIndex: 0,
+                          unit: L(isFa, "toman/USD", "تومان/دلار"),
+                          points: fxOfficialPoints,
+                          color: "hsl(220, 14%, 46%)",
+                          symbol: "diamond",
+                          symbolSize: CHART_LINE_SYMBOL_SIZE * 0.85,
+                          showSymbol: false,
+                          lineWidth: 1.5,
+                          linePattern: "dashed" as const,
+                        } satisfies ChartSeries,
+                      ]
+                    : []),
+                ]}
               />
-              {fxSource && (
+              {(fxSource || fxOfficialSource) && (
                 <SourceInfo
                   items={[
-                    {
-                      label: "USD→Toman",
-                      sourceName: fxSource.name,
-                      sourceUrl: fxSource.url,
-                      sourceDetail: fxSource.publisher,
-                      unitLabel: "toman/USD",
-                      unitNote: "1 toman = 10 rials",
-                    },
+                    ...(fxSource
+                      ? [
+                          {
+                            label: L(isFa, "Open market (chart)", "بازار آزاد (نمودار)"),
+                            sourceName: fxSource.name,
+                            sourceUrl: fxSource.url,
+                            sourceDetail: fxSource.publisher,
+                            unitLabel: L(isFa, "toman/USD", "تومان/دلار"),
+                            unitNote: "1 toman = 10 rials",
+                          },
+                        ]
+                      : []),
+                    ...(fxOfficialSource
+                      ? [
+                          {
+                            label: L(isFa, "Official (dashed line)", "رسمی (خط چین‌دار)"),
+                            sourceName: fxOfficialSource.name,
+                            sourceUrl: fxOfficialSource.url,
+                            sourceDetail: fxOfficialSource.publisher,
+                            unitLabel: L(isFa, "toman/USD (annual average)", "تومان/دلار (میانگین سال)"),
+                            unitNote: fxOfficialSource.notes,
+                          },
+                        ]
+                      : []),
                   ]}
                 />
               )}
               {study.concepts?.length ? <ConceptsUsed locale={isFa ? "fa" : "en"} conceptKeys={study.concepts} /> : null}
               <InSimpleTerms locale={isFa ? "fa" : "en"}>
                 <p>
-                  The chart shows the open-market exchange rate between the US dollar and the Iranian toman—how many tomans you get for one dollar.
-                  The toman is Iran’s main currency unit (one toman equals ten rials).
+                  The solid line is the open-market rate (Bonbast and the public rial archive where available; before that, annual data from the same merge as elsewhere on SignalMap).
+                  The dashed line, when shown, is the official period-average rate from international statistics (World Bank, with a fill from FRED where WDI is missing a year)—annual only, for comparison, not a substitute for a market quote.
                 </p>
                 <p>
-                  When the rate rises, it means more tomans are needed to buy one dollar—a sign of a weaker toman.
-                  The chart aims to show that pattern over time and give context for economic pressure. It does not explain why the rate moves or prove any cause.
+                  When the open rate rises, more tomans are needed to buy one dollar. The toman is Iran’s main currency unit (one toman equals ten rials). This is descriptive context, not an explanation of causes.
                 </p>
               </InSimpleTerms>
             </>
@@ -9221,7 +9656,7 @@ export default function StudyDetailPage() {
               data={data.timeline}
               valueKey="value"
               label="Sentiment"
-              events={events}
+              events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
               anchorEventId={anchorEventId || undefined}
               secondSeries={
                 showOil

@@ -118,8 +118,9 @@ export const STUDIES: StudyMeta[] = [
     id: "usd-toman",
     number: 3,
     title: "USD→Toman (open market) as a socio-economic signal",
-    timeRange: ["2018-01-01", new Date().toISOString().slice(0, 10)],
-    description: "Open-market toman per US dollar (Bonbast / archive; not the official rate).",
+    timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "Open-market toman per US dollar (Bonbast / rial archive from 2012; FRED PWT annual pre-archive). Official WDI annual shown dashed for comparison.",
     status: "active",
     groupPlacements: [{ group: "core", order: 1 }],
     primarySignal: { kind: "fx_usd_toman" },

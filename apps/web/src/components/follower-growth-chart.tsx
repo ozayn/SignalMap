@@ -134,7 +134,7 @@ export function FollowerGrowthChart({
             selectedEnd: chartRange[1],
             defaultStart: rangeBounds[0],
             defaultEnd: rangeBounds[1],
-            rangeGranularity: "day",
+            rangeGranularity: "year",
           })
         : slugifyChartFilename(exportFileStem ?? metricLabel);
     const footerColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
@@ -360,7 +360,6 @@ export function FollowerGrowthChart({
           onStartChange={setClipStart}
           onEndChange={setClipEnd}
           onExportPng={handleExportPng}
-          granularity="day"
           mode="full"
         />
       ) : showExportOnlyToolbar ? (
@@ -372,7 +371,6 @@ export function FollowerGrowthChart({
           onStartChange={setClipStart}
           onEndChange={setClipEnd}
           onExportPng={handleExportPng}
-          granularity="day"
           mode="exportOnly"
         />
       ) : null}

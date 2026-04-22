@@ -1,15 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import type { ChartRangeGranularity } from "@/lib/chart-study-range";
-import {
-  clampDateToBounds,
-  monthInputToEndDay,
-  monthInputToStartDay,
-  normalizeChartRangeBound,
-  toMonthInputMinMax,
-  toYearInputMinMax,
-} from "@/lib/chart-study-range";
+import { normalizeChartRangeBound, toYearInputMinMax } from "@/lib/chart-study-range";
 
 export type StudyChartControlsMode = "full" | "exportOnly";
 
@@ -22,8 +14,6 @@ export type StudyChartControlsProps = {
   onEndChange: (value: string) => void;
   onExportPng: () => void;
   disabledExport?: boolean;
-  /** Picker resolution; defaults to day (`type="date"`). */
-  granularity?: ChartRangeGranularity;
   /**
    * `exportOnly`: single Export PNG button (e.g. when the parent page owns range controls or the chart is year-scoped).
    * `full`: start/end + export (default).
@@ -47,8 +37,8 @@ const EXPORT_BUTTON =
   "h-8 shrink-0 rounded-md px-2.5 text-xs font-normal leading-none";
 
 /**
- * Compact per-chart toolbar: start/end range (granularity-aware) and PNG export.
- * Bounds are always `YYYY-MM-DD` at the chart layer; this component maps UI to those strings.
+ * Compact per-chart toolbar: start/end as **calendar years** and PNG export.
+ * The chart may still be daily or monthly; values are normalized to `YYYY-01-01` / `YYYY-12-31` (see `normalizeChartRangeBound`).
  */
 export function StudyChartControls({
   minDate,
@@ -59,7 +49,6 @@ export function StudyChartControls({
   onEndChange,
   onExportPng,
   disabledExport,
-  granularity = "day",
   mode = "full",
 }: StudyChartControlsProps) {
   const minD = minDate.slice(0, 10);
@@ -86,129 +75,52 @@ export function StudyChartControls({
     );
   }
 
-  if (granularity === "year") {
-    const { min: yMin, max: yMax } = toYearInputMinMax(minD, maxD);
-    const startY = startValue ? parseInt(startValue.slice(0, 4), 10) : NaN;
-    const endY = endValue ? parseInt(endValue.slice(0, 4), 10) : NaN;
-    return (
-      <div className={TOOLBAR_ROW}>
-        <label className="flex w-[5.5rem] shrink-0 flex-col">
-          <span className={FIELD_LABEL}>Start Year</span>
-          <input
-            type="number"
-            min={yMin}
-            max={yMax}
-            step={1}
-            value={Number.isFinite(startY) ? startY : ""}
-            onChange={(e) => {
-              const raw = e.target.value;
-              if (raw === "") {
-                onStartChange("");
-                return;
-              }
-              const y = parseInt(raw, 10);
-              if (!Number.isFinite(y)) return;
-              const clamped = Math.min(yMax, Math.max(yMin, y));
-              onStartChange(normalizeChartRangeBound(String(clamped), false));
-            }}
-            className={CONTROL_INPUT}
-          />
-        </label>
-        <label className="flex w-[5.5rem] shrink-0 flex-col">
-          <span className={FIELD_LABEL}>End Year</span>
-          <input
-            type="number"
-            min={yMin}
-            max={yMax}
-            step={1}
-            value={Number.isFinite(endY) ? endY : ""}
-            onChange={(e) => {
-              const raw = e.target.value;
-              if (raw === "") {
-                onEndChange("");
-                return;
-              }
-              const y = parseInt(raw, 10);
-              if (!Number.isFinite(y)) return;
-              const clamped = Math.min(yMax, Math.max(yMin, y));
-              onEndChange(normalizeChartRangeBound(String(clamped), true));
-            }}
-            className={CONTROL_INPUT}
-          />
-        </label>
-        {exportButton}
-      </div>
-    );
-  }
-
-  if (granularity === "month") {
-    const { min: mMin, max: mMax } = toMonthInputMinMax(minD, maxD);
-    return (
-      <div className={TOOLBAR_ROW}>
-        <label className="flex min-w-[9rem] shrink-0 flex-col">
-          <span className={FIELD_LABEL}>Start Month</span>
-          <input
-            type="month"
-            min={mMin}
-            max={mMax}
-            value={startValue ? startValue.slice(0, 7) : ""}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (!v) {
-                onStartChange("");
-                return;
-              }
-              const day = monthInputToStartDay(v);
-              onStartChange(clampDateToBounds(day, minD, maxD));
-            }}
-            className={CONTROL_INPUT}
-          />
-        </label>
-        <label className="flex min-w-[9rem] shrink-0 flex-col">
-          <span className={FIELD_LABEL}>End Month</span>
-          <input
-            type="month"
-            min={mMin}
-            max={mMax}
-            value={endValue ? endValue.slice(0, 7) : ""}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (!v) {
-                onEndChange("");
-                return;
-              }
-              const day = monthInputToEndDay(v);
-              onEndChange(clampDateToBounds(day, minD, maxD));
-            }}
-            className={CONTROL_INPUT}
-          />
-        </label>
-        {exportButton}
-      </div>
-    );
-  }
-
+  const { min: yMin, max: yMax } = toYearInputMinMax(minD, maxD);
+  const startY = startValue ? parseInt(startValue.slice(0, 4), 10) : NaN;
+  const endY = endValue ? parseInt(endValue.slice(0, 4), 10) : NaN;
   return (
     <div className={TOOLBAR_ROW}>
-      <label className="flex min-w-[10.5rem] shrink-0 flex-col">
-        <span className={FIELD_LABEL}>Start Date</span>
+      <label className="flex w-[5.5rem] shrink-0 flex-col">
+        <span className={FIELD_LABEL}>Start Year</span>
         <input
-          type="date"
-          min={minD}
-          max={maxD}
-          value={startValue ? startValue.slice(0, 10) : ""}
-          onChange={(e) => onStartChange(e.target.value)}
+          type="number"
+          min={yMin}
+          max={yMax}
+          step={1}
+          value={Number.isFinite(startY) ? startY : ""}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (raw === "") {
+              onStartChange("");
+              return;
+            }
+            const y = parseInt(raw, 10);
+            if (!Number.isFinite(y)) return;
+            const clamped = Math.min(yMax, Math.max(yMin, y));
+            onStartChange(normalizeChartRangeBound(String(clamped), false));
+          }}
           className={CONTROL_INPUT}
         />
       </label>
-      <label className="flex min-w-[10.5rem] shrink-0 flex-col">
-        <span className={FIELD_LABEL}>End Date</span>
+      <label className="flex w-[5.5rem] shrink-0 flex-col">
+        <span className={FIELD_LABEL}>End Year</span>
         <input
-          type="date"
-          min={minD}
-          max={maxD}
-          value={endValue ? endValue.slice(0, 10) : ""}
-          onChange={(e) => onEndChange(e.target.value)}
+          type="number"
+          min={yMin}
+          max={yMax}
+          step={1}
+          value={Number.isFinite(endY) ? endY : ""}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (raw === "") {
+              onEndChange("");
+              return;
+            }
+            const y = parseInt(raw, 10);
+            if (!Number.isFinite(y)) return;
+            const clamped = Math.min(yMax, Math.max(yMin, y));
+            onEndChange(normalizeChartRangeBound(String(clamped), true));
+          }}
           className={CONTROL_INPUT}
         />
       </label>

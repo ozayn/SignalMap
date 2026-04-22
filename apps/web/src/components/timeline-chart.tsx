@@ -5,7 +5,6 @@ import * as echarts from "echarts";
 import { cssHsl, withAlphaHsl } from "@/lib/utils";
 import {
   type ChartRangeGranularity,
-  inferChartRangeGranularityFromDates,
   normalizeChartRangeBound,
 } from "@/lib/chart-study-range";
 import {
@@ -798,21 +797,8 @@ export function TimelineChart({
     return [a, b];
   }, [rangeBounds, clipStart, clipEnd]);
 
-  const inferredChartRangeGranularity = useMemo((): ChartRangeGranularity => {
-    const primary = data.map((p) => p.date);
-    if (primary.length >= 2) {
-      return inferChartRangeGranularityFromDates(primary);
-    }
-    const samples: string[] = [];
-    for (const p of data) samples.push(p.date);
-    if (multiSeries) for (const s of multiSeries) for (const p of s.points) samples.push(p.date);
-    if (secondSeries) for (const p of secondSeries.points) samples.push(p.date);
-    for (const p of oilPoints) samples.push(p.date);
-    if (comparatorSeries) for (const p of comparatorSeries.points) samples.push(p.date);
-    return inferChartRangeGranularityFromDates(samples);
-  }, [data, oilPoints, secondSeries, multiSeries, comparatorSeries]);
-
-  const rangeInputGranularity = chartRangeGranularityProp ?? inferredChartRangeGranularity;
+  /** Study PNG export: filename range segment and shared toolbar always use calendar years (data may be daily). */
+  const studyExportRangeGranularity: ChartRangeGranularity = "year";
 
   /** Stable identity for grouped series so we reset selection when labels/keys change, not on array ref churn. */
   const groupedLegendSourceKey = useMemo(() => {
@@ -950,7 +936,7 @@ export function TimelineChart({
             selectedEnd: chartRange[1],
             defaultStart: rangeBounds[0],
             defaultEnd: rangeBounds[1],
-            rangeGranularity: rangeInputGranularity,
+            rangeGranularity: studyExportRangeGranularity,
           })
         : slugifyChartFilename(exportFileStem ?? label);
     const footerColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
@@ -1024,7 +1010,6 @@ export function TimelineChart({
     exportSourceFooter,
     label,
     rangeBounds,
-    rangeInputGranularity,
     xAxisYearLabel,
     groupedLegendModel,
     groupedLegendSelected,
@@ -2744,7 +2729,6 @@ export function TimelineChart({
           onStartChange={setClipStart}
           onEndChange={setClipEnd}
           onExportPng={handleExportPng}
-          granularity={rangeInputGranularity}
           mode="full"
         />
       ) : showExportOnlyToolbar ? (
@@ -2756,7 +2740,6 @@ export function TimelineChart({
           onStartChange={setClipStart}
           onEndChange={setClipEnd}
           onExportPng={handleExportPng}
-          granularity={rangeInputGranularity}
           mode="exportOnly"
         />
       ) : null}
