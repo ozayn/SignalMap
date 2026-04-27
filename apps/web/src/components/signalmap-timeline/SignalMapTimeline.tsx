@@ -23,17 +23,26 @@ import {
   minImportanceForViewPortion,
   parseYmdToUtcMs,
   readYearRangeFromCurrentUrl,
-  shouldShowInlaneLabelsByZoom,
+  resolveSpacedNarrativeLabelIds,
+  shouldShowNarrativeLabelForEvent,
   toXPercent,
+  verticalJitterPx,
   viewMsFromInclusiveYearsClamped,
   writeYearRangeToUrl,
   zoomAroundCenter,
   endYearFromViewEnd,
   startYearFromViewStart,
+  type LabelSpacingCandidate,
   type SignalMapTimelineEvent,
   type SignalMapTimelineProps,
+  type TimelineNode,
 } from "@/lib/signalmap-timeline";
 import { t as tLang, type StudyLocale } from "@/lib/iran-study-fa";
+import {
+  eventDisplayTitle,
+  formatSignalMapDotEventDateLine,
+  signalMapDotEventTooltipText,
+} from "@/lib/signalmap-timeline/event-display-text";
 
 const DAY = 86_400_000;
 const LANE_PITCH = 40;
@@ -211,7 +220,6 @@ export function SignalMapTimeline({
     if (importanceDetail === "all") return 1;
     return minImportanceForViewPortion(viewPortion);
   }, [importanceDetail, viewPortion]);
-  const showNarrativeLabels = useMemo(() => shouldShowInlaneLabelsByZoom(viewPortion), [viewPortion]);
 
   const filtered = useMemo(
     () => events.filter((e) => layers.has(e.category)),
@@ -238,6 +246,62 @@ export function SignalMapTimeline({
       }),
     [filtered, viewStart, viewEnd, trackWidth, domainStartMs, domainEndMs, minImportance, viewPortion]
   );
+
+  /** Wider spans first, then point markers, then cluster buckets, so the top of the stack gets hover. */
+  const displayNodes = useMemo(() => {
+    const nodeLayer = (n: TimelineNode): 0 | 1 | 2 => {
+      if (n.kind === "cluster") return 2;
+      if (n.kind === "event") {
+        const wP = toXPercent(n.endMs, viewStart, viewEnd) - toXPercent(n.startMs, viewStart, viewEnd);
+        if (wP <= 1.1) return 1;
+      }
+      return 0;
+    };
+    return [...nodes].sort((A, B) => {
+      if (A.lane !== B.lane) return A.lane - B.lane;
+      const la = nodeLayer(A);
+      const lb = nodeLayer(B);
+      if (la !== lb) return la - lb;
+      if (la === 0 && A.kind === "event" && B.kind === "event") {
+        const wA = A.endMs - A.startMs;
+        const wB = B.endMs - B.startMs;
+        return wB - wA;
+      }
+      if (la === 1 && A.kind === "event" && B.kind === "event") {
+        return A.startMs - B.startMs;
+      }
+      if (la === 2 && A.kind === "cluster" && B.kind === "cluster") {
+        return A.centerMs - B.centerMs;
+      }
+      return 0;
+    });
+  }, [nodes, viewStart, viewEnd]);
+
+  const narrativeLabelIds = useMemo(() => {
+    if (trackWidth < 1) return new Set<string>();
+    const candidates: LabelSpacingCandidate[] = [];
+    for (const node of nodes) {
+      if (node.kind !== "event") continue;
+      const ev = node.event;
+      const s = toXPercent(node.startMs, viewStart, viewEnd);
+      const e0 = toXPercent(node.endMs, viewStart, viewEnd);
+      const wPct = Math.max(e0 - s, 0.08);
+      const isSpan = wPct > 1.1;
+      const spanWpx = (wPct / 100) * trackWidth;
+      const xCenterPx = (wPct * 0.5 + s) * (trackWidth / 100);
+      const hov = hoveredId === ev.id;
+      const sel = selectedId === ev.id;
+      if (!shouldShowNarrativeLabelForEvent(ev, isSpan, isSpan ? spanWpx : null, viewPortion, hov, sel)) {
+        continue;
+      }
+      candidates.push({
+        id: ev.id,
+        xCenterPx,
+        importance: getEventImportance(ev),
+      });
+    }
+    return resolveSpacedNarrativeLabelIds(candidates);
+  }, [nodes, viewStart, viewEnd, trackWidth, viewPortion, hoveredId, selectedId]);
 
   const eventStripHeight = useMemo(
     () => Math.max(EVENT_STRIP_MIN_PX, EVENT_STRIP_TOP_PAD * 2 + (maxLane + 1) * LANE_PITCH + 4),
@@ -334,16 +398,23 @@ export function SignalMapTimeline({
   const axisBottomGetter = useCallback(() => axisRowRef.current?.getBoundingClientRect().bottom ?? 0, []);
 
   const setFloatFromEvent = useCallback(
-    (ev: SignalMapTimelineEvent, e: { clientX: number; clientY: number }) => {
+    (ev: SignalMapTimelineEvent, p: { clientX: number; clientY: number }) => {
+      const raw = titleOf(ev, lang);
+      const { displayTitle, dateLine } = signalMapDotEventTooltipText(
+        raw,
+        ev,
+        yearAxisMode,
+        numeralLoc
+      );
       setFloatTip({
         kind: "event",
         id: ev.id,
-        x: e.clientX,
-        y: e.clientY,
-        content: { title: titleOf(ev, lang), date: ev.date_start },
+        x: p.clientX,
+        y: p.clientY,
+        content: { title: displayTitle, date: dateLine },
       });
     },
-    [lang]
+    [lang, yearAxisMode, numeralLoc]
   );
 
   const clearFloatTip = useCallback(() => {
@@ -426,8 +497,8 @@ export function SignalMapTimeline({
             </button>
             <span className="max-w-[14rem] pl-0.5 text-[10px] leading-snug text-muted-foreground/70">
               {tLang(
-                "Drag · scroll to zoom · names in hover, or on strong zoom",
-                "کشیدن · اسکرول برای بزرگ‌نمایی",
+                "Drag · scroll · range labels when zoomed; point names on hover",
+                "کشیدن · اسکرول · برچسب دوره وقتی زوم؛ نام نقاط روی هاور",
                 lang
               )}
             </span>
@@ -501,7 +572,9 @@ export function SignalMapTimeline({
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="pr-1 font-semibold leading-snug text-foreground">{titleOf(selected, lang)}</h3>
+                  <h3 className="pr-1 font-semibold leading-snug text-foreground">
+                    {eventDisplayTitle(titleOf(selected, lang))}
+                  </h3>
                   <button
                     type="button"
                     className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -511,9 +584,9 @@ export function SignalMapTimeline({
                     ×
                   </button>
                 </div>
-                <p className="text-[11px] text-muted-foreground">
-                  {selected.date_start}
-                  {selected.date_end ? ` — ${selected.date_end}` : ""} · I{getEventImportance(selected)}
+                <p className="whitespace-pre-line text-[11px] text-muted-foreground">
+                  {formatSignalMapDotEventDateLine(selected, yearAxisMode, numeralLoc)} · I
+                  {getEventImportance(selected)}
                 </p>
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground/95">{descOf(selected, lang)}</p>
                 {selected.tags.length > 0 ? (
@@ -528,22 +601,27 @@ export function SignalMapTimeline({
               </div>
             ) : null}
 
-            {nodes.map((node) => {
-              const rowTop = EVENT_STRIP_TOP_PAD + node.lane * LANE_PITCH;
+            {displayNodes.map((node) => {
+              const rowBase = EVENT_STRIP_TOP_PAD + node.lane * LANE_PITCH;
               if (node.kind === "event") {
                 const ev = node.event;
                 const s = toXPercent(node.startMs, viewStart, viewEnd);
                 const e0 = toXPercent(node.endMs, viewStart, viewEnd);
                 const wPct = Math.max(e0 - s, 0.08);
                 const isSpan = wPct > 1.1;
+                const rowTop = isSpan ? rowBase : rowBase + verticalJitterPx(ev.id);
                 const cat = CAT_STYLE[ev.category];
                 const isSel = selectedId === ev.id;
                 const isHover = hoveredId === ev.id;
-                const eventTitle = titleOf(ev, lang);
+                const eventTitle = eventDisplayTitle(titleOf(ev, lang));
+                const showNarrativeLabel = narrativeLabelIds.has(ev.id);
                 return (
                   <div
                     key={ev.id}
-                    className="absolute z-10 transition-all duration-200 ease-out"
+                    className={cn(
+                      "absolute transition-all duration-200 ease-out",
+                      isSpan ? "z-[5]" : "z-[15]"
+                    )}
                     style={
                       isSpan
                         ? { left: `${s}%`, width: `${wPct}%`, top: rowTop, height: LANE_PITCH }
@@ -552,6 +630,7 @@ export function SignalMapTimeline({
                   >
                       <button
                         type="button"
+                        aria-label={eventTitle}
                         onClick={() => pickEvent(ev)}
                         onPointerDown={(e) => e.stopPropagation()}
                         onPointerMove={(e) => {
@@ -568,11 +647,12 @@ export function SignalMapTimeline({
                         }}
                         className={cn(
                           "group relative flex h-full w-full items-center justify-center outline-none",
-                          isSpan ? "w-full" : "min-w-[0.5rem] max-w-[0.5rem] translate-x-0"
+                          isSpan ? "w-full" : "min-h-[1.2rem] min-w-[1.2rem] -m-1.5 p-1.5"
                         )}
                       >
-                          {showNarrativeLabels ? (
+                          {showNarrativeLabel ? (
                             <span
+                              aria-hidden
                               className={cn(
                                 "pointer-events-none absolute bottom-full left-1/2 z-20 mb-0.5 w-max max-w-[6.5rem] -translate-x-1/2 line-clamp-2 text-center text-[9px] font-medium leading-tight text-foreground/80",
                                 isSpan && "left-0 w-full max-w-full translate-x-0 truncate",
@@ -603,13 +683,14 @@ export function SignalMapTimeline({
                 " · " +
                 String(node.count) +
                 tLang(" events", " رویداد", lang);
+              const clusterRowTop = rowBase;
               return (
                 <div
                   key={node.id}
-                  className="absolute z-10 flex items-center justify-center transition-all duration-200 ease-out"
+                  className="absolute z-20 flex items-center justify-center transition-all duration-200 ease-out"
                   style={{
                     left: `${cx}%`,
-                    top: rowTop,
+                    top: clusterRowTop,
                     height: LANE_PITCH,
                     width: 0,
                     transform: "translateX(-50%)",
@@ -656,7 +737,7 @@ export function SignalMapTimeline({
                               className="w-full text-left text-foreground transition-colors hover:underline"
                               onClick={() => pickEvent(e)}
                             >
-                              {titleOf(e, lang)}
+                              {eventDisplayTitle(titleOf(e, lang))}
                             </button>
                           </li>
                         ))}

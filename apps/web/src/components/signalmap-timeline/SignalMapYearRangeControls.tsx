@@ -54,6 +54,12 @@ export function SignalMapYearRangeControls({
   const [controlsReady, setControlsReady] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const lastExternal = useRef({ displayStart, displayEnd });
+  /** While > 0, a year field is focused; do not overwrite drafts from view/pan/URL. */
+  const yearFieldFocusDepth = useRef(0);
+  const draftStartRef = useRef(draftStart);
+  const draftEndRef = useRef(draftEnd);
+  draftStartRef.current = draftStart;
+  draftEndRef.current = draftEnd;
   const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const uid = useId();
   const nameStart = `sm-tl-ys-${uid.replace(/:/g, "")}`;
@@ -73,6 +79,9 @@ export function SignalMapYearRangeControls({
   );
 
   useEffect(() => {
+    if (yearFieldFocusDepth.current > 0) {
+      return;
+    }
     if (lastExternal.current.displayStart === displayStart && lastExternal.current.displayEnd === displayEnd) {
       return;
     }
@@ -158,11 +167,8 @@ export function SignalMapYearRangeControls({
           </span>
           <input
             id={nameStart}
-            type="number"
+            type="text"
             name={nameStart}
-            min={minY}
-            max={maxY}
-            step={1}
             value={draftStart}
             autoComplete="off"
             spellCheck={false}
@@ -170,7 +176,13 @@ export function SignalMapYearRangeControls({
             data-lpignore="true"
             data-1p-ignore="true"
             onChange={(e) => setDraftStart(e.target.value)}
-            onBlur={() => applyPair(draftStart, draftEnd)}
+            onFocus={() => {
+              yearFieldFocusDepth.current += 1;
+            }}
+            onBlur={() => {
+              yearFieldFocusDepth.current = Math.max(0, yearFieldFocusDepth.current - 1);
+              applyPair(draftStartRef.current, draftEndRef.current);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") (e.target as HTMLInputElement).blur();
             }}
@@ -184,11 +196,8 @@ export function SignalMapYearRangeControls({
           </span>
           <input
             id={nameEnd}
-            type="number"
+            type="text"
             name={nameEnd}
-            min={minY}
-            max={maxY}
-            step={1}
             value={draftEnd}
             autoComplete="off"
             spellCheck={false}
@@ -196,7 +205,13 @@ export function SignalMapYearRangeControls({
             data-lpignore="true"
             data-1p-ignore="true"
             onChange={(e) => setDraftEnd(e.target.value)}
-            onBlur={() => applyPair(draftStart, draftEnd)}
+            onFocus={() => {
+              yearFieldFocusDepth.current += 1;
+            }}
+            onBlur={() => {
+              yearFieldFocusDepth.current = Math.max(0, yearFieldFocusDepth.current - 1);
+              applyPair(draftStartRef.current, draftEndRef.current);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") (e.target as HTMLInputElement).blur();
             }}

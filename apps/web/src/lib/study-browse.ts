@@ -1,4 +1,5 @@
-import { CONCEPTS, type ConceptKey } from "./concepts";
+import { resolveStudyConcept } from "./signalmap-concepts";
+import type { StudyConceptId } from "./signalmap-concepts";
 import { IRAN_STUDY_FA_DISPLAY } from "./iran-study-fa-copy";
 import { normalizeSearchText } from "./study-search-normalize";
 import {
@@ -152,7 +153,7 @@ const OIL_KINDS: readonly string[] = [
  */
 function subjectSearchAliasBits(study: StudyMeta): string[] {
   const k = study.primarySignal.kind;
-  const concepts = new Set<ConceptKey>((study.concepts ?? []) as ConceptKey[]);
+  const concepts = new Set<StudyConceptId>((study.concepts ?? []) as StudyConceptId[]);
   const b: string[] = [];
 
   if (OIL_KINDS.includes(k)) {
@@ -546,14 +547,15 @@ export function getBrowseProfile(study: StudyMeta): BrowseProfile {
 }
 
 function conceptSearchBits(study: StudyMeta): string[] {
-  const keys = (study.concepts ?? []) as ConceptKey[];
+  const keys = study.concepts ?? [];
   const bits: string[] = [];
   for (const key of keys) {
     bits.push(key.replace(/_/g, " "));
-    const c = CONCEPTS[key];
-    if (c) {
-      bits.push(c.title);
-      bits.push(c.description);
+    for (const fa of [false, true] as const) {
+      const c = resolveStudyConcept(key, fa);
+      if (c) {
+        bits.push(c.title, c.short, c.example, ...c.tags);
+      }
     }
   }
   return bits;

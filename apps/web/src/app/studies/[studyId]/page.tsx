@@ -110,7 +110,7 @@ import {
   toDisplayName,
 } from "@/lib/oil-trade-regions";
 import { joinExportSourceNames } from "@/lib/chart-export";
-import { normalizeChartRangeBound, toYearInputMinMax } from "@/lib/chart-study-range";
+import { normalizeChartRangeBound, toYearInputMinMax, yearDraftFromBoundIso } from "@/lib/chart-study-range";
 import { CHART_LINE_SYMBOL_SIZE, CHART_LINE_SYMBOL_SIZE_MINI } from "@/lib/chart-series-markers";
 import {
   isStudyEventLayerVisible,
@@ -145,11 +145,13 @@ type OverviewData = {
 type Event = {
   id: string;
   title: string;
+  title_fa?: string;
   date?: string;
   date_start?: string;
   date_end?: string;
   type?: string;
   description?: string;
+  description_fa?: string;
   confidence?: string;
   sources?: string[];
   layer?:
@@ -504,6 +506,10 @@ export default function StudyDetailPage() {
   /** When set, narrows the three oil-economy charts and indexed view (Export PNG uses the same timeRange). */
   const [oilEconomyViewStart, setOilEconomyViewStart] = useState("");
   const [oilEconomyViewEnd, setOilEconomyViewEnd] = useState("");
+  const [oilEconomyStartYearDraft, setOilEconomyStartYearDraft] = useState("");
+  const [oilEconomyEndYearDraft, setOilEconomyEndYearDraft] = useState("");
+  const oilEconomyStartYearFocusRef = useRef(false);
+  const oilEconomyEndYearFocusRef = useRef(false);
   const [oilEconomyPriceRealPoints, setOilEconomyPriceRealPoints] = useState<{ date: string; value: number }[]>([]);
   const [oilEconomyRevenueRealPoints, setOilEconomyRevenueRealPoints] = useState<{ date: string; value: number }[]>([]);
   const [oilEconomyInflation, setOilEconomyInflation] = useState<OilEconomyInflationBlock | null>(null);
@@ -898,6 +904,15 @@ export default function StudyDetailPage() {
       normalizeChartRangeBound(oilEconomyTimeRange[1], true).slice(0, 10)
     );
   }, [oilEconomyTimeRange]);
+
+  useEffect(() => {
+    if (!oilEconomyStartYearFocusRef.current) {
+      setOilEconomyStartYearDraft(yearDraftFromBoundIso(oilEconomyViewStart));
+    }
+    if (!oilEconomyEndYearFocusRef.current) {
+      setOilEconomyEndYearDraft(yearDraftFromBoundIso(oilEconomyViewEnd));
+    }
+  }, [oilEconomyViewStart, oilEconomyViewEnd]);
 
   const productionTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isOilProductionMajorExporters) return null;
@@ -7243,56 +7258,84 @@ export default function StudyDetailPage() {
                     "محدوده سال را برای هر سه نمودار و خروجی PNG ببندید؛ خالی = پنجره مطالعه."
                   )}
                 </span>
-                <label className="flex w-[5.5rem] shrink-0 flex-col">
+                <label className="flex w-[5.5rem] shrink-0 flex-col" dir="ltr">
                   <span className="mb-0.5 block min-h-[0.875rem] text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                     {L(isFa, "Start year", "سال شروع")}
                   </span>
                   <input
-                    type="number"
-                    min={oilEconomyYearInputMinMax.min}
-                    max={oilEconomyYearInputMinMax.max}
-                    step={1}
-                    value={
-                      oilEconomyViewStart
-                        ? parseInt(oilEconomyViewStart.slice(0, 4), 10) || ""
-                        : ""
-                    }
-                    onChange={(e) => {
-                      const raw = e.target.value;
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={oilEconomyStartYearDraft}
+                    onChange={(e) => setOilEconomyStartYearDraft(e.target.value)}
+                    onFocus={() => {
+                      oilEconomyStartYearFocusRef.current = true;
+                    }}
+                    onBlur={() => {
+                      oilEconomyStartYearFocusRef.current = false;
+                      const { min: yMin, max: yMax } = oilEconomyYearInputMinMax;
+                      const raw = oilEconomyStartYearDraft.trim();
                       if (raw === "") {
                         setOilEconomyViewStart("");
                         return;
                       }
                       const y = parseInt(raw, 10);
-                      if (!Number.isFinite(y)) return;
-                      const { min: yMin, max: yMax } = oilEconomyYearInputMinMax;
-                      const clamped = Math.min(yMax, Math.max(yMin, y));
-                      setOilEconomyViewStart(normalizeChartRangeBound(String(clamped), false));
+                      if (!Number.isFinite(y)) {
+                        setOilEconomyStartYearDraft(yearDraftFromBoundIso(oilEconomyViewStart));
+                        return;
+                      }
+                      let c = Math.min(yMax, Math.max(yMin, y));
+                      const endY = oilEconomyViewEnd && oilEconomyViewEnd.trim() !== ""
+                        ? parseInt(oilEconomyViewEnd.slice(0, 4), 10)
+                        : null;
+                      if (endY != null && Number.isFinite(endY) && c > endY) c = endY;
+                      setOilEconomyViewStart(normalizeChartRangeBound(String(c), false));
+                      setOilEconomyStartYearDraft(String(c));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                     }}
                     className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-sm outline-none transition-[box-shadow,border-color] focus-visible:border-ring/60 focus-visible:ring-2 focus-visible:ring-ring/25"
                   />
                 </label>
-                <label className="flex w-[5.5rem] shrink-0 flex-col">
+                <label className="flex w-[5.5rem] shrink-0 flex-col" dir="ltr">
                   <span className="mb-0.5 block min-h-[0.875rem] text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                     {L(isFa, "End year", "سال پایان")}
                   </span>
                   <input
-                    type="number"
-                    min={oilEconomyYearInputMinMax.min}
-                    max={oilEconomyYearInputMinMax.max}
-                    step={1}
-                    value={oilEconomyViewEnd ? parseInt(oilEconomyViewEnd.slice(0, 4), 10) || "" : ""}
-                    onChange={(e) => {
-                      const raw = e.target.value;
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={oilEconomyEndYearDraft}
+                    onChange={(e) => setOilEconomyEndYearDraft(e.target.value)}
+                    onFocus={() => {
+                      oilEconomyEndYearFocusRef.current = true;
+                    }}
+                    onBlur={() => {
+                      oilEconomyEndYearFocusRef.current = false;
+                      const { min: yMin, max: yMax } = oilEconomyYearInputMinMax;
+                      const raw = oilEconomyEndYearDraft.trim();
                       if (raw === "") {
                         setOilEconomyViewEnd("");
                         return;
                       }
                       const y = parseInt(raw, 10);
-                      if (!Number.isFinite(y)) return;
-                      const { min: yMin, max: yMax } = oilEconomyYearInputMinMax;
-                      const clamped = Math.min(yMax, Math.max(yMin, y));
-                      setOilEconomyViewEnd(normalizeChartRangeBound(String(clamped), true));
+                      if (!Number.isFinite(y)) {
+                        setOilEconomyEndYearDraft(yearDraftFromBoundIso(oilEconomyViewEnd));
+                        return;
+                      }
+                      let c = Math.min(yMax, Math.max(yMin, y));
+                      const startY = oilEconomyViewStart && oilEconomyViewStart.trim() !== ""
+                        ? parseInt(oilEconomyViewStart.slice(0, 4), 10)
+                        : null;
+                      if (startY != null && Number.isFinite(startY) && c < startY) c = startY;
+                      setOilEconomyViewEnd(normalizeChartRangeBound(String(c), true));
+                      setOilEconomyEndYearDraft(String(c));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                     }}
                     className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-sm outline-none transition-[box-shadow,border-color] focus-visible:border-ring/60 focus-visible:ring-2 focus-visible:ring-ring/25"
                   />

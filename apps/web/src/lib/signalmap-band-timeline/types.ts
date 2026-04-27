@@ -3,7 +3,25 @@
  * Periods render as rounded bands; points render as markers. Used for world-style history views.
  */
 
-export type BandTimelineLane = "global" | "iran" | "oil" | "fx" | "war" | "policy";
+export type BandWarRegion = "global" | "europe" | "middle_east";
+
+export type BandTimelineLane =
+  | "global"
+  | "iran"
+  | "oil"
+  | "fx"
+  /** World-scale conflicts (e.g. WWI, WWII) — separate from regional war rows. */
+  | "global_wars"
+  | "europe_wars"
+  | "middle_east_wars"
+  | "policy"
+  /** Political leadership: Iran presidents and related terms. */
+  | "iran_leadership"
+  /** Political leadership: U.S. chief executives. */
+  | "us_leadership";
+
+/** Thematic / styling / filter: use `leadership` for IRI and U.S. head-of-term bands. */
+export type BandTimelineCategory = BandTimelineLane | "leadership";
 
 type BandTimelineEventBase = {
   id: string;
@@ -12,14 +30,22 @@ type BandTimelineEventBase = {
   /** Vertical swimlane (Y). */
   lane: BandTimelineLane;
   /**
-   * Styling / future filters (e.g. same row as `lane` or cross-cutting theme).
-   * Defaults to `lane` in seed data.
+   * Styling / filter key (e.g. `leadership` for presidential-term bands, `europe_wars` for row colors).
    */
-  category: BandTimelineLane;
+  category: BandTimelineCategory;
+  /**
+   * Geographic bucketing for conflict rows (only used for `*_wars` lanes; matches lane choice).
+   */
+  region?: BandWarRegion;
   /** 1 = light context, 2 = default, 3 = landmark. */
   importance: 1 | 2 | 3;
   description_en: string;
   description_fa: string;
+  /** Optional: search / filters (e.g. president, us, iran). */
+  tags?: string[];
+  /** Optional: human-readable citation in EN (e.g. Britannica, White House). */
+  source_citation_en?: string;
+  source_citation_fa?: string;
 };
 
 export type BandTimelinePeriodEvent = BandTimelineEventBase & {
@@ -40,6 +66,10 @@ export const BAND_LANE_ORDER: readonly BandTimelineLane[] = [
   "iran",
   "oil",
   "fx",
-  "war",
+  "global_wars",
+  "europe_wars",
+  "middle_east_wars",
   "policy",
+  "iran_leadership",
+  "us_leadership",
 ] as const;

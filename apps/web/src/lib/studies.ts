@@ -30,7 +30,7 @@ export type PrimarySignal =
   | { kind: "iran_money_supply_m2" }
   | { kind: "oil_economy_overview" };
 
-import type { ConceptKey } from "./concepts";
+import type { StudyConceptId } from "./signalmap-concepts";
 
 /** Browse / filter: geographic emphasis (a study may span several). */
 export type StudyCountry = "iran" | "us" | "global";
@@ -64,8 +64,8 @@ export type StudyMeta = {
    * Local `next dev` still lists and opens it. Use for work-in-progress or staging-only studies.
    */
   hiddenInProduction?: boolean;
-  /** Concepts used in this study for educational display. */
-  concepts?: ConceptKey[];
+  /** Concepts used in this study for educational display (core ids + legacy `ConceptKey`s). */
+  concepts?: readonly StudyConceptId[];
   /** When set, show Turkey as a comparator (always-on for Study 8). */
   comparatorCountry?: "Turkey";
   /** Observational bullets for "What this chart shows (in this dataset)". 3–6 short bullets, no causality. */
@@ -114,7 +114,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     groupPlacements: [{ group: "core", order: 2 }],
     primarySignal: { kind: "oil_brent" },
-    concepts: ["nominal_price", "oil_benchmark", "event_overlay", "oil_price_shocks"],
+    concepts: ["nominal_price", "oil_benchmark", "event_overlay", "oil_shock"],
     unitLabel: "USD per barrel",
   },
   {
@@ -127,7 +127,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     groupPlacements: [{ group: "core", order: 1 }],
     primarySignal: { kind: "fx_usd_toman" },
-    concepts: ["fx_rate", "event_overlay"],
+    concepts: ["fx", "spread", "event_overlay"],
     unitLabel: "toman per USD",
   },
   {
@@ -139,7 +139,7 @@ export const STUDIES: StudyMeta[] = [
     status: "active",
     groupPlacements: [{ group: "core", order: 3 }],
     primarySignal: { kind: "oil_and_fx" },
-    concepts: ["nominal_price", "oil_benchmark", "fx_rate", "event_overlay"],
+    concepts: ["nominal_price", "oil_benchmark", "fx", "event_overlay"],
   },
   {
     id: "global_oil_1900",
@@ -163,7 +163,7 @@ export const STUDIES: StudyMeta[] = [
     groupPlacements: [{ group: "global", order: 6 }],
     primarySignal: { kind: "real_oil" },
     eventLayers: ["world_core", "world_1900"],
-    concepts: ["real_price", "cpi", "real_oil_price", "derived_series", "event_overlay"],
+    concepts: ["nominal_vs_real", "cpi", "oil_shock", "real_oil_price", "derived_series", "event_overlay"],
     unitLabel: "constant 2015 USD per barrel",
   },
   {
@@ -306,7 +306,20 @@ export const STUDIES: StudyMeta[] = [
     tags: ["Dual", "Spread"],
     groupPlacements: [{ group: "iran", order: 5 }],
     primarySignal: { kind: "fx_usd_irr_dual" },
-    concepts: ["multiple_exchange_rates", "official_exchange_rate", "fx_rate", "capital_controls", "price_controls", "measurement_vs_reality", "fx_spread", "derived_series"],
+    concepts: [
+      "fx",
+      "spread",
+      "exchange_rate_regime",
+      "multiple_exchange_rates",
+      "official_exchange_rate",
+      "fx_rate",
+      "capital_controls",
+      "price_controls",
+      "sanctions",
+      "measurement_vs_reality",
+      "fx_spread",
+      "derived_series",
+    ],
   },
   {
     id: "oil_geopolitical_reaction",
@@ -321,7 +334,7 @@ export const STUDIES: StudyMeta[] = [
     groupPlacements: [{ group: "global", order: 3 }],
     primarySignal: { kind: "oil_geopolitical_reaction" },
     eventLayers: ["world_core", "world_1900", "sanctions", "opec_decisions"],
-    concepts: ["nominal_price", "oil_benchmark", "event_overlay", "oil_price_shocks"],
+    concepts: ["nominal_price", "oil_benchmark", "event_overlay", "oil_shock"],
     unitLabel: "USD per barrel",
   },
   {
@@ -502,7 +515,7 @@ export const STUDIES: StudyMeta[] = [
     primarySignal: { kind: "gdp_composition" },
     hiddenInProduction: true,
     eventLayers: ["iran_core"],
-    concepts: ["gdp_aggregate", "final_consumption_share", "gross_capital_formation", "event_overlay"],
+    concepts: ["gdp", "final_consumption_share", "gross_capital_formation", "event_overlay"],
     observations: [
       "Consumption and investment shares are both expressed as percent of GDP, so they are comparable on the same vertical scale.",
       "The two shares do not sum to 100%: GDP also includes net exports, government investment nuances, and statistical discrepancies in national accounts.",
@@ -525,7 +538,7 @@ export const STUDIES: StudyMeta[] = [
     groupPlacements: [{ group: "iran", order: 2 }],
     primarySignal: { kind: "iran_gdp_accounts_dual" },
     eventLayers: ["iran_core"],
-    concepts: ["gdp_aggregate", "final_consumption_share", "gross_capital_formation", "event_overlay"],
+    concepts: ["gdp", "final_consumption_share", "gross_capital_formation", "event_overlay"],
     observations: [
       "Left axis: consumption and investment (two separate series). Right axis: GDP. Each axis has its own scale.",
       "Lines use the same WDI indicators and value-type bundle as Study 27 levels (NE.CON.*, NY.GDP.MKTP.*, NE.GDI.TOTL.*).",
@@ -574,7 +587,7 @@ export const STUDIES: StudyMeta[] = [
     ],
     primarySignal: { kind: "inflation_cpi_yoy" },
     eventLayers: ["iran_core", "world_core", "sanctions"],
-    concepts: ["cpi", "event_overlay", "measurement_vs_reality"],
+    concepts: ["inflation", "cpi", "event_overlay", "measurement_vs_reality"],
     unitLabel: "Annual % change (CPI)",
     observations: [
       "Annual frequency: one observation per calendar year where the World Bank publishes FP.CPI.TOTL.ZG.",
@@ -629,8 +642,8 @@ export const STUDIES: StudyMeta[] = [
     primarySignal: { kind: "dutch_disease_diagnostics_iran" },
     eventLayers: ["iran_core", "world_core", "sanctions"],
     concepts: [
-      "gdp_aggregate",
-      "fx_rate",
+      "gdp",
+      "fx",
       "export_dependencies",
       "measurement_vs_reality",
       "event_overlay",
@@ -658,7 +671,7 @@ export const STUDIES: StudyMeta[] = [
     groupPlacements: [{ group: "global", order: 1 }],
     primarySignal: { kind: "gdp_global_comparison" },
     eventLayers: ["iran_core", "world_core", "sanctions"],
-    concepts: ["gdp_aggregate", "measurement_vs_reality", "indexing", "event_overlay"],
+    concepts: ["gdp", "measurement_vs_reality", "indexing", "event_overlay"],
     unitLabel: "Indexed (2000 = 100) or US$ levels",
     observations: [
       "Each economy uses WDI total GDP; the app prefers constant 2015 US$ and falls back to current US$ only when the constant-price series is empty for that country.",
@@ -693,7 +706,7 @@ export const STUDIES: StudyMeta[] = [
     ],
     primarySignal: { kind: "isi_diagnostics" },
     eventLayers: ["iran_core", "world_core", "sanctions"],
-    concepts: ["trade_networks", "gdp_aggregate", "measurement_vs_reality", "indexing"],
+    concepts: ["trade_networks", "gdp", "measurement_vs_reality", "indexing"],
     unitLabel: "% of GDP or % growth (see panels)",
     observations: [
       "Each panel uses World Bank WDI annual series; coverage and revisions differ by country and year.",
@@ -737,7 +750,7 @@ export const STUDIES: StudyMeta[] = [
     countries: ["iran"],
     themes: ["macro"],
     tags: ["Iran", "M2", "WDI", "liquidity", "CPI"],
-    concepts: ["cpi", "event_overlay", "measurement_vs_reality"],
+    concepts: ["liquidity_m2", "inflation", "cpi", "event_overlay", "measurement_vs_reality"],
     unitLabel: "Growth or inflation (annual %)",
     observations: [
       "M2: WDI FM.LBL.BMNY.ZG / IFS through 2016; 2017+ = SignalMap-derived YoY on CBI-style year-end broad liquidity (static file). Definitions may differ; treat 2017+ as continuity, not a strict redefinition of WDI M2.",

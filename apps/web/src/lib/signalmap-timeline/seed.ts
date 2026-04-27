@@ -1,4 +1,7 @@
 import type { SignalMapTimelineEvent } from "./types";
+import { ISRAEL_IRAN_US_TIMELINE_DOT } from "../signalmap-israel-iran-us-conflict";
+import { SIGNALMAP_BALKAN_AND_WAR_RANGES } from "../signalmap-war-canonical";
+import { SIGNALMAP_OIL_TIMELINE } from "../signalmap-oil-canonical";
 
 /** ~50 global + ~20 Iran anchor events for the interactive timeline MVP. */
 export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
@@ -105,17 +108,6 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     importance: 3,
   },
   {
-    id: "g-1973-embargo",
-    date_start: "1973-10-16",
-    title_en: "1973 oil embargo (OPEC)",
-    title_fa: "تحریم نفتی ۱۹۷۳ (اوپک)",
-    description_en: "OPEC members restrict exports after Yom Kippur War; oil prices spike, stagflation in importers.",
-    description_fa: "محدودسازی صادرات نفت پس از جنگ یوم‌کپور؛ جهش قیمت و تورم رکودی واردکنندگان.",
-    category: "oil",
-    tags: ["opec", "yom-kippur"],
-    importance: 3,
-  },
-  {
     id: "g-volcker",
     date_start: "1979-10-06",
     title_en: "Volcker shock (Fed tightening)",
@@ -203,17 +195,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     tags: ["russia", "europe", "commodities"],
     importance: 3,
   },
-  {
-    id: "g-2022-oil-swing",
-    date_start: "2022-03-08",
-    title_en: "2022 post-invasion energy price shock",
-    title_fa: "شوک قیمت انرژی پس از تهاجم",
-    description_en: "Brent and gas benchmarks spike; policy responses in importers; volatile macro cross-currents.",
-    description_fa: "افزایش تند نفت/گاز؛ اقدامات واردکنندگان و نوسان اقتصاد کلان.",
-    category: "oil",
-    tags: ["brent", "sanctions", "volatility"],
-    importance: 3,
-  },
+  ...ISRAEL_IRAN_US_TIMELINE_DOT,
   // —— Iran-specific (domestic + foreign policy) ——
   {
     id: "ir-1953",
@@ -379,7 +361,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "اشغال و پاسخ ائتلاف؛ ریسک عرضه نفتی بسیار بزرگ-کوتاه‌مدت.",
     category: "war",
     tags: ["gulf", "iraq", "kuwait", "oil"],
-    importance: 3,
+    importance: 1,
   },
   {
     id: "g-china-wto",
@@ -456,7 +438,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تغییر نظام و جنگ‌های فرسایشی و ریسک عرضه میدل‌ایست.",
     category: "war",
     tags: ["iraq", "us", "mideast"],
-    importance: 3,
+    importance: 1,
   },
   {
     id: "g-afghan-21",
@@ -511,7 +493,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تداوم جنگ-پناهنده و پراکسی-منطقه‌ای و بک‌دراپ نفتی خاورمیانه.",
     category: "war",
     tags: ["syria", "mideast", "refugees"],
-    importance: 2,
+    importance: 1,
   },
   {
     id: "g-oil-negative", // illustrative (contract-specific)
@@ -634,4 +616,6 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     tags: ["multilateral", "gatt", "disputes"],
     importance: 1,
   },
+  ...SIGNALMAP_OIL_TIMELINE,
+  ...SIGNALMAP_BALKAN_AND_WAR_RANGES,
 ];

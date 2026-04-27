@@ -5,13 +5,7 @@ iran_presidents, opec_decisions, global_macro_oil (curated global oil / macro an
 
 from datetime import date
 
-def _get_iran_conflict_2026():
-    """U.S.–Israel strikes on Iran (Feb 2026) — date_end=today since conflict is ongoing."""
-    from signalmap.data.event_layers import _us_israel_iran_2026_event
-    ev = _us_israel_iran_2026_event("us_israel_iran_strikes_2026")
-    ev["scope"] = "iran"
-    ev["layer"] = "iran_core"
-    return [ev]
+# Israel–Iran–US conflict lives in world_core / world_1900 (``israel_iran_us_conflict``); not duplicated in iran_core.
 
 # Iran presidential terms 1990→present (RANGE events)
 # Sources: Wikipedia List of presidents of Iran
@@ -109,7 +103,7 @@ IRAN_CORE_PRE_2021 = [
 
 def _get_iran_core() -> list[dict]:
     from signalmap.data.events_iran_loader import load_events_iran_json
-    return IRAN_CORE_PRE_2021 + load_events_iran_json() + _get_iran_conflict_2026()
+    return IRAN_CORE_PRE_2021 + load_events_iran_json()
 
 # Sanctions events (point events → vertical lines)
 # Sources: USIP, State Dept
@@ -137,8 +131,9 @@ SANCTIONS_OIL_EXPORTS_RANGE = [
 SANCTIONS = SANCTIONS_POINT + SANCTIONS_OIL_EXPORTS_RANGE
 
 def _get_world_core():
-    from signalmap.data.event_layers import EVENTS_WORLD_CORE, get_events_world_range
-    return EVENTS_WORLD_CORE + get_events_world_range()
+    from signalmap.data.event_layers import get_world_core_events
+
+    return get_world_core_events()
 
 def _get_world_1900():
     from signalmap.data.event_layers import get_events_world_1900

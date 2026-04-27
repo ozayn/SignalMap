@@ -45,27 +45,41 @@ EVENTS_IRAN_EXTERNAL: list[dict] = [
     {"id": "sn-005c", "title": "US reimposes oil and financial sanctions", "category": "iran_external", "date_start": "2018-11-05", "date_end": None, "description": "Second round of US sanctions; targets oil, banking, shipping."},
     {"id": "sn-005d", "title": "Vienna JCPOA talks begin", "category": "iran_external", "date_start": "2021-04-06", "date_end": None, "description": "Negotiations to restore JCPOA resume in Vienna."},
     {"id": "sn-005e", "title": "EU removes JCPOA from agenda", "category": "iran_external", "date_start": "2022-08-08", "date_end": None, "description": "EU coordinator pauses JCPOA restoration talks after final text rejection."},
-    {"id": "iran-2024-israel-strike", "title": "Iran–Israel escalation", "category": "iran_external", "date_start": "2024-04-13", "date_end": None, "description": "Iran launches direct strikes on Israel; EU expands sanctions."},
 ]
+
+def _macro_crisis_timeline_row(macro_id: str) -> dict:
+    from signalmap.data.macro_crisis_periods import MACRO_CRISIS_PERIODS
+
+    r = next(x for x in MACRO_CRISIS_PERIODS if x["id"] == macro_id)
+    return {
+        "id": r["id"],
+        "title": r["title"],
+        "category": "global_geopolitics",
+        "date_start": r["date_start"],
+        "date_end": r["date_end"],
+        "description": r["description"],
+    }
+
 
 EVENTS_GLOBAL_GEOPOLITICS_BASE: list[dict] = [
     {"id": "g1900-ww1", "title": "World War I", "category": "global_geopolitics", "date_start": "1914-07-28", "date_end": "1918-11-11", "description": "Global conflict; major powers engaged across Europe and beyond."},
-    {"id": "g1900-depression", "title": "Great Depression", "category": "global_geopolitics", "date_start": "1929-10-29", "date_end": "1939-09-01", "description": "Severe global economic downturn following the 1929 stock market crash."},
+    _macro_crisis_timeline_row("g-macro-great-depression"),
     {"id": "g1900-ww2", "title": "World War II", "category": "global_geopolitics", "date_start": "1939-09-01", "date_end": "1945-09-02", "description": "Global conflict; European and Pacific theaters."},
     {"id": "g1900-gulf-war", "title": "Gulf War", "category": "global_geopolitics", "date_start": "1990-08-02", "date_end": "1991-02-28", "description": "Iraq invades Kuwait; coalition response."},
-    {"id": "g1900-gfc", "title": "Global Financial Crisis", "category": "global_geopolitics", "date_start": "2008-09-15", "date_end": "2009-06-30", "description": "Lehman collapse; global banking crisis."},
-    {"id": "g1900-covid", "title": "COVID-19 pandemic", "category": "global_geopolitics", "date_start": "2020-01-30", "date_end": "2022-03-11", "description": "WHO pandemic declaration; global lockdowns."},
+    _macro_crisis_timeline_row("g-macro-gfc-2007"),
+    _macro_crisis_timeline_row("g-covid-pandemic-era"),
     {"id": "g1900-ukraine", "title": "Russia–Ukraine war", "category": "global_geopolitics", "date_start": "2022-02-24", "date_end": None, "description": "Russia's full-scale invasion of Ukraine; energy market disruption."},
-    {"id": "iran_israel_12_day_war_2025", "title": "Israel–Iran direct military confrontation", "category": "global_geopolitics", "date_start": "2025-06-13", "date_end": "2025-06-24", "description": "Period of direct military escalation involving missile and drone strikes."},
 ]
 
 
+def _events_global_geopolitics_merged() -> list[dict]:
+    from signalmap.data.israel_iran_us_conflict import israel_iran_global_geopolitics_timeline_rows
+
+    return EVENTS_GLOBAL_GEOPOLITICS_BASE + israel_iran_global_geopolitics_timeline_rows()
+
+
 def _get_events_global_geopolitics() -> list[dict]:
-    """Returns global geopolitics events with U.S.–Israel Iran strikes having date_end=today."""
-    from signalmap.data.event_layers import _us_israel_iran_2026_event
-    ev = _us_israel_iran_2026_event("us_israel_iran_strikes_2026")
-    ev["category"] = "global_geopolitics"
-    return EVENTS_GLOBAL_GEOPOLITICS_BASE + [ev]
+    return _events_global_geopolitics_merged()
 
 EVENTS_ENERGY_MARKETS: list[dict] = [
     {"id": "g1900-oil-embargo-73", "title": "1973–74 oil embargo", "category": "energy_markets", "date_start": "1973-10-17", "date_end": "1974-03-18", "description": "OPEC oil embargo following the Yom Kippur War; first major oil shock."},
@@ -80,7 +94,7 @@ EVENTS_ENERGY_MARKETS: list[dict] = [
 ]
 
 def get_events_timeline_all() -> list[dict]:
-    """Returns all timeline events; U.S.–Israel Iran strikes has date_end=today."""
+    """Returns all timeline events (including Israel–Iran–US rows from ``israel_iran_us_conflict``)."""
     return (
         EVENTS_IRAN_DOMESTIC
         + EVENTS_IRAN_EXTERNAL

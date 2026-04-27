@@ -1,7 +1,8 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { normalizeChartRangeBound, toYearInputMinMax } from "@/lib/chart-study-range";
+import { normalizeChartRangeBound, toYearInputMinMax, yearDraftFromBoundIso } from "@/lib/chart-study-range";
 
 export type StudyChartControlsMode = "full" | "exportOnly";
 
@@ -38,6 +39,7 @@ const EXPORT_BUTTON =
 
 /**
  * Compact per-chart toolbar: start/end as **calendar years** and PNG export.
+ * Edits are **string-based** while typing; values commit on blur or Enter (clamped, start ≤ end).
  * The chart may still be daily or monthly; values are normalized to `YYYY-01-01` / `YYYY-12-31` (see `normalizeChartRangeBound`).
  */
 export function StudyChartControls({
@@ -53,6 +55,65 @@ export function StudyChartControls({
 }: StudyChartControlsProps) {
   const minD = minDate.slice(0, 10);
   const maxD = maxDate.slice(0, 10);
+  const { min: yMin, max: yMax } = toYearInputMinMax(minD, maxD);
+
+  const [draftStart, setDraftStart] = useState(() => yearDraftFromBoundIso(startValue));
+  const [draftEnd, setDraftEnd] = useState(() => yearDraftFromBoundIso(endValue));
+  const startFocus = useRef(false);
+  const endFocus = useRef(false);
+
+  useEffect(() => {
+    if (!startFocus.current) setDraftStart(yearDraftFromBoundIso(startValue));
+  }, [startValue]);
+
+  useEffect(() => {
+    if (!endFocus.current) setDraftEnd(yearDraftFromBoundIso(endValue));
+  }, [endValue]);
+
+  const otherYear = useCallback(
+    (iso: string) => {
+      if (!iso || !iso.trim()) return null;
+      const y = parseInt(iso.slice(0, 4), 10);
+      return Number.isFinite(y) ? y : null;
+    },
+    []
+  );
+
+  const commitStart = useCallback(() => {
+    const raw = draftStart.trim();
+    if (raw === "") {
+      onStartChange("");
+      return;
+    }
+    const y = parseInt(raw, 10);
+    if (!Number.isFinite(y)) {
+      setDraftStart(yearDraftFromBoundIso(startValue));
+      return;
+    }
+    let c = Math.min(yMax, Math.max(yMin, y));
+    const endY = otherYear(endValue);
+    if (endY != null && c > endY) c = endY;
+    onStartChange(normalizeChartRangeBound(String(c), false));
+    setDraftStart(String(c));
+  }, [draftStart, yMin, yMax, endValue, startValue, onStartChange, otherYear]);
+
+  const commitEnd = useCallback(() => {
+    const raw = draftEnd.trim();
+    if (raw === "") {
+      onEndChange("");
+      return;
+    }
+    const y = parseInt(raw, 10);
+    if (!Number.isFinite(y)) {
+      setDraftEnd(yearDraftFromBoundIso(endValue));
+      return;
+    }
+    let c = Math.min(yMax, Math.max(yMin, y));
+    const startY = otherYear(startValue);
+    if (startY != null && c < startY) c = startY;
+    onEndChange(normalizeChartRangeBound(String(c), true));
+    setDraftEnd(String(c));
+  }, [draftEnd, yMin, yMax, startValue, endValue, onEndChange, otherYear]);
 
   const exportButton = (
     <Button
@@ -75,51 +136,52 @@ export function StudyChartControls({
     );
   }
 
-  const { min: yMin, max: yMax } = toYearInputMinMax(minD, maxD);
-  const startY = startValue ? parseInt(startValue.slice(0, 4), 10) : NaN;
-  const endY = endValue ? parseInt(endValue.slice(0, 4), 10) : NaN;
   return (
     <div className={TOOLBAR_ROW}>
-      <label className="flex w-[5.5rem] shrink-0 flex-col">
+      <label className="flex w-[5.5rem] shrink-0 flex-col" dir="ltr">
         <span className={FIELD_LABEL}>Start Year</span>
         <input
-          type="number"
-          min={yMin}
-          max={yMax}
-          step={1}
-          value={Number.isFinite(startY) ? startY : ""}
-          onChange={(e) => {
-            const raw = e.target.value;
-            if (raw === "") {
-              onStartChange("");
-              return;
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          spellCheck={false}
+          value={draftStart}
+          onChange={(e) => setDraftStart(e.target.value)}
+          onFocus={() => {
+            startFocus.current = true;
+          }}
+          onBlur={() => {
+            startFocus.current = false;
+            commitStart();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.currentTarget.blur();
             }
-            const y = parseInt(raw, 10);
-            if (!Number.isFinite(y)) return;
-            const clamped = Math.min(yMax, Math.max(yMin, y));
-            onStartChange(normalizeChartRangeBound(String(clamped), false));
           }}
           className={CONTROL_INPUT}
         />
       </label>
-      <label className="flex w-[5.5rem] shrink-0 flex-col">
+      <label className="flex w-[5.5rem] shrink-0 flex-col" dir="ltr">
         <span className={FIELD_LABEL}>End Year</span>
         <input
-          type="number"
-          min={yMin}
-          max={yMax}
-          step={1}
-          value={Number.isFinite(endY) ? endY : ""}
-          onChange={(e) => {
-            const raw = e.target.value;
-            if (raw === "") {
-              onEndChange("");
-              return;
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          spellCheck={false}
+          value={draftEnd}
+          onChange={(e) => setDraftEnd(e.target.value)}
+          onFocus={() => {
+            endFocus.current = true;
+          }}
+          onBlur={() => {
+            endFocus.current = false;
+            commitEnd();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.currentTarget.blur();
             }
-            const y = parseInt(raw, 10);
-            if (!Number.isFinite(y)) return;
-            const clamped = Math.min(yMax, Math.max(yMin, y));
-            onEndChange(normalizeChartRangeBound(String(clamped), true));
           }}
           className={CONTROL_INPUT}
         />

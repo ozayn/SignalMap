@@ -1,7 +1,5 @@
 """In-code event layers for studies. Each event has id, title, date, type, description, confidence, sources."""
 
-from datetime import date
-
 EVENTS_SANCTIONS: list[dict] = [
     {
         "id": "sn-001",
@@ -126,17 +124,6 @@ EVENTS_WORLD_1900_BASE: list[dict] = [
         "sources": [],
     },
     {
-        "id": "g1900-depression",
-        "title": "Great Depression",
-        "date_start": "1929-10-29",
-        "date_end": "1939-09-01",
-        "type": "economic",
-        "scope": "world",
-        "confidence": "high",
-        "description": "Severe global economic downturn following the 1929 stock market crash.",
-        "sources": [],
-    },
-    {
         "id": "g1900-ww2",
         "title": "World War II",
         "date_start": "1939-09-01",
@@ -181,28 +168,6 @@ EVENTS_WORLD_1900_BASE: list[dict] = [
         "sources": [],
     },
     {
-        "id": "g1900-gfc",
-        "title": "Global Financial Crisis",
-        "date_start": "2008-09-15",
-        "date_end": "2009-06-30",
-        "type": "economic",
-        "scope": "world",
-        "confidence": "high",
-        "description": "Lehman collapse; global banking crisis; sharp oil demand collapse.",
-        "sources": [],
-    },
-    {
-        "id": "g1900-covid",
-        "title": "COVID-19 pandemic",
-        "date_start": "2020-01-30",
-        "date_end": "2022-03-11",
-        "type": "economic",
-        "scope": "world",
-        "confidence": "high",
-        "description": "WHO pandemic declaration; global lockdowns; unprecedented oil demand shock.",
-        "sources": [],
-    },
-    {
         "id": "g1900-ukraine",
         "title": "Russia–Ukraine war",
         "date_start": "2022-02-24",
@@ -213,31 +178,50 @@ EVENTS_WORLD_1900_BASE: list[dict] = [
         "description": "Russia's full-scale invasion of Ukraine; energy market disruption.",
         "sources": [],
     },
+    {
+        "id": "g1900-bosnian-war",
+        "title": "Bosnian War",
+        "date_start": "1992-04-01",
+        "date_end": "1995-12-14",
+        "type": "conflict",
+        "scope": "world",
+        "confidence": "high",
+        "description": "Bosnian War; aligns with web `bosnian-war` in SIGNALMAP_TIMELINE_SEED.",
+        "sources": ["https://www.britannica.com/event/Bosnian-War-of-1992-95"],
+    },
+    {
+        "id": "g1900-kosovo-war",
+        "title": "Kosovo War",
+        "date_start": "1998-10-01",
+        "date_end": "1999-06-20",
+        "type": "conflict",
+        "scope": "world",
+        "confidence": "high",
+        "description": "Kosovo conflict (web id `kosovo-war`); dates are approximate band edges.",
+        "sources": ["https://www.britannica.com/event/Kosovo-conflict"],
+    },
 ]
 
 
-def _us_israel_iran_2026_event(event_id: str = "us_israel_iran_strikes_2026") -> dict:
-    """Returns the U.S.–Israel strikes on Iran event with date_end=today (ongoing conflict)."""
-    return {
-        "id": event_id,
-        "title": "U.S.–Israel strikes on Iran",
-        "date_start": "2026-02-28",
-        "date_end": date.today().isoformat(),
-        "type": "military",
-        "scope": "world",
-        "confidence": "high",
-        "description": "Coordinated U.S. and Israeli military operations against Iranian nuclear facilities and IRGC infrastructure; oil market impact.",
-        "sources": ["https://www.britannica.com/event/2026-Iran-Conflict"],
-    }
-
-
 def get_events_world_range() -> list[dict]:
-    return [_us_israel_iran_2026_event("us_israel_iran_strikes_2026")]
+    from signalmap.data.israel_iran_us_conflict import israel_iran_events_for_layer
+
+    return israel_iran_events_for_layer("world_core")
 
 
 def get_events_world_1900() -> list[dict]:
-    """Returns world_1900 events with U.S.–Israel Iran strikes having date_end=today."""
-    return EVENTS_WORLD_1900_BASE + [_us_israel_iran_2026_event("g1900-us-israel-iran-2026")]
+    """Returns world_1900 events; Israel–Iran–US rows share ids with world_core (deduped if both layers load)."""
+    from signalmap.data.macro_crisis_periods import with_layer
+    from signalmap.data.israel_iran_us_conflict import israel_iran_events_for_layer
+
+    return EVENTS_WORLD_1900_BASE + israel_iran_events_for_layer("world_1900") + with_layer("world_1900")
+
+
+def get_world_core_events() -> list[dict]:
+    """world_core point events + ongoing range rows + canonical macro-crisis bands."""
+    from signalmap.data.macro_crisis_periods import with_layer
+
+    return EVENTS_WORLD_CORE + get_events_world_range() + with_layer("world_core")
 
 
 EVENTS_WORLD_CORE: list[dict] = [

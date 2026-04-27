@@ -27,3 +27,10 @@ export function toYearInputMinMax(isoMin: string, isoMax: string): { min: number
     max: parseInt(isoMax.slice(0, 4), 10),
   };
 }
+
+/** String shown in a year text field (typing-friendly; may be partial while user edits). */
+export function yearDraftFromBoundIso(iso: string): string {
+  if (!iso || String(iso).trim() === "") return "";
+  const y = parseInt(String(iso).slice(0, 4), 10);
+  return Number.isFinite(y) ? String(y) : "";
+}

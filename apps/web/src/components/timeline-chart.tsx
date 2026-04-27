@@ -131,11 +131,14 @@ type DataPoint = { date: string; value: number; confidence?: number };
 export type TimelineEvent = {
   id: string;
   title: string;
+  /** Persian title for tooltips when ``chartLocale`` is ``fa`` (API may omit). */
+  title_fa?: string;
   date?: string;
   date_start?: string;
   date_end?: string;
   type?: string;
   description?: string;
+  description_fa?: string;
   confidence?: string;
   sources?: string[];
   layer?:
@@ -626,19 +629,33 @@ function buildVerticalGlobalOilLabelLayout(args: {
   return layout;
 }
 
+function eventTitleForChartLocale(ev: TimelineEvent, chartLocale: "en" | "fa"): string {
+  if (chartLocale === "fa" && ev.title_fa?.trim()) return ev.title_fa.trim();
+  return ev.title.trim();
+}
+
+function eventDescriptionForChartLocale(ev: TimelineEvent, chartLocale: "en" | "fa"): string | undefined {
+  if (chartLocale === "fa" && ev.description_fa?.trim()) return ev.description_fa.trim();
+  return ev.description;
+}
+
 /** Short markLine text; full title stays on the event for tooltips. */
-function macroMarkLineCaption(ev: TimelineEvent): string {
+function macroMarkLineCaption(
+  ev: TimelineEvent,
+  chartLocale: "en" | "fa" = "en"
+): string {
   const c = ev.chartLabel?.trim();
   if (c) return c;
-  const t = ev.title.trim();
+  const t = eventTitleForChartLocale(ev, chartLocale);
   if (t.length <= 16) return t;
   return `${t.slice(0, 14)}…`;
 }
 
 /** Single readable line for tooltips (publication oil / macro events). */
-function eventTooltipOneLiner(ev: TimelineEvent): string {
-  const raw = (ev.description ?? "").trim().replace(/\s+/g, " ");
-  if (!raw) return ev.title.trim();
+function eventTooltipOneLiner(ev: TimelineEvent, chartLocale: "en" | "fa" = "en"): string {
+  const desc = eventDescriptionForChartLocale(ev, chartLocale) ?? ev.description ?? "";
+  const raw = desc.trim().replace(/\s+/g, " ");
+  if (!raw) return eventTitleForChartLocale(ev, chartLocale);
   const sentence = raw.split(/(?<=[.!?])\s/)[0] ?? raw;
   const one = sentence.trim();
   if (one.length <= 160) return one;
@@ -1506,7 +1523,7 @@ export function TimelineChart({
       if (d.event.macroMarker === true) {
         const ml = macroLabelLayout.get(d.event.id) ?? { showLabel: false, staggerIndex: 0 };
         const showTopMacroLabel = ml.showLabel;
-        const caption = macroMarkLineCaption(d.event);
+        const caption = macroMarkLineCaption(d.event, chartLocale === "fa" ? "fa" : "en");
         const row = ml.staggerIndex % MACRO_LABEL_MAX_ROWS;
         const offsetY = -row * MACRO_LABEL_ROW_HEIGHT;
         return {
@@ -1788,11 +1805,12 @@ export function TimelineChart({
               const usePubOilTooltip = oilPublicationLayout && isClassicOilChart;
               if (usePubOilTooltip && ev.layer === "global_macro_oil") {
                 const dateLine = ev.date ?? ev.date_start ?? "";
-                lines.push(`<span style="font-weight:600;font-size:14px">${ev.title}</span>`);
+                const evTitle = eventTitleForChartLocale(ev, chartLocale === "fa" ? "fa" : "en");
+                lines.push(`<span style="font-weight:600;font-size:14px">${evTitle}</span>`);
                 lines.push(`<span style="font-size:12px;color:#888">${dateLine}</span>`);
                 lines.push(
                   `<span style="font-size:13px;line-height:1.35">${localizeChartNumericDisplayStringSafe(
-                    eventTooltipOneLiner(ev),
+                    eventTooltipOneLiner(ev, chartLocale === "fa" ? "fa" : "en"),
                     chartNumeralLocale
                   )}</span>`
                 );
@@ -1806,26 +1824,32 @@ export function TimelineChart({
                       : mt === "sanctions"
                         ? ui.sanctions
                         : ui.macroContext;
+                const evTitle = eventTitleForChartLocale(ev, chartLocale === "fa" ? "fa" : "en");
+                const evDesc = eventDescriptionForChartLocale(ev, chartLocale === "fa" ? "fa" : "en");
                 lines.push(`<span style="font-size:10px;color:#888">${mtLabel}</span>`);
-                lines.push(`<span style="font-weight:600">${ev.title}</span>`);
+                lines.push(`<span style="font-weight:600">${evTitle}</span>`);
                 if (ev.date) lines.push(ev.date);
-                if (ev.description) lines.push(ev.description);
+                if (evDesc) lines.push(evDesc);
               }
             } else if (rangeBand && isPresidentialEvent(ev)) {
               lines.push(`<span style="font-size:10px;color:#888">${ui.presidentialTerm}</span>`);
-              lines.push(`<span style="font-weight:600">${ev.title}</span> ${ev.date_start} — ${ev.date_end}`);
+              lines.push(
+                `<span style="font-weight:600">${eventTitleForChartLocale(ev, chartLocale === "fa" ? "fa" : "en")}</span> ${ev.date_start} — ${ev.date_end}`
+              );
             } else {
               const scope = getEventScope(ev);
               const scopeLabel =
                 scope === "sanctions" ? ui.scopeSanctions : scope === "world" ? ui.scopeWorld : ui.scopeIran;
+              const evTitle = eventTitleForChartLocale(ev, chartLocale === "fa" ? "fa" : "en");
+              const evDesc = eventDescriptionForChartLocale(ev, chartLocale === "fa" ? "fa" : "en");
               lines.push(`<span style="font-size:10px;color:#888">${scopeLabel}</span>`);
-              lines.push(`<span style="font-weight:600">${ev.title}</span>`);
+              lines.push(`<span style="font-weight:600">${evTitle}</span>`);
               if (ev.date_start && ev.date_end) {
                 lines.push(`${ev.date_start} — ${ev.date_end}`);
               } else {
                 lines.push(ev.date ?? "");
               }
-              if (ev.description) lines.push(ev.description);
+              if (evDesc) lines.push(evDesc);
             }
             if (
               !(rangeBand && isPresidentialEvent(ev)) &&

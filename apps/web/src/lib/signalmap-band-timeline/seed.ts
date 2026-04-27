@@ -1,11 +1,46 @@
 import type { BandTimelineEvent } from "./types";
+import { LEADERSHIP_BAND_ALL } from "./leadership-seed";
+import { SIGNALMAP_BALKAN_AND_WAR_BAND } from "../signalmap-war-canonical";
+import { SIGNALMAP_OIL_BAND } from "../signalmap-oil-canonical";
+import { MACRO_CRISIS_BAND_PERIODS } from "../signalmap-macro-crisis-periods";
+import { ISRAEL_IRAN_US_BAND } from "../signalmap-israel-iran-us-conflict";
+import { SIGNALMAP_FX_BAND } from "../signalmap-fx-band-canonical";
 
 /**
- * Band swimlane seed. Ids are aligned with dot timeline `SIGNALMAP_TIMELINE_SEED` where the same
- * real-world episode appears (e.g. `g-1973-embargo`); period-only rows use dedicated ids
+ * Band swimlane seed. Ids are aligned with dot `SIGNALMAP_TIMELINE_SEED` and shared canons
+ * (e.g. `SIGNALMAP_OIL_*`, `g-1973-embargo`); period-only rows use dedicated ids
  * (e.g. `ir-jcpoa-era` vs point `ir-jcpoa` on the dot chart).
+ * Major **periods** use `kind: "period"` (horizontal bands); one-off episodes stay `point` when needed.
  */
 export const BAND_TIMELINE_SEED: BandTimelineEvent[] = [
+  {
+    kind: "period",
+    id: "b-ww1",
+    start_date: "1914-07-28",
+    end_date: "1918-11-11",
+    title_en: "World War I",
+    title_fa: "جنگ جهانی اول",
+    lane: "global_wars",
+    category: "global_wars",
+    region: "global",
+    importance: 3,
+    description_en: "Allied and Central Powers conflict in Europe and beyond; ends with the Armistice of 11 November 1918.",
+    description_fa: "جنگ اتحادها و قدرت‌های محور در اروپا و مناطق دیگر؛ پایان با آتش‌بس ۱۱ نوامبر ۱۹۱۸.",
+  },
+  {
+    kind: "period",
+    id: "b-ww2",
+    start_date: "1939-09-01",
+    end_date: "1945-09-02",
+    title_en: "World War II",
+    title_fa: "جنگ جهانی دوم",
+    lane: "global_wars",
+    category: "global_wars",
+    region: "global",
+    importance: 3,
+    description_en: "Global war in Europe, Asia, and the Pacific; ends with the surrender of Japan in September 1945.",
+    description_fa: "جنگ گسترده در اروپا، آسیا و اقیانوس آرام؛ پایان با تسلیم ژاپن در سپتامبر ۱۹۴۵.",
+  },
   {
     kind: "period",
     id: "b-cold-war",
@@ -19,31 +54,9 @@ export const BAND_TIMELINE_SEED: BandTimelineEvent[] = [
     description_en: "Geopolitical and ideological standoff between US-led and Soviet-led blocs after WWII.",
     description_fa: "رقابت ژئوپلیتیک و ایدئولوژیک بلوک غرب و شوروی پس از جنگ جهانی دوم.",
   },
-  {
-    kind: "period",
-    id: "b-bretton-woods",
-    start_date: "1944-07-22",
-    end_date: "1971-08-15",
-    title_en: "Bretton Woods era",
-    title_fa: "نظم برتون‌وُدز",
-    lane: "fx",
-    category: "fx",
-    importance: 3,
-    description_en: "Dollar-gold par value system and fixed FX arrangements centered on the US dollar until Nixon shock.",
-    description_fa: "سامانه تثبیت نرخ‌ها و پیوند دلار به طلا تا نقطه شکست نیكسون (۱۹۷۱).",
-  },
-  {
-    kind: "point",
-    id: "g-1973-embargo",
-    date: "1973-10-16",
-    title_en: "1973 oil shock",
-    title_fa: "شوک نفتی ۱۹۷۳",
-    lane: "oil",
-    category: "oil",
-    importance: 3,
-    description_en: "OPEC price decision and oil embargo, sharp rise in energy prices and macro volatility.",
-    description_fa: "تصمیم قیمت اوپک و فشار بر بازار نفت و انرژی.",
-  },
+  ...SIGNALMAP_FX_BAND,
+  ...MACRO_CRISIS_BAND_PERIODS,
+  ...SIGNALMAP_OIL_BAND,
   {
     kind: "point",
     id: "ir-rev-79",
@@ -63,8 +76,9 @@ export const BAND_TIMELINE_SEED: BandTimelineEvent[] = [
     end_date: "1988-08-20",
     title_en: "Iran–Iraq War",
     title_fa: "جنگ ایران و عراق",
-    lane: "war",
-    category: "war",
+    lane: "middle_east_wars",
+    category: "middle_east_wars",
+    region: "middle_east",
     importance: 3,
     description_en: "Full-scale conventional war; heavy human and economic cost for both countries.",
     description_fa: "جنگ نسل‌کش؛ هزینه سنگین انسانی و اقتصادی برای طرفین.",
@@ -87,26 +101,13 @@ export const BAND_TIMELINE_SEED: BandTimelineEvent[] = [
     id: "ir-sanctions-max-pressure",
     start_date: "2018-05-08",
     end_date: "2021-01-20",
-    title_en: "Maximum pressure sanctions (phase)",
-    title_fa: "دور اِعمال «حداکثر فشار»",
+    title_en: "Maximum pressure sanctions",
+    title_fa: "دور «حداکثر فشار» تحریمی",
     lane: "policy",
     category: "policy",
-    importance: 2,
+    importance: 3,
     description_en: "Expanded US oil and banking sanctions; severe trade and FX stress on the Iranian economy.",
     description_fa: "تشدید محدودیت نفتی و بانکی و فشار مضاعف بر اقتصاد و تجارت.",
-  },
-  {
-    kind: "period",
-    id: "g-covid-pandemic-era",
-    start_date: "2020-03-11",
-    end_date: "2023-05-05",
-    title_en: "COVID-19 pandemic (WHO emergency → end of global PHEIC)",
-    title_fa: "همه‌گیری کرونا (چارچه WHO → پایان PHEIC جهانی)",
-    lane: "global",
-    category: "global",
-    importance: 2,
-    description_en: "Global public-health shock; dot chart marks WHO PHEIC (`g-covid-pheic`, Jan 30, 2020) as a point-in-time anchor.",
-    description_fa: "تأثیر گسترده سلامت و اقتصاد؛ تایم‌لاین نقطه‌ای از `g-covid-pheic` دارد.",
   },
   {
     kind: "period",
@@ -115,10 +116,14 @@ export const BAND_TIMELINE_SEED: BandTimelineEvent[] = [
     end_date: "2026-12-31",
     title_en: "Russia’s invasion of Ukraine (ongoing)",
     title_fa: "جنگ روسیه و اوکراین",
-    lane: "war",
-    category: "war",
+    lane: "europe_wars",
+    category: "europe_wars",
+    region: "europe",
     importance: 3,
     description_en: "Full-scale war; dot chart also marks the invasion day as `g-ukraine-22`.",
     description_fa: "تأثیر بر انرژی و دیپلماسی و تحریم‌ها؛ تایم‌لاین نقطه‌ای از `g-ukraine-22` دارد.",
   },
+  ...SIGNALMAP_BALKAN_AND_WAR_BAND,
+  ...ISRAEL_IRAN_US_BAND,
+  ...LEADERSHIP_BAND_ALL,
 ];

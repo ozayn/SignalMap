@@ -21,10 +21,14 @@ import {
 import {
   BAND_LANE_ORDER,
   BAND_TIMELINE_SEED,
+  clientXToTimeOnTrack,
   clusterPointsInLane,
   getBandEventEndMs,
   getBandEventStartMs,
   getBandTimelineDomain,
+  periodsContainingTime,
+  resolveBandLaneLayerHit,
+  sortPeriodsWideToNarrow,
 } from "@/lib/signalmap-band-timeline";
 import { SignalMapYearRangeControls } from "@/components/signalmap-timeline/SignalMapYearRangeControls";
 import {
@@ -34,28 +38,34 @@ import {
   minImportanceForViewPortion,
   parseYmdToUtcMs,
   readYearRangeFromCurrentUrl,
-  shouldShowInlaneLabelsByZoom,
+  resolveSpacedNarrativeLabelIds,
+  shouldShowNarrativeLabel,
   startYearFromViewStart,
   toXPercent,
+  type LabelSpacingCandidate,
   viewMsFromInclusiveYearsClamped,
   writeYearRangeToUrl,
   zoomAroundCenter,
 } from "@/lib/signalmap-timeline";
 import type { BandLane } from "./lane-meta";
 import type {
+  BandTimelineCategory,
   BandTimelineEvent,
   BandTimelineLane,
+  BandTimelinePeriodEvent,
   BandTimelinePointEvent,
 } from "@/lib/signalmap-band-timeline";
 import { LAYER_ROW_H_PX, LAYER_UI } from "./lane-meta";
 import { t as tLang, type StudyLocale } from "@/lib/iran-study-fa";
+import {
+  eventDisplayTitle,
+  formatSignalMapBandEventDateLine,
+  signalMapBandEventTooltipText,
+} from "@/lib/signalmap-timeline/event-display-text";
 
-const BAND_LABEL_MIN_PX = 40;
+const BAND_LABEL_MIN_PX = 80;
 
-const CAT: Record<
-  BandTimelineLane,
-  { bar: string; line: string; mark: string; ring: string }
-> = {
+const CAT: Record<BandTimelineCategory, { bar: string; line: string; mark: string; ring: string }> = {
   global: {
     bar: "bg-sky-500/25",
     line: "border-sky-500/40",
@@ -80,17 +90,47 @@ const CAT: Record<
     mark: "bg-emerald-600/90",
     ring: "ring-emerald-400/45",
   },
-  war: {
+  global_wars: {
     bar: "bg-rose-500/25",
     line: "border-rose-500/40",
     mark: "bg-rose-600/90",
     ring: "ring-rose-400/45",
+  },
+  europe_wars: {
+    bar: "bg-indigo-500/25",
+    line: "border-indigo-500/40",
+    mark: "bg-indigo-600/90",
+    ring: "ring-indigo-400/45",
+  },
+  middle_east_wars: {
+    bar: "bg-orange-500/25",
+    line: "border-orange-500/40",
+    mark: "bg-orange-600/90",
+    ring: "ring-orange-400/45",
   },
   policy: {
     bar: "bg-slate-500/25",
     line: "border-slate-500/40",
     mark: "bg-slate-600/90",
     ring: "ring-slate-400/45",
+  },
+  iran_leadership: {
+    bar: "bg-fuchsia-900/25",
+    line: "border-fuchsia-600/40",
+    mark: "bg-fuchsia-600/90",
+    ring: "ring-fuchsia-400/45",
+  },
+  us_leadership: {
+    bar: "bg-slate-500/20",
+    line: "border-slate-500/40",
+    mark: "bg-slate-500/90",
+    ring: "ring-slate-500/40",
+  },
+  leadership: {
+    bar: "bg-slate-500/20",
+    line: "border-slate-500/40",
+    mark: "bg-slate-500/90",
+    ring: "ring-slate-500/40",
   },
 };
 
@@ -100,13 +140,6 @@ function titleOf(e: BandTimelineEvent, lang: StudyLocale) {
 
 function descOf(e: BandTimelineEvent, lang: StudyLocale) {
   return tLang(e.description_en, e.description_fa, lang);
-}
-
-function dateLineOf(e: BandTimelineEvent) {
-  if (e.kind === "period") {
-    return `${e.start_date} — ${e.end_date}`;
-  }
-  return e.date;
 }
 
 function YearAxisTickText({
@@ -176,7 +209,9 @@ export function SignalMapBandTimeline({
     return { domainStartMs: a, domainEndMs: b };
   }, [timeRangeProp, events]);
 
-  const [layers, setLayers] = useState<Set<BandLane>>(() => new Set(LAYER_UI.map((x) => x.key)));
+  const [layers, setLayers] = useState<Set<BandLane>>(
+    () => new Set(LAYER_UI.map((x) => x.key))
+  );
   const [viewStart, setViewStart] = useState(() => domainStartMs);
   const [viewEnd, setViewEnd] = useState(() => domainEndMs);
   const [trackWidth, setTrackWidth] = useState(800);
@@ -242,7 +277,31 @@ export function SignalMapBandTimeline({
     if (importanceDetail === "all") return 1;
     return minImportanceForViewPortion(viewPortion);
   }, [importanceDetail, viewPortion]);
-  const showPointLabels = useMemo(() => shouldShowInlaneLabelsByZoom(viewPortion), [viewPortion]);
+
+  const filtered = useMemo(
+    () => events.filter((e) => layers.has(e.lane) && e.importance >= minImportance),
+    [events, layers, minImportance]
+  );
+
+  const bandPointNarrativeLabelIds = useMemo(() => {
+    if (trackWidth < 1) return new Set<string>();
+    const cands: LabelSpacingCandidate[] = [];
+    for (const e of filtered) {
+      if (e.kind !== "point") continue;
+      const tMs = parseYmdToUtcMs(e.date);
+      if (tMs < viewStart || tMs > viewEnd) continue;
+      const xCenterPx = (toXPercent(tMs, viewStart, viewEnd) / 100) * trackWidth;
+      const hov = hoveredId === e.id;
+      const sel = selectedId === e.id;
+      if (
+        !shouldShowNarrativeLabel("point", e.importance, viewPortion, null, hov, sel)
+      ) {
+        continue;
+      }
+      cands.push({ id: e.id, xCenterPx, importance: e.importance });
+    }
+    return resolveSpacedNarrativeLabelIds(cands);
+  }, [filtered, viewStart, viewEnd, trackWidth, viewPortion, hoveredId, selectedId]);
 
   const axisTicks = useMemo(
     () =>
@@ -252,11 +311,6 @@ export function SignalMapBandTimeline({
         domainEndMs,
       }),
     [viewStart, viewEnd, trackWidth, viewPortion, domainStartMs, domainEndMs]
-  );
-
-  const filtered = useMemo(
-    () => events.filter((e) => layers.has(e.lane) && e.importance >= minImportance),
-    [events, layers, minImportance]
   );
 
   const setViewport = (a: number, b: number) => {
@@ -348,15 +402,22 @@ export function SignalMapBandTimeline({
 
   const setFloatFrom = useCallback(
     (e: BandTimelineEvent, p: { clientX: number; clientY: number }) => {
+      const raw = titleOf(e, lang);
+      const { displayTitle, dateLine } = signalMapBandEventTooltipText(
+        raw,
+        e,
+        yearAxisMode,
+        numeralLoc
+      );
       setFloatTip({
         kind: "event",
         id: e.id,
         x: p.clientX,
         y: p.clientY,
-        content: { title: titleOf(e, lang), date: dateLineOf(e) },
+        content: { title: displayTitle, date: dateLine },
       });
     },
-    [lang]
+    [lang, yearAxisMode, numeralLoc]
   );
 
   useEffect(() => {
@@ -438,8 +499,8 @@ export function SignalMapBandTimeline({
             </button>
             <span className="max-w-[16rem] pl-0.5 text-[10px] leading-snug text-muted-foreground/70">
               {tLang(
-                "Drag · scroll to zoom · periods as bands, points on hover or zoom",
-                "کشیدن · بزرگ‌نمایی با اسکرول · روی باند/نقطه",
+                "Drag · scroll to zoom · bands; point names on hover (labels when zoomed)",
+                "کشیدن · اسکرول · نوارها؛ نام نقاط روی هاور (زوم، برچسب داخلی)",
                 lang
               )}
             </span>
@@ -520,12 +581,12 @@ export function SignalMapBandTimeline({
                   />
                 );
               }
-              const periods = filtered
-                .filter((e): e is Extract<BandTimelineEvent, { kind: "period" }> => e.kind === "period" && e.lane === lane)
-                .sort(
-                  (a, b) =>
-                    getBandEventEndMs(b) - getBandEventStartMs(b) - (getBandEventEndMs(a) - getBandEventStartMs(a))
-                );
+              const periods: BandTimelinePeriodEvent[] = sortPeriodsWideToNarrow(
+                filtered.filter(
+                  (e): e is BandTimelinePeriodEvent =>
+                    e.kind === "period" && e.lane === lane
+                )
+              );
               const points = filtered.filter(
                 (e): e is BandTimelinePointEvent => e.kind === "point" && e.lane === lane
               );
@@ -536,6 +597,12 @@ export function SignalMapBandTimeline({
                   key={lane}
                   className="relative w-full overflow-visible border-t border-border/30"
                   style={{ minHeight: LAYER_ROW_H_PX }}
+                  onPointerOut={(ev) => {
+                    const rel = ev.relatedTarget as Node | null;
+                    if (rel && ev.currentTarget.contains(rel)) return;
+                    setHoveredId(null);
+                    clearFloatTip();
+                  }}
                 >
                   {axisTicks.map((t) => (
                     <div
@@ -555,34 +622,29 @@ export function SignalMapBandTimeline({
                     const w = toXPercent(s1, viewStart, viewEnd) - left;
                     if (w < 0.04) return null;
                     const wPx = (w / 100) * trackWidth;
-                    const canLabel = wPx >= BAND_LABEL_MIN_PX;
+                    const canLabel =
+                      wPx >= BAND_LABEL_MIN_PX &&
+                      shouldShowNarrativeLabel(
+                        "span",
+                        e.importance,
+                        viewPortion,
+                        wPx,
+                        hoveredId === e.id,
+                        selectedId === e.id
+                      );
                     const cat = CAT[e.category];
-                    const bandTitle = titleOf(e, lang);
+                    const bandTitle = eventDisplayTitle(titleOf(e, lang));
                     const isSel = selectedId === e.id;
                     return (
-                      <button
+                      <div
                         key={e.id}
-                        type="button"
-                        onPointerDown={(ev) => ev.stopPropagation()}
-                        onClick={() => pick(e)}
-                        onPointerMove={(ev) => {
-                          setHoveredId(e.id);
-                          setFloatFrom(e, ev);
-                        }}
-                        onPointerEnter={(ev) => {
-                          setHoveredId(e.id);
-                          setFloatFrom(e, ev);
-                        }}
-                        onPointerLeave={() => {
-                          setHoveredId((h) => (h === e.id ? null : h));
-                          clearFloatTip();
-                        }}
+                        role="presentation"
                         className={cn(
-                          "absolute top-1/2 box-border h-5 max-w-full -translate-y-1/2 rounded-full border text-left transition-all duration-200",
+                          "pointer-events-none absolute top-1/2 z-[1] box-border h-5 max-w-full -translate-y-1/2 rounded-full border text-left transition-all duration-200",
                           cat.bar,
                           cat.line,
-                          isSel && "ring-2 ring-foreground/30",
-                          hoveredId === e.id && "z-20 brightness-110"
+                          isSel && "z-[2] ring-2 ring-foreground/30",
+                          hoveredId === e.id && "z-[2] brightness-110"
                         )}
                         style={{
                           left: `${left}%`,
@@ -592,37 +654,94 @@ export function SignalMapBandTimeline({
                       >
                         {canLabel ? (
                           <span
-                            className="pointer-events-none block truncate px-2.5 text-[9px] font-medium leading-5 text-foreground/90 tabular-nums"
+                            className="block truncate px-2.5 text-[9px] font-medium leading-5 text-foreground/90 tabular-nums"
                             title={bandTitle}
                           >
                             {bandTitle}
                           </span>
                         ) : null}
-                      </button>
+                      </div>
                     );
                   })}
+
+                  <div
+                    className="absolute inset-0 z-[12] cursor-default"
+                    onPointerDown={(pe) => {
+                      pe.stopPropagation();
+                    }}
+                    onPointerMove={(pe) => {
+                      const rect = pe.currentTarget.getBoundingClientRect();
+                      const t = clientXToTimeOnTrack(pe.clientX, rect, viewStart, viewEnd);
+                      const containing = periodsContainingTime(periods, t);
+                      const h = resolveBandLaneLayerHit(containing);
+                      if (h.kind === "empty") {
+                        setHoveredId(null);
+                        clearFloatTip();
+                        return;
+                      }
+                      if (h.kind === "single") {
+                        setHoveredId(h.e.id);
+                        setFloatFrom(h.e, pe);
+                        return;
+                      }
+                      setHoveredId(h.focus.id);
+                      const spanW = (p: BandTimelinePeriodEvent) =>
+                        getBandEventEndMs(p) - getBandEventStartMs(p);
+                      const sorted = [...h.all].sort((a, b) => spanW(a) - spanW(b));
+                      setFloatTip({
+                        kind: "overlap",
+                        id: `o-${String(lane)}-${sorted.map((p) => p.id).join(".")}`,
+                        x: pe.clientX,
+                        y: pe.clientY,
+                        header: tLang(
+                          `${h.all.length} events here`,
+                          `${h.all.length} رویداد در این بخش`,
+                          lang
+                        ),
+                        lines: sorted.map((p) => eventDisplayTitle(titleOf(p, lang))),
+                      });
+                    }}
+                    onClick={(ce) => {
+                      ce.stopPropagation();
+                      const rect = ce.currentTarget.getBoundingClientRect();
+                      const t = clientXToTimeOnTrack(ce.clientX, rect, viewStart, viewEnd);
+                      const containing = periodsContainingTime(periods, t);
+                      const h = resolveBandLaneLayerHit(containing);
+                      if (h.kind === "single") {
+                        pick(h.e);
+                        return;
+                      }
+                      if (h.kind === "overlap") {
+                        pick(h.focus);
+                      }
+                    }}
+                  />
 
                   {pointNodes.map((n) => {
                     if (n.kind === "one") {
                       const e = n.p;
                       const cx = toXPercent(n.tMs, viewStart, viewEnd);
-                      const bandTitle = titleOf(e, lang);
+                      const bandTitle = eventDisplayTitle(titleOf(e, lang));
                       const isSel = selectedId === e.id;
                       return (
                         <div
                           key={e.id}
-                          className="absolute top-1/2 z-10 w-0 -translate-y-1/2"
+                          className="absolute top-1/2 z-[20] w-0 -translate-y-1/2"
                           style={{ left: `${cx}%` }}
                         >
                           <button
                             type="button"
-                            onPointerDown={(ev) => ev.stopPropagation()}
+                            onPointerDown={(ev) => {
+                              ev.stopPropagation();
+                            }}
                             onClick={() => pick(e)}
                             onPointerMove={(ev) => {
+                              ev.stopPropagation();
                               setHoveredId(e.id);
                               setFloatFrom(e, ev);
                             }}
                             onPointerEnter={(ev) => {
+                              ev.stopPropagation();
                               setHoveredId(e.id);
                               setFloatFrom(e, ev);
                             }}
@@ -630,7 +749,7 @@ export function SignalMapBandTimeline({
                               setHoveredId((h) => (h === e.id ? null : h));
                               clearFloatTip();
                             }}
-                            className="relative -translate-x-1/2 outline-none"
+                            className="relative -m-1.5 flex min-h-[1.4rem] min-w-[1.4rem] -translate-x-1/2 items-center justify-center p-1.5 outline-none"
                             aria-label={bandTitle}
                           >
                             <span
@@ -641,7 +760,7 @@ export function SignalMapBandTimeline({
                                 (isSel || hoveredId === e.id) && "z-20 scale-125 ring-2 ring-foreground/30"
                               )}
                             />
-                            {showPointLabels ? (
+                            {bandPointNarrativeLabelIds.has(e.id) ? (
                               <span
                                 className="pointer-events-none absolute left-1/2 top-full z-20 mt-0.5 w-max max-w-[8rem] -translate-x-1/2 line-clamp-2 text-center text-[8.5px] font-medium text-foreground/80"
                                 title={bandTitle}
@@ -663,14 +782,17 @@ export function SignalMapBandTimeline({
                     return (
                       <div
                         key={n.id}
-                        className="absolute top-1/2 z-10 w-0 -translate-y-1/2"
+                        className="absolute top-1/2 z-[20] w-0 -translate-y-1/2"
                         style={{ left: `${cx}%` }}
                       >
                         <button
                           type="button"
                           onClick={() => setOpenCluster(isOpen ? null : n.id)}
-                          onPointerDown={(ev) => ev.stopPropagation()}
+                          onPointerDown={(ev) => {
+                            ev.stopPropagation();
+                          }}
                           onPointerEnter={(ev) => {
+                            ev.stopPropagation();
                             setFloatTip({
                               kind: "cluster",
                               id: n.id,
@@ -680,6 +802,7 @@ export function SignalMapBandTimeline({
                             });
                           }}
                           onPointerMove={(ev) => {
+                            ev.stopPropagation();
                             setFloatTip({
                               kind: "cluster",
                               id: n.id,
@@ -704,7 +827,7 @@ export function SignalMapBandTimeline({
                                     className="w-full text-left text-foreground transition-colors hover:underline"
                                     onClick={() => pick(e)}
                                   >
-                                    {titleOf(e, lang)}
+                                    {eventDisplayTitle(titleOf(e, lang))}
                                   </button>
                                 </li>
                               ))}
@@ -724,7 +847,9 @@ export function SignalMapBandTimeline({
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="pr-1 font-semibold leading-snug text-foreground">{titleOf(selected, lang)}</h3>
+                  <h3 className="pr-1 font-semibold leading-snug text-foreground">
+                    {eventDisplayTitle(titleOf(selected, lang))}
+                  </h3>
                   <button
                     type="button"
                     className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -734,10 +859,32 @@ export function SignalMapBandTimeline({
                     ×
                   </button>
                 </div>
-                <p className="text-[11px] text-muted-foreground">
-                  {dateLineOf(selected)} · I{selected.importance}
+                <p className="whitespace-pre-line text-[11px] text-muted-foreground">
+                  {formatSignalMapBandEventDateLine(selected, yearAxisMode, numeralLoc)} · I
+                  {selected.importance}
                 </p>
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground/95">{descOf(selected, lang)}</p>
+                {selected.source_citation_en || selected.source_citation_fa ? (
+                  <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground/90">
+                    {tLang(
+                      selected.source_citation_en ?? "",
+                      selected.source_citation_fa ?? "",
+                      lang
+                    )}
+                  </p>
+                ) : null}
+                {selected.tags && selected.tags.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {selected.tags.map((tg) => (
+                      <span
+                        key={tg}
+                        className="rounded border border-border/50 bg-muted/50 px-1.5 py-0.5 text-[9px] text-foreground/75"
+                      >
+                        {tg}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>

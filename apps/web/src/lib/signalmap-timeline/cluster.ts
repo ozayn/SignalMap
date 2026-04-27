@@ -139,7 +139,8 @@ export function buildTimelineNodes(
 
   const vp = Math.min(1, Math.max(0.0001, opts.viewPortion));
   // Zoomed out: fewer individual markers, merge into clusters sooner.
-  const maxSolo = vp > 0.5 ? 6 : vp > 0.2 ? 18 : vp > 0.1 ? 36 : 64;
+  // Tight year ranges: allow more “solo” markers (labels resolve overlap separately).
+  const maxSolo = vp > 0.5 ? 6 : vp > 0.2 ? 18 : vp > 0.1 ? 36 : vp < 0.12 ? 96 : 64;
   const msPerPx = w / contentWidthPx;
   const pxPerMarker = vp > 0.5 ? 12 : vp > 0.2 ? 9 : vp > 0.1 ? 7.5 : 5.5;
   const bucketMs = Math.max(3 * DAY, Math.max(10 * DAY, msPerPx * pxPerMarker));
