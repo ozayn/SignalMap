@@ -22,3 +22,14 @@ export {
   EVENT_LABEL_ZOOM_PORTION,
 } from "./importance";
 export { buildTimelineNodes, toXPercent, type TimelineNode } from "./cluster";
+export {
+  clearYearRangeFromUrl,
+  domainInclusiveYearBounds,
+  endYearFromViewEnd,
+  msRangeForInclusiveYears,
+  normalizeYearPair,
+  readYearRangeFromCurrentUrl,
+  startYearFromViewStart,
+  viewMsFromInclusiveYearsClamped,
+  writeYearRangeToUrl,
+} from "./year-range";

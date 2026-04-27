@@ -1,7 +1,9 @@
 import type { BandTimelineEvent } from "./types";
 
 /**
- * Demo / dev seed: broad historical arcs and anchor points. Dates are calendar YYYY-MM-DD in UTC.
+ * Band swimlane seed. Ids are aligned with dot timeline `SIGNALMAP_TIMELINE_SEED` where the same
+ * real-world episode appears (e.g. `g-1973-embargo`); period-only rows use dedicated ids
+ * (e.g. `ir-jcpoa-era` vs point `ir-jcpoa` on the dot chart).
  */
 export const BAND_TIMELINE_SEED: BandTimelineEvent[] = [
   {
@@ -32,7 +34,7 @@ export const BAND_TIMELINE_SEED: BandTimelineEvent[] = [
   },
   {
     kind: "point",
-    id: "b-oil-shock-73",
+    id: "g-1973-embargo",
     date: "1973-10-16",
     title_en: "1973 oil shock",
     title_fa: "شوک نفتی ۱۹۷۳",
@@ -44,7 +46,7 @@ export const BAND_TIMELINE_SEED: BandTimelineEvent[] = [
   },
   {
     kind: "point",
-    id: "b-ir-rev",
+    id: "ir-rev-79",
     date: "1979-02-11",
     title_en: "Iranian Revolution",
     title_fa: "انقلاب ایران",
@@ -56,7 +58,7 @@ export const BAND_TIMELINE_SEED: BandTimelineEvent[] = [
   },
   {
     kind: "period",
-    id: "b-ir-iq",
+    id: "ir-iq-war",
     start_date: "1980-09-22",
     end_date: "1988-08-20",
     title_en: "Iran–Iraq War",
@@ -69,23 +71,23 @@ export const BAND_TIMELINE_SEED: BandTimelineEvent[] = [
   },
   {
     kind: "period",
-    id: "b-jcpoa",
+    id: "ir-jcpoa-era",
     start_date: "2015-07-14",
     end_date: "2018-05-08",
-    title_en: "JCPOA / nuclear deal in force (US in)",
+    title_en: "JCPOA / nuclear deal in force (US party)",
     title_fa: "برجام (آمریکا در برجام)",
     lane: "iran",
     category: "iran",
     importance: 3,
-    description_en: "Joint action plan: sanctions relief for nuclear limitations until US withdrawal (May 2018).",
-    description_fa: "نامه محدودسازی هسته‌ای و رفع تحریم‌ها تا خروج آمریکا از برجام.",
+    description_en: "Joint action plan: nuclear limits for relief until US withdrawal (May 8, 2018). Dot timeline uses points `ir-jcpoa` and `ir-jcpoa-exit` for the two milestones.",
+    description_fa: "نامه محدودسازی هسته‌ای و تخفیف تحریم‌ها تا خروج آمریکا؛ تایم‌لاین نقطه‌ای از `ir-jcpoa` و `ir-jcpoa-exit` استفاده می‌کند.",
   },
   {
     kind: "period",
-    id: "b-max-pressure",
+    id: "ir-sanctions-max-pressure",
     start_date: "2018-05-08",
     end_date: "2021-01-20",
-    title_en: "Maximum pressure sanctions",
+    title_en: "Maximum pressure sanctions (phase)",
     title_fa: "دور اِعمال «حداکثر فشار»",
     lane: "policy",
     category: "policy",
@@ -95,20 +97,20 @@ export const BAND_TIMELINE_SEED: BandTimelineEvent[] = [
   },
   {
     kind: "period",
-    id: "b-covid",
+    id: "g-covid-pandemic-era",
     start_date: "2020-03-11",
     end_date: "2023-05-05",
-    title_en: "COVID-19 pandemic (WHO PHEIC → end of global emergency)",
-    title_fa: "همه‌گیری کرونا",
+    title_en: "COVID-19 pandemic (WHO emergency → end of global PHEIC)",
+    title_fa: "همه‌گیری کرونا (چارچه WHO → پایان PHEIC جهانی)",
     lane: "global",
     category: "global",
     importance: 2,
-    description_en: "Global public-health shock with deep economic and mobility impacts.",
-    description_fa: "تأثیر گسترده سلامت و اقتصاد جهان.",
+    description_en: "Global public-health shock; dot chart marks WHO PHEIC (`g-covid-pheic`, Jan 30, 2020) as a point-in-time anchor.",
+    description_fa: "تأثیر گسترده سلامت و اقتصاد؛ تایم‌لاین نقطه‌ای از `g-covid-pheic` دارد.",
   },
   {
     kind: "period",
-    id: "b-ukraine-war",
+    id: "g-ukraine-invasion-ongoing",
     start_date: "2022-02-24",
     end_date: "2026-12-31",
     title_en: "Russia’s invasion of Ukraine (ongoing)",
@@ -116,7 +118,7 @@ export const BAND_TIMELINE_SEED: BandTimelineEvent[] = [
     lane: "war",
     category: "war",
     importance: 3,
-    description_en: "Full-scale war with global energy, security, and sanctions consequences.",
-    description_fa: "تأثیر بر انرژی و دیپلماسی و تحریم‌های گسترده.",
+    description_en: "Full-scale war; dot chart also marks the invasion day as `g-ukraine-22`.",
+    description_fa: "تأثیر بر انرژی و دیپلماسی و تحریم‌ها؛ تایم‌لاین نقطه‌ای از `g-ukraine-22` دارد.",
   },
 ];

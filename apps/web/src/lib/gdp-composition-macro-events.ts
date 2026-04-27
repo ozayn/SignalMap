@@ -82,6 +82,14 @@ export const IRAN_GDP_MACRO_EVENTS: GdpMacroEventDef[] = [
     type: "sanctions",
   },
   {
+    year: 2016,
+    anchorMonth: 11,
+    label: "OPEC+ output framework (Vienna)",
+    chartLabel: "OPEC+ 2016",
+    description: "OPEC+ coordination after 2014–2016 low price phase; long-run governance of spare capacity and cuts.",
+    type: "political",
+  },
+  {
     year: 2018,
     anchorMonth: 5,
     label: "US exits JCPOA",

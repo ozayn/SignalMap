@@ -122,47 +122,54 @@ function pickZoomTier(
 }
 
 /**
- * Tries candidate steps; returns first set that fits count and minimum pixel gap (no collisions).
- * - `full` (broad / low zoom): decade, half-century, or century (10, 20, 50, 100). Order coarse→fine
- *   so 50y / 20y / 10y are preferred.
- * - `medium`: 10y, 5y, then 20y for awkward spans.
- * - `strong` (narrow / high zoom): 1y, 2y, 5y (order fine→coarse) for yearly at strong zoom.
+ * **Finest first:** try small year steps before large ones so we get as many labels as width allows.
+ * Tier only trims the upper end for very long spans (avoid 100y grid when the window is < ~40y).
+ * Order is always 1,2,5,10,20,50,100; `takeIfOk` picks the first (densest) that does not overlap.
  */
-function candidateSteps(tier: ZoomTier, spanY: number): number[] {
+function yearAxisStepsToTry(
+  tier: ZoomTier,
+  spanY: number
+): number[] {
+  if (spanY < 1.2) {
+    return [1];
+  }
+  const all = [1, 2, 5, 10, 20, 50, 100] as const;
+  let maxStep = 100;
   if (spanY < 3) {
-    return [1, 2, 5];
+    maxStep = 5;
+  } else if (tier === "strong") {
+    maxStep = 20;
+  } else if (tier === "medium") {
+    maxStep = 100;
+  } else {
+    /** Full/wide: still try 1y…, but cap coarseness for huge spans. */
+    maxStep = spanY < 30 ? 20 : spanY < 80 ? 100 : 100;
   }
-  switch (tier) {
-    case "full":
-      if (spanY < 30) {
-        return [20, 10, 5, 2, 1];
-      }
-      return [100, 50, 20, 10];
-    case "medium":
-      return [10, 5, 20];
-    case "strong":
-      return [1, 2, 5, 10];
-    default:
-      return [1, 2, 5, 10];
-  }
+  return all.filter((s) => s <= maxStep);
 }
 
 export type BuildYearAxisOptions = {
   /**
    * (viewEnd - viewStart) / (domainEnd - domainStart). 1 = full domain, small = zoomed in.
-   * Drives which step tier is used; pan changes start/end, not the domain, so the tier is stable
-   * until zoom, while Jan 1 alignment is preserved.
-   */
+ * Drives which step tier is used; pan changes start/end, not the domain, so the tier is stable
+ * until zoom, while Jan 1 alignment is preserved.
+ */
   viewPortion: number;
   domainStartMs: number;
   domainEndMs: number;
   minLabelPx?: number;
+  /** Slightly more labels on wide band timelines when unset (42 vs 56). */
+  minLabelPxFloor?: number;
+  /** Cap on tick count; defaults scale with width. */
+  maxLabelCount?: number;
 };
 
 /**
  * **Zoom-tiered, Jan-1–aligned axis.** Steps are only clean calendar multiples (1,2,5,10,20,50,100y).
- * **No collision:** at most `floor(width / minLabelPx)` labels and minimum consecutive tick gap
- * in pixels ≥ 0.85 * minLabelPx. Pan keeps alignment because ticks are 1 Jan on integer grids.
+ * **No collision:** at most `min(maxLabelCount, floor(width / minLabelPx))` labels; minimum gap
+ * between consecutive label centers ≥ 0.88 * minLabelPx. **Density:** picks the **smallest** step
+ * (e.g. 5y before 20y) that still satisfies those constraints, so wide views get ~10y instead of 100y.
+ * Recomputes whenever the visible window, zoom, or `contentWidthPx` changes.
  */
 export function buildYearAxisTicks(
   startMs: number,
@@ -174,19 +181,21 @@ export function buildYearAxisTicks(
   if (endMs <= startMs || !Number.isFinite(startMs) || !Number.isFinite(endMs)) {
     return out;
   }
-  const minLabelPx = Math.max(36, Math.min(80, opts.minLabelPx ?? 56));
+  const floor = opts.minLabelPxFloor ?? 42;
+  const minLabelPx = Math.max(32, Math.min(76, opts.minLabelPx ?? floor));
   const w = Math.max(1, contentWidthPx);
   const spanView = endMs - startMs;
   const spanY = Math.max(1e-6, spanView / MS_PER_YEAR);
-  const maxFitting = Math.max(2, Math.min(28, Math.floor(w / minLabelPx)));
-  const gapMin = minLabelPx * 0.9;
+  const maxCap = opts.maxLabelCount ?? 36;
+  const maxFitting = Math.max(2, Math.min(maxCap, Math.floor(w / minLabelPx)));
+  const gapMin = minLabelPx * 0.88;
 
   const { viewPortion } = opts;
   const tier = pickZoomTier(
     viewPortion,
     spanView
   );
-  const order = candidateSteps(tier, spanY);
+  const order = yearAxisStepsToTry(tier, spanY);
 
   const takeIfOk = (ticks: { tMs: number; label: string }[]): boolean => {
     if (ticks.length === 0) {
@@ -204,6 +213,7 @@ export function buildYearAxisTicks(
 
   let chosen: { tMs: number; label: string }[] = [];
 
+  /** Finer year grids first: prefer 5y/10y over 50y when the screen can fit the labels. */
   for (const step of order) {
     const ticks = yearTicksInView(startMs, endMs, step);
     if (takeIfOk(ticks)) {
@@ -213,7 +223,7 @@ export function buildYearAxisTicks(
   }
 
   if (chosen.length === 0) {
-    for (const step of [100, 50, 20, 10, 5, 2, 1] as const) {
+    for (const step of [1, 2, 5, 10, 20, 50, 100] as const) {
       const ticks = yearTicksInView(startMs, endMs, step);
       if (takeIfOk(ticks)) {
         chosen = ticks;

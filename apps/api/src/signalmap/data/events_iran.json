@@ -10,6 +10,7 @@
   },
   {
     "id": "ir-002",
+    "include_in_iran_core": false,
     "title": "Raisi elected president",
     "date": "2021-06-18",
     "type": "political",
@@ -19,6 +20,7 @@
   },
   {
     "id": "ir-003",
+    "include_in_iran_core": false,
     "title": "Raisi sworn in",
     "date": "2021-08-03",
     "type": "political",
@@ -73,6 +75,7 @@
   },
   {
     "id": "ir-009",
+    "include_in_iran_core": false,
     "title": "Iranian government anniversary statement",
     "date": "2023-02-11",
     "type": "political",
@@ -154,6 +157,7 @@
   },
   {
     "id": "ir-018",
+    "include_in_iran_core": false,
     "title": "Khamenei killed in Israeli-US strikes",
     "date": "2026-03-01",
     "type": "political",
@@ -167,6 +171,7 @@
   },
   {
     "id": "ir-019",
+    "include_in_iran_core": false,
     "title": "Iran drone boat attacks on oil tankers",
     "date": "2026-03-04",
     "type": "political",

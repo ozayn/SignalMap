@@ -23,6 +23,9 @@ def load_events_iran_json() -> list[dict]:
     for ev in raw if isinstance(raw, list) else []:
         if not ev.get("id") or not ev.get("title"):
             continue
+        # Curated: timeline noise / scenarios excluded from default iran_core overlays (opt-in TBD)
+        if ev.get("include_in_iran_core") is False:
+            continue
         date_start = ev.get("date_start") or ev.get("date")
         if not date_start:
             continue

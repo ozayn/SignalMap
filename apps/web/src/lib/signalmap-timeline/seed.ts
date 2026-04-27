@@ -12,6 +12,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "امپراتوری اتریش-مجارستان به صربستان اعلام جنگ می‌کند و اتحادها به درگیری گسترده تبدیل می‌شود.",
     category: "war",
     tags: ["ww1", "europe"],
+    importance: 3,
   },
   {
     id: "g-1929-crash",
@@ -22,6 +23,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "سقوط بازار سهام آمریکا و آغاز رکود بزرگ در سطح جهان.",
     category: "global",
     tags: ["depression", "us"],
+    importance: 3,
   },
   {
     id: "g-ww2-eu",
@@ -32,6 +34,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "حمله نازی‌ها به لهستان و گسترش سریع جنگ در اروپا.",
     category: "war",
     tags: ["ww2", "europe"],
+    importance: 3,
   },
   {
     id: "g-bretton-woods",
@@ -43,6 +46,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "برنامه‌ریزی متفقین برای نظام پولی پساجنگ؛ دلار ـ طلا و بانک جهانی/صندوق.",
     category: "fx",
     tags: ["imf", "usd", "gold"],
+    importance: 3,
   },
   {
     id: "g-ww2-end",
@@ -53,6 +57,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تسلیم بی‌قیدوششر آلمان؛ پایان نبرد در اروپا.",
     category: "war",
     tags: ["ww2", "europe"],
+    importance: 3,
   },
   {
     id: "g-cold-start",
@@ -63,6 +68,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تعهد آمریکا به حمایت «مردم آزاد» در برابر فشار؛ نقطه آغاز فریم جنگ سرد.",
     category: "global",
     tags: ["cold-war", "us"],
+    importance: 2,
   },
   {
     id: "g-korea",
@@ -73,6 +79,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "نیروهای کره‌شمالی از خط ۳۸ عبور می‌کنند و مداخله سازمان ملل آغاز می‌شود.",
     category: "war",
     tags: ["korea", "un"],
+    importance: 2,
   },
   {
     id: "g-cuban",
@@ -84,6 +91,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "برخورد ابرقدرت‌ها بر سر موشک هسته‌ای در کوبا؛ بحران اوج جنگ سرد.",
     category: "war",
     tags: ["cuba", "cold-war", "nuclear"],
+    importance: 3,
   },
   {
     id: "g-nixon-gold",
@@ -94,6 +102,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "پایان تبدیل‌پذیری دلار به طلا و گذار به نرخ شناور نسبی و نظام اهرمی.",
     category: "fx",
     tags: ["bretton-woods", "gold", "usd"],
+    importance: 3,
   },
   {
     id: "g-1973-embargo",
@@ -104,6 +113,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "محدودسازی صادرات نفت پس از جنگ یوم‌کپور؛ جهش قیمت و تورم رکودی واردکنندگان.",
     category: "oil",
     tags: ["opec", "yom-kippur"],
+    importance: 3,
   },
   {
     id: "g-volcker",
@@ -114,6 +124,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تنگی شدید سیاست پولی آمریکا برای مقابله با تورم؛ اثر تطبیقی جهانی نرخ‌ها.",
     category: "fx",
     tags: ["fed", "inflation", "us"],
+    importance: 2,
   },
   {
     id: "g-soviet-end",
@@ -124,6 +135,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "اتحاد شوروی پایان می‌یابد و نظام میدان قدرت جهانی دگرگون می‌شود.",
     category: "global",
     tags: ["ussr", "europe", "russia"],
+    importance: 3,
   },
   {
     id: "g-1997-asia",
@@ -134,6 +146,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "رهاکردن بات و سرایت به اندونزی و کره جنوبی و کانال‌های اعتباری.",
     category: "fx",
     tags: ["asia", "imf", "contagion"],
+    importance: 2,
   },
   {
     id: "g-9-11",
@@ -144,6 +157,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "همدستی حملات و تحول امنیتی/ژئوپلیتیک و اثر بر بازارهای جهانی.",
     category: "global",
     tags: ["us", "security", "mideast"],
+    importance: 3,
   },
   {
     id: "g-2008-lehman",
@@ -154,6 +168,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "سقوط بانک بزرگ سرمایه و فاز حاد بحران مالی جهانی و تنگی دلاری.",
     category: "fx",
     tags: ["gfc", "us", "banking"],
+    importance: 3,
   },
   {
     id: "g-arab-spring",
@@ -164,6 +179,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "موج اعتراضات منطقه‌ای و تغییر حکومت در چند کشور پس از حادثه تونس.",
     category: "global",
     tags: ["mideast", "tunisia"],
+    importance: 3,
   },
   {
     id: "g-covid-pheic",
@@ -174,6 +190,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "اعلام اضطرار جهانی؛ تعطیلی‌ها و شوک تقاضای انرژی و اثر مالی-ارزی بزرگ.",
     category: "global",
     tags: ["pandemic", "who", "lockdowns"],
+    importance: 3,
   },
   {
     id: "g-ukraine-22",
@@ -184,6 +201,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "جنگ بزرگ در اروپا؛ تحریم و جابجایی انرژی/کالا و موج پناهجویی.",
     category: "war",
     tags: ["russia", "europe", "commodities"],
+    importance: 3,
   },
   {
     id: "g-2022-oil-swing",
@@ -194,6 +212,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "افزایش تند نفت/گاز؛ اقدامات واردکنندگان و نوسان اقتصاد کلان.",
     category: "oil",
     tags: ["brent", "sanctions", "volatility"],
+    importance: 3,
   },
   // —— Iran-specific (domestic + foreign policy) ——
   {
@@ -205,6 +224,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "سقوط دولت مصدق و بازتعریف نفت و روابط واشنگتن/لندن (روایت‌های ملی‌گرایانه).",
     category: "iran",
     tags: ["coup", "mossadegh", "history"],
+    importance: 2,
   },
   {
     id: "ir-rev-79",
@@ -215,6 +235,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "جایگزینی نظام سلطنت با جمهوری اسلامی و دگرگونی قانون/خارجی.",
     category: "iran",
     tags: ["1979", "pahlavi", "state"],
+    importance: 3,
   },
   {
     id: "ir-hostage",
@@ -226,6 +247,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "توقف سیاسی-دیپلماتیک، تحریم‌ها و شکاف ماندگار واشنگتن-تهران (در ادوار نفتی/شوی).",
     category: "iran",
     tags: ["us", "diplomacy", "crisis"],
+    importance: 3,
   },
   {
     id: "ir-iq-war-start",
@@ -236,6 +258,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "جنگ فرسایشی و بعداً جنگ تانکرها و سایه بلند اقتصادی-نفتی.",
     category: "war",
     tags: ["tanker-war", "gulf", "saddam"],
+    importance: 3,
   },
   {
     id: "ir-iq-war-end",
@@ -246,6 +269,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "توقف تیرپساز هشت‌ساله و هزینه انسانی-سرمایه‌ای سنگین.",
     category: "war",
     tags: ["un", "ceasefire"],
+    importance: 3,
   },
   {
     id: "ir-green",
@@ -256,6 +280,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تظاهرات وسیع پس از انتخابات؛ اثر در رسانه و جامعه مدنی.",
     category: "iran",
     tags: ["2009", "protests", "politics"],
+    importance: 2,
   },
   {
     id: "ir-jcpoa",
@@ -266,6 +291,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "توافق هسته‌ای و تغییر معماری تحریم (خروج آمریکا در ۹۷، رویداد جدا).",
     category: "global",
     tags: ["jcpoa", "sanctions", "nuclear"],
+    importance: 3,
   },
   {
     id: "ir-jcpoa-exit",
@@ -276,6 +302,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "بازتشدید فشار حداکثری و بازچینش کانال نفت-ارز.",
     category: "fx",
     tags: ["jcpoa", "sanctions", "trump"],
+    importance: 3,
   },
   {
     id: "ir-soleimani",
@@ -286,6 +313,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تصعید شدید امنیتی-منطقه‌ای و اثر پریمیوم نفت و اقدام-واکنش.",
     category: "global",
     tags: ["mideast", "security", "qods"],
+    importance: 3,
   },
   {
     id: "ir-wlf",
@@ -296,6 +324,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "بازه اعترضات ملی-فراملی پس از فوت جینا (مهسا) امینی و توجه گسترده.",
     category: "iran",
     tags: ["2022", "wlf", "protests"],
+    importance: 3,
   },
   {
     id: "ir-rial-stress-18",
@@ -306,6 +335,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "لنگر دوره تنگی/شوک نرخ پس از فشار ۹۸؛ بیشینه دقیق روزانه ممکن است اختلاف داشته باشد.",
     category: "fx",
     tags: ["rial", "sanctions", "ir"],
+    importance: 1,
   },
   {
     id: "oil-shale-rev",
@@ -316,6 +346,18 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "لنگر سال‌های سقوط قیمت ۲۰۱۴-۲۰۱۶ (اوپک+نفت تنگ‌شکن).",
     category: "oil",
     tags: ["brent", "shale", "oversupply"],
+    importance: 2,
+  },
+  {
+    id: "g-opec-plus-2016",
+    date_start: "2016-11-30",
+    title_en: "OPEC+ coordinated output framework (Vienna cycle)",
+    title_fa: "نخستین توافق اصلی اوپک+ (چرخه مذاکرات ۲۰۱۶ وین)",
+    description_en: "OPEC and non-OPEC (notably Russia) move toward explicit output management after 2014–2016 low prices; durable shift in oil market governance and spare-capacity logic.",
+    description_fa: "روند هم‌مدیریتی تولید توسط اوپک و تولیدکنندگان غیر اوپک پس از فاز قیمت پایین؛ تغییر ماندگار در منطق مدیریت و ظرفیت مازاد نفت.",
+    category: "oil",
+    tags: ["opec-plus", "russia", "output-cuts"],
+    importance: 2,
   },
   {
     id: "g-brexit-ref",
@@ -326,6 +368,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "رأی خروج؛ سردرگمی چندساله تجارت-ارز/پاند.",
     category: "global",
     tags: ["europe", "gbp", "trade"],
+    importance: 2,
   },
   {
     id: "g-isf-gulf-91",
@@ -336,16 +379,18 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "اشغال و پاسخ ائتلاف؛ ریسک عرضه نفتی بسیار بزرگ-کوتاه‌مدت.",
     category: "war",
     tags: ["gulf", "iraq", "kuwait", "oil"],
+    importance: 3,
   },
   {
     id: "g-china-wto",
     date_start: "2001-12-11",
     title_en: "China joins WTO",
     title_fa: "ورود چین به سازمان تجارت جهانی",
-    description_en: "Deeper global manufacturing integration; long-run trade and energy-demand implications.",
+    description_en: "Deeper global manufacturing integration; long-run trade and energy-demand implications. (Doha: accession protocol agreed Nov 10, 2001.)",
     description_fa: "عمیق‌شدن تولید جهانی و اثر برداشت بلندمدت روی انرژی-تقاضا.",
     category: "global",
     tags: ["trade", "china", "wto"],
+    importance: 2,
   },
   {
     id: "g-2014-crimea",
@@ -356,6 +401,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تصاعد و آغاز کمانی از تحریم-ارز غرب/روسیه.",
     category: "global",
     tags: ["russia", "europe", "sanctions"],
+    importance: 3,
   },
   {
     id: "g-isis-mosul",
@@ -366,6 +412,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "شاخص ارضی-امنیتی و اثر بر تولید نفت/پناهندگان.",
     category: "war",
     tags: ["iraq", "isis", "oil"],
+    importance: 2,
   },
   {
     id: "g-euro-99",
@@ -376,6 +423,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "ایجاد اتحاد پولی یورو؛ اثر ماندگار فکس-شناور/حساب‌های تجاری.",
     category: "fx",
     tags: ["eur", "europe", "monetary-union"],
+    importance: 2,
   },
   {
     id: "g-egypt-11",
@@ -386,6 +434,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "قدرت‌زدایی و اثر بر ریسک ممر/Suez و MENA.",
     category: "global",
     tags: ["egypt", "arab-spring", "mideast"],
+    importance: 3,
   },
   {
     id: "g-japan-311",
@@ -396,6 +445,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تصادم هسته‌ای-انرژی: تقاضا برای LNG و چرخش سیاستی.",
     category: "global",
     tags: ["fukushima", "lng", "japan"],
+    importance: 3,
   },
   {
     id: "g-2003-iraq",
@@ -406,6 +456,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تغییر نظام و جنگ‌های فرسایشی و ریسک عرضه میدل‌ایست.",
     category: "war",
     tags: ["iraq", "us", "mideast"],
+    importance: 3,
   },
   {
     id: "g-afghan-21",
@@ -416,6 +467,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تغییر تند نظام و بازسنجی امنیت/پناهجویی.",
     category: "war",
     tags: ["afghanistan", "taliban", "us-exit"],
+    importance: 2,
   },
   {
     id: "g-2000-dot",
@@ -426,6 +478,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "لنگر پساجنگ رونده سهام/واقع‌گرایی بنگاه.",
     category: "global",
     tags: ["equities", "us", "cycle"],
+    importance: 1,
   },
   {
     id: "g-euro-08",
@@ -436,6 +489,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تنش بانکی فرامرزی و اصلاح قیمت‌گذاری ریسک حاکمیت؛ شروع دوره اقدامات BCE.",
     category: "fx",
     tags: ["europe", "ecb", "gfc"],
+    importance: 2,
   },
   {
     id: "g-2010-spill",
@@ -446,6 +500,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "ریزش-تنظیمی-مسئولیتی بخش دریایی-خلیج-مکزیکو.",
     category: "oil",
     tags: ["gulf", "safety", "us"],
+    importance: 3,
   },
   {
     id: "g-syria-11",
@@ -456,16 +511,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تداوم جنگ-پناهنده و پراکسی-منطقه‌ای و بک‌دراپ نفتی خاورمیانه.",
     category: "war",
     tags: ["syria", "mideast", "refugees"],
-  },
-  {
-    id: "g-china-wto-join-note",
-    date_start: "2001-11-10",
-    title_en: "Doha: China accession agreed (WTO path)",
-    title_fa: "دُوحه: پذیرش سیاسی-ایجاد/پروتکل WTO (چین)",
-    description_en: "Negotiations milestone before formal entry; anchor for long-run world goods markets.",
-    description_fa: "نقطه در مسیر اجرای پروتکل الحاق چین (پیش از اعمال ۲۰۰۱-۱۲).",
-    category: "global",
-    tags: ["wto", "china", "multilateralism"],
+    importance: 2,
   },
   {
     id: "g-oil-negative", // illustrative (contract-specific)
@@ -476,6 +522,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تنش کنت‌انگیز ذخایر-قرارداد؛ سطح ماندگار مادی نیست.",
     category: "oil",
     tags: ["wti", "pandemic", "storage"],
+    importance: 1,
   },
   {
     id: "g-2023-gaza-escalation",
@@ -486,6 +533,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تصعید امنیتی-انسانی بزرگ؛ اثر بر ریسک-ارزی-انرژی MENA (غیرنقطه‌ای-صرف).",
     category: "war",
     tags: ["gaza", "mideast", "security"],
+    importance: 3,
   },
   {
     id: "ir-nuc-natanz",
@@ -496,6 +544,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "لنگر روایتی-امنیتی در اطراف برنامه هسته‌ای/شگردهای منطقه‌ای.",
     category: "iran",
     tags: ["nuclear", "natanz", "security"],
+    importance: 1,
   },
   {
     id: "ir-2019-nov",
@@ -506,6 +555,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "موبیالیزه گسترده؛ اختلال نت/پسزمینه اقتصاد-پول/بنزین.",
     category: "iran",
     tags: ["2019", "protests", "prices"],
+    importance: 2,
   },
   {
     id: "g-1990-reunif",
@@ -516,6 +566,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تبدیل علامت شرقی؛ زیرنویس نهادهای اروپا و زیر-فیکس-شناور.",
     category: "fx",
     tags: ["europe", "dem", "euro-path"],
+    importance: 1,
   },
   {
     id: "g-plaza",
@@ -526,6 +577,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تطبیق هم‌آهنگ ۵-گانه ۱۹۸۵: فشار به ارزش واقعی دلار.",
     category: "fx",
     tags: ["g5", "jpy", "d-mark"],
+    importance: 3,
   },
   {
     id: "g-ltcm",
@@ -536,6 +588,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "تنش نقدینگی و فشار در زنجیره‌ی فاینکس/اوراق؛ سازوکار هماهنگی سیاستی برای جلوگیری از فروپاشی نقدی.",
     category: "fx",
     tags: ["ficc", "liquidity", "leverage"],
+    importance: 1,
   },
   {
     id: "g-1987-b",
@@ -546,6 +599,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "رکورد افت٪-روزانه مهم؛ نقدینگی/بیمه-پُرتفو و سرایت سریع بورس‌ها.",
     category: "global",
     tags: ["equities", "crash", "liquidity"],
+    importance: 1,
   },
   {
     id: "g-y2k",
@@ -556,6 +610,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "اگرچه اختلال سیستم‌اتیک محدود بود، اما ریسک زیرسامانه/تقویم در خاطره ماکرو ماندگار ماند.",
     category: "global",
     tags: ["y2k", "infrastructure", "it"],
+    importance: 1,
   },
   {
     id: "g-paris-15",
@@ -566,6 +621,7 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "متحدالمللی‌سازی تهدید-اقتصاد-انرژی در بلند-مدت.",
     category: "global",
     tags: ["cop21", "climate", "framework"],
+    importance: 3,
   },
   {
     id: "g-wto-95",
@@ -576,5 +632,6 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
     description_fa: "نقطه‌ای که چارچوب-حقوی/حل-اختلاف-تعرفه را در تجارت-جهانی قوی‌تر کرد.",
     category: "global",
     tags: ["multilateral", "gatt", "disputes"],
+    importance: 1,
   },
 ];

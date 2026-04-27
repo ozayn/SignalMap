@@ -446,6 +446,7 @@ export default function StudyDetailPage() {
   /** Jalali / both only in Persian UI; English mode always uses Gregorian (no mixed calendar lines). */
   const chartYearAxisLabel = faEligible && isFa ? yearAxisMode : undefined;
   const faRich = IRAN_STUDY_FA_DISPLAY[studyId];
+  const [showAllSignalMapImportance, setShowAllSignalMapImportance] = useState(false);
   const [data, setData] = useState<OverviewData | null>(null);
   const [events, setEvents] = useState<EventsData["events"]>([]);
   const [anchorEventId, setAnchorEventId] = useState<string>("");
@@ -3851,6 +3852,25 @@ export default function StudyDetailPage() {
                 "کشیدن برای جابه‌جایی، اسکرول برای بزرگ‌نمایی، و لایه‌ها را تغییر دهید. برای جزئیات نگه دارید.",
               )}
             </p>
+            <div className="mt-2 flex max-w-2xl items-start gap-2">
+              <input
+                id="signalmap-dot-all-importance"
+                type="checkbox"
+                className="mt-0.5 h-3.5 w-3.5 rounded border border-border"
+                checked={showAllSignalMapImportance}
+                onChange={(e) => setShowAllSignalMapImportance(e.target.checked)}
+              />
+              <label
+                htmlFor="signalmap-dot-all-importance"
+                className="text-xs text-muted-foreground cursor-pointer select-none leading-snug"
+              >
+                {L(
+                  isFa,
+                  "Show more events (incl. minor and context at the current zoom).",
+                  "نمایش رویدادهای بیشتر (شامل جزئی و زمینه در همین زوم)."
+                )}
+              </label>
+            </div>
           </CardHeader>
           <CardContent>
             {study ? (
@@ -3858,6 +3878,7 @@ export default function StudyDetailPage() {
                 timeRange={study.timeRange}
                 locale={isFa ? "fa" : "en"}
                 xAxisYearLabel={chartYearAxisLabel}
+                importanceDetail={showAllSignalMapImportance ? "all" : "default"}
                 initialZoom={1}
               />
             ) : null}
@@ -3890,6 +3911,25 @@ export default function StudyDetailPage() {
                 "دوره‌ها باند افقی و نقاط رویداد مارکر. کشیدن، اسکرول برای بزرگ‌نمایی، لایه‌ها را فعال/غیرفعال کنید.",
               )}
             </p>
+            <div className="mt-2 flex max-w-2xl items-start gap-2">
+              <input
+                id="signalmap-band-all-importance"
+                type="checkbox"
+                className="mt-0.5 h-3.5 w-3.5 rounded border border-border"
+                checked={showAllSignalMapImportance}
+                onChange={(e) => setShowAllSignalMapImportance(e.target.checked)}
+              />
+              <label
+                htmlFor="signalmap-band-all-importance"
+                className="text-xs text-muted-foreground cursor-pointer select-none leading-snug"
+              >
+                {L(
+                  isFa,
+                  "Show more events (incl. minor and context at the current zoom).",
+                  "نمایش رویدادهای بیشتر (شامل جزئی و زمینه در همین زوم)."
+                )}
+              </label>
+            </div>
           </CardHeader>
           <CardContent>
             {study ? (
@@ -3897,6 +3937,7 @@ export default function StudyDetailPage() {
                 timeRange={study.timeRange}
                 locale={isFa ? "fa" : "en"}
                 xAxisYearLabel={chartYearAxisLabel}
+                importanceDetail={showAllSignalMapImportance ? "all" : "default"}
                 initialZoom={1}
                 onEventClick={(e) =>
                   trackEvent("band_timeline_event_click", { study_id: studyId, event_id: e.id, kind: e.kind })

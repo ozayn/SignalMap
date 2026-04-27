@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "@/lib/utils";
 import {
   formatChartTimeAxisYearLabel,
@@ -19,12 +26,19 @@ import {
   getBandEventStartMs,
   getBandTimelineDomain,
 } from "@/lib/signalmap-band-timeline";
+import { SignalMapYearRangeControls } from "@/components/signalmap-timeline/SignalMapYearRangeControls";
 import {
   buildYearAxisTicks,
+  domainInclusiveYearBounds,
+  endYearFromViewEnd,
   minImportanceForViewPortion,
   parseYmdToUtcMs,
+  readYearRangeFromCurrentUrl,
   shouldShowInlaneLabelsByZoom,
+  startYearFromViewStart,
   toXPercent,
+  viewMsFromInclusiveYearsClamped,
+  writeYearRangeToUrl,
   zoomAroundCenter,
 } from "@/lib/signalmap-timeline";
 import type { BandLane } from "./lane-meta";
@@ -123,9 +137,13 @@ export type SignalMapBandTimelineProps = {
   locale?: "en" | "fa";
   /** Same optional wiring as the dots timeline: Gregorian, Jalali, or both. */
   xAxisYearLabel?: ChartAxisYearMode;
+  /** `default` = filter by zoom like the dot timeline; `all` = show importance 1+ at current zoom. */
+  importanceDetail?: "default" | "all";
   onEventClick?: (event: BandTimelineEvent) => void;
   className?: string;
   initialZoom?: number;
+  /** When true (default), visible year range is written to `?start=YYYY&end=YYYY` (client only). */
+  syncYearRangeToUrl?: boolean;
 };
 
 /**
@@ -136,10 +154,13 @@ export function SignalMapBandTimeline({
   timeRange: timeRangeProp,
   locale = "en",
   xAxisYearLabel,
+  importanceDetail = "default",
   onEventClick,
   className,
   initialZoom = 1,
+  syncYearRangeToUrl: syncYearRangeToUrlProp = true,
 }: SignalMapBandTimelineProps) {
+  const syncYearRangeToUrl = syncYearRangeToUrlProp;
   const lang: StudyLocale = locale;
   const yearAxisMode: ChartAxisYearMode = xAxisYearLabel ?? "gregorian";
   const numeralLoc: ChartAxisNumeralLocale = lang === "fa" ? "fa" : "en";
@@ -170,6 +191,39 @@ export function SignalMapBandTimeline({
     startMs: [number, number];
   } | null>(null);
 
+  const { minY, maxY } = useMemo(
+    () => domainInclusiveYearBounds(domainStartMs, domainEndMs),
+    [domainStartMs, domainEndMs]
+  );
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    const fromUrl = readYearRangeFromCurrentUrl();
+    if (fromUrl) {
+      const m = viewMsFromInclusiveYearsClamped(
+        fromUrl.startY,
+        fromUrl.endY,
+        domainStartMs,
+        domainEndMs
+      );
+      setViewStart(m.startMs);
+      setViewEnd(m.endMs);
+    } else {
+      const full = Math.max(1, domainEndMs - domainStartMs);
+      const v = full * Math.min(1, Math.max(0.04, initialZoom));
+      const c = (domainStartMs + domainEndMs) / 2;
+      setViewStart(c - v / 2);
+      setViewEnd(c + v / 2);
+    }
+  }, [domainStartMs, domainEndMs, initialZoom]);
+
+  useEffect(() => {
+    if (!syncYearRangeToUrl || typeof window === "undefined") return;
+    const a = startYearFromViewStart(viewStart, minY, maxY);
+    const b = endYearFromViewEnd(viewStart, viewEnd, minY, maxY);
+    writeYearRangeToUrl(a, b);
+  }, [viewStart, viewEnd, minY, maxY, syncYearRangeToUrl]);
+
   useLayoutEffect(() => {
     const el = trackRef.current;
     if (!el) return;
@@ -184,7 +238,10 @@ export function SignalMapBandTimeline({
     return Math.min(1, (viewEnd - viewStart) / full);
   }, [viewStart, viewEnd, domainStartMs, domainEndMs]);
 
-  const minImportance = useMemo(() => minImportanceForViewPortion(viewPortion), [viewPortion]);
+  const minImportance = useMemo((): 1 | 2 | 3 => {
+    if (importanceDetail === "all") return 1;
+    return minImportanceForViewPortion(viewPortion);
+  }, [importanceDetail, viewPortion]);
   const showPointLabels = useMemo(() => shouldShowInlaneLabelsByZoom(viewPortion), [viewPortion]);
 
   const axisTicks = useMemo(
@@ -224,14 +281,6 @@ export function SignalMapBandTimeline({
     setViewStart(a0);
     setViewEnd(b0);
   };
-
-  useEffect(() => {
-    const full = Math.max(1, domainEndMs - domainStartMs);
-    const v = full * Math.min(1, Math.max(0.04, initialZoom));
-    const c = (domainStartMs + domainEndMs) / 2;
-    setViewStart(c - v / 2);
-    setViewEnd(c + v / 2);
-  }, [domainStartMs, domainEndMs, initialZoom]);
 
   const onWheel = (e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) return;
@@ -279,6 +328,11 @@ export function SignalMapBandTimeline({
     setViewEnd(domainEndMs);
   };
 
+  const applyYearViewMs = useCallback((startMs: number, endMs: number) => {
+    setViewStart(startMs);
+    setViewEnd(endMs);
+  }, []);
+
   const pick = useCallback(
     (e: BandTimelineEvent) => {
       setSelectedId(e.id);
@@ -323,6 +377,16 @@ export function SignalMapBandTimeline({
         )}
         dir="ltr"
       >
+        <SignalMapYearRangeControls
+          className={cn("mb-3", lang === "fa" && "font-[family-name:Vazirmatn] study-page-fa")}
+          domainStartMs={domainStartMs}
+          domainEndMs={domainEndMs}
+          viewStart={viewStart}
+          viewEnd={viewEnd}
+          onApplyViewMs={applyYearViewMs}
+          onFitAll={fitAll}
+          lang={lang}
+        />
         <div
           className={cn(
             "mb-3 flex flex-wrap items-center justify-between gap-2 gap-y-2",
@@ -371,13 +435,6 @@ export function SignalMapBandTimeline({
               onClick={() => zoomCenter(1.2)}
             >
               −
-            </button>
-            <button
-              type="button"
-              className="rounded border border-border/80 bg-background/50 px-2 py-0.5 transition-colors duration-200 hover:bg-muted/60"
-              onClick={fitAll}
-            >
-              {tLang("Fit all", "همه", lang)}
             </button>
             <span className="max-w-[16rem] pl-0.5 text-[10px] leading-snug text-muted-foreground/70">
               {tLang(

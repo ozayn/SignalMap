@@ -44,9 +44,18 @@ export type SignalMapTimelineProps = {
   className?: string;
   /**
    * Initial view as fraction of full range width (0–1] visible, e.g. 0.25 = show 25% of span (zoomed in).
-   * Default 1 = full range.
+   * Default 1 = full range. Ignored on first client paint if `?start=&end=` in the URL (browser only).
    */
   initialZoom?: number;
+  /**
+   * When true (default), the visible year range is reflected in the URL as `?start=YYYY&end=YYYY` (client only).
+   */
+  syncYearRangeToUrl?: boolean;
+  /**
+   * `default` = importance filtered by zoom (3 only when zoomed out, then 2, then 1).
+   * `all` = show every importance level at the current zoom (use sparingly; can crowd the chart).
+   */
+  importanceDetail?: "default" | "all";
 };
 
 export type TimeViewport = { startMs: number; endMs: number };
