@@ -25,6 +25,7 @@ import { CurrentSnapshot } from "@/components/current-snapshot";
 import { IranMoneySupplyMethodology } from "@/components/studies/iran-money-supply-methodology";
 import { InSimpleTerms } from "@/components/in-simple-terms";
 import { EventsTimeline, type TimelineEvent } from "@/components/events-timeline";
+import { SignalMapTimeline } from "@/components/signalmap-timeline";
 import { FollowerGrowthChart } from "@/components/follower-growth-chart";
 import { NetworkGraph, type NetworkNode, type NetworkEdge } from "@/components/network-graph";
 import { OilTradeSankey } from "@/components/oil-trade-sankey";
@@ -720,6 +721,7 @@ export default function StudyDetailPage() {
   const isOilExportCapacity = study?.primarySignal.kind === "oil_export_capacity";
   const isOilProductionMajorExporters = study?.primarySignal.kind === "oil_production_major_exporters";
   const isEventsTimeline = study?.primarySignal.kind === "events_timeline";
+  const isGlobalEventsTimeline = study?.primarySignal.kind === "global_events_timeline";
   const isFollowerGrowthDynamics = study?.primarySignal.kind === "follower_growth_dynamics";
   const isFxUsdIrrDual = study?.primarySignal.kind === "fx_usd_irr_dual";
   const isWageCpiReal = study?.primarySignal.kind === "wage_cpi_real";
@@ -1829,7 +1831,7 @@ export default function StudyDetailPage() {
   }, [oilPointsWithVolatility]);
 
   useEffect(() => {
-    if (!study) return;
+    if (!study || isGlobalEventsTimeline) return;
     let mounted = true;
     const params = new URLSearchParams({
       study_id: isOilGeopoliticalReaction
@@ -1993,6 +1995,7 @@ export default function StudyDetailPage() {
     isOilExporterTimeseries,
     hasTurkeyComparator,
     isEventsTimeline,
+    isGlobalEventsTimeline,
     chartEventToggleState,
     showSanctionsPeriods,
     showTimeSeriesEventOverlay,
@@ -2005,10 +2008,10 @@ export default function StudyDetailPage() {
   ]);
 
   useEffect(() => {
-    if (study && (isEventsTimeline || isFollowerGrowthDynamics || isYoutubeCommentAnalysis)) {
+    if (study && (isEventsTimeline || isGlobalEventsTimeline || isFollowerGrowthDynamics || isYoutubeCommentAnalysis)) {
       setLoading(false);
     }
-  }, [study, isEventsTimeline, isFollowerGrowthDynamics, isYoutubeCommentAnalysis]);
+  }, [study, isEventsTimeline, isGlobalEventsTimeline, isFollowerGrowthDynamics, isYoutubeCommentAnalysis]);
 
   const fetchYoutubeAnalysis = useCallback(
     async (forceRefresh: boolean, forceRecompute: boolean = false, adminCode?: string) => {
@@ -3312,17 +3315,20 @@ export default function StudyDetailPage() {
     isPovertyHeadcountIran ||
     isIranMoneySupplyM2 ||
     isDutchDiseaseDiagnostics ||
-    isOilEconomyOverview;
+    isOilEconomyOverview ||
+    isGlobalEventsTimeline;
 
   const hasTimeSeriesEventOverlayControl =
     isSingleSignalStudy &&
     !isOilTradeNetwork &&
     !isFollowerGrowthDynamics &&
     !isYoutubeCommentAnalysis &&
-    !isEventsTimeline;
+    !isEventsTimeline &&
+    !isGlobalEventsTimeline;
 
-  const singleSignalReady =
-    isGoldAndOil
+  const singleSignalReady = isGlobalEventsTimeline
+    ? true
+    : isGoldAndOil
       ? goldPoints.length > 0 && oilPoints.length > 0
       : isOilBrent || isOilGlobalLong
       ? oilPoints.length > 0
@@ -3816,7 +3822,46 @@ export default function StudyDetailPage() {
         </div>
       </header>
 
-      {isEventsTimeline ? (
+      {isGlobalEventsTimeline ? (
+        <>
+        <Card className="border-border min-w-0 overflow-visible">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold tracking-tight text-foreground">
+              {L(isFa, "Interactive context timeline", "تایم‌لاین زمینه (تعاملی)")}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">{displayStudy.description}</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              {L(
+                isFa,
+                "Drag to pan, use the scroll wheel to zoom, and toggle layers. Hover events for details.",
+                "کشیدن برای جابه‌جایی، اسکرول برای بزرگ‌نمایی، و لایه‌ها را تغییر دهید. برای جزئیات نگه دارید.",
+              )}
+            </p>
+          </CardHeader>
+          <CardContent>
+            {study ? (
+              <SignalMapTimeline
+                timeRange={study.timeRange}
+                locale={isFa ? "fa" : "en"}
+                xAxisYearLabel={chartYearAxisLabel}
+                initialZoom={0.4}
+              />
+            ) : null}
+          </CardContent>
+        </Card>
+        {study.concepts?.length ? <ConceptsUsed locale={isFa ? "fa" : "en"} conceptKeys={study.concepts} /> : null}
+        <InSimpleTerms locale={isFa ? "fa" : "en"}>
+          {isFa && faRich?.simpleTermsParagraphs?.length ? (
+            faRich.simpleTermsParagraphs.map((p, i) => <p key={i}>{p}</p>)
+          ) : (
+            <p>
+              This view arranges global, Iran, oil, currency, and war-relevant events on a shared time axis. Use it as a
+              navigational reference, not a causal model.
+            </p>
+          )}
+        </InSimpleTerms>
+        </>
+      ) : isEventsTimeline ? (
         <>
         <Card className="border-border min-w-0 overflow-visible">
           <CardHeader>
@@ -5109,7 +5154,11 @@ export default function StudyDetailPage() {
         </div>
       ) : null}
 
-      {!isEventsTimeline && !isFollowerGrowthDynamics && !isFxUsdIrrDual && !isYoutubeCommentAnalysis && (
+      {!isGlobalEventsTimeline &&
+        !isEventsTimeline &&
+        !isFollowerGrowthDynamics &&
+        !isFxUsdIrrDual &&
+        !isYoutubeCommentAnalysis && (
       <Card className="chart-card border-border overflow-hidden">
         <CardHeader>
           <div className="flex items-center justify-between gap-4 mb-2">

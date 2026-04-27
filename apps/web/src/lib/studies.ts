@@ -10,6 +10,7 @@ export type PrimarySignal =
   | { kind: "oil_export_capacity" }
   | { kind: "oil_production_major_exporters" }
   | { kind: "events_timeline" }
+  | { kind: "global_events_timeline" }
   | { kind: "follower_growth_dynamics" }
   | { kind: "fx_usd_irr_dual" }
   | { kind: "wage_cpi_real" }
@@ -245,11 +246,27 @@ export const STUDIES: StudyMeta[] = [
     number: 11,
     title: "Historical events timeline (1900–present)",
     timeRange: ["1900-01-01", new Date().toISOString().slice(0, 10)],
-    description: "A scrollable 1900+ event list: reference context for other charts (not a price series).",
+    description: "A scrollable 1900+ event list: reference context for other studies (not a price series).",
     status: "active",
     groupPlacements: [{ group: "global", order: 5 }],
     primarySignal: { kind: "events_timeline" },
     hiddenInProduction: true,
+    concepts: ["event_overlay"],
+  },
+  {
+    id: "timeline-global-events",
+    number: 37,
+    title: "Global events (interactive timeline)",
+    timeRange: ["1914-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "Zoom and layer-filtered world context: energy, FX, war, and Iran. Seed dataset for chart alignment and exploration.",
+    status: "active",
+    groupPlacements: [{ group: "global", order: 4 }],
+    countries: ["global", "iran"],
+    themes: ["macro"],
+    tags: ["Timeline", "Context"],
+    keywords: ["events", "history", "Bretton", "OPEC", "Ukraine", "geopolitics", "WDI", "chronology"],
+    primarySignal: { kind: "global_events_timeline" },
     concepts: ["event_overlay"],
   },
   {
