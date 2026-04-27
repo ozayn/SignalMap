@@ -139,6 +139,36 @@ const CAT: Record<BandTimelineCategory, { bar: string; line: string; mark: strin
     mark: "bg-slate-500/90",
     ring: "ring-slate-500/40",
   },
+  hist_iran: {
+    bar: "bg-amber-700/22",
+    line: "border-amber-600/38",
+    mark: "bg-amber-600/90",
+    ring: "ring-amber-500/45",
+  },
+  hist_france: {
+    bar: "bg-blue-600/22",
+    line: "border-blue-500/38",
+    mark: "bg-blue-500/90",
+    ring: "ring-blue-400/45",
+  },
+  hist_uk: {
+    bar: "bg-indigo-600/22",
+    line: "border-indigo-500/38",
+    mark: "bg-indigo-500/90",
+    ring: "ring-indigo-400/45",
+  },
+  hist_us: {
+    bar: "bg-red-800/20",
+    line: "border-red-600/35",
+    mark: "bg-red-600/90",
+    ring: "ring-red-500/40",
+  },
+  hist_global: {
+    bar: "bg-teal-600/20",
+    line: "border-teal-500/40",
+    mark: "bg-teal-500/90",
+    ring: "ring-teal-400/45",
+  },
   leadership: {
     bar: "bg-slate-500/20",
     line: "border-slate-500/40",
@@ -190,6 +220,12 @@ export type SignalMapBandTimelineProps = {
   initialZoom?: number;
   /** When true (default), visible year range is written to `?start=YYYY&end=YYYY` (client only). */
   syncYearRangeToUrl?: boolean;
+  /**
+   * Override row order and layer toggles (e.g. comparative history: Iran, France, UK, US, global).
+   * Defaults to the macro band timeline lanes.
+   */
+  laneOrder?: readonly BandTimelineLane[];
+  layerUi?: readonly { key: BandLane; labelEn: string; labelFa: string }[];
 };
 
 /**
@@ -205,11 +241,22 @@ export function SignalMapBandTimeline({
   className,
   initialZoom = 1,
   syncYearRangeToUrl: syncYearRangeToUrlProp = true,
+  laneOrder: laneOrderProp,
+  layerUi: layerUiProp,
 }: SignalMapBandTimelineProps) {
   const syncYearRangeToUrl = syncYearRangeToUrlProp;
   const lang: StudyLocale = locale;
   const yearAxisMode: ChartAxisYearMode = xAxisYearLabel ?? "gregorian";
   const numeralLoc: ChartAxisNumeralLocale = lang === "fa" ? "fa" : "en";
+
+  const effectiveLayerUi = useMemo(
+    () => (layerUiProp && layerUiProp.length > 0 ? layerUiProp : LAYER_UI),
+    [layerUiProp]
+  );
+  const effectiveLaneOrder = useMemo((): readonly BandTimelineLane[] => {
+    if (laneOrderProp && laneOrderProp.length > 0) return laneOrderProp;
+    return BAND_LANE_ORDER;
+  }, [laneOrderProp]);
 
   const { domainStartMs, domainEndMs } = useMemo(() => {
     if (timeRangeProp) {
@@ -222,9 +269,10 @@ export function SignalMapBandTimeline({
     return { domainStartMs: a, domainEndMs: b };
   }, [timeRangeProp, events]);
 
-  const [layers, setLayers] = useState<Set<BandLane>>(
-    () => new Set(LAYER_UI.map((x) => x.key))
-  );
+  const [layers, setLayers] = useState<Set<BandLane>>(() => {
+    const ui = layerUiProp && layerUiProp.length > 0 ? layerUiProp : LAYER_UI;
+    return new Set(ui.map((x) => x.key));
+  });
   const [viewStart, setViewStart] = useState(() => domainStartMs);
   const [viewEnd, setViewEnd] = useState(() => domainEndMs);
   const [trackWidth, setTrackWidth] = useState(800);
@@ -331,7 +379,7 @@ export function SignalMapBandTimeline({
             (e): e is BandTimelinePeriodEvent =>
               e.kind === "period" && e.lane === lane
           ),
-        BAND_LANE_ORDER.filter((l) => layers.has(l as BandLane)),
+        effectiveLaneOrder.filter((l) => layers.has(l as BandLane)),
         {
           viewStart,
           viewEnd,
@@ -354,6 +402,7 @@ export function SignalMapBandTimeline({
       selectedId,
       lang,
       layers,
+      effectiveLaneOrder,
     ]
   );
 
@@ -468,7 +517,7 @@ export function SignalMapBandTimeline({
         id: e.id,
         x: p.clientX,
         y: p.clientY,
-        content: { title: displayTitle, date: dateLine },
+        content: { title: displayTitle, date: dateLine, description: descOf(e, lang) },
       });
     },
     [lang, yearAxisMode, numeralLoc]
@@ -509,7 +558,7 @@ export function SignalMapBandTimeline({
           )}
         >
           <div className="flex flex-wrap gap-2" role="group" aria-label="Layer filters">
-            {LAYER_UI.map((L) => {
+            {effectiveLayerUi.map((L) => {
               const on = layers.has(L.key);
               return (
                 <button
@@ -570,7 +619,7 @@ export function SignalMapBandTimeline({
               className="flex items-end justify-end pr-1.5 pb-0.5"
               style={{ minHeight: yearAxisMode === "both" ? 36 : 28 }}
             />
-            {BAND_LANE_ORDER.map((lane) => {
+            {effectiveLaneOrder.map((lane) => {
               if (!layers.has(lane as BandLane)) {
                 return (
                   <div
@@ -580,7 +629,7 @@ export function SignalMapBandTimeline({
                   />
                 );
               }
-              const ui = LAYER_UI.find((x) => x.key === lane);
+              const ui = effectiveLayerUi.find((x) => x.key === lane);
               return (
                 <div
                   key={lane}
@@ -625,7 +674,7 @@ export function SignalMapBandTimeline({
               ))}
             </div>
 
-            {BAND_LANE_ORDER.map((lane) => {
+            {effectiveLaneOrder.map((lane) => {
               if (!layers.has(lane as BandLane)) {
                 return (
                   <div
@@ -908,8 +957,9 @@ export function SignalMapBandTimeline({
                   </button>
                 </div>
                 <p className="whitespace-pre-line text-[11px] text-muted-foreground">
-                  {formatSignalMapBandEventDateLine(selected, yearAxisMode, numeralLoc)} · I
-                  {selected.importance}
+                  {formatSignalMapBandEventDateLine(selected, yearAxisMode, numeralLoc)}
+                  {" · "}
+                  {tLang("importance", "اهمیت", lang)} {selected.importance}
                 </p>
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground/95">{descOf(selected, lang)}</p>
                 {selected.source_citation_en || selected.source_citation_fa ? (

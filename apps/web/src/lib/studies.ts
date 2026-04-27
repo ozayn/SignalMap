@@ -12,6 +12,7 @@ export type PrimarySignal =
   | { kind: "events_timeline" }
   | { kind: "global_events_timeline" }
   | { kind: "band_events_timeline" }
+  | { kind: "comparative_history_timeline" }
   | { kind: "iran_dynasties_timeline" }
   | { kind: "follower_growth_dynamics" }
   | { kind: "fx_usd_irr_dual" }
@@ -294,6 +295,36 @@ export const STUDIES: StudyMeta[] = [
       "chronology",
     ],
     primarySignal: { kind: "band_events_timeline" },
+    concepts: ["event_overlay"],
+  },
+  {
+    id: "comparative-history-timeline",
+    number: 40,
+    title: "Comparative history timeline",
+    timeRange: ["-550-01-01", "2030-12-31"],
+    description:
+      "Swimlane band view: Iran, France, the UK, the U.S., and major global cultural/political eras (schematic). Compare periodisation at a glance—reference only, not exhaustive history.",
+    status: "active",
+    /** Dev/staging: keep off `/studies` in production until ready to ship. */
+    hiddenInProduction: true,
+    groupPlacements: [{ group: "global", order: 5 }],
+    countries: ["global", "iran", "us"],
+    themes: ["macro"],
+    tags: ["Timeline", "Context", "History", "Comparative"],
+    keywords: [
+      "comparative",
+      "France",
+      "UK",
+      "USA",
+      "Renaissance",
+      "Enlightenment",
+      "industrial",
+      "world war",
+      "Cold War",
+      "Iran",
+      "Swimlane",
+    ],
+    primarySignal: { kind: "comparative_history_timeline" },
     concepts: ["event_overlay"],
   },
   {

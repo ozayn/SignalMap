@@ -1,6 +1,14 @@
-/** Parse YYYY-MM-DD to UTC midnight ms (calendar placement on timeline). */
+/**
+ * Parse YYYY-MM-DD to UTC midnight ms. Use a leading minus before the year for BCE
+ * (e.g. `-550-01-15` for 550 BCE); CE years use four digits as usual.
+ */
 export function parseYmdToUtcMs(ymd: string): number {
-  const p = ymd.slice(0, 10);
+  const t = ymd.trim();
+  const bce = t.match(/^-(\d{1,4})-(\d{2})-(\d{2})$/);
+  if (bce) {
+    return Date.UTC(-Number(bce[1]), Number(bce[2]) - 1, Number(bce[3]));
+  }
+  const p = t.slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(p)) {
     return Date.parse(ymd);
   }

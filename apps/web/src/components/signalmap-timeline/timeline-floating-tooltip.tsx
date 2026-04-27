@@ -48,7 +48,7 @@ type FloatingTip =
       id: string;
       x: number;
       y: number;
-      content: { title: string; date: string | null | undefined };
+      content: { title: string; date: string | null | undefined; description?: string | null | undefined };
     }
   | { kind: "cluster"; id: string; x: number; y: number; line: string }
   | { kind: "overlap"; id: string; x: number; y: number; header: string; lines: string[] };
@@ -144,6 +144,11 @@ export function TimelineTooltipPortal({
           {tip.content.date?.trim() ? (
             <p className="whitespace-pre-line text-[10px] text-muted-foreground">
               {tip.content.date}
+            </p>
+          ) : null}
+          {tip.content.description?.trim() ? (
+            <p className="mt-1 line-clamp-3 text-[10px] leading-snug text-muted-foreground/90">
+              {tip.content.description}
             </p>
           ) : null}
         </>

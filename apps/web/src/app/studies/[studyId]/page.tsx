@@ -26,6 +26,11 @@ import { IranMoneySupplyMethodology } from "@/components/studies/iran-money-supp
 import { InSimpleTerms } from "@/components/in-simple-terms";
 import { EventsTimeline, type TimelineEvent } from "@/components/events-timeline";
 import { SignalMapBandTimeline } from "@/components/signalmap-band-timeline";
+import {
+  COMPARATIVE_HISTORY_BAND,
+  COMPARATIVE_HISTORY_LANE_ORDER,
+  COMPARATIVE_HISTORY_LAYER_UI,
+} from "@/lib/signalmap-band-timeline";
 import { SignalMapTimeline } from "@/components/signalmap-timeline";
 import { FollowerGrowthChart } from "@/components/follower-growth-chart";
 import { NetworkGraph, type NetworkNode, type NetworkEdge } from "@/components/network-graph";
@@ -732,6 +737,7 @@ export default function StudyDetailPage() {
   const isEventsTimeline = study?.primarySignal.kind === "events_timeline";
   const isGlobalEventsTimeline = study?.primarySignal.kind === "global_events_timeline";
   const isBandEventsTimeline = study?.primarySignal.kind === "band_events_timeline";
+  const isComparativeHistoryTimeline = study?.primarySignal.kind === "comparative_history_timeline";
   const isFollowerGrowthDynamics = study?.primarySignal.kind === "follower_growth_dynamics";
   const isFxUsdIrrDual = study?.primarySignal.kind === "fx_usd_irr_dual";
   const isWageCpiReal = study?.primarySignal.kind === "wage_cpi_real";
@@ -1851,7 +1857,7 @@ export default function StudyDetailPage() {
   }, [oilPointsWithVolatility]);
 
   useEffect(() => {
-    if (!study || isGlobalEventsTimeline || isBandEventsTimeline) return;
+    if (!study || isGlobalEventsTimeline || isBandEventsTimeline || isComparativeHistoryTimeline) return;
     let mounted = true;
     const params = new URLSearchParams({
       study_id: isOilGeopoliticalReaction
@@ -2017,6 +2023,7 @@ export default function StudyDetailPage() {
     isEventsTimeline,
     isGlobalEventsTimeline,
     isBandEventsTimeline,
+    isComparativeHistoryTimeline,
     chartEventToggleState,
     showSanctionsPeriods,
     showTimeSeriesEventOverlay,
@@ -2031,11 +2038,24 @@ export default function StudyDetailPage() {
   useEffect(() => {
     if (
       study &&
-      (isEventsTimeline || isGlobalEventsTimeline || isBandEventsTimeline || isFollowerGrowthDynamics || isYoutubeCommentAnalysis)
+      (isEventsTimeline ||
+        isGlobalEventsTimeline ||
+        isBandEventsTimeline ||
+        isComparativeHistoryTimeline ||
+        isFollowerGrowthDynamics ||
+        isYoutubeCommentAnalysis)
     ) {
       setLoading(false);
     }
-  }, [study, isEventsTimeline, isGlobalEventsTimeline, isBandEventsTimeline, isFollowerGrowthDynamics, isYoutubeCommentAnalysis]);
+  }, [
+    study,
+    isEventsTimeline,
+    isGlobalEventsTimeline,
+    isBandEventsTimeline,
+    isComparativeHistoryTimeline,
+    isFollowerGrowthDynamics,
+    isYoutubeCommentAnalysis,
+  ]);
 
   const fetchYoutubeAnalysis = useCallback(
     async (forceRefresh: boolean, forceRecompute: boolean = false, adminCode?: string) => {
@@ -3341,7 +3361,8 @@ export default function StudyDetailPage() {
     isDutchDiseaseDiagnostics ||
     isOilEconomyOverview ||
     isGlobalEventsTimeline ||
-    isBandEventsTimeline;
+    isBandEventsTimeline ||
+    isComparativeHistoryTimeline;
 
   const hasTimeSeriesEventOverlayControl =
     isSingleSignalStudy &&
@@ -3350,9 +3371,10 @@ export default function StudyDetailPage() {
     !isYoutubeCommentAnalysis &&
     !isEventsTimeline &&
     !isGlobalEventsTimeline &&
-    !isBandEventsTimeline;
+    !isBandEventsTimeline &&
+    !isComparativeHistoryTimeline;
 
-  const singleSignalReady = isGlobalEventsTimeline || isBandEventsTimeline
+  const singleSignalReady = isGlobalEventsTimeline || isBandEventsTimeline || isComparativeHistoryTimeline
     ? true
     : isGoldAndOil
       ? goldPoints.length > 0 && oilPoints.length > 0
@@ -3907,6 +3929,71 @@ export default function StudyDetailPage() {
             <p>
               This view arranges global, Iran, oil, currency, and war-relevant events on a shared time axis. Use it as a
               navigational reference, not a causal model.
+            </p>
+          )}
+        </InSimpleTerms>
+        </>
+      ) : isComparativeHistoryTimeline ? (
+        <>
+        <Card className="border-border min-w-0 overflow-visible">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold tracking-tight text-foreground">
+              {L(isFa, "Comparative history (swimlanes)", "تاریخ تطبیقی (لایه‌های شناور)")}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">{displayStudy.description}</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              {L(
+                isFa,
+                "Five rows: Iran, France, the UK, the U.S., and world-scale eras. Schematic periodisation—use Fit all, then zoom in.",
+                "پنج ردیف: ایران، فرانسه، بریتانیا، ایالات متحده و دوره‌های جهانی. بخش‌بندی نمادین—ابتدا «نمایش همه»، سپس بزرگ‌نمایی."
+              )}
+            </p>
+            <div className="mt-2 flex max-w-2xl items-start gap-2">
+              <input
+                id="signalmap-comparative-band-all-importance"
+                type="checkbox"
+                className="mt-0.5 h-3.5 w-3.5 rounded border border-border"
+                checked={showAllSignalMapImportance}
+                onChange={(e) => setShowAllSignalMapImportance(e.target.checked)}
+              />
+              <label
+                htmlFor="signalmap-comparative-band-all-importance"
+                className="text-xs text-muted-foreground cursor-pointer select-none leading-snug"
+              >
+                {L(
+                  isFa,
+                  "Show more events (incl. minor and context at the current zoom).",
+                  "نمایش رویدادهای بیشتر (شامل جزئی و زمینه در همین زوم)."
+                )}
+              </label>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {study ? (
+              <SignalMapBandTimeline
+                events={COMPARATIVE_HISTORY_BAND}
+                laneOrder={COMPARATIVE_HISTORY_LANE_ORDER}
+                layerUi={COMPARATIVE_HISTORY_LAYER_UI}
+                timeRange={study.timeRange}
+                locale={isFa ? "fa" : "en"}
+                xAxisYearLabel={chartYearAxisLabel}
+                importanceDetail={showAllSignalMapImportance ? "all" : "default"}
+                initialZoom={1}
+                onEventClick={(e) =>
+                  trackEvent("band_timeline_event_click", { study_id: studyId, event_id: e.id, kind: e.kind })
+                }
+              />
+            ) : null}
+          </CardContent>
+        </Card>
+        {study.concepts?.length ? <ConceptsUsed locale={isFa ? "fa" : "en"} conceptKeys={study.concepts} /> : null}
+        <InSimpleTerms locale={isFa ? "fa" : "en"}>
+          {isFa && faRich?.simpleTermsParagraphs?.length ? (
+            faRich.simpleTermsParagraphs.map((p, i) => <p key={i}>{p}</p>)
+          ) : (
+            <p>
+              Date boundaries are chosen for a readable side-by-side comparison, not a definitive single chronology. Use
+              lane toggles to hide regions, and zoom in to read band labels and see overlaps.
             </p>
           )}
         </InSimpleTerms>
@@ -5268,6 +5355,7 @@ export default function StudyDetailPage() {
 
       {!isGlobalEventsTimeline &&
         !isBandEventsTimeline &&
+        !isComparativeHistoryTimeline &&
         !isEventsTimeline &&
         !isFollowerGrowthDynamics &&
         !isFxUsdIrrDual &&

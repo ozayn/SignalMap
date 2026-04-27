@@ -8,6 +8,11 @@ export type {
 export { BAND_LANE_ORDER } from "./types";
 export { BAND_TIMELINE_SEED } from "./seed";
 export {
+  COMPARATIVE_HISTORY_BAND,
+  COMPARATIVE_HISTORY_LANE_ORDER,
+  COMPARATIVE_HISTORY_LAYER_UI,
+} from "./comparative-history-seed";
+export {
   IR_LEADERSHIP_COUNT,
   LEADERSHIP_BAND_ALL,
   LEADERSHIP_BAND_IR,

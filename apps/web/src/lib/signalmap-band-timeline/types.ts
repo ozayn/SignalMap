@@ -19,7 +19,13 @@ export type BandTimelineLane =
   /** Political leadership: Iran presidents and related terms. */
   | "iran_leadership"
   /** Political leadership: U.S. chief executives. */
-  | "us_leadership";
+  | "us_leadership"
+  /** Comparative history study: one row per region / global era (separate from macro band seed). */
+  | "hist_iran"
+  | "hist_france"
+  | "hist_uk"
+  | "hist_us"
+  | "hist_global";
 
 /**
  * Thematic / styling / filter: use `leadership` for IRI and U.S. head-of-term bands; `political` for

@@ -102,6 +102,7 @@ export function getSignalTags(study: StudyMeta): string[] {
     kind === "events_timeline" ||
     kind === "global_events_timeline" ||
     kind === "band_events_timeline" ||
+    kind === "comparative_history_timeline" ||
     kind === "iran_dynasties_timeline"
   ) {
     tags.push("Reference");
@@ -230,6 +231,31 @@ function subjectSearchAliasBits(study: StudyMeta): string[] {
     b.push("Iran", "ایران", "ایرانی", "persian", "Farsi", "تاریخ", "تاریخی", "history", "dynasty", "dynasties", "دودمان", "BCE", "chronology");
   }
 
+  if (k === "comparative_history_timeline") {
+    b.push(
+      "France",
+      "فرانسه",
+      "United Kingdom",
+      "بریتانیا",
+      "انگلستان",
+      "United States",
+      "ایالات متحده",
+      "Renaissance",
+      "رنسانس",
+      "Enlightenment",
+      "تنویر",
+      "Industrial Revolution",
+      "انقلاب صنعتی",
+      "Cold War",
+      "جنگ سرد",
+      "world war",
+      "comparative",
+      "مقایسه",
+      "تاریخ",
+      "history"
+    );
+  }
+
   return [...new Set(b)];
 }
 
@@ -354,6 +380,24 @@ function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
         themes: ["macro"],
         tags: [],
         keywords: ["iran", "history", "dynasty", "periods", "BCE", "chronology", "persia", "vertical", "reference"],
+      };
+    case "comparative_history_timeline":
+      return {
+        countries: ["global", "iran", "us"],
+        themes: ["macro"],
+        tags: [],
+        keywords: [
+          "comparative",
+          "France",
+          "UK",
+          "US",
+          "Renaissance",
+          "enlightenment",
+          "industrial",
+          "world war",
+          "swimlane",
+          "context",
+        ],
       };
     case "follower_growth_dynamics":
       return {
