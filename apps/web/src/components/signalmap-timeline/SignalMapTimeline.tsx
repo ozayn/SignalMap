@@ -59,6 +59,7 @@ const LAYERS: {
   { key: "oil", labelEn: "Oil", labelFa: "نفت" },
   { key: "fx", labelEn: "FX", labelFa: "ارز" },
   { key: "war", labelEn: "Wars", labelFa: "جنگ" },
+  { key: "political", labelEn: "M.E. political", labelFa: "سیاسی (خاورمیانه)" },
 ];
 
 const CAT_STYLE: Record<
@@ -70,6 +71,11 @@ const CAT_STYLE: Record<
   oil: { bar: "bg-amber-500/90", ring: "ring-amber-400/50", text: "text-amber-800 dark:text-amber-200" },
   fx: { bar: "bg-emerald-500/90", ring: "ring-emerald-400/50", text: "text-emerald-800 dark:text-emerald-200" },
   war: { bar: "bg-rose-600/90", ring: "ring-rose-500/50", text: "text-rose-800 dark:text-rose-200" },
+  political: {
+    bar: "bg-cyan-600/90",
+    ring: "ring-cyan-500/50",
+    text: "text-cyan-800 dark:text-cyan-200",
+  },
 };
 
 function eventSpanMs(e: SignalMapTimelineEvent) {
@@ -129,7 +135,7 @@ export function SignalMapTimeline({
   const yearAxisMode: ChartAxisYearMode = xAxisYearLabel ?? "gregorian";
   const numeralLoc: ChartAxisNumeralLocale = lang === "fa" ? "fa" : "en";
   const [layers, setLayers] = useState<Set<SignalMapTimelineEvent["category"]>>(
-    () => new Set(["global", "iran", "oil", "fx", "war"])
+    () => new Set(["global", "iran", "oil", "fx", "war", "political"])
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openCluster, setOpenCluster] = useState<string | null>(null);

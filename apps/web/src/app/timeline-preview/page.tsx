@@ -27,6 +27,17 @@ export default function TimelinePreviewPage() {
           </Link>
           <p className="mt-0.5 text-xs text-muted-foreground">Horizontal bands for periods, compact markers for points; zoom and pan on time.</p>
         </li>
+        <li>
+          <Link
+            href="/timeline/iran-history"
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Iran dynasties (vertical) →
+          </Link>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Museum-style vertical bar chart: time runs top (present) to bottom (deep past).
+          </p>
+        </li>
       </ul>
     </div>
   );

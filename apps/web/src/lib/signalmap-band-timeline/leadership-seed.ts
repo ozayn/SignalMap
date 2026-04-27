@@ -349,6 +349,24 @@ export const LEADERSHIP_BAND_IR: readonly BandTimelinePeriodEvent[] = [
   },
   {
     kind: "period",
+    id: "ir-reza-khan-executive-1923",
+    start_date: "1923-10-28",
+    end_date: "1925-10-30",
+    title_en: "Reza Khan (PM / effective government)",
+    title_fa: "رضاخان (نخست‌وزیری / اقتدار موثر)",
+    lane: "iran_leadership",
+    category: "iran_leadership",
+    importance: 2,
+    description_en:
+      "As Sardar Sepah, then Prime Minister, Reza holds effective power over the Qajar monarchy; overlaps late Ahmad Shah’s nominal rule; he became Shah in Dec 1925 in the same consolidation arc.",
+    description_fa:
+      "نخست‌وزیر و اقتدار عملی پادشاهی ضعیف‌شدهٔ قاجار (هم‌پوشانی با احمدشاه)؛ تاج‌گذاری ۱۳۰۴ گام بعدی همان بسط قدرت است.",
+    tags: ["pahlavi", "reza-shah", "monarchy", "iran"],
+    source_citation_en: "PM/executive phase; dates rounded to standard chronology (e.g. Britannica / IRI); refine with official gazette.",
+    source_citation_fa: "نوبت اجرائی؛ مبنا گاه‌شمار پذیرفته‌شده؛ اصلاح با سند.",
+  },
+  {
+    kind: "period",
     id: "ir-reza-shah-pahlavi",
     start_date: "1925-10-31",
     end_date: "1941-09-16",
@@ -378,6 +396,42 @@ export const LEADERSHIP_BAND_IR: readonly BandTimelinePeriodEvent[] = [
     tags: ["pahlavi", "monarchy", "iran", "reza-pahlavi-era"],
     source_citation_en: "From Shah’s accession after Reza Shah’s forced abdication (16 Sept 1941) to revolution end (11 Feb 1979); use official chronology for sub-month precision.",
     source_citation_fa: "از ۲۵ شهریور ۱۳۲۰ تا ۲۲ بهمن ۱۳۵۷ (تقویم رسمی-تفسیری برای نمایش).",
+  },
+  {
+    kind: "period",
+    id: "ir-bazargan",
+    start_date: "1979-02-12",
+    end_date: "1979-11-05",
+    title_en: "Mehdi Bazargan (Interim Government, Prime Minister)",
+    title_fa: "مهدی بازرگان (دولت موقت، نخست‌وزیر)",
+    lane: "iran_leadership",
+    category: "iran_leadership",
+    importance: 3,
+    description_en:
+      "Provisional government after the 1979 revolution; Bazargan leads until resignation after the U.S. embassy episode (rough window; end date rounded in seed).",
+    description_fa:
+      "ریاست دولت موقت پس از انقلاب ۱۳۵۷ تا دوره پایان با استعفا/بحران سفارت (بازه تقریبی؛ اصلاح با سند).",
+    tags: ["provisional", "iran", "revolution"],
+    source_citation_en: "Bazargan as PM, interim; verify exact mandate end against official IRI/standard histories.",
+    source_citation_fa: "نخست‌وزیری دولت موقت؛ اصلاح با اعلان رسمی.",
+  },
+  {
+    kind: "period",
+    id: "ir-iri-pre-first-president",
+    start_date: "1979-11-06",
+    end_date: "1980-02-03",
+    title_en: "Post-Bazargan: revolutionary bodies to first president",
+    title_fa: "پس از بازرگان: نهادهای انقلابی تا نخستین رئیس‌جمهور",
+    lane: "iran_leadership",
+    category: "iran_leadership",
+    importance: 2,
+    description_en:
+      "Transitional period after the interim PM (Council of the Islamic Revolution and related bodies) until the first IRI president takes office (4 Feb 1980).",
+    description_fa:
+      "فاز انتقال پس از نخست‌وزیر موقت تا روی کار آمدن نخستین رئیس‌جمهور (۱۲/۱۳ بهمن ۱۳۵۸)؛ مبنا کلی.",
+    tags: ["provisional", "council", "iran"],
+    source_citation_en: "Placeholder band for display; use official IRI history for sub-period split.",
+    source_citation_fa: "کلی؛ تقسیم دقیق با اعلان رسمی.",
   },
   {
     kind: "period",

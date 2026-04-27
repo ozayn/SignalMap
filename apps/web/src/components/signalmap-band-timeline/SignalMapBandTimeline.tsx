@@ -23,6 +23,7 @@ import {
   BAND_TIMELINE_SEED,
   clientXToTimeOnTrack,
   clusterPointsInLane,
+  buildAllBandPeriodLabelMaps,
   getBandEventEndMs,
   getBandEventStartMs,
   getBandTimelineDomain,
@@ -107,6 +108,18 @@ const CAT: Record<BandTimelineCategory, { bar: string; line: string; mark: strin
     line: "border-orange-500/40",
     mark: "bg-orange-600/90",
     ring: "ring-orange-400/45",
+  },
+  middle_east_political: {
+    bar: "bg-cyan-600/20",
+    line: "border-cyan-600/35",
+    mark: "bg-cyan-600/90",
+    ring: "ring-cyan-500/40",
+  },
+  political: {
+    bar: "bg-cyan-600/20",
+    line: "border-cyan-600/35",
+    mark: "bg-cyan-600/90",
+    ring: "ring-cyan-500/40",
   },
   policy: {
     bar: "bg-slate-500/25",
@@ -302,6 +315,47 @@ export function SignalMapBandTimeline({
     }
     return resolveSpacedNarrativeLabelIds(cands);
   }, [filtered, viewStart, viewEnd, trackWidth, viewPortion, hoveredId, selectedId]);
+
+  const bandPeriodLabelInfo = useMemo(
+    () =>
+      buildAllBandPeriodLabelMaps(
+        (lane) =>
+          sortPeriodsWideToNarrow(
+            filtered.filter(
+              (e): e is BandTimelinePeriodEvent =>
+                e.kind === "period" && e.lane === lane
+            )
+          ),
+        (lane) =>
+          filtered.filter(
+            (e): e is BandTimelinePeriodEvent =>
+              e.kind === "period" && e.lane === lane
+          ),
+        BAND_LANE_ORDER.filter((l) => layers.has(l as BandLane)),
+        {
+          viewStart,
+          viewEnd,
+          trackWidth,
+          viewPortion,
+          hoveredId,
+          selectedId,
+          lang,
+          minLabelWidthPx: BAND_LABEL_MIN_PX,
+          getTitle: (e) => eventDisplayTitle(titleOf(e, lang)),
+        }
+      ),
+    [
+      filtered,
+      viewStart,
+      viewEnd,
+      trackWidth,
+      viewPortion,
+      hoveredId,
+      selectedId,
+      lang,
+      layers,
+    ]
+  );
 
   const axisTicks = useMemo(
     () =>
@@ -622,25 +676,18 @@ export function SignalMapBandTimeline({
                     const w = toXPercent(s1, viewStart, viewEnd) - left;
                     if (w < 0.04) return null;
                     const wPx = (w / 100) * trackWidth;
-                    const canLabel =
-                      wPx >= BAND_LABEL_MIN_PX &&
-                      shouldShowNarrativeLabel(
-                        "span",
-                        e.importance,
-                        viewPortion,
-                        wPx,
-                        hoveredId === e.id,
-                        selectedId === e.id
-                      );
                     const cat = CAT[e.category];
                     const bandTitle = eventDisplayTitle(titleOf(e, lang));
+                    const labelRow = bandPeriodLabelInfo.get(e.id);
+                    const canLabel = labelRow?.show === true;
+                    const labelText = labelRow?.text ?? bandTitle;
                     const isSel = selectedId === e.id;
                     return (
                       <div
                         key={e.id}
                         role="presentation"
                         className={cn(
-                          "pointer-events-none absolute top-1/2 z-[1] box-border h-5 max-w-full -translate-y-1/2 rounded-full border text-left transition-all duration-200",
+                          "pointer-events-none absolute top-1/2 z-[1] box-border h-5 min-w-0 max-w-full -translate-y-1/2 rounded-full border text-left transition-all duration-200",
                           cat.bar,
                           cat.line,
                           isSel && "z-[2] ring-2 ring-foreground/30",
@@ -654,10 +701,11 @@ export function SignalMapBandTimeline({
                       >
                         {canLabel ? (
                           <span
-                            className="block truncate px-2.5 text-[9px] font-medium leading-5 text-foreground/90 tabular-nums"
+                            className="block min-h-0 min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-2.5 text-left text-[9px] font-medium leading-5 text-foreground/90 tabular-nums"
                             title={bandTitle}
+                            dir="auto"
                           >
-                            {bandTitle}
+                            {labelText}
                           </span>
                         ) : null}
                       </div>

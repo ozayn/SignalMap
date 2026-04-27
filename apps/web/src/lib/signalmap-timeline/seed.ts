@@ -1,5 +1,6 @@
 import type { SignalMapTimelineEvent } from "./types";
 import { ISRAEL_IRAN_US_TIMELINE_DOT } from "../signalmap-israel-iran-us-conflict";
+import { ARAB_SPRING_TIMELINE_DOT } from "../signalmap-arab-spring";
 import { SIGNALMAP_BALKAN_AND_WAR_RANGES } from "../signalmap-war-canonical";
 import { SIGNALMAP_OIL_TIMELINE } from "../signalmap-oil-canonical";
 
@@ -618,4 +619,5 @@ export const SIGNALMAP_TIMELINE_SEED: SignalMapTimelineEvent[] = [
   },
   ...SIGNALMAP_OIL_TIMELINE,
   ...SIGNALMAP_BALKAN_AND_WAR_RANGES,
+  ...ARAB_SPRING_TIMELINE_DOT,
 ];

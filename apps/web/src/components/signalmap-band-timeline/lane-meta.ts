@@ -13,6 +13,7 @@ export const LAYER_UI: { key: BandLane; labelEn: string; labelFa: string }[] = [
   { key: "global_wars", labelEn: "Global conflicts", labelFa: "نبردهای جهانی" },
   { key: "europe_wars", labelEn: "Europe", labelFa: "اروپا" },
   { key: "middle_east_wars", labelEn: "Middle East", labelFa: "خاورمیانه" },
+  { key: "middle_east_political", labelEn: "M.E. political", labelFa: "سیاسی خاورمیانه" },
   { key: "policy", labelEn: "Policy", labelFa: "سیاست" },
   { key: "iran_leadership", labelEn: "Iran leadership", labelFa: "رهبری سیاسی ایران" },
   { key: "us_leadership", labelEn: "U.S. leadership", labelFa: "رهبری سیاسی آمریکا" },

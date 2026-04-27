@@ -4,6 +4,7 @@ import { SIGNALMAP_BALKAN_AND_WAR_BAND } from "../signalmap-war-canonical";
 import { SIGNALMAP_OIL_BAND } from "../signalmap-oil-canonical";
 import { MACRO_CRISIS_BAND_PERIODS } from "../signalmap-macro-crisis-periods";
 import { ISRAEL_IRAN_US_BAND } from "../signalmap-israel-iran-us-conflict";
+import { ARAB_SPRING_BAND } from "../signalmap-arab-spring";
 import { SIGNALMAP_FX_BAND } from "../signalmap-fx-band-canonical";
 
 /**
@@ -125,5 +126,6 @@ export const BAND_TIMELINE_SEED: BandTimelineEvent[] = [
   },
   ...SIGNALMAP_BALKAN_AND_WAR_BAND,
   ...ISRAEL_IRAN_US_BAND,
+  ...ARAB_SPRING_BAND,
   ...LEADERSHIP_BAND_ALL,
 ];

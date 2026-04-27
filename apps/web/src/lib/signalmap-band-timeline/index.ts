@@ -25,3 +25,8 @@ export {
   timeSlopForPixels,
   type BandLaneLayerHitResult,
 } from "./band-lane-pointer-hit";
+export {
+  buildAllBandPeriodLabelMaps,
+  buildBandPeriodLabelMap,
+  type BuildBandLabelOpts,
+} from "./band-period-labels";

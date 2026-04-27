@@ -14,14 +14,18 @@ export type BandTimelineLane =
   | "global_wars"
   | "europe_wars"
   | "middle_east_wars"
+  | "middle_east_political"
   | "policy"
   /** Political leadership: Iran presidents and related terms. */
   | "iran_leadership"
   /** Political leadership: U.S. chief executives. */
   | "us_leadership";
 
-/** Thematic / styling / filter: use `leadership` for IRI and U.S. head-of-term bands. */
-export type BandTimelineCategory = BandTimelineLane | "leadership";
+/**
+ * Thematic / styling / filter: use `leadership` for IRI and U.S. head-of-term bands; `political` for
+ * e.g. Arab Spring (lane `middle_east_political`).
+ */
+export type BandTimelineCategory = BandTimelineLane | "leadership" | "political";
 
 type BandTimelineEventBase = {
   id: string;
@@ -69,6 +73,7 @@ export const BAND_LANE_ORDER: readonly BandTimelineLane[] = [
   "global_wars",
   "europe_wars",
   "middle_east_wars",
+  "middle_east_political",
   "policy",
   "iran_leadership",
   "us_leadership",

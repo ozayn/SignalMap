@@ -5,7 +5,7 @@ import type { ChartAxisYearMode } from "@/lib/chart-axis-year";
  * Consumed by charts via onEventClick for zoom, highlights, and cross-filtering.
  */
 
-export type SignalMapTimelineCategory = "global" | "iran" | "oil" | "fx" | "war";
+export type SignalMapTimelineCategory = "global" | "iran" | "oil" | "fx" | "war" | "political";
 
 export type SignalMapTimelineEvent = {
   id: string;
