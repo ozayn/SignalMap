@@ -75,7 +75,7 @@ type IranDynastiesVerticalTimelineProps = {
   /** When true, the main line title is rendered as h2 (page supplies h1). */
   embedInStudyPage?: boolean;
   /**
-   * Initial view: `vertical` (tall scroll) or `horizontal` (single row, scroll on narrow viewports).
+   * Initial view: `vertical` (tall scroll) or `horizontal` (time along the width). Default: horizontal.
    * User can change it with the Vertical / Horizontal control.
    */
   defaultLayout?: DynastyTimelineLayout;
@@ -500,7 +500,7 @@ function IranDynastiesVerticalTimelineInner({
   onLocaleChange,
   showLanguageToggle = true,
   embedInStudyPage = false,
-  defaultLayout = "vertical",
+  defaultLayout = "horizontal",
 }: IranDynastiesVerticalTimelineProps) {
   const isControlled = controlledLocale !== undefined;
   const [uncontrolledLang, setUncontrolledLang] = useState<StudyLocale>(initialLocale);
