@@ -36,7 +36,8 @@ const HORIZONTAL_TRACK_MIN_PX = 260;
 const H_NARROW_LANE_STRIDE_PX = 12;
 /** Half-width of each external label in px for horizontal overlap resolution (max-w 6.5rem ≈ 52px rad). */
 const H_NARROW_LABEL_HALF_PX = 48;
-const H_NARROW_TEXT_LINE_PX = 10;
+/** Reserve vertical space in the callout block for 2–3 lines of 7px copy (e.g. “Early caliphal era”). */
+const H_NARROW_TEXT_LINE_PX = 22;
 const H_NARROW_CONNECTOR_BASE_PX = 4;
 const H_NARROW_MAX_LANES = 8;
 
@@ -352,9 +353,15 @@ function computeHorizontalNarrowCalloutLayout(
     if (a >= b) continue;
     const { left, width: w0 } = bandRectFromYearsHorizontal(a, b, tMin, tMax, widthPx);
     const w = Math.max(w0, 4);
+    const isNested = isStrictlyNestedInAnother(d, data);
+    const parentLosesInBand = !isNested && hasStrictSubspanChild(d, data);
+    /** Superscript-style nested band would paint over a centered in-band name (e.g. Sāmānid over caliphal). */
+    if (parentLosesInBand) {
+      raw.push({ d, i, cx: left + w / 2 });
+      continue;
+    }
     if (w >= MIN_INNER_LABEL_H_PX) continue;
-    const cx = left + w / 2;
-    raw.push({ d, i, cx });
+    raw.push({ d, i, cx: left + w / 2 });
   }
   if (raw.length === 0) {
     return { hasItems: false, blockHeight: 0, placements: [] };
@@ -473,7 +480,7 @@ function NarrowHorizontalCalloutLane({
           >
             <span
               className={cn(
-                "w-full min-w-0 text-center text-[7px] font-medium leading-tight text-balance",
+                "w-full min-w-0 break-words text-center text-[7px] font-medium leading-snug text-balance [overflow-wrap:anywhere] line-clamp-3",
                 vis.label
               )}
               dir={lang === "fa" ? "rtl" : "ltr"}
@@ -836,7 +843,8 @@ function IranDynastiesVerticalTimelineInner({
                   const w = Math.max(w0, 4);
                   const vis = BAND_VISUAL[i] ?? BAND_VISUAL[0]!;
                   const nestedH = isStrictlyNestedInAnother(d, data);
-                  const canLabel = w >= MIN_INNER_LABEL_H_PX;
+                  const canLabel =
+                    w >= MIN_INNER_LABEL_H_PX && (nestedH || !hasStrictSubspanChild(d, data));
                   const zH = nestedH ? 20 + i : 2 + i;
                   return (
                     <button
@@ -862,7 +870,7 @@ function IranDynastiesVerticalTimelineInner({
                       {canLabel ? (
                         <span
                           className={cn(
-                            "w-full min-w-0 max-w-full overflow-hidden px-0.5 text-center text-[8px] font-medium leading-tight line-clamp-2",
+                            "w-full min-w-0 max-w-full overflow-hidden break-words px-0.5 text-center text-[8px] font-medium leading-snug line-clamp-3 [overflow-wrap:anywhere]",
                             vis.label
                           )}
                           dir={lang === "fa" ? "rtl" : "ltr"}
