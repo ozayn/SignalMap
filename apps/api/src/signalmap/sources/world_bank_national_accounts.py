@@ -4,8 +4,14 @@ from typing import Any
 
 import httpx
 
+from signalmap.utils.ttl_cache import get as cache_get, set as cache_set
+
 WB_BASE = "https://api.worldbank.org/v2/country"
 USER_AGENT = "SignalMap/1.0 (research; +https://github.com/ozayn/SignalMap)"
+
+# In-process cache for raw WDI indicator rows (shared across signal bundles). Invalidated with
+# ``invalidate_prefix("wdi_rows:")`` when the weekly WDI refresh job runs.
+WDI_ROWS_TTL_SECONDS = 21600.0  # 6 hours, aligned with ``signalmap.services.signals.CACHE_TTL``
 
 # World Development Indicators used for GDP composition studies
 WDI_FINAL_CONSUMPTION_PCT_GDP = "NE.CON.TOTL.ZS"
@@ -82,10 +88,17 @@ def resolve_national_account_levels_rows(iso: str, gdp_current_usd_rows: list[di
 def fetch_wdi_annual_indicator(country_iso3: str, indicator_id: str) -> list[dict[str, Any]]:
     """
     Fetch one WDI indicator for a country. Returns [{year: int, value: float}, ...] sorted by year.
-    Paginates until all rows are read.
+    Paginates until all rows are read. Results are cached in-process (``wdi_rows:…``) to avoid
+    repeated HTTP for the same (iso, indicator) when building multiple study bundles.
     """
     iso = country_iso3.strip().upper()
-    url = f"{WB_BASE}/{iso}/indicator/{indicator_id}"
+    iid = indicator_id.strip()
+    ck = f"wdi_rows:{iso}:{iid}"
+    hit = cache_get(ck)
+    if hit is not None:
+        return hit  # type: ignore[return-value]
+
+    url = f"{WB_BASE}/{iso}/indicator/{iid}"
     rows: list[dict[str, Any]] = []
     page = 1
     with httpx.Client(timeout=30.0, headers={"User-Agent": USER_AGENT}) as client:
@@ -117,6 +130,7 @@ def fetch_wdi_annual_indicator(country_iso3: str, indicator_id: str) -> list[dic
                 break
             page += 1
     rows.sort(key=lambda r: r["year"])
+    cache_set(ck, rows, WDI_ROWS_TTL_SECONDS)
     return rows
 
 

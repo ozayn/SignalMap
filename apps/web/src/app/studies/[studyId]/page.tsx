@@ -3262,6 +3262,16 @@ export default function StudyDetailPage() {
     [isFxUsdToman, fxPoints, fxTimeRange]
   );
 
+  /**
+   * Dual FX (iran_fx_spread): same as USD→Toman — full `fxDualOpenPoints` for means, spread, KPIs, stats;
+   * downsampled series for the open line in ECharts only.
+   */
+  const fxDualOpenPointsForChart = useMemo(
+    () =>
+      isFxUsdIrrDual ? downsampleFxOpenForDisplay(fxDualOpenPoints, fxDualTimeRange) : [],
+    [isFxUsdIrrDual, fxDualOpenPoints, fxDualTimeRange]
+  );
+
   if (!study) {
     return (
       <div className="study-page-container py-12 space-y-4">
@@ -4490,7 +4500,7 @@ export default function StudyDetailPage() {
                     label: L(isFa, "Open market (merged, same as USD→Toman)", "بازار آزاد (ادغام‌شده، همان مطالعهٔ اصلی)"),
                     yAxisIndex: 0,
                     unit: L(isFa, "toman/USD", "تومان/دلار"),
-                    points: fxDualOpenPoints,
+                    points: fxDualOpenPointsForChart,
                     color: SIGNAL_CONCEPT.fx_open,
                     symbol: "diamond",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,

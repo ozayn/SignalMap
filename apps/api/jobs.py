@@ -1692,6 +1692,7 @@ def update_macro_signals() -> dict:
         from signalmap.utils.ttl_cache import invalidate_prefix
 
         out["wdi_signal_cache_invalidated"] = {
+            "wdi_annual_rows": invalidate_prefix("wdi_rows:"),
             "gini_inequality": invalidate_prefix("signal:gini_inequality:"),
             "cpi_inflation_yoy": invalidate_prefix("signal:cpi_inflation_yoy:"),
             "poverty_headcount_iran": invalidate_prefix("signal:poverty_headcount_iran:"),
@@ -1700,6 +1701,7 @@ def update_macro_signals() -> dict:
             "iran_money_supply_m2": invalidate_prefix("signal:iran_money_supply_m2:"),
             "dutch_disease_diagnostics_iran": invalidate_prefix("signal:dutch_disease_diagnostics_iran:"),
             "isi_diagnostics": invalidate_prefix("signal:isi_diagnostics:"),
+            "gdp_global_comparison": invalidate_prefix("signal:gdp_global_comparison:"),
             "oil_economy_overview": invalidate_prefix("signal:oil_economy_overview:"),
         }
     except Exception as e:

@@ -32,14 +32,20 @@ CITATION_FA = (
 )
 
 _LIQUIDITY_JSON = Path(__file__).resolve().parent.parent / "data" / "iran_cbi_liquidity_levels_solar.json"
+_LIQUIDITY_LEVELS_PARSED: dict[int, float] | None = None
 
 
 def _read_liquidity_levels() -> dict[int, float]:
+    """Parse the static CBI-liquidity JSON once per process (same file on every post-2016 M2 build)."""
+    global _LIQUIDITY_LEVELS_PARSED
+    if _LIQUIDITY_LEVELS_PARSED is not None:
+        return _LIQUIDITY_LEVELS_PARSED
     with open(_LIQUIDITY_JSON, encoding="utf-8") as f:
         raw = json.load(f)
     levels: dict[int, float] = {}
     for k, v in (raw.get("levels") or {}).items():
         levels[int(k)] = float(v)
+    _LIQUIDITY_LEVELS_PARSED = levels
     return levels
 
 
