@@ -96,9 +96,10 @@ def update_fx_usd_toman() -> dict[str, Any]:
         if start_date > end_date:
             return {"rows_added": 0, "start_date": start_date, "end_date": end_date}
 
-        from signalmap.services.signals import fetch_usd_toman_merged
+        from signalmap.services.signals import fetch_usd_toman_merged, set_usd_toman_merged_cache
 
         merged = fetch_usd_toman_merged()
+        set_usd_toman_merged_cache(merged)
         points = [p for p in merged if start_date <= p["date"] <= end_date]
         rows = insert_points_ignore_conflict(
             SIGNAL_FX_USD_TOMAN,

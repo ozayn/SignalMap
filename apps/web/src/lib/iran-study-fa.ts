@@ -23,6 +23,7 @@ export const IRAN_FA_STUDY_IDS = new Set<string>([
   "poverty-rate",
   "dutch-disease-diagnostics",
   "oil-economy-overview",
+  "iran-money-supply-growth",
 ]);
 
 export type StudyLocale = "en" | "fa";

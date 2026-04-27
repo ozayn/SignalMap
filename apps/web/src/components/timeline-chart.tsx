@@ -8,6 +8,12 @@ import {
   normalizeChartRangeBound,
 } from "@/lib/chart-study-range";
 import {
+  buildEventOverlay,
+  findTimeSeriesEventCategoryIndex,
+  findTimeSeriesEventRangeCategoryIndices,
+  resolveTimeSeriesEventAlignToCalendarYearBucket,
+} from "@/lib/time-series-event-overlay";
+import {
   downloadEchartsRaster,
   slugifyChartFilename,
   type DownloadEchartsRasterOptions,
@@ -494,15 +500,6 @@ function GroupedMultiSeriesLegendTable({
       </table>
     </div>
   );
-}
-
-function findEventIndex(dates: string[], eventDate: string): number | null {
-  const idx = dates.indexOf(eventDate);
-  if (idx >= 0) return idx;
-  for (let i = 0; i < dates.length; i++) {
-    if (dates[i] >= eventDate) return i;
-  }
-  return dates.length - 1;
 }
 
 /** Minimum Gregorian years between shown Iran macro **top** captions (lines always draw). */
@@ -1204,6 +1201,10 @@ export function TimelineChart({
       !!timeRange?.[1];
     const useYearlyMultiSeries =
       hasMultiSeries && timeRange && useSparseMultiSeriesDates && !forceTimeRangeAxis;
+    const alignToCalendarYearBucket = resolveTimeSeriesEventAlignToCalendarYearBucket({
+      chartRangeGranularity: chartRangeGranularityProp,
+      useYearlyMultiSeries: Boolean(useYearlyMultiSeries),
+    });
     const yearlyDates =
       useYearlyMultiSeries && timeRange
         ? (() => {
@@ -1378,7 +1379,7 @@ export function TimelineChart({
         ? oilShockDates
             .filter((d) => d >= minDate! && d <= maxDate!)
             .map((d) => {
-              const idx = findEventIndex(dates, d);
+              const idx = findTimeSeriesEventCategoryIndex(dates, d, false);
               if (idx == null) return null;
               const dateStr = dates[idx]!;
               const yVal =
@@ -1431,18 +1432,18 @@ export function TimelineChart({
     const pointEvents = events.filter((e) => e.date != null);
     const rangeEvents = events.filter((e) => e.date_start != null && e.date_end != null);
 
-    const markLineData: { xAxis: string; event: TimelineEvent; isAnchor: boolean }[] = [];
-    for (const ev of pointEvents) {
-      if (ev.date! < minDate || ev.date! > maxDate) continue;
-      const idx = findEventIndex(dates, ev.date!);
-      if (idx != null) {
-        markLineData.push({
-          xAxis: dates[idx],
-          event: ev,
-          isAnchor: anchorEventId === ev.id,
-        });
-      }
-    }
+    const { pointMarkers: eventOverlayPoints } = buildEventOverlay({
+      events: pointEvents,
+      dates,
+      minDate: minDate!,
+      maxDate: maxDate!,
+      alignToCalendarYearBucket,
+    });
+    const markLineData: { xAxis: string; event: TimelineEvent; isAnchor: boolean }[] = eventOverlayPoints.map((p) => ({
+      xAxis: p.xAxis,
+      event: p.event,
+      isAnchor: anchorEventId === p.event.id,
+    }));
 
     const markLineDataForRender =
       oilPublicationLayout && isClassicOilChart && oilEventDensity === "story"
@@ -1556,16 +1557,10 @@ export function TimelineChart({
     for (const ev of rangeEvents) {
       const ds = ev.date_start!;
       const de = ev.date_end!;
-      if (de < minDate || ds > maxDate) continue;
-      const startIdx = dates.findIndex((d) => d >= ds);
-      let endIdx = -1;
-      for (let i = dates.length - 1; i >= 0; i--) {
-        if (dates[i] <= de) {
-          endIdx = i;
-          break;
-        }
-      }
-      if (startIdx < 0 || endIdx < 0 || startIdx > endIdx) continue;
+      if (de < minDate! || ds > maxDate!) continue;
+      const rangeIdx = findTimeSeriesEventRangeCategoryIndices(dates, ds, de, alignToCalendarYearBucket);
+      if (rangeIdx == null) continue;
+      const { startIdx, endIdx } = rangeIdx;
       const bandWidth = endIdx - startIdx + 1;
       const gapIndices = isPresidentialEvent(ev)
         ? Math.min(3, Math.floor(bandWidth / 10))
@@ -2296,9 +2291,14 @@ export function TimelineChart({
                           ),
                           ...sanctionsPeriods
                             .map((p) => {
-                              const startIdx = dates.findIndex((d) => d >= p.date_start);
-                              const endIdx = dates.reduce((last, d, i) => (d <= p.date_end ? i : last), -1);
-                              if (startIdx < 0 || endIdx < 0 || startIdx > endIdx) return null;
+                              const r = findTimeSeriesEventRangeCategoryIndices(
+                                dates,
+                                p.date_start,
+                                p.date_end,
+                                alignToCalendarYearBucket
+                              );
+                              if (r == null) return null;
+                              const { startIdx, endIdx } = r;
                               const xStart = dates[startIdx]!;
                               const xEnd = dates[endIdx]!;
                               return [

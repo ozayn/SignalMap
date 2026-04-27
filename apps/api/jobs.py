@@ -1695,6 +1695,9 @@ def update_macro_signals() -> dict:
             "gini_inequality": invalidate_prefix("signal:gini_inequality:"),
             "cpi_inflation_yoy": invalidate_prefix("signal:cpi_inflation_yoy:"),
             "poverty_headcount_iran": invalidate_prefix("signal:poverty_headcount_iran:"),
+            "ira_official_fx_annual": invalidate_prefix("internal:ira_official_fx_annual_toman:"),
+            # WDI refresh; post-2016 M2 is static CBI-liquidity JSON in world_bank_iran_money_supply (no new cron for CBI)
+            "iran_money_supply_m2": invalidate_prefix("signal:iran_money_supply_m2:"),
             "dutch_disease_diagnostics_iran": invalidate_prefix("signal:dutch_disease_diagnostics_iran:"),
             "isi_diagnostics": invalidate_prefix("signal:isi_diagnostics:"),
             "oil_economy_overview": invalidate_prefix("signal:oil_economy_overview:"),

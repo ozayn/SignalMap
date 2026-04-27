@@ -136,12 +136,13 @@ export default function StudiesPage() {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search titles, topics, countries…"
+            placeholder="Search titles, topics, countries (English or Persian)…"
             className="w-full rounded-lg border border-[#e5e7eb] dark:border-[#374151] bg-white dark:bg-[#111827] px-3 py-2 text-sm text-[#111827] dark:text-[#e5e7eb] placeholder:text-[#9ca3af] outline-none focus:ring-2 focus:ring-[#111827]/15 dark:focus:ring-[#e5e7eb]/20"
           />
           <p className="mt-1.5 text-[11px] leading-snug text-[#9ca3af]">
-            Matches study title, subtitle, description, concepts, signal tags, browse themes/countries, and section
-            labels. Use several words to narrow (all words must match).
+            Matches English and Persian study text (including Persian titles and descriptions where available), concepts,
+            signal tags, browse themes/countries, and section labels. Diacritics, Arabic–Persian character variants, and
+            digit shapes are normalized. Use several words to narrow (all words must match).
           </p>
         </div>
 

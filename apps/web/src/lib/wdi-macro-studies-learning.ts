@@ -216,6 +216,72 @@ export function povertyLearningSections(isFa: boolean): LearningNoteSection[] {
   return isFa ? POVERTY_FA : POVERTY_EN;
 }
 
+const MONEY_SUPPLY_M2_EN: LearningNoteSection[] = [
+  {
+    heading: "What this shows",
+    bullets: [
+      "Money supply growth measures how fast broad money (often labeled M2: cash plus deposits that can be spent fairly quickly) is increasing, expressed as an annual percent change (year-on-year).",
+      "The primary M2 line combines WDI through 2016 with a CBI-liquidity–based extension; see “Methodology”. A second line adds Iran CPI inflation (WDI FP.CPI.TOTL.ZG) on the same calendar year to compare liquidity and price dynamics.",
+    ],
+  },
+  {
+    heading: "Methodology",
+    bullets: [
+      "WDI / IMF IFS broad money growth (FM.LBL.BMNY.ZG via the World Bank pipeline) is used through 2016.",
+      "From 2017 onward, SignalMap derives year-on-year growth from year-end, CBI-style broad liquidity (نقدینگی) levels held in a static, manually updated file—not a live CBI feed.",
+      "Definitions and timing can differ from WDI M2; the post-2016 segment is best read as a continuity-oriented estimate, not a strict redefinition of the WDI series.",
+    ],
+  },
+  {
+    heading: "How to read",
+    bullets: [
+      "Vertical axis: percent per year. Horizontal axis: year (Gregorian; optional Solar Hijri / both labels in Persian mode).",
+      "High money growth can contribute to inflation pressure, but the relationship is not always immediate or one-to-one: velocity, output, and expectations also matter. The CPI series can extend past the WDI M2 window; the stitched M2 line extends with liquidity-based YoY where we have levels.",
+    ],
+  },
+  {
+    heading: "Source (chart & export)",
+    bullets: [
+      "Source: World Bank WDI FM.LBL.BMNY.ZG; IMF IFS; CBI-style liquidity levels, derived YoY growth from 2017 onward.",
+    ],
+  },
+];
+
+const MONEY_SUPPLY_M2_FA: LearningNoteSection[] = [
+  {
+    heading: "این چه می‌نماید",
+    bullets: [
+      "رشد نقدینگی یعنی سرعت افزایش حجم پول و سپرده‌های قابل خرج در اقتصاد — اغلب با پول وسیع / M2؛ در اینجا به‌صورت تغییر درصد سالانه (نسبت به سال قبل) نمایش داده می‌شود.",
+      "خط اصلی M2 ترکیب WDI تا ۲۰۱۶ با ادامهٔ مبتنی بر سطح نقدینگی بانک است؛ بخش «روش ساخت داده» را ببینید. خط دوم تورم CPI (FP.CPI.TOTL.ZG) را روی همان سال می‌گذارد.",
+    ],
+  },
+  {
+    heading: "روش ساخت داده",
+    bullets: [
+      "رشد پول وسیع (FM.LBL.BMNY.ZG) از IFS/IMF در بانک جهانی تا ۲۰۱۶ در همین سری حفظ می‌شود.",
+      "از ۲۰۱۷ به‌بعد، ٪نسبت به سال قبل در SignalMap از سطح نقدینگی وسیع پایان‌سال به‌سبک بانک مرکزی (فایل ثابت، به‌صورت دستی هنگام انتشار سطح جدید) مشتق می‌شود—نه API زنده.",
+      "تعریف ممکن است کاملاً مطابق M2ی WDI نباشد؛ ادامهٔ ۲۰۱۷+ بیشتر به‌عنوان تخمین تداوم (کنار بخش WDI) تفسیر شود.",
+    ],
+  },
+  {
+    heading: "چگونه بخوانید",
+    bullets: [
+      "محور عمودی: درصد در سال. محور افقی: سال (میلادی؛ در رابط فارسی شمسی یا هر دو).",
+      "رشد بالای نقدینگی می‌تواند به فشار تورمی کمک کند اما ارتباط همیشه سریع یا یک‌به‌یک نیست؛ شکست داده و تفاوت طول سری مهم است.",
+    ],
+  },
+  {
+    heading: "منبع (نمودار و خروج PNG)",
+    bullets: [
+      "منبع: WDI بانک جهانی FM.LBL.BMNY.ZG؛ IFS (IMF)؛ سطوح نقدینگی به‌سبک بانک مرکزی—٪رشد سال‌به‌سال از ۲۰۱۷ به‌بعد (مشتق در SignalMap).",
+    ],
+  },
+];
+
+export function moneySupplyM2LearningSections(isFa: boolean): LearningNoteSection[] {
+  return isFa ? MONEY_SUPPLY_M2_FA : MONEY_SUPPLY_M2_EN;
+}
+
 const ISI_DIAGNOSTICS_EN: LearningNoteSection[] = [
   {
     heading: "What ISI refers to here",

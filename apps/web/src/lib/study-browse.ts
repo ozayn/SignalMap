@@ -1,5 +1,14 @@
 import { CONCEPTS, type ConceptKey } from "./concepts";
-import { getStudyById, STUDY_BROWSE_GROUP_TITLES, type StudyCountry, type StudyMeta, type StudyTheme } from "./studies";
+import { IRAN_STUDY_FA_DISPLAY } from "./iran-study-fa-copy";
+import { normalizeSearchText } from "./study-search-normalize";
+import {
+  getStudyById,
+  STUDY_BROWSE_GROUP_TITLES,
+  type StudyCountry,
+  type StudyGroup,
+  type StudyMeta,
+  type StudyTheme,
+} from "./studies";
 
 export type BrowseProfile = {
   countries: StudyCountry[];
@@ -21,6 +30,49 @@ export const STUDY_THEME_OPTIONS: { id: StudyTheme; label: string }[] = [
   { id: "inequality", label: "Inequality" },
   { id: "social", label: "Social / platform" },
 ];
+
+/** Localized browse labels (search & discovery). */
+const COUNTRY_FA: Partial<Record<StudyCountry, string>> = {
+  iran: "ایران",
+  us: "ایالات متحده آمریکا",
+  global: "جهانی",
+};
+
+const THEME_FA: Partial<Record<StudyTheme, string>> = {
+  macro: "اقتصاد کلان",
+  oil: "نفت",
+  fx: "نرخ ارز",
+  inequality: "نابرابری",
+  social: "اجتماعی پلتفرم",
+};
+
+const STUDY_BROWSE_GROUP_TITLES_FA: Record<StudyGroup, { title: string; description: string }> = {
+  core: {
+    title: "سیگنال‌های اصلی",
+    description: "نرخ ارز، نفت، نفت+ارز، تورم بین‌کشوری (CPI)",
+  },
+  iran: {
+    title: "اقتصاد ایران",
+    description: "حساب‌های ملی، نفت، صادرات، نرخ ارز و کار",
+  },
+  global: {
+    title: "زمینهٔ جهانی",
+    description: "مقیاس GDP، نفت بلندمدت، رویدادها، تولید و تجارت",
+  },
+  policy: {
+    title: "ساختار و سیاست",
+    description: "منبع در برابر بخش قابل‌تجارت و الگوهای واردات‌گریز (WDI)",
+  },
+  welfare: {
+    title: "نابرابری و رفاه",
+    // Omit the exact word for poverty as a single token in this shared blurb, so "فقر" search targets poverty studies and FA text.
+    description: "نابرابری در درآمد، رفاه و توان خرید و قیمت‌ها",
+  },
+  discourse: {
+    title: "گفتمان و مخاطب",
+    description: "رشد پلتفرم و تحلیل نظرات یوتیوب",
+  },
+};
 
 /** Signal-row tags. `study.tags` (when set) come first, then kind-derived tags (de-duplicated). */
 export function getSignalTags(study: StudyMeta): string[] {
@@ -57,9 +109,116 @@ function sectionTitlesForStudy(studyId: string): string[] {
   const out: string[] = [];
   for (const p of study.groupPlacements) {
     const t = STUDY_BROWSE_GROUP_TITLES[p.group];
-    out.push(t.title, t.description);
+    const f = STUDY_BROWSE_GROUP_TITLES_FA[p.group];
+    out.push(t.title, t.description, f.title, f.description);
   }
   return out;
+}
+
+function faDisplaySearchBits(study: StudyMeta): string[] {
+  const fa = IRAN_STUDY_FA_DISPLAY[study.id];
+  if (!fa) return [];
+  const o: string[] = [];
+  if (fa.title) o.push(fa.title);
+  if (fa.subtitle) o.push(fa.subtitle);
+  if (fa.description) o.push(fa.description);
+  if (fa.unitLabel) o.push(fa.unitLabel);
+  if (fa.observations) o.push(...fa.observations);
+  if (fa.simpleTermsParagraphs) o.push(...fa.simpleTermsParagraphs);
+  if (fa.fxDualCardTitle) o.push(fa.fxDualCardTitle);
+  return o;
+}
+
+const OIL_KINDS: readonly string[] = [
+  "oil_brent",
+  "oil_global_long",
+  "oil_and_fx",
+  "real_oil",
+  "oil_ppp_iran",
+  "oil_export_capacity",
+  "oil_production_major_exporters",
+  "oil_trade_network",
+  "oil_exporter_timeseries",
+  "oil_geopolitical_reaction",
+  "oil_economy_overview",
+  "gold_and_oil",
+];
+
+/**
+ * Bilingual and Persian-friendly aliases so EN queries match FA text and vice versa
+ * (WDI, policy labels, and common class names on study detail pages).
+ */
+function subjectSearchAliasBits(study: StudyMeta): string[] {
+  const k = study.primarySignal.kind;
+  const concepts = new Set<ConceptKey>((study.concepts ?? []) as ConceptKey[]);
+  const b: string[] = [];
+
+  if (OIL_KINDS.includes(k)) {
+    b.push("نفت", "نفت خام", "oil", "brent", "crude", "petroleum", "OPEC", "اُپک");
+  }
+
+  const cpiInConcepts =
+    concepts.has("cpi") || concepts.has("real_wage") || concepts.has("real_oil_price");
+  if (k === "inflation_cpi_yoy" || cpiInConcepts) {
+    b.push("تورم", "inflation", "CPI", "consumer price", "تورم مصرف‌کننده", "تورم مصرف کننده");
+  }
+
+  if (k === "iran_money_supply_m2") {
+    b.push("نقدینگی", "M2", "broad money", "money supply", "پول وسیع", "نقدینگی m2", "رشد نقدینگی", "liquidity");
+  }
+
+  if (k === "fx_usd_toman" || k === "oil_and_fx" || k === "fx_usd_irr_dual") {
+    b.push("نرخ ارز", "نرخ آزاد", "نرخ رسمی", "تومان", "toman", "dollar", "forex", "دلار", "foreign exchange", "FX");
+  }
+
+  if (k === "gdp_composition" || k === "iran_gdp_accounts_dual" || k === "gdp_global_comparison") {
+    b.push("تولید ناخالص داخلی", "GDP", "gross domestic product", "حساب‌های ملی", "national accounts", "WDI", "wdi");
+  }
+
+  if (k === "gini_inequality") {
+    b.push("نابرابری", "gini", "inequality", "income distribution", "جینی", "ضریب جینی");
+  }
+
+  if (k === "poverty_headcount_iran") {
+    b.push("فقر", "poverty", "poverty line", "خط فقر", "دستمزد", "welfare");
+  }
+
+  if (k === "dutch_disease_diagnostics_iran" || concepts.has("dutch_disease_pattern")) {
+    b.push("بیماری هلندی", "Dutch disease", "resource curse", "اجاره نفت", "نفت");
+  }
+
+  if (k === "isi_diagnostics") {
+    b.push(
+      "جانشینی واردات",
+      "import substitution",
+      "ISI",
+      "صنعتی‌سازی",
+      "واردات",
+      "صادرات",
+      "تولید صنعتی",
+      "manufacturing",
+      "industry",
+      "صنعت"
+    );
+  }
+
+  if (k === "isi_diagnostics" || k === "oil_trade_network" || k === "oil_exporter_timeseries" || concepts.has("trade_networks")) {
+    b.push("imports", "exports", "تجارت");
+  }
+
+  if (k === "wage_cpi_real") {
+    b.push("تورم", "CPI", "wage", "دستمزد", "دست‌مزد");
+  }
+
+  if (study.themes?.includes("inequality")) {
+    b.push("نابرابری", "inequality", "welfare", "رفاه");
+  }
+
+  if (k === "real_oil") {
+    b.push("CPI", "inflation", "تورم");
+  }
+
+  return [...new Set(b)];
 }
 
 function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
@@ -320,6 +479,22 @@ function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
           "fred",
         ],
       };
+    case "iran_money_supply_m2":
+      return {
+        countries: ["iran"],
+        themes: ["macro"],
+        tags: [],
+        keywords: [
+          "m2",
+          "broad money",
+          "fm.lbl.bmny.zg",
+          "liquidity",
+          "money supply",
+          "wdi",
+          "inflation",
+          "fp.cpi.totl.zg",
+        ],
+      };
     default:
       return { countries: ["global"], themes: ["macro"], tags: [], keywords: [] };
   }
@@ -353,10 +528,12 @@ function conceptSearchBits(study: StudyMeta): string[] {
 export function getStudySearchHaystack(study: StudyMeta): string {
   const p = getBrowseProfile(study);
   const signalTags = getSignalTags(study);
-  const parts = [
+  const parts: string[] = [
     study.title,
     study.subtitle ?? "",
     study.description,
+    ...(study.observations ?? []),
+    study.unitLabel ?? "",
     study.id,
     String(study.number),
     study.status,
@@ -367,16 +544,32 @@ export function getStudySearchHaystack(study: StudyMeta): string {
     ...signalTags,
     ...conceptSearchBits(study),
     ...sectionTitlesForStudy(study.id),
+    ...faDisplaySearchBits(study),
   ];
-  return parts.join(" ").toLowerCase();
+  for (const c of p.countries) {
+    const cf = COUNTRY_FA[c];
+    if (cf) parts.push(cf);
+  }
+  for (const t of p.themes) {
+    const tf = THEME_FA[t];
+    if (tf) parts.push(tf);
+  }
+  for (const opt of STUDY_COUNTRY_OPTIONS) {
+    if (p.countries.includes(opt.id)) parts.push(opt.label);
+  }
+  for (const opt of STUDY_THEME_OPTIONS) {
+    if (p.themes.includes(opt.id)) parts.push(opt.label);
+  }
+  parts.push(...subjectSearchAliasBits(study));
+  return normalizeSearchText(parts.join(" "));
 }
 
 /** Every query word must appear somewhere in the haystack (AND). */
 export function studyMatchesSearch(study: StudyMeta, query: string, haystack?: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  const h = haystack ?? getStudySearchHaystack(study);
-  const words = q.split(/\s+/).filter(Boolean);
+  const nq = normalizeSearchText(query);
+  if (!nq) return true;
+  const h = normalizeSearchText(haystack ?? getStudySearchHaystack(study));
+  const words = nq.split(/\s+/).filter(Boolean);
   return words.every((w) => h.includes(w));
 }
 
@@ -406,3 +599,5 @@ export function studyMatchesBrowseFilters(
   if (!studyMatchesThemeFilters(study, opts.themes)) return false;
   return true;
 }
+
+export { normalizeSearchText } from "./study-search-normalize";

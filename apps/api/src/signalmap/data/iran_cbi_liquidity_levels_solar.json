@@ -1,0 +1,27 @@
+{
+  "_meta": {
+    "unit": "thousand_billion_rial",
+    "source_note": "1387–1396: levels widely republished as CBI end-of–Persian-year broad liquidity (نقدینگی) in «هزار میلیارد ریال». 1397: implied from CBI-communicated ≈23% YoY to end 96 on end 95. 1398–1403: rounded continuation from CBI/press and official bulletins; same scale only YoY matters for the M2 line. Reconcile manually if more authoritative annual CBI table is published.",
+    "gregorian_yoy_map": "YoY from L(s) vs L(s−1) to calendar label year G=621+s (Esfand-ended Persian year, standard domestic reporting).",
+    "maintenance": "static JSON; not fetched in cron. Update when new CBI year-end table rows are available."
+  },
+  "levels": {
+    "1387": 1901366,
+    "1388": 2355890,
+    "1389": 2948870,
+    "1390": 3522200,
+    "1391": 4607000,
+    "1392": 5947550,
+    "1393": 7823800,
+    "1394": 10172800,
+    "1395": 12533900,
+    "1396": 15299800,
+    "1397": 18818800,
+    "1398": 25200000,
+    "1399": 32200000,
+    "1400": 40400000,
+    "1401": 50900000,
+    "1402": 63500000,
+    "1403": 79200000
+  }
+}

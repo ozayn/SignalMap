@@ -4,6 +4,7 @@ Read path: cache → Postgres → fetcher (with upsert).
 """
 
 import logging
+import time
 from datetime import datetime, timezone
 
 from signalmap.data.gold_annual import GOLD_ANNUAL
@@ -47,6 +48,10 @@ SIGNAL_IRAN_EXPORT_VOLUME = "iran_oil_export_volume"
 SIGNAL_EXPORT_REVENUE_PROXY = "derived_export_revenue_proxy"
 SIGNAL_USD_TOMAN = "usd_toman_open_market"
 CACHE_TTL = 21600  # 6 hours
+# Merged open-market series (FRED + rial archive + live Bonbast): expensive; cache separately from per-range keys.
+_FX_USD_TOMAN_MERGED_CACHE = "internal:fx_merged:usd_toman_open:v1"
+_IRAN_OFFICIAL_FX_ANNUAL_CACHE = "internal:ira_official_fx_annual_toman:v1"
+_FX_INTERNAL_TTL = float(CACHE_TTL)
 
 # Base year for inflation adjustment (CPI reference month)
 CPI_BASE_YEAR = 2015
@@ -120,6 +125,39 @@ def fetch_usd_toman_merged() -> list[dict]:
     for p in bonbast:
         by_date[p["date"]] = p
     return sorted(by_date.values(), key=lambda x: x["date"])
+
+
+def get_usd_toman_merged_cached() -> list[dict]:
+    """In-memory full merged series; avoids refetching GitHub archive + FRED + Bonbast on every (start,end) cache miss."""
+    hit = cache_get(_FX_USD_TOMAN_MERGED_CACHE)
+    if hit is not None:
+        return hit
+    t0 = time.perf_counter()
+    merged = fetch_usd_toman_merged()
+    cache_set(_FX_USD_TOMAN_MERGED_CACHE, merged, _FX_INTERNAL_TTL)
+    logger.info(
+        "fx_merged usd_toman: built n=%d merge_s=%.2f (archive+bonbast+fred); cached for %s h",
+        len(merged),
+        time.perf_counter() - t0,
+        _FX_INTERNAL_TTL / 3600,
+    )
+    return merged
+
+
+def set_usd_toman_merged_cache(merged: list[dict]) -> None:
+    """Set merged cache (e.g. after ingest) so the next read avoids redundant remote fetches."""
+    cache_set(_FX_USD_TOMAN_MERGED_CACHE, merged, _FX_INTERNAL_TTL)
+
+
+def _get_iran_official_annual_toman_cached() -> list[dict]:
+    hit = cache_get(_IRAN_OFFICIAL_FX_ANNUAL_CACHE)
+    if hit is not None:
+        return hit
+    t0 = time.perf_counter()
+    full = build_iran_official_annual_toman_merged()
+    cache_set(_IRAN_OFFICIAL_FX_ANNUAL_CACHE, full, _FX_INTERNAL_TTL)
+    logger.info("ira_official_fx_annual: n=%d build_s=%.2f", len(full), time.perf_counter() - t0)
+    return full
 
 
 def get_brent_series(start: str, end: str) -> dict:
@@ -788,7 +826,8 @@ def get_usd_toman_series(start: str, end: str) -> dict:
     if cached is not None:
         return cached
 
-    merged = fetch_usd_toman_merged()
+    t_req = time.perf_counter()
+    merged = get_usd_toman_merged_cached()
     by_date: dict[str, dict] = {}
     for p in merged:
         if start <= p["date"] <= end:
@@ -797,19 +836,21 @@ def get_usd_toman_series(start: str, end: str) -> dict:
 
     official_annual: list[dict] = []
     try:
-        full = build_iran_official_annual_toman_merged()
+        full = _get_iran_official_annual_toman_cached()
         official_annual = [p for p in full if start <= p["date"] <= end]
     except Exception:
         official_annual = []
 
     if points:
         logger.info(
-            "usd_toman: %s..%s points=%d earliest=%s latest=%s",
+            "usd_toman: %s..%s points=%d earliest=%s latest=%s; prep_s=%.2f; merged_len=%d",
             start,
             end,
             len(points),
             points[0]["date"],
             points[-1]["date"],
+            time.perf_counter() - t_req,
+            len(merged),
         )
     else:
         logger.info("usd_toman: no open-market points in %s..%s", start, end)
@@ -854,12 +895,13 @@ def get_usd_irr_dual_series(start: str, end: str) -> dict:
     if cached is not None:
         return cached
 
-    full_official = build_iran_official_annual_toman_merged()
+    t_req = time.perf_counter()
+    full_official = _get_iran_official_annual_toman_cached()
     official_points = [p for p in full_official if start <= p["date"] <= end]
 
     open_merged: list[dict] = []
     try:
-        open_merged = fetch_usd_toman_merged()
+        open_merged = get_usd_toman_merged_cached()
     except Exception:
         open_merged = []
     open_by: dict[str, dict] = {}
@@ -901,6 +943,12 @@ def get_usd_irr_dual_series(start: str, end: str) -> dict:
         },
     }
     cache_set(ck, out, CACHE_TTL)
+    logger.info(
+        "fx_usd_irr_dual: n_official=%d n_open=%d build_s=%.2f",
+        len(official_points),
+        len(open_points),
+        time.perf_counter() - t_req,
+    )
     return out
 
 
@@ -1166,6 +1214,36 @@ def get_poverty_headcount_iran(start: str, end: str) -> dict:
     result = {
         **bundle,
         "source": POVERTY_HEADCOUNT_IRAN_SOURCE,
+        "resolution": "annual",
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
+
+
+IRAN_MONEY_SUPPLY_M2_SOURCE = {
+    "name": "World Bank World Development Indicators",
+    "publisher": "World Bank",
+    "url": "https://data.worldbank.org/indicator/FM.LBL.BMNY.ZG",
+}
+
+
+def get_iran_money_supply_m2(start: str, end: str) -> dict:
+    """
+    Iran: WDI FM.LBL.BMNY.ZG through 2016; 2017+ = YoY from CBI-liquidity levels (static). CPI FP.CPI.TOTL.ZG (Iran) for comparison.
+    """
+    from signalmap.sources.world_bank_iran_money_supply import build_iran_money_supply_m2_bundle
+
+    ck = f"signal:iran_money_supply_m2:v2:{start}:{end}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    bundle = build_iran_money_supply_m2_bundle(start_year, end_year)
+    result = {
+        **bundle,
+        "source": IRAN_MONEY_SUPPLY_M2_SOURCE,
         "resolution": "annual",
     }
     cache_set(ck, result, CACHE_TTL)

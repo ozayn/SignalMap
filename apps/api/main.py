@@ -598,6 +598,28 @@ def get_wdi_poverty_headcount_iran_signal(
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
+@app.get("/api/signals/wdi/iran-money-supply-m2")
+def get_wdi_iran_money_supply_m2_signal(
+    start: str | None = Query(None, description="Start date YYYY-MM-DD"),
+    end: str | None = Query(None, description="End date YYYY-MM-DD"),
+):
+    """Return Iran M2 growth: WDI FM.LBL.BMNY.ZG through 2016, then YoY from CBI-liquidity levels (static JSON). Plus CPI (FP.CPI.TOTL.ZG) for comparison."""
+    if start is None:
+        start = "1960-01-01"
+    if end is None:
+        end = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    try:
+        from signalmap.services.signals import get_iran_money_supply_m2
+
+        return get_iran_money_supply_m2(start, end)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
+
+
 @app.get("/api/signals/wdi/dutch-disease-diagnostics-iran")
 def get_wdi_dutch_disease_diagnostics_iran_signal(
     start: str | None = Query(None, description="Start date YYYY-MM-DD"),

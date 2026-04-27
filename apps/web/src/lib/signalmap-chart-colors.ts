@@ -48,6 +48,8 @@ export const SIGNAL_CONCEPT: Record<string, string> = {
   fx_official: "#2563eb",
   fx_open: "#16a34a",
   fx_spread: "#f97316",
+  /** Broad money (M2) growth — Iran WDI FM.LBL.BMNY.ZG */
+  broad_money_m2: "#7c3aed",
   /** Wage / labour */
   wage_nominal: "#2563eb",
   wage_real: "#16a34a",

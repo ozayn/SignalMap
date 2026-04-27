@@ -25,6 +25,7 @@ export type PrimarySignal =
   | { kind: "isi_diagnostics" }
   | { kind: "poverty_headcount_iran" }
   | { kind: "dutch_disease_diagnostics_iran" }
+  | { kind: "iran_money_supply_m2" }
   | { kind: "oil_economy_overview" };
 
 import type { ConceptKey } from "./concepts";
@@ -117,10 +118,10 @@ export const STUDIES: StudyMeta[] = [
   {
     id: "usd-toman",
     number: 3,
-    title: "USD→Toman (open market) as a socio-economic signal",
+    title: "USD→Toman (Open Market) — Socio-economic Signal",
     timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
     description:
-      "Open-market toman per US dollar (Bonbast / rial archive from 2012; FRED PWT annual pre-archive). Official WDI annual shown dashed for comparison.",
+      "Open-market toman per US dollar as a lived-economy pressure indicator (Bonbast / rial archive from 2012; FRED PWT annual pre-archive). Official WDI annual shown dashed for comparison. For official vs open and spread, see the dual-rate study.",
     status: "active",
     groupPlacements: [{ group: "core", order: 1 }],
     primarySignal: { kind: "fx_usd_toman" },
@@ -254,10 +255,10 @@ export const STUDIES: StudyMeta[] = [
   {
     id: "iran_fx_spread",
     number: 12,
-    title: "Dual Exchange Rates in Iran",
+    title: "Dual Exchange Rates in Iran — Official vs Open Market",
     timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
     description:
-      "WDI official toman/USD vs. open market on the same merged history as the USD→Toman study (FRED + rial archive + Bonbast). Spread (%) only where a calendar year has both official and open data.",
+      "Regime / distortion view: WDI official toman/USD vs. open market on the same merged history as the open-market study (FRED + rial archive + Bonbast). Yearly spread (%) only where a calendar year has both official and open data.",
     status: "active",
     tags: ["Dual", "Spread"],
     groupPlacements: [{ group: "iran", order: 5 }],
@@ -676,6 +677,29 @@ export const STUDIES: StudyMeta[] = [
       "Revenue is annual barrels × annual average price (EIA global proxy 1980–86; FRED DCOILBRENTEU 1987+). Not government receipts or net export value.",
       "1965–1999 production: embedded Energy Institute (1965–79) and EIA/BP-compatible annuals (1980–99) when the live EIA/IMF pipeline has no value for that year; 2000+ from the same pipeline as other oil production studies. Primary (EIA/IMF) wins when both exist.",
       "When prices rise with flat production, the revenue line tends to rise; when production falls, revenue can fall even if price is high.",
+    ],
+  },
+  {
+    id: "iran-money-supply-growth",
+    number: 36,
+    title: "Money Supply Growth (M2) — Iran",
+    subtitle: "Broad money growth and CPI inflation (WDI/IFS through 2016; 2017+ = CBI-style liquidity YoY, annual %)",
+    timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "Annual broad money (M2): World Bank WDI FM.LBL.BMNY.ZG through 2016 (IMF IFS in WDI’s chain), then year-on-year % derived in SignalMap from CBI-style broad-liquidity (نقدینگی) year-end levels (continuity estimate). Optional Iran CPI inflation (WDI) on the same calendar year for comparison—liquidity, prices, and macro stress in long perspective.",
+    status: "active",
+    groupPlacements: [{ group: "iran", order: 4 }],
+    primarySignal: { kind: "iran_money_supply_m2" },
+    eventLayers: ["iran_core", "world_core", "sanctions"],
+    countries: ["iran"],
+    themes: ["macro"],
+    tags: ["Iran", "M2", "WDI", "liquidity", "CPI"],
+    concepts: ["cpi", "event_overlay", "measurement_vs_reality"],
+    unitLabel: "Growth or inflation (annual %)",
+    observations: [
+      "M2: WDI FM.LBL.BMNY.ZG / IFS through 2016; 2017+ = SignalMap-derived YoY on CBI-style year-end broad liquidity (static file). Definitions may differ; treat 2017+ as continuity, not a strict redefinition of WDI M2.",
+      "CPI: WDI FP.CPI.TOTL.ZG (Iran) on the same calendar year; may extend past WDI M2; compare only overlapping years for strict timing claims.",
+      "Rapid liquidity growth can add to inflation and FX pressure, but the mapping is not mechanical or instant; WDI vs CBI-liquidity YoY can differ by a few points in overlap years (calendar vs year-end).",
     ],
   },
 ];

@@ -46,6 +46,7 @@ import {
   giniLearningSections,
   inflationLearningSections,
   isiDiagnosticsLearningSections,
+  moneySupplyM2LearningSections,
   povertyLearningSections,
 } from "@/lib/wdi-macro-studies-learning";
 import {
@@ -107,13 +108,14 @@ import {
 } from "@/lib/oil-trade-regions";
 import { joinExportSourceNames } from "@/lib/chart-export";
 import { normalizeChartRangeBound, toYearInputMinMax } from "@/lib/chart-study-range";
-import { CHART_LINE_SYMBOL_SIZE } from "@/lib/chart-series-markers";
+import { CHART_LINE_SYMBOL_SIZE, CHART_LINE_SYMBOL_SIZE_MINI } from "@/lib/chart-series-markers";
 import {
   isStudyEventLayerVisible,
   studyEventLayersForFetch,
   type StudyEventLayerToggleState,
 } from "@/lib/study-event-layer-toggles";
 import { withTimeSeriesEventOverlay } from "@/lib/time-series-event-overlay";
+import { downsampleFxOpenForDisplay } from "@/lib/time-series-lttb";
 import { trackEvent } from "@/lib/analytics";
 import { formatStatDate, decodeHtmlEntities } from "@/lib/utils";
 import {
@@ -542,6 +544,24 @@ export default function StudyDetailPage() {
   const [povertyDdayIndicatorId, setPovertyDdayIndicatorId] = useState("");
   const [povertyLmicIndicatorId, setPovertyLmicIndicatorId] = useState("");
   const [povertySource, setPovertySource] = useState<{ name?: string; url?: string; publisher?: string } | null>(null);
+  const [moneySupplyM2Points, setMoneySupplyM2Points] = useState<{ date: string; value: number }[]>([]);
+  const [moneySupplyCpiPoints, setMoneySupplyCpiPoints] = useState<{ date: string; value: number }[]>([]);
+  const [moneySupplyWdiSource, setMoneySupplyWdiSource] = useState<{
+    name?: string;
+    url?: string;
+    publisher?: string;
+  } | null>(null);
+  const [moneySupplyCitation, setMoneySupplyCitation] = useState<{ en: string; fa: string } | null>(null);
+  const [moneySupplyCoverage, setMoneySupplyCoverage] = useState<{
+    broad_money: { first_year: number; last_year: number } | null;
+    broad_money_wdi?: { first_year: number; last_year: number } | null;
+    broad_money_cbi_liquidity_yoy?: { first_year: number; last_year: number } | null;
+    cpi_inflation_iran: { first_year: number; last_year: number } | null;
+  } | null>(null);
+  const [moneySupplyIndicatorIds, setMoneySupplyIndicatorIds] = useState<{
+    broad_money_growth: string;
+    cpi_inflation_yoy_iran: string;
+  } | null>(null);
   const [dutchOilRentsPoints, setDutchOilRentsPoints] = useState<{ date: string; value: number }[]>([]);
   const [dutchManufacturingPoints, setDutchManufacturingPoints] = useState<{ date: string; value: number }[]>([]);
   const [dutchImportsPoints, setDutchImportsPoints] = useState<{ date: string; value: number }[]>([]);
@@ -708,6 +728,7 @@ export default function StudyDetailPage() {
   const isGdpGlobalComparison = study?.primarySignal.kind === "gdp_global_comparison";
   const isIsiDiagnostics = study?.primarySignal.kind === "isi_diagnostics";
   const isPovertyHeadcountIran = study?.primarySignal.kind === "poverty_headcount_iran";
+  const isIranMoneySupplyM2 = study?.primarySignal.kind === "iran_money_supply_m2";
   const isDutchDiseaseDiagnostics = study?.primarySignal.kind === "dutch_disease_diagnostics_iran";
   const isOilEconomyOverview = study?.primarySignal.kind === "oil_economy_overview";
   /** WDI national-accounts levels bundle (composition study or dual-axis reference study). */
@@ -942,6 +963,20 @@ export default function StudyDetailPage() {
     return [start, resolvedEnd];
   }, [study, isPovertyHeadcountIran, anchorEventId, events, effectiveWindowYears]);
 
+  const moneySupplyTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isIranMoneySupplyM2) return null;
+    if (anchorEventId) {
+      const ev = events.find((e) => e.id === anchorEventId);
+      if (ev) {
+        const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
+        if (anchorDate) return computeWindowRange(anchorDate, effectiveWindowYears);
+      }
+    }
+    const [start, end] = study.timeRange;
+    const resolvedEnd = end === "today" ? new Date().toISOString().slice(0, 10) : end;
+    return [start, resolvedEnd];
+  }, [study, isIranMoneySupplyM2, anchorEventId, events, effectiveWindowYears]);
+
   const dutchTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isDutchDiseaseDiagnostics) return null;
     if (anchorEventId) {
@@ -1071,6 +1106,11 @@ export default function StudyDetailPage() {
     if (!isPovertyHeadcountIran) return events;
     return events.filter((e) => isStudyEventLayerVisible(e.layer, chartEventToggleState));
   }, [isPovertyHeadcountIran, events, chartEventToggleState]);
+
+  const moneySupplyFilteredEvents = useMemo(() => {
+    if (!isIranMoneySupplyM2) return events;
+    return events.filter((e) => isStudyEventLayerVisible(e.layer, chartEventToggleState));
+  }, [isIranMoneySupplyM2, events, chartEventToggleState]);
 
   const dutchFilteredEvents = useMemo(() => {
     if (!isDutchDiseaseDiagnostics) return events;
@@ -1805,6 +1845,7 @@ export default function StudyDetailPage() {
       isGdpGlobalComparison ||
       isIsiDiagnostics ||
       isPovertyHeadcountIran ||
+      isIranMoneySupplyM2 ||
       isDutchDiseaseDiagnostics ||
       isOilEconomyOverview ||
       isFxUsdIrrDual ||
@@ -1835,6 +1876,7 @@ export default function StudyDetailPage() {
             isGdpGlobalComparison ||
             isIsiDiagnostics ||
             isPovertyHeadcountIran ||
+            isIranMoneySupplyM2 ||
             isDutchDiseaseDiagnostics) &&
             studyLayersLen > 0) ||
           (hasTurkeyComparator && studyLayersLen > 0)
@@ -1868,6 +1910,7 @@ export default function StudyDetailPage() {
             isGdpGlobalComparison ||
             isIsiDiagnostics ||
             isPovertyHeadcountIran ||
+            isIranMoneySupplyM2 ||
             isDutchDiseaseDiagnostics
           ) {
             layers = [
@@ -1929,6 +1972,7 @@ export default function StudyDetailPage() {
     isGdpGlobalComparison,
     isIsiDiagnostics,
     isPovertyHeadcountIran,
+    isIranMoneySupplyM2,
     isDutchDiseaseDiagnostics,
     isOilEconomyOverview,
     isFxUsdIrrDual,
@@ -2886,6 +2930,63 @@ export default function StudyDetailPage() {
   }, [povertyTimeRange, isPovertyHeadcountIran]);
 
   useEffect(() => {
+    if (!moneySupplyTimeRange || !isIranMoneySupplyM2) {
+      if (isIranMoneySupplyM2) {
+        setMoneySupplyM2Points([]);
+        setMoneySupplyCpiPoints([]);
+        setMoneySupplyWdiSource(null);
+        setMoneySupplyCitation(null);
+        setMoneySupplyCoverage(null);
+        setMoneySupplyIndicatorIds(null);
+      }
+      return;
+    }
+    const [start, end] = moneySupplyTimeRange;
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+    fetchJson<{
+      series?: {
+        broad_money_growth_pct?: { date: string; value: number }[];
+        cpi_inflation_yoy_iran_pct?: { date: string; value: number }[];
+      };
+      source?: { name?: string; url?: string; publisher?: string };
+      citation?: { en: string; fa: string };
+      coverage?: {
+        broad_money: { first_year: number; last_year: number } | null;
+        broad_money_wdi?: { first_year: number; last_year: number } | null;
+        broad_money_cbi_liquidity_yoy?: { first_year: number; last_year: number } | null;
+        cpi_inflation_iran: { first_year: number; last_year: number } | null;
+      };
+      indicator_ids?: { broad_money_growth: string; cpi_inflation_yoy_iran: string };
+    }>(`/api/signals/wdi/iran-money-supply-m2?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+      .then((res) => {
+        if (!mounted) return;
+        setMoneySupplyM2Points(res.series?.broad_money_growth_pct ?? []);
+        setMoneySupplyCpiPoints(res.series?.cpi_inflation_yoy_iran_pct ?? []);
+        setMoneySupplyWdiSource(res.source ?? null);
+        setMoneySupplyCitation(res.citation ?? null);
+        setMoneySupplyCoverage(res.coverage ?? null);
+        setMoneySupplyIndicatorIds(res.indicator_ids ?? null);
+      })
+      .catch((e) => {
+        if (mounted) {
+          setMoneySupplyM2Points([]);
+          setMoneySupplyCpiPoints([]);
+          setMoneySupplyWdiSource(null);
+          setMoneySupplyCitation(null);
+          setMoneySupplyCoverage(null);
+          setMoneySupplyIndicatorIds(null);
+          setError(e instanceof Error ? e.message : "Signal fetch failed");
+        }
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => {
+      mounted = false;
+    };
+  }, [moneySupplyTimeRange, isIranMoneySupplyM2]);
+
+  useEffect(() => {
     if (!dutchTimeRange || !isDutchDiseaseDiagnostics) {
       if (isDutchDiseaseDiagnostics) {
         setDutchOilRentsPoints([]);
@@ -3133,6 +3234,20 @@ export default function StudyDetailPage() {
     };
   }, [study, isOverviewStub, data, showOil]);
 
+  const isiDataReady = useMemo(() => {
+    if (!isiDiagnosticsData?.series) return false;
+    const s = isiDiagnosticsData.series;
+    return [s.imports_pct_gdp, s.exports_pct_gdp, s.manufacturing_pct_gdp, s.industry_pct_gdp, s.gdp_growth_pct].some(
+      (rec) => Object.values(rec).some((pts) => Array.isArray(pts) && pts.length > 0)
+    );
+  }, [isiDiagnosticsData]);
+
+  /** ECharts: full-history daily is heavy; downsample for long spans only. KPIs use full `fxPoints`. */
+  const fxOpenPointsForChart = useMemo(
+    () => (isFxUsdToman ? downsampleFxOpenForDisplay(fxPoints, fxTimeRange) : []),
+    [isFxUsdToman, fxPoints, fxTimeRange]
+  );
+
   if (!study) {
     return (
       <div className="study-page-container py-12 space-y-4">
@@ -3171,6 +3286,7 @@ export default function StudyDetailPage() {
     isGdpGlobalComparison ||
     isIsiDiagnostics ||
     isPovertyHeadcountIran ||
+    isIranMoneySupplyM2 ||
     isDutchDiseaseDiagnostics ||
     isOilEconomyOverview;
 
@@ -3180,14 +3296,6 @@ export default function StudyDetailPage() {
     !isFollowerGrowthDynamics &&
     !isYoutubeCommentAnalysis &&
     !isEventsTimeline;
-
-  const isiDataReady = useMemo(() => {
-    if (!isiDiagnosticsData?.series) return false;
-    const s = isiDiagnosticsData.series;
-    return [s.imports_pct_gdp, s.exports_pct_gdp, s.manufacturing_pct_gdp, s.industry_pct_gdp, s.gdp_growth_pct].some(
-      (rec) => Object.values(rec).some((pts) => Array.isArray(pts) && pts.length > 0)
-    );
-  }, [isiDiagnosticsData]);
 
   const singleSignalReady =
     isGoldAndOil
@@ -3235,6 +3343,8 @@ export default function StudyDetailPage() {
                         ? isiDataReady
                         : isPovertyHeadcountIran
                         ? povertyDdayPoints.length > 0 || povertyLmicPoints.length > 0
+                        : isIranMoneySupplyM2
+                          ? moneySupplyM2Points.length > 0
                         : isDutchDiseaseDiagnostics
                           ? dutchOilRentsPoints.length > 0 ||
                             dutchManufacturingPoints.length > 0 ||
@@ -3359,6 +3469,10 @@ export default function StudyDetailPage() {
       if (povertyDdayPoints.length > 0) allDates.push(...collect(povertyDdayPoints));
       if (povertyLmicPoints.length > 0) allDates.push(...collect(povertyLmicPoints));
     }
+    if (isIranMoneySupplyM2) {
+      if (moneySupplyM2Points.length > 0) allDates.push(...collect(moneySupplyM2Points));
+      if (moneySupplyCpiPoints.length > 0) allDates.push(...collect(moneySupplyCpiPoints));
+    }
     if (isDutchDiseaseDiagnostics) {
       if (dutchOilRentsPoints.length > 0) allDates.push(...collect(dutchOilRentsPoints));
       if (dutchManufacturingPoints.length > 0) allDates.push(...collect(dutchManufacturingPoints));
@@ -3427,6 +3541,7 @@ export default function StudyDetailPage() {
       gdpGlobalTimeRange ??
       isiTimeRange ??
       povertyTimeRange ??
+      moneySupplyTimeRange ??
       exporterTimeRange ??
       gdpCompositionTimeRange ??
       fxDualTimeRange ??
@@ -3561,6 +3676,10 @@ export default function StudyDetailPage() {
       if (isPovertyHeadcountIran) {
         if (povertyDdayPoints.length > 0) arrays.push(povertyDdayPoints);
         if (povertyLmicPoints.length > 0) arrays.push(povertyLmicPoints);
+      }
+      if (isIranMoneySupplyM2) {
+        if (moneySupplyM2Points.length > 0) arrays.push(moneySupplyM2Points);
+        if (moneySupplyCpiPoints.length > 0) arrays.push(moneySupplyCpiPoints);
       }
       return arrays;
     })()
@@ -4985,6 +5104,12 @@ export default function StudyDetailPage() {
                   ? "Annual inflation rate (CPI)"
                   : isDutchDiseaseDiagnostics
                     ? "Dutch disease diagnostics (Iran)"
+                  : isIranMoneySupplyM2
+                    ? L(
+                        isFa,
+                        "Broad money growth (M2) and CPI (Iran, annual %)",
+                        "رشد پول وسیع (M2) و CPI (ایران، ٪ سالانه)"
+                      )
                   : isPovertyHeadcountIran
                     ? "Poverty headcount ratio (Iran)"
                     : isGiniInequality
@@ -5077,6 +5202,12 @@ export default function StudyDetailPage() {
                 ? "World Bank WDI FP.CPI.TOTL.ZG: annual consumer price inflation (% change from a year earlier). Toggle event layers below."
                 : isDutchDiseaseDiagnostics
                   ? "Four panels: WDI oil rents, manufacturing value added, and imports (each as % of GDP), plus open-market USD→toman. Annual WDI vs higher-frequency FX; exploratory only. Toggle event layers below."
+                : isIranMoneySupplyM2
+                  ? L(
+                      isFa,
+                      "M2: WDI/IFS through 2016; 2017+ = YoY from CBI-style year-end broad liquidity (continuity estimate). Optional Iran CPI (FP.CPI.TOTL.ZG). Event layers; PNG source matches methodology note.",
+                      "M2: WDI/IFS تا ۲۰۱۶؛ ۲۰۱۷+ = ٪نقدینگی به‌سبک بانک مرکزی (تخمین تداوم). تورم CPI (FP.CPI.TOTL.ZG) اختیاری. لایه‌های رویداد؛ منبع PNG همان بخش روش است."
+                    )
                 : isPovertyHeadcountIran
                   ? "World Bank WDI SI.POV.DDAY and SI.POV.LMIC: share of Iran’s population below two international poverty lines (annual %). Toggle event layers below."
                   : isGiniInequality
@@ -5199,6 +5330,7 @@ export default function StudyDetailPage() {
               !isGdpGlobalComparison &&
               !isIsiDiagnostics &&
               !isPovertyHeadcountIran &&
+              !isIranMoneySupplyM2 &&
               !isDutchDiseaseDiagnostics && (
               <>
                 <select
@@ -5290,6 +5422,7 @@ export default function StudyDetailPage() {
               isGdpGlobalComparison ||
               isIsiDiagnostics ||
               isPovertyHeadcountIran ||
+              isIranMoneySupplyM2 ||
               isDutchDiseaseDiagnostics) && (
               <>
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
@@ -8439,6 +8572,237 @@ export default function StudyDetailPage() {
                 )}
               </InSimpleTerms>
             </>
+          ) : isIranMoneySupplyM2 ? (
+            <>
+              <MultiSeriesStats
+                locale={isFa ? "fa" : "en"}
+                series={[
+                  {
+                    label: L(isFa, "Broad money growth (M2)", "رشد نقدینگی (M2)"),
+                    unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
+                    points: moneySupplyM2Points,
+                  },
+                  {
+                    label: L(isFa, "CPI inflation — Iran (WDI)", "تورم CPI — ایران (WDI)"),
+                    unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
+                    points: moneySupplyCpiPoints,
+                  },
+                ]}
+                timeRange={moneySupplyTimeRange ?? undefined}
+              />
+              <TimelineChart
+                chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={displayStudy.title}
+                exportPresentationTitle={L(
+                  isFa,
+                  "Broad money growth (annual %)",
+                  "رشد نقدینگی (٪ سالانه)"
+                )}
+                exportSourceFooter={studyChartExportSource(isFa, [
+                  moneySupplyCitation
+                    ? isFa
+                      ? moneySupplyCitation.fa
+                      : moneySupplyCitation.en
+                    : null,
+                ])}
+                data={[]}
+                valueKey="value"
+                label={L(isFa, "Broad money growth", "رشد نقدینگی")}
+                events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, moneySupplyFilteredEvents)}
+                anchorEventId={anchorEventId || undefined}
+                multiSeries={[
+                  {
+                    key: "m2",
+                    label: L(
+                      isFa,
+                      "M2 growth (WDI/IFS through 2016; 2017+ = CBI-style liquidity YoY)",
+                      "رشد M2 (WDI/IFS تا ۲۰۱۶؛ ۲۰۱۷+ = ٪نقدینگی به‌سبک بانک مرکزی)"
+                    ),
+                    yAxisIndex: 0,
+                    unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
+                    points: moneySupplyM2Points,
+                    color: SIGNAL_CONCEPT.broad_money_m2,
+                    symbol: "circle",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE_MINI,
+                  },
+                ]}
+                timeRange={moneySupplyTimeRange ?? study.timeRange}
+                chartRangeGranularity="year"
+                xAxisYearLabel={chartYearAxisLabel}
+                forceTimeAxis
+                exportFileStem="iran-m2-growth"
+                multiSeriesYAxisNameOverrides={{
+                  0: L(isFa, "Growth rate (% YoY)", "نرخ رشد (٪ نسبت به سال قبل)"),
+                }}
+              />
+              <div className="space-y-2 border-t border-border pt-8 mt-4">
+                <h3 className="text-sm font-semibold text-foreground">
+                  {L(
+                    isFa,
+                    "M2 growth vs CPI inflation (same calendar year)",
+                    "رشد M2 در برابر تورم CPI (همان سال میلادی)"
+                  )}
+                </h3>
+                <p className="text-xs text-muted-foreground max-w-3xl">
+                  {L(
+                    isFa,
+                    "Both series use the same WDI year alignment. CPI can extend after M2 stops; compare only overlapping years for timing statements.",
+                    "هر دو سری WDI و سال میلادی یکسان‌اند. CPI ممکن است بعد از توقف M2 ادامه یابد؛ برای زمان‌بندی فقط سال‌های هم‌پوشان را در نظر بگیرید."
+                  )}
+                </p>
+                <TimelineChart
+                  chartLocale={chartLocaleForCharts}
+                  exportPresentationStudyHeading={displayStudy.title}
+                  exportPresentationTitle={L(
+                    isFa,
+                    "M2 growth and CPI inflation (Iran)",
+                    "رشد M2 و تورم CPI (ایران)"
+                  )}
+                  exportSourceFooter={studyChartExportSource(isFa, [
+                    moneySupplyCitation
+                      ? isFa
+                        ? moneySupplyCitation.fa
+                        : moneySupplyCitation.en
+                      : null,
+                    L(
+                      isFa,
+                      "CPI: WDI FP.CPI.TOTL.ZG (Iran, annual %).",
+                      "CPI: WDI FP.CPI.TOTL.ZG (ایران، ٪ سالانه)."
+                    ),
+                  ])}
+                  data={[]}
+                  valueKey="value"
+                  label={L(isFa, "Liquidity vs prices", "نقدینگی در برابر قیمت‌ها")}
+                  events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, moneySupplyFilteredEvents)}
+                  anchorEventId={anchorEventId || undefined}
+                  multiSeries={[
+                    {
+                      key: "m2_cmp",
+                      label: L(isFa, "Broad money growth", "رشد نقدینگی"),
+                      yAxisIndex: 0,
+                      unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
+                      points: moneySupplyM2Points,
+                      color: SIGNAL_CONCEPT.broad_money_m2,
+                      symbol: "circle",
+                      symbolSize: CHART_LINE_SYMBOL_SIZE_MINI,
+                    },
+                    {
+                      key: "cpi_iran",
+                      label: L(isFa, "CPI inflation (Iran)", "تورم CPI (ایران)"),
+                      yAxisIndex: 0,
+                      unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
+                      points: moneySupplyCpiPoints,
+                      color: SIGNAL_CONCEPT.inflation,
+                      symbol: "diamond",
+                      symbolSize: CHART_LINE_SYMBOL_SIZE_MINI,
+                    },
+                  ]}
+                  timeRange={moneySupplyTimeRange ?? study.timeRange}
+                  chartRangeGranularity="year"
+                  xAxisYearLabel={chartYearAxisLabel}
+                  forceTimeAxis
+                  exportFileStem="iran-m2-vs-cpi"
+                  multiSeriesYAxisNameOverrides={{
+                    0: L(isFa, "Percent per year", "درصد در سال"),
+                  }}
+                />
+              </div>
+              <LearningNote locale={isFa ? "fa" : "en"} sections={moneySupplyM2LearningSections(isFa)} />
+              {displayStudy.observations?.length ? (
+                <DataObservations locale={isFa ? "fa" : "en"} observations={displayStudy.observations ?? []} />
+              ) : null}
+              {study.concepts?.length ? <ConceptsUsed locale={isFa ? "fa" : "en"} conceptKeys={study.concepts} /> : null}
+              {moneySupplyWdiSource && moneySupplyIndicatorIds ? (
+                <SourceInfo
+                  items={[
+                    {
+                      label: L(isFa, "Broad money growth", "رشد نقدینگی"),
+                      sourceName: moneySupplyWdiSource.name ?? "World Bank World Development Indicators",
+                      sourceUrl: `https://data.worldbank.org/indicator/${moneySupplyIndicatorIds.broad_money_growth}`,
+                      sourceDetail: moneySupplyWdiSource.publisher ?? "World Bank",
+                      unitLabel: L(isFa, "% per year (YoY)", "٪ در سال (نسبت به سال قبل)"),
+                      unitNote: L(
+                        isFa,
+                        (() => {
+                          const w = moneySupplyCoverage?.broad_money_wdi;
+                          const c = moneySupplyCoverage?.broad_money_cbi_liquidity_yoy;
+                          const tot = moneySupplyCoverage?.broad_money;
+                          const parts: string[] = [];
+                          if (w)
+                            parts.push(
+                              `M2: WDI FM.LBL.BMNY.ZG ${w.first_year}–${w.last_year}; IFS. 2017+: CBI-style liquidity–derived YoY ${c ? `${c.first_year}–${c.last_year}` : ""} (static file, continuity est.).`
+                            );
+                          if (tot && c)
+                            parts.push(
+                              `Combined M2 line on chart: ${tot.first_year}–${tot.last_year} in this window.`
+                            );
+                          return (
+                            parts.join(" ") ||
+                            "M2: WDI/IFS through 2016; 2017+ = CBI-style liquidity YoY (see methodology note and export footer)."
+                          );
+                        })(),
+                        (() => {
+                          const w = moneySupplyCoverage?.broad_money_wdi;
+                          const c = moneySupplyCoverage?.broad_money_cbi_liquidity_yoy;
+                          const tot = moneySupplyCoverage?.broad_money;
+                          const parts: string[] = [];
+                          if (w)
+                            parts.push(
+                              `M2: WDI ${w.first_year}–${w.last_year}؛ IFS. ۲۰۱۷+: ٪نقدینگی به‌سبک بانک مرکزی ${c ? `${c.first_year}–${c.last_year}` : ""} (فایل ثابت، تخمین تداوم).`
+                            );
+                          if (tot && c)
+                            parts.push(
+                              `خط ترکیبی در نمودار: ${tot.first_year}–${tot.last_year} در این پنجره.`
+                            );
+                          return (
+                            parts.join(" ") ||
+                            "M2: WDI/IFS تا ۲۰۱۶؛ ۲۰۱۷+ = ٪نقدینگی به‌سبک بانک (بخش روش و پاورقی خروج)."
+                          );
+                        })()
+                      ),
+                    },
+                    {
+                      label: L(isFa, "CPI inflation (Iran)", "تورم CPI (ایران)"),
+                      sourceName: moneySupplyWdiSource.name ?? "World Bank World Development Indicators",
+                      sourceUrl: `https://data.worldbank.org/indicator/${moneySupplyIndicatorIds.cpi_inflation_yoy_iran}`,
+                      sourceDetail: moneySupplyWdiSource.publisher ?? "World Bank",
+                      unitLabel: L(isFa, "% per year (YoY)", "٪ در سال (نسبت به سال قبل)"),
+                      unitNote: L(
+                        isFa,
+                        moneySupplyCoverage?.cpi_inflation_iran
+                          ? `Coverage in WDI: ${moneySupplyCoverage.cpi_inflation_iran.first_year}–${moneySupplyCoverage.cpi_inflation_iran.last_year}.`
+                          : "Coverage: see WDI (FP.CPI.TOTL.ZG) for Iran.",
+                        moneySupplyCoverage?.cpi_inflation_iran
+                          ? `پوشش در WDI: ${moneySupplyCoverage.cpi_inflation_iran.first_year}–${moneySupplyCoverage.cpi_inflation_iran.last_year}.`
+                          : "پوشش: WDI (FP.CPI.TOTL.ZG) ایران."
+                      ),
+                    },
+                  ]}
+                />
+              ) : null}
+              <InSimpleTerms locale={isFa ? "fa" : "en"}>
+                {isFa && faRich?.simpleTermsParagraphs?.length ? (
+                  faRich.simpleTermsParagraphs.map((p, i) => <p key={i}>{p}</p>)
+                ) : (
+                  <>
+                    <p>
+                      {L(
+                        isFa,
+                        "Money supply growth means how fast the amount of money and spendable deposits in the economy is increasing. It is often tracked with broad money (M2). High growth can add to inflation pressure, but the link is not always immediate or one-to-one—output, expectations, and the exchange environment also matter.",
+                        "رشد نقدینگی یعنی سرعت افزایش حجم پول و سپرده‌های قابل خرج در اقتصاد — اغلب با پول وسیع (M2) دنبال می‌شود. رشد تند می‌تواند به فشار تورمی کمک کند اما ارتباط همیشه سریع یا یک‌به‌یک نیست."
+                      )}
+                    </p>
+                    <p>
+                      {L(
+                        isFa,
+                        "The second chart places CPI inflation on the same year as M2 to see whether liquidity changes line up with price changes. Event markers are optional context only.",
+                        "نمودار دوم تورم را کنار M2 در همان سال می‌گذارد تا ببینید تغییرات نقدینگی با تغییرات قیمت چقدر هم‌زمان‌اند. نشانگرهای رویداد اختیاری و صرفاً زمینه‌اند."
+                      )}
+                    </p>
+                  </>
+                )}
+              </InSimpleTerms>
+            </>
           ) : isPovertyHeadcountIran ? (
             <>
               <MultiSeriesStats
@@ -8470,7 +8834,7 @@ export default function StudyDetailPage() {
                 data={[]}
                 valueKey="value"
                 label={L(isFa, "Poverty headcount ratio", "نرخ شمارش فقر")}
-                events={povertyFilteredEvents}
+                events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, povertyFilteredEvents)}
                 anchorEventId={anchorEventId || undefined}
                 multiSeries={[
                   {
@@ -9576,7 +9940,7 @@ export default function StudyDetailPage() {
                     ),
                     yAxisIndex: 0,
                     unit: L(isFa, "toman/USD", "تومان/دلار"),
-                    points: fxPoints,
+                    points: fxOpenPointsForChart.length > 0 ? fxOpenPointsForChart : fxPoints,
                     color: SIGNAL_CONCEPT.exchange_rate,
                     symbol: "circle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,

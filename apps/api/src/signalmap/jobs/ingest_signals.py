@@ -83,9 +83,10 @@ def main() -> int:
         return 0
 
     if args.signal == "usd_toman":
-        from signalmap.services.signals import fetch_usd_toman_merged
+        from signalmap.services.signals import fetch_usd_toman_merged, set_usd_toman_merged_cache
 
         merged = fetch_usd_toman_merged()
+        set_usd_toman_merged_cache(merged)
         points = [p for p in merged if start_str <= p["date"] <= end_str]
         count = upsert_points(
             "usd_toman_open_market",
