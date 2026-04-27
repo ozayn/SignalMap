@@ -75,6 +75,13 @@ const MULTI_SERIES_FALLBACK_LEGEND_ICONS: Array<"circle" | "diamond" | "triangle
   "rect",
 ];
 
+/** Toman/USD (or FA «تومان/دلار») — used for log-axis min + non-positive sanitization. */
+function isTomanFxUnit(unit: string | undefined): boolean {
+  if (!unit) return false;
+  if (/toman/i.test(unit)) return true;
+  return unit.includes("تومان");
+}
+
 type LegendEndShape = ComparatorLineSymbol;
 
 /**
@@ -2102,6 +2109,21 @@ export function TimelineChart({
                   ? multiSeriesYAxisNameOverrides[yAxisIndex]!
                   : nameWithSuffix;
               const isGoldLogAxis = useLog && first.unit === "USD/oz";
+              const tomanOrRateLogAxis = useLog && isLeft && isTomanFxUnit(first.unit);
+              const tomanLogAxisMin =
+                tomanOrRateLogAxis && !isGoldLogAxis && multiSeriesValues
+                  ? (() => {
+                      const nums: number[] = [];
+                      for (const s of seriesOnAxis) {
+                        const si = multiSeries.indexOf(s);
+                        for (const v of multiSeriesValues[si] ?? []) {
+                          if (typeof v === "number" && Number.isFinite(v) && v > 0) nums.push(v);
+                        }
+                      }
+                      if (nums.length === 0) return undefined;
+                      return Math.max(Math.min(...nums) * 0.01, 1e-9);
+                    })()
+                  : undefined;
               const fixedRange =
                 yAxisMin != null && yAxisMax != null && isLeft
                   ? { min: yAxisMin, max: yAxisMax }
@@ -2109,7 +2131,9 @@ export function TimelineChart({
                     ? { min: yAxisMin }
                     : isGoldLogAxis
                       ? { min: 10, max: 3000 }
-                      : {};
+                      : tomanLogAxisMin != null
+                        ? { min: tomanLogAxisMin }
+                        : {};
               const pctEligible =
                 !useLog &&
                 Object.keys(fixedRange).length === 0 &&
@@ -2132,6 +2156,7 @@ export function TimelineChart({
               }
               return {
                 type: (useLog ? "log" : "value") as "value" | "log",
+                ...(useLog ? { logBase: 10 } : {}),
                 ...fixedRange,
                 ...(pctNice ? { min: pctNice.min, max: pctNice.max, interval: pctNice.interval } : {}),
                 position: (isLeft ? "left" : "right") as "left" | "right",
@@ -2206,6 +2231,7 @@ export function TimelineChart({
             },
             {
               type: (yAxisLog ? "log" : "value") as "value" | "log",
+              ...(yAxisLog ? { logBase: 10 } : {}),
               position: "right" as const,
               name: formatYAxisNameMultiline(
                 localizeChartNumericDisplayString(
@@ -2340,11 +2366,16 @@ export function TimelineChart({
                     ? CHART_LINE_SYMBOL_SIZE_COMPACT
                     : CHART_LINE_SYMBOL_SIZE);
                 const showSymbol = s.showSymbol !== false;
+                const rawSeriesVals = multiSeriesValues[i] ?? [];
+                const tomanLogSanitize = yAxisLog && s.yAxisIndex === 0 && isTomanFxUnit(s.unit);
+                const valuesForEcharts = tomanLogSanitize
+                  ? rawSeriesVals.map((v) => (v != null && typeof v === "number" && v > 0 ? v : null))
+                  : rawSeriesVals;
                 return {
                   name: s.label,
                   type: "line" as const,
                   yAxisIndex: s.yAxisIndex,
-                  data: useTimeAxis ? toTimeData(multiSeriesValues[i] ?? []) : (multiSeriesValues[i] ?? []),
+                  data: useTimeAxis ? toTimeData(valuesForEcharts) : valuesForEcharts,
                   smooth: false,
                   connectNulls: true,
                   step: (isGold ? "start" : false) as "start" | false,

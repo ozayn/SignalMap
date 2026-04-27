@@ -9,7 +9,7 @@ import {
   type StudyLocale,
 } from "@/lib/iran-study-fa";
 import { IRAN_STUDY_FA_DISPLAY } from "@/lib/iran-study-fa-copy";
-import { useParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TimelineChart, type ChartSeries } from "@/components/timeline-chart";
@@ -425,6 +425,9 @@ function studyChartExportSource(_isFa: boolean, parts: Array<string | null | und
 export default function StudyDetailPage() {
   const params = useParams();
   const studyId = params.studyId as string;
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
   const studyRaw = getStudyById(studyId);
   const study = studyRaw && isStudyListedForDeployment(studyRaw) ? studyRaw : undefined;
   const faEligible = supportsIranStudyFa(studyId);
@@ -460,6 +463,8 @@ export default function StudyDetailPage() {
   /** Master time-series event overlay: default off; sub-layer checkboxes apply only when on. */
   const [showTimeSeriesEventOverlay, setShowTimeSeriesEventOverlay] = useState(false);
   const [pppYAxisLog, setPppYAxisLog] = useState(true);
+  /** USD→Toman: linear by default; optional `?log=1` in URL. */
+  const [fxUsdTomanYAxisLog, setFxUsdTomanYAxisLog] = useState(false);
   const [showSanctionsPeriods, setShowSanctionsPeriods] = useState(false);
   const [showShocks, setShowShocks] = useState(true);
   /** Brent / global oil: story = major vertical markers only; data = all toggled point events on the chart. */
@@ -734,6 +739,14 @@ export default function StudyDetailPage() {
   /** WDI national-accounts levels bundle (composition study or dual-axis reference study). */
   const isGdpMacroNationalAccounts = isGdpComposition || isGdpIranAccountsDual;
   const isGdpIranLocal = study?.gdpCompositionIranLocalOptions === true;
+
+  useEffect(() => {
+    if (!isFxUsdToman) {
+      setFxUsdTomanYAxisLog(false);
+      return;
+    }
+    setFxUsdTomanYAxisLog(searchParams.get("log") === "1");
+  }, [isFxUsdToman, searchParams]);
 
   const oilMacroDefaultsApplied = useRef(false);
   useEffect(() => {
@@ -6682,6 +6695,25 @@ export default function StudyDetailPage() {
                   Show presidential terms
                 </label>
               )}
+              {isFxUsdToman && (
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={fxUsdTomanYAxisLog}
+                    onChange={(e) => {
+                      const next = e.target.checked;
+                      setFxUsdTomanYAxisLog(next);
+                      const p = new URLSearchParams(searchParams.toString());
+                      if (next) p.set("log", "1");
+                      else p.delete("log");
+                      const qs = p.toString();
+                      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+                    }}
+                    className="rounded border-border"
+                  />
+                  {L(isFa, "Log scale", "مقیاس لگاریتمی")}
+                </label>
+              )}
             </div>
           )}
           {isOilPppIran ? (
@@ -9930,6 +9962,10 @@ export default function StudyDetailPage() {
                 timeRange={fxTimeRange ?? study.timeRange}
                 highlightLatestPoint
                 forceTimeAxis
+                yAxisLog={fxUsdTomanYAxisLog}
+                yAxisNameSuffix={
+                  fxUsdTomanYAxisLog ? L(isFa, "(log₁₀ scale)", "(لگ ۱۰)") : undefined
+                }
                 multiSeries={[
                   {
                     key: "fx_open",
