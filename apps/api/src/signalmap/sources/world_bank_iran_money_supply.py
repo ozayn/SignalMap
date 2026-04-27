@@ -25,11 +25,10 @@ GREGORIAN_FROM_SOLAR = 621
 
 # Used on chart PNG/exports and the study’s source footer (must stay aligned with the methodology note in the app).
 CITATION_EN = (
-    "Source: World Bank WDI FM.LBL.BMNY.ZG; IMF IFS; CBI-style liquidity levels, derived YoY growth from 2017 onward."
+    "Source: World Bank WDI (FM.LBL.BMNY.ZG; IMF IFS); post-2016 derived from CBI-style liquidity levels (YoY)"
 )
 CITATION_FA = (
-    "منبع: WDI بانک جهانی FM.LBL.BMNY.ZG؛ IFS (IMF)؛ سطوح نقدینگی به‌سبک بانک مرکزی—٪رشد "
-    "سال‌به‌سال از ۲۰۱۷ به‌بعد (مشتق در SignalMap)."
+    "منبع: WDI بانک جهانی؛ IMF IFS؛ بخش بعد از ۲۰۱۶ بر اساس سطوح نقدینگی (محاسبه رشد سالانه)"
 )
 
 _LIQUIDITY_JSON = Path(__file__).resolve().parent.parent / "data" / "iran_cbi_liquidity_levels_solar.json"

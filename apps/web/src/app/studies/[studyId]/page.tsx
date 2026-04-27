@@ -22,6 +22,7 @@ import { LearningNote } from "@/components/learning-note";
 import { DataObservations } from "@/components/data-observations";
 import { ConceptsUsed } from "@/components/concepts-used";
 import { CurrentSnapshot } from "@/components/current-snapshot";
+import { IranMoneySupplyMethodology } from "@/components/studies/iran-money-supply-methodology";
 import { InSimpleTerms } from "@/components/in-simple-terms";
 import { EventsTimeline, type TimelineEvent } from "@/components/events-timeline";
 import { FollowerGrowthChart } from "@/components/follower-growth-chart";
@@ -8667,6 +8668,7 @@ export default function StudyDetailPage() {
                   0: L(isFa, "Growth rate (% YoY)", "نرخ رشد (٪ نسبت به سال قبل)"),
                 }}
               />
+              <IranMoneySupplyMethodology isFa={isFa} />
               <div className="space-y-2 border-t border-border pt-8 mt-4">
                 <h3 className="text-sm font-semibold text-foreground">
                   {L(
@@ -8746,6 +8748,11 @@ export default function StudyDetailPage() {
               {study.concepts?.length ? <ConceptsUsed locale={isFa ? "fa" : "en"} conceptKeys={study.concepts} /> : null}
               {moneySupplyWdiSource && moneySupplyIndicatorIds ? (
                 <SourceInfo
+                  note={L(
+                    isFa,
+                    "پس از ۲۰۱۶: نرخ رشد از سطوح نقدینگی به‌سبک بانک مرکزی (٪نسبت به سال قبل)؛ جزییات در بلوک روش‌شناسی فوق.",
+                    "Post-2016: values derived from CBI-style year-end liquidity (YoY); see Methodology (Post-2016 Extension) above."
+                  )}
                   items={[
                     {
                       label: L(isFa, "Broad money growth", "رشد نقدینگی"),
@@ -8770,7 +8777,7 @@ export default function StudyDetailPage() {
                             );
                           return (
                             parts.join(" ") ||
-                            "M2: WDI/IFS through 2016; 2017+ = CBI-style liquidity YoY (see methodology note and export footer)."
+                            "M2: WDI/IFS through 2016; 2017+ = CBI-style liquidity YoY (see methodology and export footer)."
                           );
                         })(),
                         (() => {
@@ -8788,7 +8795,7 @@ export default function StudyDetailPage() {
                             );
                           return (
                             parts.join(" ") ||
-                            "M2: WDI/IFS تا ۲۰۱۶؛ ۲۰۱۷+ = ٪نقدینگی به‌سبک بانک (بخش روش و پاورقی خروج)."
+                            "M2: WDI/IFS تا ۲۰۱۶؛ ۲۰۱۷+ = ٪نقدینگی به‌سبک بانک (روش‌شناسی و پاورقی خروج را ببینید)."
                           );
                         })()
                       ),
