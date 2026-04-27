@@ -11,6 +11,7 @@ export type PrimarySignal =
   | { kind: "oil_production_major_exporters" }
   | { kind: "events_timeline" }
   | { kind: "global_events_timeline" }
+  | { kind: "band_events_timeline" }
   | { kind: "follower_growth_dynamics" }
   | { kind: "fx_usd_irr_dual" }
   | { kind: "wage_cpi_real" }
@@ -267,6 +268,31 @@ export const STUDIES: StudyMeta[] = [
     tags: ["Timeline", "Context"],
     keywords: ["events", "history", "Bretton", "OPEC", "Ukraine", "geopolitics", "WDI", "chronology"],
     primarySignal: { kind: "global_events_timeline" },
+    concepts: ["event_overlay"],
+    hiddenInProduction: true,
+  },
+  {
+    id: "timeline-bands",
+    number: 38,
+    title: "Global & Iran context (band timeline)",
+    timeRange: ["1914-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "Swimlane / world-history view: long spans as soft bands, anchor dates as markers. Zoom, pan, and layer by theme—reference context, not a causal model.",
+    status: "active",
+    groupPlacements: [{ group: "global", order: 4 }],
+    countries: ["global", "iran"],
+    themes: ["macro"],
+    tags: ["Timeline", "Bands", "Context"],
+    keywords: [
+      "bands",
+      "swimlane",
+      "Bretton",
+      "OPEC",
+      "sanctions",
+      "eras",
+      "chronology",
+    ],
+    primarySignal: { kind: "band_events_timeline" },
     concepts: ["event_overlay"],
   },
   {

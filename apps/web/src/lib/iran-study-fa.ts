@@ -25,6 +25,7 @@ export const IRAN_FA_STUDY_IDS = new Set<string>([
   "oil-economy-overview",
   "iran-money-supply-growth",
   "timeline-global-events",
+  "timeline-bands",
 ]);
 
 export type StudyLocale = "en" | "fa";
@@ -33,8 +34,16 @@ export function supportsIranStudyFa(studyId: string): boolean {
   return IRAN_FA_STUDY_IDS.has(studyId);
 }
 
+/**
+ * Single-language copy: pass English and Persian; only one is returned (no bilingual fallbacks).
+ * Use with `lang` from `StudyLanguageToggle` / `locale="en" | "fa"`.
+ */
+export function t(en: string, fa: string, lang: StudyLocale): string {
+  return lang === "fa" ? fa : en;
+}
+
 export function L(isFa: boolean, en: string, fa: string): string {
-  return isFa ? fa : en;
+  return t(en, fa, isFa ? "fa" : "en");
 }
 
 /** User-visible study fields (title, description, observations, …) without touching data-fetch keys. */

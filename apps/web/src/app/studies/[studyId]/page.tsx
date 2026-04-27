@@ -25,6 +25,7 @@ import { CurrentSnapshot } from "@/components/current-snapshot";
 import { IranMoneySupplyMethodology } from "@/components/studies/iran-money-supply-methodology";
 import { InSimpleTerms } from "@/components/in-simple-terms";
 import { EventsTimeline, type TimelineEvent } from "@/components/events-timeline";
+import { SignalMapBandTimeline } from "@/components/signalmap-band-timeline";
 import { SignalMapTimeline } from "@/components/signalmap-timeline";
 import { FollowerGrowthChart } from "@/components/follower-growth-chart";
 import { NetworkGraph, type NetworkNode, type NetworkEdge } from "@/components/network-graph";
@@ -442,7 +443,8 @@ export default function StudyDetailPage() {
   const chartLocaleForCharts = faEligible ? (isFa ? ("fa" as const) : ("en" as const)) : undefined;
   const statChartLocale: "en" | "fa" = faEligible && isFa ? "fa" : "en";
   const { yearAxisMode, setYearAxisMode } = useIranStudyChartYearMode();
-  const chartYearAxisLabel = faEligible ? yearAxisMode : undefined;
+  /** Jalali / both only in Persian UI; English mode always uses Gregorian (no mixed calendar lines). */
+  const chartYearAxisLabel = faEligible && isFa ? yearAxisMode : undefined;
   const faRich = IRAN_STUDY_FA_DISPLAY[studyId];
   const [data, setData] = useState<OverviewData | null>(null);
   const [events, setEvents] = useState<EventsData["events"]>([]);
@@ -722,6 +724,7 @@ export default function StudyDetailPage() {
   const isOilProductionMajorExporters = study?.primarySignal.kind === "oil_production_major_exporters";
   const isEventsTimeline = study?.primarySignal.kind === "events_timeline";
   const isGlobalEventsTimeline = study?.primarySignal.kind === "global_events_timeline";
+  const isBandEventsTimeline = study?.primarySignal.kind === "band_events_timeline";
   const isFollowerGrowthDynamics = study?.primarySignal.kind === "follower_growth_dynamics";
   const isFxUsdIrrDual = study?.primarySignal.kind === "fx_usd_irr_dual";
   const isWageCpiReal = study?.primarySignal.kind === "wage_cpi_real";
@@ -1332,6 +1335,7 @@ export default function StudyDetailPage() {
   const gdpLevelsIndexedBaseYearLabel = useMemo(() => {
     if (gdpLevelsIndexedBaseYear == null || !gdpLevelsIndexedBaseIsoDate) return "";
     const useIranYearLabelsOnLevels =
+      isFa &&
       isGdpIranLocal &&
       yearAxisMode !== "gregorian" &&
       (isGdpIranAccountsDual || (isGdpComposition && gdpStudyView === "levels"));
@@ -1831,7 +1835,7 @@ export default function StudyDetailPage() {
   }, [oilPointsWithVolatility]);
 
   useEffect(() => {
-    if (!study || isGlobalEventsTimeline) return;
+    if (!study || isGlobalEventsTimeline || isBandEventsTimeline) return;
     let mounted = true;
     const params = new URLSearchParams({
       study_id: isOilGeopoliticalReaction
@@ -1996,6 +2000,7 @@ export default function StudyDetailPage() {
     hasTurkeyComparator,
     isEventsTimeline,
     isGlobalEventsTimeline,
+    isBandEventsTimeline,
     chartEventToggleState,
     showSanctionsPeriods,
     showTimeSeriesEventOverlay,
@@ -2008,10 +2013,13 @@ export default function StudyDetailPage() {
   ]);
 
   useEffect(() => {
-    if (study && (isEventsTimeline || isGlobalEventsTimeline || isFollowerGrowthDynamics || isYoutubeCommentAnalysis)) {
+    if (
+      study &&
+      (isEventsTimeline || isGlobalEventsTimeline || isBandEventsTimeline || isFollowerGrowthDynamics || isYoutubeCommentAnalysis)
+    ) {
       setLoading(false);
     }
-  }, [study, isEventsTimeline, isGlobalEventsTimeline, isFollowerGrowthDynamics, isYoutubeCommentAnalysis]);
+  }, [study, isEventsTimeline, isGlobalEventsTimeline, isBandEventsTimeline, isFollowerGrowthDynamics, isYoutubeCommentAnalysis]);
 
   const fetchYoutubeAnalysis = useCallback(
     async (forceRefresh: boolean, forceRecompute: boolean = false, adminCode?: string) => {
@@ -3316,7 +3324,8 @@ export default function StudyDetailPage() {
     isIranMoneySupplyM2 ||
     isDutchDiseaseDiagnostics ||
     isOilEconomyOverview ||
-    isGlobalEventsTimeline;
+    isGlobalEventsTimeline ||
+    isBandEventsTimeline;
 
   const hasTimeSeriesEventOverlayControl =
     isSingleSignalStudy &&
@@ -3324,9 +3333,10 @@ export default function StudyDetailPage() {
     !isFollowerGrowthDynamics &&
     !isYoutubeCommentAnalysis &&
     !isEventsTimeline &&
-    !isGlobalEventsTimeline;
+    !isGlobalEventsTimeline &&
+    !isBandEventsTimeline;
 
-  const singleSignalReady = isGlobalEventsTimeline
+  const singleSignalReady = isGlobalEventsTimeline || isBandEventsTimeline
     ? true
     : isGoldAndOil
       ? goldPoints.length > 0 && oilPoints.length > 0
@@ -3718,7 +3728,9 @@ export default function StudyDetailPage() {
   const { prev: prevStudy, next: nextStudy } = getPrevNextStudies(study?.id ?? studyId);
 
   const gdpLevelsXAxisYearLabel: ChartAxisYearMode | undefined =
-    isGdpIranLocal && (isGdpIranAccountsDual || (isGdpComposition && gdpStudyView === "levels"))
+    isFa &&
+    isGdpIranLocal &&
+    (isGdpIranAccountsDual || (isGdpComposition && gdpStudyView === "levels"))
       ? yearAxisMode
       : undefined;
 
@@ -3740,10 +3752,12 @@ export default function StudyDetailPage() {
           {faEligible ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <StudyLanguageToggle locale={studyLocale} onLocaleChange={setStudyLocale} />
-              <span className="inline-flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground border-l border-border/60 pl-3">
-                <span className="whitespace-nowrap shrink-0">{L(isFa, "Year axis:", "محور سال:")}</span>
-                <StudyYearDisplayToggle size="compact" isFa={isFa} value={yearAxisMode} onChange={setYearAxisMode} />
-              </span>
+              {isFa ? (
+                <span className="inline-flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground border-l border-border/60 pl-3">
+                  <span className="whitespace-nowrap shrink-0">{L(isFa, "Year axis:", "محور سال:")}</span>
+                  <StudyYearDisplayToggle size="compact" isFa={isFa} value={yearAxisMode} onChange={setYearAxisMode} />
+                </span>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -3844,7 +3858,7 @@ export default function StudyDetailPage() {
                 timeRange={study.timeRange}
                 locale={isFa ? "fa" : "en"}
                 xAxisYearLabel={chartYearAxisLabel}
-                initialZoom={0.4}
+                initialZoom={1}
               />
             ) : null}
           </CardContent>
@@ -3857,6 +3871,48 @@ export default function StudyDetailPage() {
             <p>
               This view arranges global, Iran, oil, currency, and war-relevant events on a shared time axis. Use it as a
               navigational reference, not a causal model.
+            </p>
+          )}
+        </InSimpleTerms>
+        </>
+      ) : isBandEventsTimeline ? (
+        <>
+        <Card className="border-border min-w-0 overflow-visible">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold tracking-tight text-foreground">
+              {L(isFa, "Band / swimlane context timeline", "تایم‌لاین باندی (زمینه)")}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">{displayStudy.description}</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              {L(
+                isFa,
+                "Periods are shown as horizontal bands; point events are shown as markers. Drag to pan, scroll to zoom, and toggle layers on or off.",
+                "دوره‌ها باند افقی و نقاط رویداد مارکر. کشیدن، اسکرول برای بزرگ‌نمایی، لایه‌ها را فعال/غیرفعال کنید.",
+              )}
+            </p>
+          </CardHeader>
+          <CardContent>
+            {study ? (
+              <SignalMapBandTimeline
+                timeRange={study.timeRange}
+                locale={isFa ? "fa" : "en"}
+                xAxisYearLabel={chartYearAxisLabel}
+                initialZoom={1}
+                onEventClick={(e) =>
+                  trackEvent("band_timeline_event_click", { study_id: studyId, event_id: e.id, kind: e.kind })
+                }
+              />
+            ) : null}
+          </CardContent>
+        </Card>
+        {study.concepts?.length ? <ConceptsUsed locale={isFa ? "fa" : "en"} conceptKeys={study.concepts} /> : null}
+        <InSimpleTerms locale={isFa ? "fa" : "en"}>
+          {isFa && faRich?.simpleTermsParagraphs?.length ? (
+            faRich.simpleTermsParagraphs.map((p, i) => <p key={i}>{p}</p>)
+          ) : (
+            <p>
+              This swimlane view shows long periods as soft bands and anchor dates as markers. Use it as navigational
+              context only—co-occurrence is not causation.
             </p>
           )}
         </InSimpleTerms>
@@ -5155,6 +5211,7 @@ export default function StudyDetailPage() {
       ) : null}
 
       {!isGlobalEventsTimeline &&
+        !isBandEventsTimeline &&
         !isEventsTimeline &&
         !isFollowerGrowthDynamics &&
         !isFxUsdIrrDual &&

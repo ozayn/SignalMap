@@ -26,6 +26,7 @@ import {
   type SignalMapTimelineEvent,
   type SignalMapTimelineProps,
 } from "@/lib/signalmap-timeline";
+import { t as tLang, type StudyLocale } from "@/lib/iran-study-fa";
 
 const DAY = 86_400_000;
 const LANE_PITCH = 40;
@@ -61,12 +62,12 @@ function eventSpanMs(e: SignalMapTimelineEvent) {
   return [a, b] as const;
 }
 
-function titleOf(e: SignalMapTimelineEvent, locale: "en" | "fa") {
-  return locale === "fa" ? e.title_fa : e.title_en;
+function titleOf(e: SignalMapTimelineEvent, lang: StudyLocale) {
+  return tLang(e.title_en, e.title_fa, lang);
 }
 
-function descOf(e: SignalMapTimelineEvent, locale: "en" | "fa") {
-  return locale === "fa" ? e.description_fa : e.description_en;
+function descOf(e: SignalMapTimelineEvent, lang: StudyLocale) {
+  return tLang(e.description_en, e.description_fa, lang);
 }
 
 function YearAxisTickText({
@@ -105,8 +106,9 @@ export function SignalMapTimeline({
   className,
   initialZoom = 1,
 }: SignalMapTimelineProps) {
+  const lang: StudyLocale = locale;
   const yearAxisMode: ChartAxisYearMode = xAxisYearLabel ?? "gregorian";
-  const numeralLoc: ChartAxisNumeralLocale = locale === "fa" ? "fa" : "en";
+  const numeralLoc: ChartAxisNumeralLocale = lang === "fa" ? "fa" : "en";
   const [layers, setLayers] = useState<Set<SignalMapTimelineEvent["category"]>>(
     () => new Set(["global", "iran", "oil", "fx", "war"])
   );
@@ -295,10 +297,10 @@ export function SignalMapTimeline({
         id: ev.id,
         x: e.clientX,
         y: e.clientY,
-        content: { title: titleOf(ev, locale), date: ev.date_start },
+        content: { title: titleOf(ev, lang), date: ev.date_start },
       });
     },
-    [locale]
+    [lang]
   );
 
   const clearFloatTip = useCallback(() => {
@@ -323,7 +325,7 @@ export function SignalMapTimeline({
         <div
           className={cn(
             "mb-3 flex flex-wrap items-center justify-between gap-2 gap-y-2",
-            locale === "fa" && "font-[family-name:Vazirmatn] study-page-fa"
+            lang === "fa" && "font-[family-name:Vazirmatn] study-page-fa"
           )}
         >
           <div className="flex flex-wrap gap-2" role="group" aria-label="Layer filters">
@@ -349,7 +351,7 @@ export function SignalMapTimeline({
                   )}
                 >
                   <span className={cn("h-2.5 w-2.5 rounded-sm", CAT_STYLE[L.key].bar)} />
-                  {locale === "fa" ? L.labelFa : L.labelEn}
+                  {tLang(L.labelEn, L.labelFa, lang)}
                 </button>
               );
             })}
@@ -374,10 +376,14 @@ export function SignalMapTimeline({
               className="rounded border border-border/80 bg-background/50 px-2 py-0.5 transition-colors duration-200 hover:bg-muted/60"
               onClick={fitAll}
             >
-              {locale === "fa" ? "همه" : "Fit all"}
+              {tLang("Fit all", "همه", lang)}
             </button>
             <span className="max-w-[14rem] pl-0.5 text-[10px] leading-snug text-muted-foreground/70">
-              {locale === "fa" ? "کشیدن · اسکرول برای بزرگ‌نمایی" : "Drag · scroll to zoom · names in hover, or on strong zoom"}
+              {tLang(
+                "Drag · scroll to zoom · names in hover, or on strong zoom",
+                "کشیدن · اسکرول برای بزرگ‌نمایی",
+                lang
+              )}
             </span>
           </div>
         </div>
@@ -449,7 +455,7 @@ export function SignalMapTimeline({
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="pr-1 font-semibold leading-snug text-foreground">{titleOf(selected, locale)}</h3>
+                  <h3 className="pr-1 font-semibold leading-snug text-foreground">{titleOf(selected, lang)}</h3>
                   <button
                     type="button"
                     className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -463,7 +469,7 @@ export function SignalMapTimeline({
                   {selected.date_start}
                   {selected.date_end ? ` — ${selected.date_end}` : ""} · I{getEventImportance(selected)}
                 </p>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground/95">{descOf(selected, locale)}</p>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground/95">{descOf(selected, lang)}</p>
                 {selected.tags.length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {selected.tags.map((t) => (
@@ -487,7 +493,7 @@ export function SignalMapTimeline({
                 const cat = CAT_STYLE[ev.category];
                 const isSel = selectedId === ev.id;
                 const isHover = hoveredId === ev.id;
-                const t = titleOf(ev, locale);
+                const eventTitle = titleOf(ev, lang);
                 return (
                   <div
                     key={ev.id}
@@ -527,7 +533,7 @@ export function SignalMapTimeline({
                                 isSel && "text-foreground"
                               )}
                             >
-                              {t}
+                              {eventTitle}
                             </span>
                           ) : null}
                           <span
@@ -547,10 +553,10 @@ export function SignalMapTimeline({
               const cx = toXPercent(node.centerMs, viewStart, viewEnd);
               const isOpen = openCluster === node.id;
               const clusterTipLine =
-                (locale === "fa" ? "کلیک برای فهرست" : "Click to list") +
+                tLang("Click to list", "کلیک برای فهرست", lang) +
                 " · " +
                 String(node.count) +
-                (locale === "fa" ? " رویداد" : " events");
+                tLang(" events", " رویداد", lang);
               return (
                 <div
                   key={node.id}
@@ -587,14 +593,14 @@ export function SignalMapTimeline({
                     }}
                     onPointerLeave={clearFloatTip}
                     className="flex h-6 min-w-[1.4rem] items-center justify-center rounded border border-border/80 bg-card/90 px-1.5 text-[10px] font-semibold text-foreground shadow-sm ring-1 ring-foreground/5 transition-transform duration-200 hover:scale-105"
-                    aria-label={locale === "fa" ? `${node.count} رویداد` : `${node.count} events`}
+                    aria-label={tLang(`${node.count} events`, `${node.count} رویداد`, lang)}
                   >
                     {node.count}
                   </button>
                   {isOpen ? (
                     <div className="absolute left-1/2 z-30 mt-1 w-56 -translate-x-1/2 rounded-md border border-border/80 bg-popover p-2 text-left text-xs shadow-lg">
                       <p className="mb-1.5 text-muted-foreground">
-                        {locale === "fa" ? `${node.count} رویداد` : `${node.count} events`}
+                        {tLang(`${node.count} events`, `${node.count} رویداد`, lang)}
                       </p>
                       <ul className="max-h-48 space-y-1 overflow-y-auto">
                         {node.events.map((e) => (
@@ -604,7 +610,7 @@ export function SignalMapTimeline({
                               className="w-full text-left text-foreground transition-colors hover:underline"
                               onClick={() => pickEvent(e)}
                             >
-                              {titleOf(e, locale)}
+                              {titleOf(e, lang)}
                             </button>
                           </li>
                         ))}

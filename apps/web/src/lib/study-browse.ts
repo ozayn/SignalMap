@@ -97,7 +97,9 @@ export function getSignalTags(study: StudyMeta): string[] {
     tags.push("FX");
   }
   if (kind === "gold_and_oil") tags.push("Gold");
-  if (kind === "events_timeline" || kind === "global_events_timeline") tags.push("Reference");
+  if (kind === "events_timeline" || kind === "global_events_timeline" || kind === "band_events_timeline") {
+    tags.push("Reference");
+  }
   if (kind === "gdp_composition" || kind === "iran_gdp_accounts_dual" || kind === "gdp_global_comparison") tags.push("GDP");
   if (kind === "oil_trade_network" || kind === "oil_exporter_timeseries") tags.push("Trade");
   return [...new Set([...(study.tags ?? []), ...tags])];
@@ -314,6 +316,23 @@ function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
           "chronology",
           "Bretton",
           "OPEC",
+          "geopolitics",
+          "zoom",
+          "layers",
+        ],
+      };
+    case "band_events_timeline":
+      return {
+        countries: ["global", "iran"],
+        themes: ["macro"],
+        tags: [],
+        keywords: [
+          "bands",
+          "swimlane",
+          "eras",
+          "periods",
+          "timeline",
+          "history",
           "geopolitics",
           "zoom",
           "layers",

@@ -14,16 +14,6 @@ import type { NextConfig } from "next";
  * Behind a reverse proxy with a different host, you may need:
  * `experimental.serverActions.allowedOrigins` (see Next.js docs) so same-origin checks pass.
  */
-const nextConfig: NextConfig = {
-  async redirects() {
-    return [
-      {
-        source: "/timeline-preview",
-        destination: "/studies/timeline-global-events",
-        permanent: true,
-      },
-    ];
-  },
-};
+const nextConfig: NextConfig = {};
 
 export default nextConfig;
