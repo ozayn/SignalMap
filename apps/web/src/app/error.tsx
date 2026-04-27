@@ -8,6 +8,16 @@ function isLikelyDeployMismatch(error: Error & { digest?: string }): boolean {
   return msg.includes("Failed to find Server Action") || msg.includes("older or newer deployment");
 }
 
+/** HMR or dev restarts: old tab still points at a chunk the server no longer has. A full reload fixes it. */
+function isChunkLoadError(error: Error & { name?: string }): boolean {
+  if (error.name === "ChunkLoadError") return true;
+  const m = error.message ?? "";
+  if (m.includes("Loading chunk") && m.toLowerCase().includes("failed")) return true;
+  if (m.includes("Failed to fetch dynamically imported module")) return true;
+  if (m.includes("Importing a module script failed")) return true;
+  return false;
+}
+
 export default function Error({
   error,
   reset,
@@ -15,7 +25,10 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  const deployMismatch = useMemo(() => isLikelyDeployMismatch(error), [error]);
+  const deployMismatch = useMemo(
+    () => isLikelyDeployMismatch(error) || isChunkLoadError(error),
+    [error]
+  );
 
   useEffect(() => {
     console.error(error);
@@ -28,7 +41,7 @@ export default function Error({
       ) : (
         <p className="text-muted-foreground">Something went wrong.</p>
       )}
-      {deployMismatch ? (
+      {isLikelyDeployMismatch(error) ? (
         <div className="text-sm text-muted-foreground max-w-prose space-y-2">
           <p>
             That usually happens right after we ship an update, while a tab still has an older copy of the app loaded.
@@ -38,6 +51,17 @@ export default function Error({
             Refresh this page (or use <span className="text-foreground">Reload page</span> below). If it still
             happens, copy the URL from the address bar and open it in a new tab. As a last resort, try a private
             window or clear cached data for this site.
+          </p>
+        </div>
+      ) : isChunkLoadError(error) ? (
+        <div className="text-sm text-muted-foreground max-w-prose space-y-2">
+          <p>
+            In development, hot reload or a dev-server restart can invalidate a JavaScript chunk the tab is still
+            trying to load. A full page reload fetches the current build.
+          </p>
+          <p>
+            Use <span className="text-foreground">Reload page</span> (or a hard refresh). This is a normal
+            next-dev/HMR quirk, not a bug in the Studies list itself.
           </p>
         </div>
       ) : null}

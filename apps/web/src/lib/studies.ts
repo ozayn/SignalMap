@@ -12,6 +12,7 @@ export type PrimarySignal =
   | { kind: "events_timeline" }
   | { kind: "global_events_timeline" }
   | { kind: "band_events_timeline" }
+  | { kind: "iran_dynasties_timeline" }
   | { kind: "follower_growth_dynamics" }
   | { kind: "fx_usd_irr_dual" }
   | { kind: "wage_cpi_real" }
@@ -293,6 +294,22 @@ export const STUDIES: StudyMeta[] = [
       "chronology",
     ],
     primarySignal: { kind: "band_events_timeline" },
+    concepts: ["event_overlay"],
+  },
+  {
+    id: "iran-dynasties-timeline",
+    number: 39,
+    title: "Iran dynasties timeline",
+    timeRange: ["-2000-01-01", new Date().toISOString().slice(0, 10)],
+    description:
+      "A vertical view of major Iranian polities: present at the top, time running downward. Band height is proportional to each dynasty’s share of the current domain; BCE years are represented on a single numeric (negative) year scale for layout.",
+    status: "active",
+    groupPlacements: [{ group: "global", order: 5 }],
+    countries: ["iran", "global"],
+    themes: ["macro"],
+    tags: ["Timeline", "Iran", "Context"],
+    keywords: ["Iran", "iran", "history", "dynasty", "dynasties", "BCE", "chronology", "Persia", "vertical", "Achaemenid", "Sasanian"],
+    primarySignal: { kind: "iran_dynasties_timeline" },
     concepts: ["event_overlay"],
   },
   {

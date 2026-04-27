@@ -98,7 +98,12 @@ export function getSignalTags(study: StudyMeta): string[] {
     tags.push("FX");
   }
   if (kind === "gold_and_oil") tags.push("Gold");
-  if (kind === "events_timeline" || kind === "global_events_timeline" || kind === "band_events_timeline") {
+  if (
+    kind === "events_timeline" ||
+    kind === "global_events_timeline" ||
+    kind === "band_events_timeline" ||
+    kind === "iran_dynasties_timeline"
+  ) {
     tags.push("Reference");
   }
   if (kind === "gdp_composition" || kind === "iran_gdp_accounts_dual" || kind === "gdp_global_comparison") tags.push("GDP");
@@ -221,6 +226,10 @@ function subjectSearchAliasBits(study: StudyMeta): string[] {
     b.push("CPI", "inflation", "تورم");
   }
 
+  if (k === "iran_dynasties_timeline") {
+    b.push("Iran", "ایران", "ایرانی", "persian", "Farsi", "تاریخ", "تاریخی", "history", "dynasty", "dynasties", "دودمان", "BCE", "chronology");
+  }
+
   return [...new Set(b)];
 }
 
@@ -338,6 +347,13 @@ function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
           "zoom",
           "layers",
         ],
+      };
+    case "iran_dynasties_timeline":
+      return {
+        countries: ["iran", "global"],
+        themes: ["macro"],
+        tags: [],
+        keywords: ["iran", "history", "dynasty", "periods", "BCE", "chronology", "persia", "vertical", "reference"],
       };
     case "follower_growth_dynamics":
       return {

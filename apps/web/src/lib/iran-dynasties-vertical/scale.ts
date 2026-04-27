@@ -50,3 +50,66 @@ export function getVerticalTimelineDomain(
 export function totalSpanYears(tMin: number, tMax: number): number {
   return tMax - tMin;
 }
+
+/**
+ * Map a year to an X offset from the left. Oldest `tMin` = 0; present / `tMax` = `trackWidthPx` (LTR, past → future).
+ */
+export function yearToOffsetFromLeft(
+  year: number,
+  tMin: number,
+  tMax: number,
+  trackWidthPx: number
+): number {
+  const span = Math.max(1, tMax - tMin);
+  return ((year - tMin) / span) * trackWidthPx;
+}
+
+/**
+ * `left` and `width` in px for a horizontal band. Newer (larger) year is the right edge.
+ */
+export function bandRectFromYearsHorizontal(
+  startYear: number,
+  endYear: number,
+  tMin: number,
+  tMax: number,
+  trackWidthPx: number
+): { left: number; width: number } {
+  const xStart = yearToOffsetFromLeft(startYear, tMin, tMax, trackWidthPx);
+  const xEnd = yearToOffsetFromLeft(endYear, tMin, tMax, trackWidthPx);
+  return { left: xStart, width: Math.max(0, xEnd - xStart) };
+}
+
+/**
+ * True if `d` is a strictly shorter span that lies inside another polity
+ * (e.g. Sāmānid inside the early caliphal / Iranian-Islamic schematic band).
+ */
+export function isStrictlyNestedInAnother(
+  d: IranVerticalDynasty,
+  all: readonly IranVerticalDynasty[]
+): boolean {
+  for (const p of all) {
+    if (p.id === d.id) continue;
+    if (d.start_year < p.start_year || d.end_year > p.end_year) continue;
+    if (d.start_year === p.start_year && d.end_year === p.end_year) continue;
+    if (d.end_year - d.start_year >= p.end_year - p.start_year) continue;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * True if some other polity is a strict time-subspan of `d` (nested on top in the same strip);
+ * the parent’s in-band label would sit under the child, so the strip should not show a centered name.
+ */
+export function hasStrictSubspanChild(
+  d: IranVerticalDynasty,
+  all: readonly IranVerticalDynasty[]
+): boolean {
+  const dSpan = d.end_year - d.start_year;
+  for (const c of all) {
+    if (c.id === d.id) continue;
+    if (c.start_year < d.start_year || c.end_year > d.end_year) continue;
+    if (c.end_year - c.start_year < dSpan) return true;
+  }
+  return false;
+}

@@ -45,6 +45,58 @@ export const IRAN_VERTICAL_DYNASTIES: readonly IranVerticalDynasty[] = [
       "دولت بزرگ ساسانی با بافت مذهبی-ایرانی؛ سقوط در موج فتح‌های نخستین سدهٔ هفتم (پایان نمادین حوالی ۶۵۱).",
   },
   {
+    id: "dy-early-high-islamic-651-1000",
+    start_year: 651,
+    end_year: 1000,
+    title_en: "Early caliphal era",
+    title_fa: "دورهٔ نخست خلافت",
+    category: "dynasty",
+    importance: 2,
+    description_en:
+      "Schematic span: Arab conquest and Umayyad/ʿAbbāsid rule, then major Iranian-ruled regions and dynasties such as the Ṭāhirid, Ṣaffārid, Būyid, and Samanid. Borders and allegiances were fluid—this is a high-level view, not a full political map.",
+    description_fa:
+      "دوره نمادین: فتح امووی و عباسی و سپس امرای ایرانی (طاهریان، صفاریان، بوییان و سامانیان)؛ اینجا تفکیک سیاسی کامل و مرزها نیست و فقط برای بافت کلی تایم‌لاین است.",
+  },
+  {
+    id: "dy-samanid",
+    start_year: 819,
+    end_year: 999,
+    title_en: "Samanid",
+    title_fa: "سامانیان",
+    category: "dynasty",
+    importance: 2,
+    description_en:
+      "Persianate emirate in Transoxiana and Khurāsān (centred at Bukhārā); often highlighted for the Iranian cultural and literary renaissance. End dates to the Kārkhānid takeover, rounded for this overview.",
+    description_fa:
+      "امارت ایرانی‌فرهنگ در ماوراءالنهر و خراسان (تکیه‌گاه اصلی: بخارا) و دوره‌ای پرآوازه در بازگشت فرهنگ و ادب فارسی؛ پایان را با تسلط قاراخانیان (تاریخ فقط کلی) می‌گذاریم.",
+  },
+  {
+    id: "dy-seljuk-mongol-transition-1000-1256",
+    start_year: 1000,
+    end_year: 1256,
+    title_en: "Seljuks, then Mongols",
+    title_fa: "سلجوق، سپس مغول",
+    category: "dynasty",
+    importance: 2,
+    description_en:
+      "Schematic span: Great Seljuks, fragmentation, the Khwārazmshāh state, and the Mongol conquests leading into Ilkhanid rule (Hülegü’s conquest c. 1250s). Rival and successor polities in different regions are folded into this band for overview.",
+    description_fa:
+      "بازه نمادین: سلجوقی بزرگ، اختلال، امپراتوری خوارزمشاهی و سپس هجوم مغول تا برآمدن سلسلهٔ ایلخانی (حدود ۱۲۵۰ م.)؛ بسیاری دولت‌های موازی صرفاً در طول کلی باند دیده می‌شود.",
+  },
+  {
+    id: "dy-ilkhanid-timurid-turcoman-1256-1501",
+    start_year: 1256,
+    end_year: 1501,
+    title_en: "Ilkhanid & Tīmūrid",
+    title_fa: "ایلخانی و تیموری",
+    category: "dynasty",
+    importance: 2,
+    description_en:
+      "Schematic span: the Mongol Ilkhanate in Iran, Tīmūrid rule and successors, then the Black Sheep and White Sheep confederations. Ends where Safavid rule is conventionally dated. Major factions overlapped; details are not drawn as separate rows here.",
+    description_fa:
+      "بازه نمادین: سلسلهٔ ایلخانی و انقراض آن، دولت و جانشینان تیموری و سپس اتحادهای اَبْلَق و آق‌قویونلو تا آستانهٔ قدرت صفوی. قدرت‌های هم‌زمان در باند واحد تلفیق شده‌اند.",
+  },
+  {
     id: "dy-safavid",
     start_year: 1501,
     end_year: 1736,
