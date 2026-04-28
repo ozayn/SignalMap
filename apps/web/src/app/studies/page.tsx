@@ -245,6 +245,11 @@ export default function StudiesPage() {
                   >
                     {meta.description}
                   </p>
+                  {group === "discourse" ? (
+                    <p className="mt-1 text-[11px] leading-snug text-[#9ca3af] dark:text-[#94a3b8]/90">
+                      This section is in progress. Some data and features are incomplete.
+                    </p>
+                  ) : null}
                 </div>
                 <div className="studies-grid">
                   {rows.map(({ study, order }) => {
