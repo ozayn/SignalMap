@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Navbar } from "@/components/navbar";
+import { SiteFooter } from "@/components/site-footer";
 import { SuppressDevLogs } from "@/components/suppress-dev-logs";
 import { Analytics } from "@/components/analytics";
 
@@ -48,10 +49,13 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} font-sans antialiased min-h-screen`} suppressHydrationWarning>
         <ThemeProvider>
-          <SuppressDevLogs />
-          {gaId && <Analytics gaId={gaId} />}
-          <Navbar />
-          <main className="main-content min-w-0 overflow-x-hidden">{children}</main>
+          <div className="flex min-h-screen w-full flex-col">
+            <SuppressDevLogs />
+            {gaId && <Analytics gaId={gaId} />}
+            <Navbar />
+            <main className="main-content min-w-0 overflow-x-hidden">{children}</main>
+            <SiteFooter />
+          </div>
         </ThemeProvider>
       </body>
     </html>

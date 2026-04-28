@@ -1,4 +1,7 @@
+import { getSignalMapSupportHref, SUPPORT_LINK_ARIA, supportMethodsCopy } from "@/lib/site-support";
+
 export default function MethodsPage() {
+  const supportHref = getSignalMapSupportHref();
   return (
     <div className="page-container">
       <h1>Methods</h1>
@@ -103,6 +106,22 @@ export default function MethodsPage() {
           generalizability beyond the defined corpus and time window.
           Uncertainty is reported where feasible; absence of uncertainty
           estimates does not imply certainty.
+        </p>
+      </section>
+
+      <section lang="en">
+        <h2>{supportMethodsCopy.title}</h2>
+        <p>
+          {supportMethodsCopy.body}{" "}
+          <a
+            href={supportHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-foreground/80 underline decoration-border underline-offset-2 transition-colors hover:text-foreground"
+            aria-label={SUPPORT_LINK_ARIA}
+          >
+            {supportMethodsCopy.linkText}
+          </a>
         </p>
       </section>
     </div>

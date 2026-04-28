@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { getSignalMapSupportHref, SUPPORT_LINK_ARIA } from "@/lib/site-support";
 import { ThemeToggle } from "./theme-toggle";
 
 const navLinks = [
@@ -40,6 +41,7 @@ export function Navbar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const hamburgerRef = useRef<HTMLButtonElement>(null);
+  const supportHref = getSignalMapSupportHref();
 
   const closeMenu = () => {
     setMobileOpen(false);
@@ -89,7 +91,17 @@ export function Navbar() {
             })}
           </nav>
         </div>
-        <div className="nav-right flex items-center gap-2 shrink-0">
+        <div className="nav-right flex items-center gap-1 sm:gap-2 shrink-0">
+          <a
+            href={supportHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="nav-support-link hidden md:inline"
+            lang="en"
+            aria-label={SUPPORT_LINK_ARIA}
+          >
+            Support
+          </a>
           <ThemeToggle />
           <button
             ref={hamburgerRef}
@@ -172,6 +184,17 @@ export function Navbar() {
                 />
               );
             })}
+            <a
+              href={supportHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={closeMenu}
+              className="mt-1 flex min-h-[44px] items-center border-t border-border/60 py-3 text-[14px] text-[#6b7280] hover:text-[#111827] dark:hover:text-[#e5e7eb]"
+              lang="en"
+              aria-label={SUPPORT_LINK_ARIA}
+            >
+              Support
+            </a>
           </nav>
         </div>
       </div>

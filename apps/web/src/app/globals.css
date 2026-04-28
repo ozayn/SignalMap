@@ -776,6 +776,67 @@ a.learning-study-link {
 .main-content {
   margin-top: 28px;
   padding-bottom: 64px;
+  flex: 1 0 auto;
+  min-width: 0;
+}
+
+/* Global footer — low emphasis */
+.site-footer {
+  flex-shrink: 0;
+  border-top: 1px solid #e5e7eb;
+  background: white;
+  padding: 10px 0 20px;
+}
+
+.dark .site-footer {
+  background: hsl(var(--background));
+  border-top-color: #1f2937;
+}
+
+.site-footer-inner {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.site-footer-link {
+  font-size: 12px;
+  color: #9ca3af;
+  text-decoration: none;
+}
+
+.site-footer-link:hover {
+  color: #6b7280;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.dark .site-footer-link {
+  color: #6b7280;
+}
+
+.dark .site-footer-link:hover {
+  color: #9ca3af;
+}
+
+/* Navbar — optional support (external), same weight as other nav text */
+.nav-support-link {
+  font-size: 14px;
+  color: #6b7280;
+  text-decoration: none;
+  margin-right: 2px;
+}
+
+.nav-support-link:hover {
+  color: #111827;
+}
+
+.dark .nav-support-link {
+  color: #9ca3af;
+}
+
+.dark .nav-support-link:hover {
+  color: #e5e7eb;
 }
 
 /* Study page - aligned with nav */
