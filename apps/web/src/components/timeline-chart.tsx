@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState, useMemo, useCallback } from "react";
+import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } from "react";
 import * as echarts from "echarts";
 import { cssHsl, withAlphaHsl } from "@/lib/utils";
 import {
@@ -779,6 +779,8 @@ export function TimelineChart({
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
+  /** Bumps when the chart container gains usable layout size (avoids echarts.init at 0×0). */
+  const [chartLayoutRevision, setChartLayoutRevision] = useState(0);
   const [xLabelRotate, setXLabelRotate] = useState(0);
   const [clipStart, setClipStart] = useState("");
   const [clipEnd, setClipEnd] = useState("");
@@ -1043,6 +1045,21 @@ export function TimelineChart({
     return () => window.removeEventListener("resize", updateRotate);
   }, []);
 
+  useLayoutEffect(() => {
+    const el = chartRef.current;
+    if (!el) return;
+    let prevOk = el.clientWidth >= 2 && el.clientHeight >= 2;
+    const run = () => {
+      const ok = el.clientWidth >= 2 && el.clientHeight >= 2;
+      if (ok && !prevOk) setChartLayoutRevision((n) => n + 1);
+      prevOk = ok;
+    };
+    const ro = new ResizeObserver(run);
+    ro.observe(el);
+    run();
+    return () => ro.disconnect();
+  }, []);
+
   useEffect(() => {
     const color = cssHsl("--chart-primary", "hsl(238, 84%, 67%)");
     const muted = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
@@ -1267,12 +1284,6 @@ export function TimelineChart({
       if (lastYear < rangeEnd.slice(0, 4)) dates = [...dates.filter((d) => d < rangeEnd), rangeEnd].sort();
     }
     const values = hasData ? dataResolved.map((d) => d[valueKey] as number) : [];
-
-    let chart = echarts.getInstanceByDom(chartRef.current);
-    if (!chart) {
-      chart = echarts.init(chartRef.current);
-    }
-    chartInstanceRef.current = chart;
 
     const oilByDate = new Map(oilPointsResolved.map((p) => [p.date, p.value]));
     const oilDates = [...oilByDate.keys()].sort();
@@ -2682,6 +2693,22 @@ export function TimelineChart({
       ],
     };
 
+    const dom = chartRef.current;
+    if (!dom) return;
+    const cw = dom.clientWidth;
+    const ch = dom.clientHeight;
+    if (cw < 2 || ch < 2) return;
+
+    let chart = echarts.getInstanceByDom(dom);
+    if (!chart) {
+      chart = echarts.init(dom, undefined, {
+        renderer: "canvas",
+        width: cw,
+        height: ch,
+      });
+    }
+    chartInstanceRef.current = chart;
+
     let cancelled = false;
     const rafId = requestAnimationFrame(() => {
       if (!cancelled && chartRef.current) {
@@ -2692,7 +2719,10 @@ export function TimelineChart({
     const resize = () => {
       if (!cancelled) {
         try {
-          chart.resize();
+          const box = chartRef.current;
+          if (box && box.clientWidth >= 2 && box.clientHeight >= 2) {
+            chart.resize({ width: box.clientWidth, height: box.clientHeight });
+          }
         } catch {
           // Chart may be disposed
         }
@@ -2752,6 +2782,7 @@ export function TimelineChart({
     groupedLegendModel,
     groupedLegendSelected,
     multiSeriesLegendGroupedVariant,
+    chartLayoutRevision,
   ]);
 
   useEffect(() => {
@@ -2838,7 +2869,7 @@ export function TimelineChart({
           ) : null}
         </div>
       ) : null}
-      <div ref={chartRef} className={`chart-area ${chartHeight} w-full min-w-0`} />
+      <div ref={chartRef} className={`chart-area ${chartHeight} w-full min-w-[2px]`} />
       {sourceLine ? (
         <p className={STUDY_CHART_SOURCE_WRAP_CLASS} dir="ltr">
           {localizeChartNumericDisplayStringSafe(sourceLine, chartLocaleResolved === "fa" ? "fa" : "en")}

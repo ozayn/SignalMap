@@ -24,8 +24,12 @@ export function SuppressDevLogs() {
     };
 
     const onUnhandledRejection = (e: PromiseRejectionEvent) => {
-      const r = e.reason;
+      const r = e.reason as { name?: string; message?: string; code?: string } | undefined;
       const msg = r?.message ?? r?.code ?? String(r ?? "");
+      if (r?.name === "AbortError") {
+        e.preventDefault();
+        return;
+      }
       if (/Firebase.*auth\/network-request-failed|auth\/network-request-failed/i.test(String(msg))) {
         e.preventDefault();
       }

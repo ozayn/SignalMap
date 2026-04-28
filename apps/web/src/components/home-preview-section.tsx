@@ -43,9 +43,7 @@ function MiniChart({
     if (data.length < 2) return;
 
     let chart: echarts.ECharts | null = null;
-    let ro: ResizeObserver | null = null;
     let disposed = false;
-    let layoutAttempts = 0;
 
     const option = {
       animation: false,
@@ -67,37 +65,41 @@ function MiniChart({
       ],
     };
 
-    const mount = () => {
+    const sync = () => {
       if (disposed || !el.isConnected) return;
-      if (el.clientWidth < 4 || el.clientHeight < 4) {
-        if (++layoutAttempts < 90) requestAnimationFrame(mount);
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w < 2 || h < 2) return;
+
+      if (!chart) {
+        try {
+          chart = echarts.init(el, undefined, {
+            renderer: "canvas",
+            width: w,
+            height: h,
+          });
+          chart.setOption(option);
+        } catch {
+          return;
+        }
         return;
       }
       try {
-        chart = echarts.init(el, undefined, { renderer: "canvas" });
-        chart.setOption(option);
+        chart.resize({ width: w, height: h });
       } catch {
-        return;
+        /* disposed */
       }
-      ro = new ResizeObserver(() => {
-        if (!chart || disposed) return;
-        try {
-          chart.resize();
-        } catch {
-          /* disposed or zero-size */
-        }
-      });
-      ro.observe(el);
     };
 
-    requestAnimationFrame(mount);
+    const ro = new ResizeObserver(() => sync());
+    ro.observe(el);
+    requestAnimationFrame(() => sync());
 
     return () => {
       disposed = true;
-      ro?.disconnect();
+      ro.disconnect();
       chart?.dispose();
       chart = null;
-      ro = null;
     };
   }, [points, lineColor]);
 
@@ -105,7 +107,8 @@ function MiniChart({
     return <div className="h-[96px] w-full rounded-md bg-muted/25 dark:bg-muted/15" />;
   }
 
-  return <div ref={ref} className="h-[96px] w-full min-w-0" />;
+  /* Avoid min-w-0 here — it lets flex/grid shrink width to 0 and breaks ECharts sizing. */
+  return <div ref={ref} className="h-[96px] w-full min-w-[2px]" />;
 }
 
 function PreviewCard({
@@ -157,19 +160,22 @@ export function HomePreviewSection() {
     let cancelled = false;
     const ac = new AbortController();
 
-    fetch("/api/homepage/previews", { signal: ac.signal })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`preview ${res.status}`);
-        return res.json() as Promise<{ cards: HomePreviewCardPayload[] }>;
-      })
-      .then((data) => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/homepage/previews", { signal: ac.signal });
+        if (cancelled) return;
+        if (!res.ok) {
+          setCards(fallbackCards());
+          return;
+        }
+        const data = (await res.json()) as { cards?: HomePreviewCardPayload[] };
         if (cancelled) return;
         setCards(Array.isArray(data.cards) ? data.cards : fallbackCards());
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (cancelled || isAbortError(err)) return;
         setCards(fallbackCards());
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
