@@ -3,8 +3,11 @@ Signal series orchestration.
 Read path: cache → Postgres → fetcher (with upsert).
 """
 
+import json
 import logging
+import os
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 from signalmap.data.gold_annual import GOLD_ANNUAL
@@ -38,6 +41,8 @@ from signalmap.data.oil_production_exporters import SOURCE as OIL_PRODUCTION_SOU
 from signalmap.sources.oil_production_exporters import fetch_oil_production_exporters
 from signalmap.store.signals_repo import get_points, upsert_points
 from signalmap.utils.ttl_cache import get as cache_get, set as cache_set
+
+_SIGNAL_TIMING_LOG = os.environ.get("SIGNAL_TIMING_LOG")
 
 SIGNAL_BRENT = "brent_oil_price"
 SIGNAL_OIL_GLOBAL_LONG = "oil_global_long"
@@ -429,21 +434,34 @@ def _get_turkey_ppp_by_year() -> dict[int, float]:
     return by_year
 
 
+def _parallel_ppp_and_oil_averages(
+    ppp_by_year_fn: Callable[[], dict[int, float]],
+    start_year: int,
+    end_year: int,
+) -> tuple[dict[int, float], dict[int, float]]:
+    """Overlap World Bank PPP fetch with Brent annualization (two independent I/O paths)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        fut_ppp = pool.submit(ppp_by_year_fn)
+        fut_oil = pool.submit(_get_oil_annual_avg_by_year, start_year, end_year)
+        return fut_ppp.result(), fut_oil.result()
+
+
 def get_oil_ppp_iran_series(start: str, end: str) -> dict:
     """
     Oil price burden in Iran (PPP-adjusted). Annual only.
     oil_price_ppp_iran(year) = nominal_oil_avg(year) * ppp_conversion_factor(year)
     Returns PPP-adjusted toman per barrel (1 toman = 10 rials). Burden proxy, not market price.
     """
-    ck = f"{_cache_key(SIGNAL_OIL_PPP_IRAN, start, end)}:toman"
+    start_year = max(1990, int(start[:4]))
+    end_year = min(int(end[:4]), 2024)
+    ck = f"signal:{SIGNAL_OIL_PPP_IRAN}:v2:{start_year}:{end_year}:toman"
     cached = cache_get(ck)
     if cached is not None:
         return cached
 
-    start_year = max(1990, int(start[:4]))
-    end_year = min(int(end[:4]), 2024)
-    ppp_by_year = _get_iran_ppp_by_year()
-    oil_by_year = _get_oil_annual_avg_by_year(start_year, end_year)
+    ppp_by_year, oil_by_year = _parallel_ppp_and_oil_averages(_get_iran_ppp_by_year, start_year, end_year)
 
     points: list[dict] = []
     for y in range(start_year, end_year + 1):
@@ -777,15 +795,14 @@ def get_oil_ppp_turkey_series(start: str, end: str) -> dict:
     Same methodology as Iran: oil_price_ppp_turkey(year) = nominal_oil_avg(year) * ppp_conversion_factor(year)
     Returns PPP-adjusted lira per barrel. Burden proxy, not market price.
     """
-    ck = f"{_cache_key(SIGNAL_OIL_PPP_TURKEY, start, end)}"
+    start_year = max(1990, int(start[:4]))
+    end_year = min(int(end[:4]), 2024)
+    ck = f"signal:{SIGNAL_OIL_PPP_TURKEY}:v2:{start_year}:{end_year}"
     cached = cache_get(ck)
     if cached is not None:
         return cached
 
-    start_year = max(1990, int(start[:4]))
-    end_year = min(int(end[:4]), 2024)
-    ppp_by_year = _get_turkey_ppp_by_year()
-    oil_by_year = _get_oil_annual_avg_by_year(start_year, end_year)
+    ppp_by_year, oil_by_year = _parallel_ppp_and_oil_averages(_get_turkey_ppp_by_year, start_year, end_year)
 
     points: list[dict] = []
     for y in range(start_year, end_year + 1):
@@ -1060,13 +1077,13 @@ def get_gini_inequality_comparison(start: str, end: str) -> dict:
     """
     from signalmap.sources.world_bank_gini import WDI_GINI_COEFFICIENT, fetch_gini_series_for_countries
 
-    ck = f"signal:gini_inequality:v2:{start}:{end}"
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    ck = f"signal:gini_inequality:v3:{start_year}:{end_year}"
     cached = cache_get(ck)
     if cached is not None:
         return cached
 
-    start_year = int(start[:4])
-    end_year = int(end[:4])
     iso3_to_key = {
         "IRN": "iran",
         "USA": "united_states",
@@ -1075,7 +1092,8 @@ def get_gini_inequality_comparison(start: str, end: str) -> dict:
         "CHN": "china",
         "SAU": "saudi_arabia",
     }
-    series = fetch_gini_series_for_countries(iso3_to_key, start_year, end_year)
+    bundle = fetch_gini_series_for_countries(iso3_to_key, start_year, end_year)
+    series = bundle["series"]
     result = {
         "series": series,
         "source": GINI_INEQUALITY_SOURCE,
@@ -1083,6 +1101,9 @@ def get_gini_inequality_comparison(start: str, end: str) -> dict:
         "value_scale": "0-100",
         "resolution": "annual",
     }
+    if bundle.get("series_warnings"):
+        result["series_warnings"] = bundle["series_warnings"]
+        result["partial"] = True
     cache_set(ck, result, CACHE_TTL)
     return result
 
@@ -1101,13 +1122,13 @@ def get_cpi_inflation_yoy_comparison(start: str, end: str) -> dict:
     """
     from signalmap.sources.world_bank_cpi_inflation import WDI_CPI_INFLATION_ANNUAL_PCT, fetch_cpi_inflation_yoy_for_countries
 
-    ck = f"signal:cpi_inflation_yoy:v2:{start}:{end}"
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    ck = f"signal:cpi_inflation_yoy:v3:{start_year}:{end_year}"
     cached = cache_get(ck)
     if cached is not None:
         return cached
 
-    start_year = int(start[:4])
-    end_year = int(end[:4])
     iso3_to_key = {
         "IRN": "iran",
         "USA": "united_states",
@@ -1116,13 +1137,17 @@ def get_cpi_inflation_yoy_comparison(start: str, end: str) -> dict:
         "CHN": "china",
         "SAU": "saudi_arabia",
     }
-    series = fetch_cpi_inflation_yoy_for_countries(iso3_to_key, start_year, end_year)
+    bundle = fetch_cpi_inflation_yoy_for_countries(iso3_to_key, start_year, end_year)
+    series = bundle["series"]
     result = {
         "series": series,
         "source": CPI_INFLATION_YOY_SOURCE,
         "indicator_id": WDI_CPI_INFLATION_ANNUAL_PCT,
         "resolution": "annual",
     }
+    if bundle.get("series_warnings"):
+        result["series_warnings"] = bundle["series_warnings"]
+        result["partial"] = True
     cache_set(ck, result, CACHE_TTL)
     return result
 
@@ -1141,13 +1166,13 @@ def get_gdp_global_comparison(start: str, end: str) -> dict:
     """
     from signalmap.sources.world_bank_gdp_totals import fetch_gdp_global_comparison_bundle
 
-    ck = f"signal:gdp_global_comparison:v1:{start}:{end}"
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    ck = f"signal:gdp_global_comparison:v2:{start_year}:{end_year}"
     cached = cache_get(ck)
     if cached is not None:
         return cached
 
-    start_year = int(start[:4])
-    end_year = int(end[:4])
     bundle = fetch_gdp_global_comparison_bundle(start_year, end_year)
     result = {
         **bundle,
@@ -1172,13 +1197,13 @@ def get_isi_diagnostics(start: str, end: str) -> dict:
     """
     from signalmap.sources.world_bank_isi_diagnostics import fetch_isi_diagnostics_bundle
 
-    ck = f"signal:isi_diagnostics:v1:{start}:{end}"
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    ck = f"signal:isi_diagnostics:v2:{start_year}:{end_year}"
     cached = cache_get(ck)
     if cached is not None:
         return cached
 
-    start_year = int(start[:4])
-    end_year = int(end[:4])
     bundle = fetch_isi_diagnostics_bundle(start_year, end_year)
     result = {
         **bundle,
@@ -1267,20 +1292,38 @@ def get_dutch_disease_diagnostics_iran(start: str, end: str) -> dict:
     """
     from signalmap.sources.world_bank_dutch_disease import fetch_iran_dutch_disease_bundle
 
-    ck = f"signal:dutch_disease_diagnostics_iran:{start}:{end}"
-    cached = cache_get(ck)
-    if cached is not None:
-        return cached
-
     start_year = int(start[:4])
     end_year = int(end[:4])
+    ck = f"signal:dutch_disease_diagnostics_iran:v2:{start_year}:{end_year}"
+    t0 = time.perf_counter()
+    cached = cache_get(ck)
+    if cached is not None:
+        if _SIGNAL_TIMING_LOG:
+            logger.info(
+                "dutch_disease_diagnostics_iran cache=hit key=%s elapsed_ms=%.1f",
+                ck,
+                (time.perf_counter() - t0) * 1000,
+            )
+        return cached
+
+    t_bundle = time.perf_counter()
     bundle = fetch_iran_dutch_disease_bundle(start_year, end_year)
+    bundle_ms = (time.perf_counter() - t_bundle) * 1000
     result = {
         **bundle,
         "source": DUTCH_DISEASE_DIAGNOSTICS_SOURCE,
         "resolution": "annual",
     }
     cache_set(ck, result, CACHE_TTL)
+    if _SIGNAL_TIMING_LOG:
+        payload = json.dumps(result)
+        logger.info(
+            "dutch_disease_diagnostics_iran cache=miss key=%s bundle_ms=%.1f total_ms=%.1f bytes=%d",
+            ck,
+            bundle_ms,
+            (time.perf_counter() - t0) * 1000,
+            len(payload.encode("utf-8")),
+        )
     return result
 
 

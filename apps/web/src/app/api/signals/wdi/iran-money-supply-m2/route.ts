@@ -6,6 +6,7 @@ export async function GET(request: NextRequest) {
   return proxySignalGetJson(
     "/api/signals/wdi/iran-money-supply-m2",
     qs,
-    signalProxyPolicy.wdiAnnual
+    signalProxyPolicy.wdiAnnual,
+    { logUpstreamFailures: true }
   );
 }

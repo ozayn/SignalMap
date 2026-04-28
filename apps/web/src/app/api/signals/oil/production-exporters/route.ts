@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
   return proxySignalGetJson(
     "/api/signals/oil/production-exporters",
     qs,
-    signalProxyPolicy.oilEconomy
+    signalProxyPolicy.oilEconomy,
+    { logUpstreamFailures: true }
   );
 }

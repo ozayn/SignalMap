@@ -97,8 +97,13 @@ def _year_bounds(m2: list[dict[str, str | float]]) -> dict[str, int] | None:
 
 
 def build_iran_money_supply_m2_bundle(start_year: int, end_year: int) -> dict[str, Any]:
-    m2_rows = fetch_wdi_annual_indicator("IRN", WDI_BROAD_MONEY_GROWTH_PCT)
-    cpi_rows = fetch_wdi_annual_indicator("IRN", WDI_CPI_INFLATION_ANNUAL_PCT)
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_m2 = pool.submit(fetch_wdi_annual_indicator, "IRN", WDI_BROAD_MONEY_GROWTH_PCT)
+        f_cpi = pool.submit(fetch_wdi_annual_indicator, "IRN", WDI_CPI_INFLATION_ANNUAL_PCT)
+        m2_rows = f_m2.result()
+        cpi_rows = f_cpi.result()
 
     wdi_only_rows = [r for r in m2_rows if int(r["year"]) <= WDI_M2_GROWTH_LAST_OBS_YEAR]
     wdi_m2_clipped: list[dict[str, Any]] = [

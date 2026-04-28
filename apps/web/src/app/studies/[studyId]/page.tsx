@@ -498,6 +498,8 @@ export default function StudyDetailPage() {
   const [pppIranSource, setPppIranSource] = useState<OilPppIranSignalData["source"] | null>(null);
   const [pppTurkeyPoints, setPppTurkeyPoints] = useState<OilPppIranSignalData["points"]>([]);
   const [pppTurkeySource, setPppTurkeySource] = useState<OilPppIranSignalData["source"] | null>(null);
+  const [pppIranLoading, setPppIranLoading] = useState(false);
+  const [pppIranError, setPppIranError] = useState<string | null>(null);
   const [exportCapacityOilPoints, setExportCapacityOilPoints] = useState<{ date: string; value: number }[]>([]);
   const [exportCapacityProxyPoints, setExportCapacityProxyPoints] = useState<{ date: string; value: number }[]>([]);
   const [exportCapacityBaseYear, setExportCapacityBaseYear] = useState<number | null>(null);
@@ -532,6 +534,10 @@ export default function StudyDetailPage() {
   const [giniChinaPoints, setGiniChinaPoints] = useState<{ date: string; value: number }[]>([]);
   const [giniSaudiArabiaPoints, setGiniSaudiArabiaPoints] = useState<{ date: string; value: number }[]>([]);
   const [giniSource, setGiniSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(null);
+  const [giniWdiLoading, setGiniWdiLoading] = useState(false);
+  const [giniLoadFailed, setGiniLoadFailed] = useState(false);
+  const [giniLoadDetail, setGiniLoadDetail] = useState<string | null>(null);
+  const [giniSeriesWarnings, setGiniSeriesWarnings] = useState<Record<string, string> | null>(null);
   const [inflationIranPoints, setInflationIranPoints] = useState<{ date: string; value: number }[]>([]);
   const [inflationUsPoints, setInflationUsPoints] = useState<{ date: string; value: number }[]>([]);
   const [inflationGermanyPoints, setInflationGermanyPoints] = useState<{ date: string; value: number }[]>([]);
@@ -539,6 +545,10 @@ export default function StudyDetailPage() {
   const [inflationChinaPoints, setInflationChinaPoints] = useState<{ date: string; value: number }[]>([]);
   const [inflationSaudiArabiaPoints, setInflationSaudiArabiaPoints] = useState<{ date: string; value: number }[]>([]);
   const [inflationSource, setInflationSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(null);
+  const [inflationWdiLoading, setInflationWdiLoading] = useState(false);
+  const [inflationLoadFailed, setInflationLoadFailed] = useState(false);
+  const [inflationLoadDetail, setInflationLoadDetail] = useState<string | null>(null);
+  const [inflationSeriesWarnings, setInflationSeriesWarnings] = useState<Record<string, string> | null>(null);
   const [gdpGlobalUnitedStatesPoints, setGdpGlobalUnitedStatesPoints] = useState<{ date: string; value: number }[]>([]);
   const [gdpGlobalChinaPoints, setGdpGlobalChinaPoints] = useState<{ date: string; value: number }[]>([]);
   const [gdpGlobalIranPoints, setGdpGlobalIranPoints] = useState<{ date: string; value: number }[]>([]);
@@ -552,12 +562,20 @@ export default function StudyDetailPage() {
   );
   const [gdpGlobalDisplayMode, setGdpGlobalDisplayMode] = useState<"absolute" | "indexed">("indexed");
   const [gdpGlobalAbsoluteLog, setGdpGlobalAbsoluteLog] = useState(false);
+  const [gdpGlobalWdiLoading, setGdpGlobalWdiLoading] = useState(false);
+  const [gdpGlobalLoadFailed, setGdpGlobalLoadFailed] = useState(false);
+  const [gdpGlobalLoadDetail, setGdpGlobalLoadDetail] = useState<string | null>(null);
+  const [gdpGlobalSeriesWarnings, setGdpGlobalSeriesWarnings] = useState<Record<string, string> | null>(null);
   const [isiDiagnosticsData, setIsiDiagnosticsData] = useState<{
     series: IsiDiagnosticsSeriesBundle;
     source?: { name?: string; url?: string; publisher?: string };
     indicator_ids?: Record<string, string>;
   } | null>(null);
   const [isiFocusCountry, setIsiFocusCountry] = useState<IsiCountryKey>("brazil");
+  const [isiWdiLoading, setIsiWdiLoading] = useState(false);
+  const [isiLoadFailed, setIsiLoadFailed] = useState(false);
+  const [isiLoadDetail, setIsiLoadDetail] = useState<string | null>(null);
+  const [isiSeriesWarnings, setIsiSeriesWarnings] = useState<Record<string, string> | null>(null);
   const [povertyDdayPoints, setPovertyDdayPoints] = useState<{ date: string; value: number }[]>([]);
   const [povertyLmicPoints, setPovertyLmicPoints] = useState<{ date: string; value: number }[]>([]);
   const [povertyDdayLineLabel, setPovertyDdayLineLabel] = useState("");
@@ -565,6 +583,9 @@ export default function StudyDetailPage() {
   const [povertyDdayIndicatorId, setPovertyDdayIndicatorId] = useState("");
   const [povertyLmicIndicatorId, setPovertyLmicIndicatorId] = useState("");
   const [povertySource, setPovertySource] = useState<{ name?: string; url?: string; publisher?: string } | null>(null);
+  const [povertyWdiLoading, setPovertyWdiLoading] = useState(false);
+  const [povertyLoadFailed, setPovertyLoadFailed] = useState(false);
+  const [povertyLoadDetail, setPovertyLoadDetail] = useState<string | null>(null);
   const [moneySupplyM2Points, setMoneySupplyM2Points] = useState<{ date: string; value: number }[]>([]);
   const [moneySupplyCpiPoints, setMoneySupplyCpiPoints] = useState<{ date: string; value: number }[]>([]);
   const [moneySupplyWdiSource, setMoneySupplyWdiSource] = useState<{
@@ -583,10 +604,18 @@ export default function StudyDetailPage() {
     broad_money_growth: string;
     cpi_inflation_yoy_iran: string;
   } | null>(null);
+  const [moneySupplyWdiLoading, setMoneySupplyWdiLoading] = useState(false);
+  const [moneySupplyLoadFailed, setMoneySupplyLoadFailed] = useState(false);
+  const [moneySupplyLoadDetail, setMoneySupplyLoadDetail] = useState<string | null>(null);
   const [dutchOilRentsPoints, setDutchOilRentsPoints] = useState<{ date: string; value: number }[]>([]);
   const [dutchManufacturingPoints, setDutchManufacturingPoints] = useState<{ date: string; value: number }[]>([]);
   const [dutchImportsPoints, setDutchImportsPoints] = useState<{ date: string; value: number }[]>([]);
   const [dutchWdiSource, setDutchWdiSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(null);
+  const [dutchWdiLoading, setDutchWdiLoading] = useState(false);
+  /** Friendly shell message when fetch fails or all series empty; see ``dutchWdiLoadDetail`` for technical text. */
+  const [dutchWdiLoadFailed, setDutchWdiLoadFailed] = useState(false);
+  const [dutchWdiLoadDetail, setDutchWdiLoadDetail] = useState<string | null>(null);
+  const [dutchWdiSeriesWarnings, setDutchWdiSeriesWarnings] = useState<Record<string, string> | null>(null);
   const [dutchFxPoints, setDutchFxPoints] = useState<{ date: string; value: number }[]>([]);
   const [dutchFxSource, setDutchFxSource] = useState<FxUsdTomanSource | null>(null);
   const [fxDualOfficialPoints, setFxDualOfficialPoints] = useState<{ date: string; value: number }[]>([]);
@@ -778,6 +807,29 @@ export default function StudyDetailPage() {
       oilMacroDefaultsApplied.current = false;
     }
   }, [studyId, isOilBrent, isOilGlobalLong]);
+
+  useEffect(() => {
+    if (
+      isDutchDiseaseDiagnostics ||
+      isOilPppIran ||
+      isIsiDiagnostics ||
+      isGiniInequality ||
+      isInflationCpiYoy ||
+      isGdpGlobalComparison ||
+      isPovertyHeadcountIran ||
+      isIranMoneySupplyM2
+    )
+      setLoading(false);
+  }, [
+    isDutchDiseaseDiagnostics,
+    isOilPppIran,
+    isIsiDiagnostics,
+    isGiniInequality,
+    isInflationCpiYoy,
+    isGdpGlobalComparison,
+    isPovertyHeadcountIran,
+    isIranMoneySupplyM2,
+  ]);
 
   useEffect(() => {
     setShowTimeSeriesEventOverlay(false);
@@ -2428,6 +2480,7 @@ export default function StudyDetailPage() {
         if (isOilPppIran) {
           setPppIranPoints([]);
           setPppIranSource(null);
+          setPppIranError(null);
         }
       }
       return;
@@ -2436,23 +2489,24 @@ export default function StudyDetailPage() {
     if (isOilPppIran) {
       const [start, end] = oilTimeRange;
       let mounted = true;
-      setLoading(true);
-      setError(null);
+      setPppIranLoading(true);
+      setPppIranError(null);
       fetchJson<OilPppIranSignalData>(`/api/signals/oil/ppp-iran?start=${start}&end=${end}`)
         .then((res) => {
           if (mounted) {
             setPppIranPoints(res.points ?? []);
             setPppIranSource(res.source ?? null);
+            setPppIranError(null);
           }
         })
         .catch((e) => {
           if (mounted) {
             setPppIranPoints([]);
             setPppIranSource(null);
-            setError(e instanceof Error ? e.message : "Signal fetch failed");
+            setPppIranError(e instanceof Error ? e.message : "PPP oil signal fetch failed");
           }
         })
-        .finally(() => mounted && setLoading(false));
+        .finally(() => mounted && setPppIranLoading(false));
       return () => { mounted = false; };
     }
     if (isRealOil) {
@@ -2736,15 +2790,21 @@ export default function StudyDetailPage() {
         setGiniChinaPoints([]);
         setGiniSaudiArabiaPoints([]);
         setGiniSource(null);
+        setGiniLoadFailed(false);
+        setGiniLoadDetail(null);
+        setGiniSeriesWarnings(null);
       }
       return;
     }
     const [start, end] = giniTimeRange;
+    const ac = new AbortController();
     let mounted = true;
-    setLoading(true);
-    setError(null);
+    setGiniWdiLoading(true);
+    setGiniLoadFailed(false);
+    setGiniLoadDetail(null);
+    setGiniSeriesWarnings(null);
     fetchJson<{
-      series: {
+      series?: {
         iran: { date: string; value: number }[];
         united_states: { date: string; value: number }[];
         germany: { date: string; value: number }[];
@@ -2752,34 +2812,65 @@ export default function StudyDetailPage() {
         china: { date: string; value: number }[];
         saudi_arabia: { date: string; value: number }[];
       };
+      series_warnings?: Record<string, string>;
+      partial?: boolean;
       source?: { name: string; url?: string; publisher?: string };
-    }>(`/api/signals/wdi/gini-comparison?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+    }>(`/api/signals/wdi/gini-comparison?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`, ac.signal)
       .then((res) => {
-        if (mounted) {
-          setGiniIranPoints(res.series?.iran ?? []);
-          setGiniUsPoints(res.series?.united_states ?? []);
-          setGiniGermanyPoints(res.series?.germany ?? []);
-          setGiniTurkeyPoints(res.series?.turkey ?? []);
-          setGiniChinaPoints(res.series?.china ?? []);
-          setGiniSaudiArabiaPoints(res.series?.saudi_arabia ?? []);
-          setGiniSource(res.source ?? null);
+        if (!mounted) return;
+        const s = res.series;
+        setGiniIranPoints(s?.iran ?? []);
+        setGiniUsPoints(s?.united_states ?? []);
+        setGiniGermanyPoints(s?.germany ?? []);
+        setGiniTurkeyPoints(s?.turkey ?? []);
+        setGiniChinaPoints(s?.china ?? []);
+        setGiniSaudiArabiaPoints(s?.saudi_arabia ?? []);
+        setGiniSource(res.source ?? null);
+        const warn = res.series_warnings;
+        setGiniSeriesWarnings(warn && typeof warn === "object" ? warn : null);
+        const nPts =
+          (s?.iran?.length ?? 0) +
+          (s?.united_states?.length ?? 0) +
+          (s?.germany?.length ?? 0) +
+          (s?.turkey?.length ?? 0) +
+          (s?.china?.length ?? 0) +
+          (s?.saudi_arabia?.length ?? 0);
+        if (nPts === 0) {
+          const tech =
+            warn && Object.keys(warn).length > 0
+              ? Object.entries(warn)
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join(" · ")
+              : null;
+          setGiniLoadFailed(true);
+          setGiniLoadDetail(tech);
+        } else {
+          setGiniLoadFailed(false);
+          setGiniLoadDetail(null);
         }
       })
-      .catch((e) => {
-        if (mounted) {
-          setGiniIranPoints([]);
-          setGiniUsPoints([]);
-          setGiniGermanyPoints([]);
-          setGiniTurkeyPoints([]);
-          setGiniChinaPoints([]);
-          setGiniSaudiArabiaPoints([]);
-          setGiniSource(null);
-          setError(e instanceof Error ? e.message : "Signal fetch failed");
-        }
+      .catch((e: unknown) => {
+        if (!mounted) return;
+        const aborted =
+          e instanceof Error && (e.name === "AbortError" || e.message.includes("aborted"));
+        if (aborted) return;
+        setGiniIranPoints([]);
+        setGiniUsPoints([]);
+        setGiniGermanyPoints([]);
+        setGiniTurkeyPoints([]);
+        setGiniChinaPoints([]);
+        setGiniSaudiArabiaPoints([]);
+        setGiniSource(null);
+        setGiniSeriesWarnings(null);
+        setGiniLoadFailed(true);
+        setGiniLoadDetail(e instanceof Error ? e.message : "Gini comparison fetch failed");
       })
-      .finally(() => mounted && setLoading(false));
+      .finally(() => {
+        if (mounted) setGiniWdiLoading(false);
+      });
     return () => {
       mounted = false;
+      ac.abort();
     };
   }, [giniTimeRange, isGiniInequality]);
 
@@ -2793,15 +2884,21 @@ export default function StudyDetailPage() {
         setInflationChinaPoints([]);
         setInflationSaudiArabiaPoints([]);
         setInflationSource(null);
+        setInflationLoadFailed(false);
+        setInflationLoadDetail(null);
+        setInflationSeriesWarnings(null);
       }
       return;
     }
     const [start, end] = inflationTimeRange;
+    const ac = new AbortController();
     let mounted = true;
-    setLoading(true);
-    setError(null);
+    setInflationWdiLoading(true);
+    setInflationLoadFailed(false);
+    setInflationLoadDetail(null);
+    setInflationSeriesWarnings(null);
     fetchJson<{
-      series: {
+      series?: {
         iran: { date: string; value: number }[];
         united_states: { date: string; value: number }[];
         germany: { date: string; value: number }[];
@@ -2809,34 +2906,68 @@ export default function StudyDetailPage() {
         china: { date: string; value: number }[];
         saudi_arabia: { date: string; value: number }[];
       };
+      series_warnings?: Record<string, string>;
+      partial?: boolean;
       source?: { name: string; url?: string; publisher?: string };
-    }>(`/api/signals/wdi/cpi-inflation-yoy?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+    }>(
+      `/api/signals/wdi/cpi-inflation-yoy?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+      ac.signal
+    )
       .then((res) => {
-        if (mounted) {
-          setInflationIranPoints(res.series?.iran ?? []);
-          setInflationUsPoints(res.series?.united_states ?? []);
-          setInflationGermanyPoints(res.series?.germany ?? []);
-          setInflationTurkeyPoints(res.series?.turkey ?? []);
-          setInflationChinaPoints(res.series?.china ?? []);
-          setInflationSaudiArabiaPoints(res.series?.saudi_arabia ?? []);
-          setInflationSource(res.source ?? null);
+        if (!mounted) return;
+        const s = res.series;
+        setInflationIranPoints(s?.iran ?? []);
+        setInflationUsPoints(s?.united_states ?? []);
+        setInflationGermanyPoints(s?.germany ?? []);
+        setInflationTurkeyPoints(s?.turkey ?? []);
+        setInflationChinaPoints(s?.china ?? []);
+        setInflationSaudiArabiaPoints(s?.saudi_arabia ?? []);
+        setInflationSource(res.source ?? null);
+        const warn = res.series_warnings;
+        setInflationSeriesWarnings(warn && typeof warn === "object" ? warn : null);
+        const nPts =
+          (s?.iran?.length ?? 0) +
+          (s?.united_states?.length ?? 0) +
+          (s?.germany?.length ?? 0) +
+          (s?.turkey?.length ?? 0) +
+          (s?.china?.length ?? 0) +
+          (s?.saudi_arabia?.length ?? 0);
+        if (nPts === 0) {
+          const tech =
+            warn && Object.keys(warn).length > 0
+              ? Object.entries(warn)
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join(" · ")
+              : null;
+          setInflationLoadFailed(true);
+          setInflationLoadDetail(tech);
+        } else {
+          setInflationLoadFailed(false);
+          setInflationLoadDetail(null);
         }
       })
-      .catch((e) => {
-        if (mounted) {
-          setInflationIranPoints([]);
-          setInflationUsPoints([]);
-          setInflationGermanyPoints([]);
-          setInflationTurkeyPoints([]);
-          setInflationChinaPoints([]);
-          setInflationSaudiArabiaPoints([]);
-          setInflationSource(null);
-          setError(e instanceof Error ? e.message : "Signal fetch failed");
-        }
+      .catch((e: unknown) => {
+        if (!mounted) return;
+        const aborted =
+          e instanceof Error && (e.name === "AbortError" || e.message.includes("aborted"));
+        if (aborted) return;
+        setInflationIranPoints([]);
+        setInflationUsPoints([]);
+        setInflationGermanyPoints([]);
+        setInflationTurkeyPoints([]);
+        setInflationChinaPoints([]);
+        setInflationSaudiArabiaPoints([]);
+        setInflationSource(null);
+        setInflationSeriesWarnings(null);
+        setInflationLoadFailed(true);
+        setInflationLoadDetail(e instanceof Error ? e.message : "Inflation comparison fetch failed");
       })
-      .finally(() => mounted && setLoading(false));
+      .finally(() => {
+        if (mounted) setInflationWdiLoading(false);
+      });
     return () => {
       mounted = false;
+      ac.abort();
     };
   }, [inflationTimeRange, isInflationCpiYoy]);
 
@@ -2852,15 +2983,21 @@ export default function StudyDetailPage() {
         setGdpGlobalSource(null);
         setGdpGlobalPerCountryBasis(null);
         setGdpGlobalPerCountryIndicatorId(null);
+        setGdpGlobalLoadFailed(false);
+        setGdpGlobalLoadDetail(null);
+        setGdpGlobalSeriesWarnings(null);
       }
       return;
     }
     const [start, end] = gdpGlobalTimeRange;
+    const ac = new AbortController();
     let mounted = true;
-    setLoading(true);
-    setError(null);
+    setGdpGlobalWdiLoading(true);
+    setGdpGlobalLoadFailed(false);
+    setGdpGlobalLoadDetail(null);
+    setGdpGlobalSeriesWarnings(null);
     fetchJson<{
-      series: {
+      series?: {
         united_states: { date: string; value: number }[];
         china: { date: string; value: number }[];
         iran: { date: string; value: number }[];
@@ -2868,76 +3005,158 @@ export default function StudyDetailPage() {
         saudi_arabia: { date: string; value: number }[];
         world: { date: string; value: number }[];
       };
+      series_warnings?: Record<string, string>;
+      partial?: boolean;
       per_country_price_basis?: Record<string, string>;
       per_country_indicator_id?: Record<string, string>;
       source?: { name: string; url?: string; publisher?: string };
-    }>(`/api/signals/wdi/gdp-global-comparison?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+    }>(
+      `/api/signals/wdi/gdp-global-comparison?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+      ac.signal
+    )
       .then((res) => {
-        if (mounted) {
-          setGdpGlobalUnitedStatesPoints(res.series?.united_states ?? []);
-          setGdpGlobalChinaPoints(res.series?.china ?? []);
-          setGdpGlobalIranPoints(res.series?.iran ?? []);
-          setGdpGlobalTurkeyPoints(res.series?.turkey ?? []);
-          setGdpGlobalSaudiArabiaPoints(res.series?.saudi_arabia ?? []);
-          setGdpGlobalWorldPoints(res.series?.world ?? []);
-          setGdpGlobalSource(res.source ?? null);
-          setGdpGlobalPerCountryBasis(res.per_country_price_basis ?? null);
-          setGdpGlobalPerCountryIndicatorId(res.per_country_indicator_id ?? null);
+        if (!mounted) return;
+        const s = res.series;
+        setGdpGlobalUnitedStatesPoints(s?.united_states ?? []);
+        setGdpGlobalChinaPoints(s?.china ?? []);
+        setGdpGlobalIranPoints(s?.iran ?? []);
+        setGdpGlobalTurkeyPoints(s?.turkey ?? []);
+        setGdpGlobalSaudiArabiaPoints(s?.saudi_arabia ?? []);
+        setGdpGlobalWorldPoints(s?.world ?? []);
+        setGdpGlobalSource(res.source ?? null);
+        setGdpGlobalPerCountryBasis(res.per_country_price_basis ?? null);
+        setGdpGlobalPerCountryIndicatorId(res.per_country_indicator_id ?? null);
+        const warn = res.series_warnings;
+        setGdpGlobalSeriesWarnings(warn && typeof warn === "object" ? warn : null);
+        const nPts =
+          (s?.united_states?.length ?? 0) +
+          (s?.china?.length ?? 0) +
+          (s?.iran?.length ?? 0) +
+          (s?.turkey?.length ?? 0) +
+          (s?.saudi_arabia?.length ?? 0) +
+          (s?.world?.length ?? 0);
+        if (nPts === 0) {
+          const tech =
+            warn && Object.keys(warn).length > 0
+              ? Object.entries(warn)
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join(" · ")
+              : null;
+          setGdpGlobalLoadFailed(true);
+          setGdpGlobalLoadDetail(tech);
+        } else {
+          setGdpGlobalLoadFailed(false);
+          setGdpGlobalLoadDetail(null);
         }
       })
-      .catch((e) => {
-        if (mounted) {
-          setGdpGlobalUnitedStatesPoints([]);
-          setGdpGlobalChinaPoints([]);
-          setGdpGlobalIranPoints([]);
-          setGdpGlobalTurkeyPoints([]);
-          setGdpGlobalSaudiArabiaPoints([]);
-          setGdpGlobalWorldPoints([]);
-          setGdpGlobalSource(null);
-          setGdpGlobalPerCountryBasis(null);
-          setGdpGlobalPerCountryIndicatorId(null);
-          setError(e instanceof Error ? e.message : "Signal fetch failed");
-        }
+      .catch((e: unknown) => {
+        if (!mounted) return;
+        const aborted =
+          e instanceof Error && (e.name === "AbortError" || e.message.includes("aborted"));
+        if (aborted) return;
+        setGdpGlobalUnitedStatesPoints([]);
+        setGdpGlobalChinaPoints([]);
+        setGdpGlobalIranPoints([]);
+        setGdpGlobalTurkeyPoints([]);
+        setGdpGlobalSaudiArabiaPoints([]);
+        setGdpGlobalWorldPoints([]);
+        setGdpGlobalSource(null);
+        setGdpGlobalPerCountryBasis(null);
+        setGdpGlobalPerCountryIndicatorId(null);
+        setGdpGlobalSeriesWarnings(null);
+        setGdpGlobalLoadFailed(true);
+        setGdpGlobalLoadDetail(e instanceof Error ? e.message : "GDP comparison fetch failed");
       })
-      .finally(() => mounted && setLoading(false));
+      .finally(() => {
+        if (mounted) setGdpGlobalWdiLoading(false);
+      });
     return () => {
       mounted = false;
+      ac.abort();
     };
   }, [gdpGlobalTimeRange, isGdpGlobalComparison]);
 
   useEffect(() => {
     if (!isIsiDiagnostics) {
       setIsiDiagnosticsData(null);
+      setIsiLoadFailed(false);
+      setIsiLoadDetail(null);
+      setIsiSeriesWarnings(null);
       return;
     }
     if (!isiTimeRange) return;
     const [start, end] = isiTimeRange;
+    const ac = new AbortController();
     let mounted = true;
-    setLoading(true);
-    setError(null);
+    setIsiWdiLoading(true);
+    setIsiLoadFailed(false);
+    setIsiLoadDetail(null);
+    setIsiSeriesWarnings(null);
     fetchJson<{
-      series: IsiDiagnosticsSeriesBundle;
+      series?: IsiDiagnosticsSeriesBundle;
+      series_warnings?: Record<string, string>;
+      partial?: boolean;
       source?: { name?: string; url?: string; publisher?: string };
       indicator_ids?: Record<string, string>;
-    }>(`/api/signals/wdi/isi-diagnostics?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+    }>(`/api/signals/wdi/isi-diagnostics?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`, ac.signal)
       .then((res) => {
-        if (mounted) {
-          setIsiDiagnosticsData({
-            series: res.series,
-            source: res.source,
-            indicator_ids: res.indicator_ids,
-          });
+        if (!mounted) return;
+        const s = res.series;
+        setIsiDiagnosticsData(
+          s
+            ? {
+                series: s,
+                source: res.source,
+                indicator_ids: res.indicator_ids,
+              }
+            : null
+        );
+        const warn = res.series_warnings;
+        setIsiSeriesWarnings(warn && typeof warn === "object" ? warn : null);
+        let nPts = 0;
+        if (s) {
+          for (const block of [
+            s.imports_pct_gdp,
+            s.exports_pct_gdp,
+            s.manufacturing_pct_gdp,
+            s.industry_pct_gdp,
+            s.gdp_growth_pct,
+          ]) {
+            for (const pts of Object.values(block)) {
+              if (Array.isArray(pts)) nPts += pts.length;
+            }
+          }
+        }
+        if (nPts === 0) {
+          const tech =
+            warn && Object.keys(warn).length > 0
+              ? Object.entries(warn)
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join(" · ")
+              : null;
+          setIsiLoadFailed(true);
+          setIsiLoadDetail(tech);
+        } else {
+          setIsiLoadFailed(false);
+          setIsiLoadDetail(null);
         }
       })
-      .catch((e) => {
-        if (mounted) {
-          setIsiDiagnosticsData(null);
-          setError(e instanceof Error ? e.message : "Signal fetch failed");
-        }
+      .catch((e: unknown) => {
+        if (!mounted) return;
+        const aborted =
+          e instanceof Error && (e.name === "AbortError" || e.message.includes("aborted"));
+        if (aborted) return;
+        setIsiDiagnosticsData(null);
+        setIsiSeriesWarnings(null);
+        setIsiLoadFailed(true);
+        setIsiLoadDetail(e instanceof Error ? e.message : "ISI diagnostics fetch failed");
       })
-      .finally(() => mounted && setLoading(false));
+      .finally(() => {
+        if (mounted) setIsiWdiLoading(false);
+      });
     return () => {
       mounted = false;
+      ac.abort();
     };
   }, [isiTimeRange, isIsiDiagnostics]);
 
@@ -2951,13 +3170,17 @@ export default function StudyDetailPage() {
         setPovertyDdayIndicatorId("");
         setPovertyLmicIndicatorId("");
         setPovertySource(null);
+        setPovertyLoadFailed(false);
+        setPovertyLoadDetail(null);
       }
       return;
     }
     const [start, end] = povertyTimeRange;
+    const ac = new AbortController();
     let mounted = true;
-    setLoading(true);
-    setError(null);
+    setPovertyWdiLoading(true);
+    setPovertyLoadFailed(false);
+    setPovertyLoadDetail(null);
     fetchJson<{
       lines?: Array<{
         key: string;
@@ -2966,7 +3189,10 @@ export default function StudyDetailPage() {
         points?: { date: string; value: number }[];
       }>;
       source?: { name: string; url?: string; publisher?: string };
-    }>(`/api/signals/wdi/poverty-headcount-iran?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+    }>(
+      `/api/signals/wdi/poverty-headcount-iran?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+      ac.signal
+    )
       .then((res) => {
         if (!mounted) return;
         const lines = res.lines ?? [];
@@ -2979,22 +3205,36 @@ export default function StudyDetailPage() {
         setPovertyDdayIndicatorId(dday?.indicator_id ?? "");
         setPovertyLmicIndicatorId(lmic?.indicator_id ?? "");
         setPovertySource(res.source ?? null);
-      })
-      .catch((e) => {
-        if (mounted) {
-          setPovertyDdayPoints([]);
-          setPovertyLmicPoints([]);
-          setPovertyDdayLineLabel("");
-          setPovertyLmicLineLabel("");
-          setPovertyDdayIndicatorId("");
-          setPovertyLmicIndicatorId("");
-          setPovertySource(null);
-          setError(e instanceof Error ? e.message : "Signal fetch failed");
+        const nPts = (dday?.points?.length ?? 0) + (lmic?.points?.length ?? 0);
+        if (nPts === 0) {
+          setPovertyLoadFailed(true);
+          setPovertyLoadDetail(null);
+        } else {
+          setPovertyLoadFailed(false);
+          setPovertyLoadDetail(null);
         }
       })
-      .finally(() => mounted && setLoading(false));
+      .catch((e: unknown) => {
+        if (!mounted) return;
+        const aborted =
+          e instanceof Error && (e.name === "AbortError" || e.message.includes("aborted"));
+        if (aborted) return;
+        setPovertyDdayPoints([]);
+        setPovertyLmicPoints([]);
+        setPovertyDdayLineLabel("");
+        setPovertyLmicLineLabel("");
+        setPovertyDdayIndicatorId("");
+        setPovertyLmicIndicatorId("");
+        setPovertySource(null);
+        setPovertyLoadFailed(true);
+        setPovertyLoadDetail(e instanceof Error ? e.message : "Poverty headcount fetch failed");
+      })
+      .finally(() => {
+        if (mounted) setPovertyWdiLoading(false);
+      });
     return () => {
       mounted = false;
+      ac.abort();
     };
   }, [povertyTimeRange, isPovertyHeadcountIran]);
 
@@ -3007,13 +3247,17 @@ export default function StudyDetailPage() {
         setMoneySupplyCitation(null);
         setMoneySupplyCoverage(null);
         setMoneySupplyIndicatorIds(null);
+        setMoneySupplyLoadFailed(false);
+        setMoneySupplyLoadDetail(null);
       }
       return;
     }
     const [start, end] = moneySupplyTimeRange;
+    const ac = new AbortController();
     let mounted = true;
-    setLoading(true);
-    setError(null);
+    setMoneySupplyWdiLoading(true);
+    setMoneySupplyLoadFailed(false);
+    setMoneySupplyLoadDetail(null);
     fetchJson<{
       series?: {
         broad_money_growth_pct?: { date: string; value: number }[];
@@ -3028,30 +3272,48 @@ export default function StudyDetailPage() {
         cpi_inflation_iran: { first_year: number; last_year: number } | null;
       };
       indicator_ids?: { broad_money_growth: string; cpi_inflation_yoy_iran: string };
-    }>(`/api/signals/wdi/iran-money-supply-m2?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+    }>(
+      `/api/signals/wdi/iran-money-supply-m2?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+      ac.signal
+    )
       .then((res) => {
         if (!mounted) return;
-        setMoneySupplyM2Points(res.series?.broad_money_growth_pct ?? []);
-        setMoneySupplyCpiPoints(res.series?.cpi_inflation_yoy_iran_pct ?? []);
+        const m2 = res.series?.broad_money_growth_pct ?? [];
+        const cpi = res.series?.cpi_inflation_yoy_iran_pct ?? [];
+        setMoneySupplyM2Points(m2);
+        setMoneySupplyCpiPoints(cpi);
         setMoneySupplyWdiSource(res.source ?? null);
         setMoneySupplyCitation(res.citation ?? null);
         setMoneySupplyCoverage(res.coverage ?? null);
         setMoneySupplyIndicatorIds(res.indicator_ids ?? null);
-      })
-      .catch((e) => {
-        if (mounted) {
-          setMoneySupplyM2Points([]);
-          setMoneySupplyCpiPoints([]);
-          setMoneySupplyWdiSource(null);
-          setMoneySupplyCitation(null);
-          setMoneySupplyCoverage(null);
-          setMoneySupplyIndicatorIds(null);
-          setError(e instanceof Error ? e.message : "Signal fetch failed");
+        if (m2.length === 0 && cpi.length === 0) {
+          setMoneySupplyLoadFailed(true);
+          setMoneySupplyLoadDetail(null);
+        } else {
+          setMoneySupplyLoadFailed(false);
+          setMoneySupplyLoadDetail(null);
         }
       })
-      .finally(() => mounted && setLoading(false));
+      .catch((e: unknown) => {
+        if (!mounted) return;
+        const aborted =
+          e instanceof Error && (e.name === "AbortError" || e.message.includes("aborted"));
+        if (aborted) return;
+        setMoneySupplyM2Points([]);
+        setMoneySupplyCpiPoints([]);
+        setMoneySupplyWdiSource(null);
+        setMoneySupplyCitation(null);
+        setMoneySupplyCoverage(null);
+        setMoneySupplyIndicatorIds(null);
+        setMoneySupplyLoadFailed(true);
+        setMoneySupplyLoadDetail(e instanceof Error ? e.message : "Money supply bundle fetch failed");
+      })
+      .finally(() => {
+        if (mounted) setMoneySupplyWdiLoading(false);
+      });
     return () => {
       mounted = false;
+      ac.abort();
     };
   }, [moneySupplyTimeRange, isIranMoneySupplyM2]);
 
@@ -3062,41 +3324,77 @@ export default function StudyDetailPage() {
         setDutchManufacturingPoints([]);
         setDutchImportsPoints([]);
         setDutchWdiSource(null);
+        setDutchWdiLoadFailed(false);
+        setDutchWdiLoadDetail(null);
+        setDutchWdiSeriesWarnings(null);
       }
       return;
     }
     const [start, end] = dutchTimeRange;
+    const ac = new AbortController();
     let mounted = true;
-    setLoading(true);
-    setError(null);
+    setDutchWdiLoading(true);
+    setDutchWdiLoadFailed(false);
+    setDutchWdiLoadDetail(null);
+    setDutchWdiSeriesWarnings(null);
     fetchJson<{
-      series: {
+      series?: {
         oil_rents_pct_gdp: { date: string; value: number }[];
         manufacturing_pct_gdp: { date: string; value: number }[];
         imports_pct_gdp: { date: string; value: number }[];
       };
+      series_warnings?: Record<string, string>;
+      partial?: boolean;
       source?: { name: string; url?: string; publisher?: string };
-    }>(`/api/signals/wdi/dutch-disease-diagnostics-iran?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+    }>(
+      `/api/signals/wdi/dutch-disease-diagnostics-iran?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+      ac.signal
+    )
       .then((res) => {
-        if (mounted) {
-          setDutchOilRentsPoints(res.series?.oil_rents_pct_gdp ?? []);
-          setDutchManufacturingPoints(res.series?.manufacturing_pct_gdp ?? []);
-          setDutchImportsPoints(res.series?.imports_pct_gdp ?? []);
-          setDutchWdiSource(res.source ?? null);
+        if (!mounted) return;
+        const oil = res.series?.oil_rents_pct_gdp ?? [];
+        const mfg = res.series?.manufacturing_pct_gdp ?? [];
+        const imp = res.series?.imports_pct_gdp ?? [];
+        setDutchOilRentsPoints(oil);
+        setDutchManufacturingPoints(mfg);
+        setDutchImportsPoints(imp);
+        setDutchWdiSource(res.source ?? null);
+        const warn = res.series_warnings;
+        setDutchWdiSeriesWarnings(warn && typeof warn === "object" ? warn : null);
+        const nPts = oil.length + mfg.length + imp.length;
+        if (nPts === 0) {
+          const tech =
+            warn && Object.keys(warn).length > 0
+              ? Object.entries(warn)
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join(" · ")
+              : null;
+          setDutchWdiLoadFailed(true);
+          setDutchWdiLoadDetail(tech);
+        } else {
+          setDutchWdiLoadFailed(false);
+          setDutchWdiLoadDetail(null);
         }
       })
-      .catch((e) => {
-        if (mounted) {
-          setDutchOilRentsPoints([]);
-          setDutchManufacturingPoints([]);
-          setDutchImportsPoints([]);
-          setDutchWdiSource(null);
-          setError(e instanceof Error ? e.message : "Signal fetch failed");
-        }
+      .catch((e: unknown) => {
+        if (!mounted) return;
+        const aborted =
+          e instanceof Error && (e.name === "AbortError" || e.message.includes("aborted"));
+        if (aborted) return;
+        setDutchOilRentsPoints([]);
+        setDutchManufacturingPoints([]);
+        setDutchImportsPoints([]);
+        setDutchWdiSource(null);
+        setDutchWdiSeriesWarnings(null);
+        setDutchWdiLoadFailed(true);
+        setDutchWdiLoadDetail(e instanceof Error ? e.message : "World Bank bundle failed");
       })
-      .finally(() => mounted && setLoading(false));
+      .finally(() => {
+        if (mounted) setDutchWdiLoading(false);
+      });
     return () => {
       mounted = false;
+      ac.abort();
     };
   }, [dutchTimeRange, isDutchDiseaseDiagnostics]);
 
@@ -3309,6 +3607,73 @@ export default function StudyDetailPage() {
       (rec) => Object.values(rec).some((pts) => Array.isArray(pts) && pts.length > 0)
     );
   }, [isiDiagnosticsData]);
+
+  const giniDataReady = useMemo(
+    () =>
+      giniIranPoints.length +
+        giniUsPoints.length +
+        giniGermanyPoints.length +
+        giniTurkeyPoints.length +
+        giniChinaPoints.length +
+        giniSaudiArabiaPoints.length >
+      0,
+    [
+      giniIranPoints,
+      giniUsPoints,
+      giniGermanyPoints,
+      giniTurkeyPoints,
+      giniChinaPoints,
+      giniSaudiArabiaPoints,
+    ]
+  );
+
+  const inflationDataReady = useMemo(
+    () =>
+      inflationIranPoints.length +
+        inflationUsPoints.length +
+        inflationGermanyPoints.length +
+        inflationTurkeyPoints.length +
+        inflationChinaPoints.length +
+        inflationSaudiArabiaPoints.length >
+      0,
+    [
+      inflationIranPoints,
+      inflationUsPoints,
+      inflationGermanyPoints,
+      inflationTurkeyPoints,
+      inflationChinaPoints,
+      inflationSaudiArabiaPoints,
+    ]
+  );
+
+  const gdpGlobalDataReady = useMemo(
+    () =>
+      gdpGlobalUnitedStatesPoints.length +
+        gdpGlobalChinaPoints.length +
+        gdpGlobalIranPoints.length +
+        gdpGlobalTurkeyPoints.length +
+        gdpGlobalSaudiArabiaPoints.length +
+        gdpGlobalWorldPoints.length >
+      0,
+    [
+      gdpGlobalUnitedStatesPoints,
+      gdpGlobalChinaPoints,
+      gdpGlobalIranPoints,
+      gdpGlobalTurkeyPoints,
+      gdpGlobalSaudiArabiaPoints,
+      gdpGlobalWorldPoints,
+    ]
+  );
+
+  const povertyDataReady = useMemo(
+    () => povertyDdayPoints.length > 0 || povertyLmicPoints.length > 0,
+    [povertyDdayPoints, povertyLmicPoints]
+  );
+
+  const moneySupplyDataReady = useMemo(
+    () => moneySupplyM2Points.length > 0 || moneySupplyCpiPoints.length > 0,
+    [moneySupplyM2Points, moneySupplyCpiPoints]
+  );
 
   /** Oil + FX study only: downsample open FX for chart (usd-toman API). */
   const fxOpenPointsForChart = useMemo(
@@ -6792,6 +7157,20 @@ export default function StudyDetailPage() {
           )}
           {isOilPppIran ? (
             <>
+              {pppIranError ? (
+                <p className="text-sm text-amber-700 dark:text-amber-400 mb-4 max-w-3xl">
+                  {L(
+                    isFa,
+                    `Could not load PPP oil series: ${pppIranError}. Turkey comparator (if shown) loads separately.`,
+                    `بارگذاری سری نفت به قیمت بر اساس برابری قدرت خرید ناموفق بود: ${pppIranError}. مقایسه با ترکیه (در صورت نمایش) جدا بارگذاری می‌شود.`
+                  )}
+                </p>
+              ) : null}
+              {pppIranLoading && pppIranPoints.length === 0 && !pppIranError ? (
+                <p className="text-sm text-muted-foreground mb-4">
+                  {L(isFa, "Loading PPP oil burden series…", "در حال بارگذاری سری بار نفت به قیمت بر اساس برابری قدرت خرید…")}
+                </p>
+              ) : null}
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
                 exportPresentationStudyHeading={displayStudy.title}
@@ -7908,6 +8287,31 @@ export default function StudyDetailPage() {
             </>
           ) : isGiniInequality ? (
             <>
+              {giniLoadFailed ? (
+                <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 mb-4 max-w-3xl space-y-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {L(isFa, "This study could not load right now.", "این مطالعه اکنون بارگذاری نشد.")}
+                  </p>
+                  {giniLoadDetail ? (
+                    <p className="text-xs text-muted-foreground font-mono break-words">{giniLoadDetail}</p>
+                  ) : null}
+                </div>
+              ) : null}
+              {giniWdiLoading && !giniLoadFailed && !giniDataReady ? (
+                <p className="text-sm text-muted-foreground mb-4">
+                  {L(isFa, "Loading World Bank Gini series…", "در حال بارگذاری سری جینی بانک جهانی…")}
+                </p>
+              ) : null}
+              {giniSeriesWarnings && Object.keys(giniSeriesWarnings).length > 0 && giniDataReady ? (
+                <p className="text-xs text-amber-800 dark:text-amber-300 mb-4 max-w-3xl">
+                  {L(isFa, "Some country series failed to load:", "بارگذاری برخی سری‌های کشور ناموفق بود:")}{" "}
+                  {Object.entries(giniSeriesWarnings)
+                    .map(([k, v]) => `${k} (${v})`)
+                    .join(" · ")}
+                </p>
+              ) : null}
+              {giniDataReady ? (
+              <>
               <MultiSeriesStats
                 locale={isFa ? "fa" : "en"}
                 series={[
@@ -8027,6 +8431,8 @@ export default function StudyDetailPage() {
                   0: L(isFa, "Gini coefficient (0–100)", "ضریب جینی (۰–۱۰۰)"),
                 }}
               />
+              </>
+              ) : null}
               <LearningNote locale={isFa ? "fa" : "en"} sections={giniLearningSections(isFa)} />
               {displayStudy.observations?.length ? (
                 <DataObservations locale={isFa ? "fa" : "en"} observations={displayStudy.observations ?? []} />
@@ -8071,6 +8477,31 @@ export default function StudyDetailPage() {
             </>
           ) : isInflationCpiYoy ? (
             <>
+              {inflationLoadFailed ? (
+                <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 mb-4 max-w-3xl space-y-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {L(isFa, "This study could not load right now.", "این مطالعه اکنون بارگذاری نشد.")}
+                  </p>
+                  {inflationLoadDetail ? (
+                    <p className="text-xs text-muted-foreground font-mono break-words">{inflationLoadDetail}</p>
+                  ) : null}
+                </div>
+              ) : null}
+              {inflationWdiLoading && !inflationLoadFailed && !inflationDataReady ? (
+                <p className="text-sm text-muted-foreground mb-4">
+                  {L(isFa, "Loading World Bank CPI inflation series…", "در حال بارگذاری سری تورم CPI بانک جهانی…")}
+                </p>
+              ) : null}
+              {inflationSeriesWarnings && Object.keys(inflationSeriesWarnings).length > 0 && inflationDataReady ? (
+                <p className="text-xs text-amber-800 dark:text-amber-300 mb-4 max-w-3xl">
+                  {L(isFa, "Some country series failed to load:", "بارگذاری برخی سری‌های کشور ناموفق بود:")}{" "}
+                  {Object.entries(inflationSeriesWarnings)
+                    .map(([k, v]) => `${k} (${v})`)
+                    .join(" · ")}
+                </p>
+              ) : null}
+              {inflationDataReady ? (
+              <>
               <MultiSeriesStats
                 locale={isFa ? "fa" : "en"}
                 series={[
@@ -8188,6 +8619,8 @@ export default function StudyDetailPage() {
                   0: L(isFa, "Inflation rate (% YoY)", "نرخ تورم (٪ نسبت به سال قبل)"),
                 }}
               />
+              </>
+              ) : null}
               <LearningNote locale={isFa ? "fa" : "en"} sections={inflationLearningSections(isFa)} />
               {displayStudy.observations?.length ? (
                 <DataObservations locale={isFa ? "fa" : "en"} observations={displayStudy.observations ?? []} />
@@ -8230,6 +8663,31 @@ export default function StudyDetailPage() {
             </>
           ) : isGdpGlobalComparison && gdpGlobalDisplayed ? (
             <>
+              {gdpGlobalLoadFailed ? (
+                <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 mb-4 max-w-3xl space-y-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {L(isFa, "This study could not load right now.", "این مطالعه اکنون بارگذاری نشد.")}
+                  </p>
+                  {gdpGlobalLoadDetail ? (
+                    <p className="text-xs text-muted-foreground font-mono break-words">{gdpGlobalLoadDetail}</p>
+                  ) : null}
+                </div>
+              ) : null}
+              {gdpGlobalWdiLoading && !gdpGlobalLoadFailed && !gdpGlobalDataReady ? (
+                <p className="text-sm text-muted-foreground mb-4">
+                  {L(isFa, "Loading World Bank GDP series…", "در حال بارگذاری سری GDP بانک جهانی…")}
+                </p>
+              ) : null}
+              {gdpGlobalSeriesWarnings && Object.keys(gdpGlobalSeriesWarnings).length > 0 && gdpGlobalDataReady ? (
+                <p className="text-xs text-amber-800 dark:text-amber-300 mb-4 max-w-3xl">
+                  {L(isFa, "Some country series failed to load:", "بارگذاری برخی سری‌های کشور ناموفق بود:")}{" "}
+                  {Object.entries(gdpGlobalSeriesWarnings)
+                    .map(([k, v]) => `${k} (${v})`)
+                    .join(" · ")}
+                </p>
+              ) : null}
+              {gdpGlobalDataReady ? (
+              <>
               <MultiSeriesStats
                 locale={isFa ? "fa" : "en"}
                 series={[
@@ -8399,6 +8857,8 @@ export default function StudyDetailPage() {
                       : L(isFa, "GDP (US$)", "GDP (دلار)"),
                 }}
               />
+              </>
+              ) : null}
               <LearningNote locale={isFa ? "fa" : "en"} sections={gdpGlobalComparisonLearningSections(isFa)} />
               {displayStudy.observations?.length ? (
                 <DataObservations locale={isFa ? "fa" : "en"} observations={displayStudy.observations ?? []} />
@@ -8452,8 +8912,33 @@ export default function StudyDetailPage() {
                 )}
               </InSimpleTerms>
             </>
-          ) : isIsiDiagnostics && isiDataReady ? (
+          ) : isIsiDiagnostics ? (
             <>
+              {isiLoadFailed ? (
+                <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 mb-4 max-w-3xl space-y-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {L(isFa, "This study could not load right now.", "این مطالعه اکنون بارگذاری نشد.")}
+                  </p>
+                  {isiLoadDetail ? (
+                    <p className="text-xs text-muted-foreground font-mono break-words">{isiLoadDetail}</p>
+                  ) : null}
+                </div>
+              ) : null}
+              {isiWdiLoading && !isiLoadFailed && !isiDataReady ? (
+                <p className="text-sm text-muted-foreground mb-4">
+                  {L(isFa, "Loading World Bank panel data…", "در حال بارگذاری دادهٔ پانل بانک جهانی…")}
+                </p>
+              ) : null}
+              {isiSeriesWarnings && Object.keys(isiSeriesWarnings).length > 0 && isiDataReady ? (
+                <p className="text-xs text-amber-800 dark:text-amber-300 mb-4 max-w-3xl">
+                  {L(isFa, "Some country/indicator series failed to load:", "بارگذاری برخی سری‌ها ناموفق بود:")}{" "}
+                  {Object.entries(isiSeriesWarnings)
+                    .map(([k, v]) => `${k} (${v})`)
+                    .join(" · ")}
+                </p>
+              ) : null}
+              {isiDataReady ? (
+              <>
               <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
                 <span className="text-muted-foreground shrink-0">
                   {L(isFa, "Overview country", "کشور برای نمای کلی")}
@@ -8623,6 +9108,8 @@ export default function StudyDetailPage() {
                   />
                 </div>
               </div>
+              </>
+              ) : null}
               <LearningNote
                 locale={isFa ? "fa" : "en"}
                 sections={isiDiagnosticsLearningSections(isFa)}
@@ -8708,6 +9195,23 @@ export default function StudyDetailPage() {
             </>
           ) : isIranMoneySupplyM2 ? (
             <>
+              {moneySupplyLoadFailed ? (
+                <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 mb-4 max-w-3xl space-y-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {L(isFa, "This study could not load right now.", "این مطالعه اکنون بارگذاری نشد.")}
+                  </p>
+                  {moneySupplyLoadDetail ? (
+                    <p className="text-xs text-muted-foreground font-mono break-words">{moneySupplyLoadDetail}</p>
+                  ) : null}
+                </div>
+              ) : null}
+              {moneySupplyWdiLoading && !moneySupplyLoadFailed && !moneySupplyDataReady ? (
+                <p className="text-sm text-muted-foreground mb-4">
+                  {L(isFa, "Loading money supply and CPI series…", "در حال بارگذاری سری نقدینگی و CPI…")}
+                </p>
+              ) : null}
+              {moneySupplyDataReady ? (
+              <>
               <MultiSeriesStats
                 locale={isFa ? "fa" : "en"}
                 series={[
@@ -8842,6 +9346,8 @@ export default function StudyDetailPage() {
                   }}
                 />
               </div>
+              </>
+              ) : null}
               <LearningNote locale={isFa ? "fa" : "en"} sections={moneySupplyM2LearningSections(isFa)} />
               {displayStudy.observations?.length ? (
                 <DataObservations locale={isFa ? "fa" : "en"} observations={displayStudy.observations ?? []} />
@@ -8945,6 +9451,23 @@ export default function StudyDetailPage() {
             </>
           ) : isPovertyHeadcountIran ? (
             <>
+              {povertyLoadFailed ? (
+                <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 mb-4 max-w-3xl space-y-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {L(isFa, "This study could not load right now.", "این مطالعه اکنون بارگذاری نشد.")}
+                  </p>
+                  {povertyLoadDetail ? (
+                    <p className="text-xs text-muted-foreground font-mono break-words">{povertyLoadDetail}</p>
+                  ) : null}
+                </div>
+              ) : null}
+              {povertyWdiLoading && !povertyLoadFailed && !povertyDataReady ? (
+                <p className="text-sm text-muted-foreground mb-4">
+                  {L(isFa, "Loading World Bank poverty headcount series…", "در حال بارگذاری سری شمارش فقر بانک جهانی…")}
+                </p>
+              ) : null}
+              {povertyDataReady ? (
+              <>
               <MultiSeriesStats
                 locale={isFa ? "fa" : "en"}
                 series={[
@@ -9007,6 +9530,8 @@ export default function StudyDetailPage() {
                   0: L(isFa, "Poverty rate (% of population)", "نرخ فقر (٪ از جمعیت)"),
                 }}
               />
+              </>
+              ) : null}
               <LearningNote locale={isFa ? "fa" : "en"} sections={povertyLearningSections(isFa)} />
               {displayStudy.observations?.length ? (
                 <DataObservations locale={isFa ? "fa" : "en"} observations={displayStudy.observations ?? []} />
@@ -9067,6 +9592,40 @@ export default function StudyDetailPage() {
             </>
           ) : isDutchDiseaseDiagnostics ? (
             <>
+              {dutchWdiLoadFailed ? (
+                <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 mb-4 max-w-3xl space-y-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {L(isFa, "This study could not load right now.", "این مطالعه اکنون بارگذاری نشد.")}
+                  </p>
+                  {dutchWdiLoadDetail ? (
+                    <p className="text-xs text-muted-foreground font-mono break-words">{dutchWdiLoadDetail}</p>
+                  ) : null}
+                  <p className="text-xs text-muted-foreground">
+                    {L(
+                      isFa,
+                      "Other sections on this page may still load (for example FX context).",
+                      "بخش‌های دیگر این صفحه ممکن است همچنان بارگذاری شوند (مثلاً زمینهٔ ارزی)."
+                    )}
+                  </p>
+                </div>
+              ) : null}
+              {dutchWdiSeriesWarnings && Object.keys(dutchWdiSeriesWarnings).length > 0 && !dutchWdiLoadFailed ? (
+                <p className="text-xs text-amber-800 dark:text-amber-300 mb-4 max-w-3xl">
+                  {L(isFa, "Some World Bank indicators failed to load:", "بارگذاری برخی شاخص‌های بانک جهانی ناموفق بود:")}{" "}
+                  {Object.entries(dutchWdiSeriesWarnings)
+                    .map(([k, v]) => `${k} (${v})`)
+                    .join(" · ")}
+                </p>
+              ) : null}
+              {dutchWdiLoading &&
+              dutchOilRentsPoints.length === 0 &&
+              dutchManufacturingPoints.length === 0 &&
+              dutchImportsPoints.length === 0 &&
+              !dutchWdiLoadFailed ? (
+                <p className="text-sm text-muted-foreground mb-6">
+                  {L(isFa, "Loading World Bank annual indicators…", "در حال بارگذاری شاخص‌های سالانه بانک جهانی…")}
+                </p>
+              ) : null}
               {dutchOverviewIndexed ? (
                 <div className="space-y-2 mb-8 pb-8 border-b border-border">
                   <h3 className="text-sm font-semibold text-foreground">

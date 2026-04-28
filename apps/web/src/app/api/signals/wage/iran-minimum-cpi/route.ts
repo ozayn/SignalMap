@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
   return proxySignalGetJson(
     "/api/signals/wage/iran-minimum-cpi",
     r.q,
-    signalProxyPolicy.wdiAnnual
+    signalProxyPolicy.wdiAnnual,
+    { logUpstreamFailures: true }
   );
 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
@@ -61,10 +62,15 @@ def build_iran_poverty_headcount_bundle(start_year: int, end_year: int) -> dict[
     Two international poverty headcount series for Iran (IRN).
     Uses WDI SI.POV.DDAY and SI.POV.LMIC; dollar thresholds are defined by the World Bank and can change with PPP revisions.
     """
-    name_dday = _fetch_indicator_name(WDI_HEADCOUNT_EXTREME)
-    name_lmic = _fetch_indicator_name(WDI_HEADCOUNT_LMIC)
-    rows_dday = fetch_wdi_annual_indicator("IRN", WDI_HEADCOUNT_EXTREME)
-    rows_lmic = fetch_wdi_annual_indicator("IRN", WDI_HEADCOUNT_LMIC)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        f_nd = pool.submit(_fetch_indicator_name, WDI_HEADCOUNT_EXTREME)
+        f_nl = pool.submit(_fetch_indicator_name, WDI_HEADCOUNT_LMIC)
+        f_rd = pool.submit(fetch_wdi_annual_indicator, "IRN", WDI_HEADCOUNT_EXTREME)
+        f_rl = pool.submit(fetch_wdi_annual_indicator, "IRN", WDI_HEADCOUNT_LMIC)
+        name_dday = f_nd.result()
+        name_lmic = f_nl.result()
+        rows_dday = f_rd.result()
+        rows_lmic = f_rl.result()
     pts_dday = rows_to_chart_points(rows_dday, start_year, end_year)
     pts_lmic = rows_to_chart_points(rows_lmic, start_year, end_year)
     y0_d, y1_d = coverage_years(pts_dday)

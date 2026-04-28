@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
   return proxySignalGetJson(
     "/api/signals/macro/gdp-composition",
     params.toString(),
-    signalProxyPolicy.wdiAnnual
+    signalProxyPolicy.wdiAnnual,
+    { logUpstreamFailures: true }
   );
 }

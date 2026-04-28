@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from signalmap.sources.world_bank_national_accounts import fetch_wdi_annual_indicator
+
+_logger = logging.getLogger(__name__)
 
 # World Development Indicators — Gini index (income inequality)
 WDI_GINI_COEFFICIENT = "SI.POV.GINI"
@@ -30,14 +34,46 @@ def rows_to_chart_points(rows: list[dict[str, Any]], start_year: int, end_year: 
     return out
 
 
+def _fetch_one_country_safe(
+    iso3: str,
+    series_key: str,
+    start_year: int,
+    end_year: int,
+) -> tuple[str, list[dict[str, float | str]], str | None]:
+    try:
+        rows = fetch_wdi_annual_indicator(iso3, WDI_GINI_COEFFICIENT)
+        return series_key, rows_to_chart_points(rows, start_year, end_year), None
+    except Exception as e:
+        _logger.warning("Gini WDI fetch failed %s %s: %s", iso3, WDI_GINI_COEFFICIENT, e)
+        return series_key, [], str(e)
+
+
 def fetch_gini_series_for_countries(
     iso3_to_key: dict[str, str],
     start_year: int,
     end_year: int,
-) -> dict[str, list[dict[str, float | str]]]:
-    """Fetch SI.POV.GINI for each ISO3 code; return chart-ready point lists keyed by ``iso3_to_key`` values."""
+) -> dict[str, Any]:
+    """
+    Fetch SI.POV.GINI for each ISO3 code.
+
+    Returns ``{"series": {country_key: points, ...}, optional series_warnings, partial}``.
+    Failed countries get empty point lists instead of raising.
+    """
     out: dict[str, list[dict[str, float | str]]] = {}
-    for iso3, series_key in iso3_to_key.items():
-        rows = fetch_wdi_annual_indicator(iso3, WDI_GINI_COEFFICIENT)
-        out[series_key] = rows_to_chart_points(rows, start_year, end_year)
-    return out
+    warnings: dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = [
+            pool.submit(_fetch_one_country_safe, iso3, sk, start_year, end_year)
+            for iso3, sk in iso3_to_key.items()
+        ]
+        for fut in futures:
+            series_key, pts, err = fut.result()
+            out[series_key] = pts
+            if err:
+                warnings[series_key] = err
+
+    bundle: dict[str, Any] = {"series": out}
+    if warnings:
+        bundle["series_warnings"] = warnings
+        bundle["partial"] = True
+    return bundle

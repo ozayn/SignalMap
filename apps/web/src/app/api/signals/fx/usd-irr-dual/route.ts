@@ -4,5 +4,7 @@ import { proxySignalGetJson, signalProxyPolicy, startEndOr400 } from "@/lib/sign
 export async function GET(request: NextRequest) {
   const r = startEndOr400(request.nextUrl.searchParams);
   if (r instanceof Response) return r;
-  return proxySignalGetJson("/api/signals/fx/usd-irr-dual", r.q, signalProxyPolicy.fxDaily);
+  return proxySignalGetJson("/api/signals/fx/usd-irr-dual", r.q, signalProxyPolicy.fxDaily, {
+    logUpstreamFailures: true,
+  });
 }

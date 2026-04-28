@@ -6,6 +6,7 @@ export async function GET(request: NextRequest) {
   return proxySignalGetJson(
     "/api/signals/wdi/gini-comparison",
     qs,
-    signalProxyPolicy.wdiAnnual
+    signalProxyPolicy.wdiAnnual,
+    { logUpstreamFailures: true }
   );
 }

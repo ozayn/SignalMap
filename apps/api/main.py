@@ -417,6 +417,7 @@ def get_brent_oil_signal(
         from signalmap.services.signals import get_brent_series
         return get_brent_series(start, end)
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -434,6 +435,7 @@ def get_gold_price_global_signal(
         from signalmap.services.signals import get_gold_price_global_series
         return get_gold_price_global_series(start, end)
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -451,6 +453,7 @@ def get_real_oil_signal(
         from signalmap.services.signals import get_real_oil_series
         return get_real_oil_series(start, end)
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -468,6 +471,7 @@ def get_oil_ppp_iran_signal(
         from signalmap.services.signals import get_oil_ppp_iran_series
         return get_oil_ppp_iran_series(start, end)
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -485,6 +489,7 @@ def get_oil_ppp_turkey_signal(
         from signalmap.services.signals import get_oil_ppp_turkey_series
         return get_oil_ppp_turkey_series(start, end)
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -507,6 +512,11 @@ def get_wdi_gini_comparison_signal(
 
         return get_gini_inequality_comparison(start, end)
     except Exception as e:
+        log.exception(
+            "gini_inequality_comparison failed start=%s end=%s",
+            start,
+            end,
+        )
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -529,6 +539,7 @@ def get_wdi_cpi_inflation_yoy_signal(
 
         return get_cpi_inflation_yoy_comparison(start, end)
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -551,6 +562,7 @@ def get_wdi_gdp_global_comparison_signal(
 
         return get_gdp_global_comparison(start, end)
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -573,6 +585,11 @@ def get_wdi_isi_diagnostics_signal(
 
         return get_isi_diagnostics(start, end)
     except Exception as e:
+        log.exception(
+            "isi_diagnostics failed start=%s end=%s",
+            start,
+            end,
+        )
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -595,6 +612,7 @@ def get_wdi_poverty_headcount_iran_signal(
 
         return get_poverty_headcount_iran(start, end)
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -617,6 +635,7 @@ def get_wdi_iran_money_supply_m2_signal(
 
         return get_iran_money_supply_m2(start, end)
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -639,6 +658,11 @@ def get_wdi_dutch_disease_diagnostics_iran_signal(
 
         return get_dutch_disease_diagnostics_iran(start, end)
     except Exception as e:
+        log.exception(
+            "dutch_disease_diagnostics_iran failed start=%s end=%s",
+            start,
+            end,
+        )
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -665,6 +689,7 @@ def get_oil_production_exporters_signal(
             out["_debug"] = result["_debug"]
         return out
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -682,6 +707,7 @@ def get_oil_export_capacity_signal(
         from signalmap.services.signals import get_oil_export_capacity_study
         return get_oil_export_capacity_study(start, end)
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -699,6 +725,7 @@ def get_oil_economy_overview_signal(
         from signalmap.services.signals import get_oil_economy_overview_iran
         return get_oil_economy_overview_iran(start, end)
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -716,6 +743,7 @@ def get_oil_global_long_signal(
         from signalmap.services.signals import get_oil_global_long_series
         return get_oil_global_long_series(start, end)
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -767,6 +795,7 @@ def get_usd_toman_signal(
         from signalmap.services.signals import get_usd_toman_series
         return get_usd_toman_series(start, end)
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -784,6 +813,7 @@ def get_usd_irr_dual_signal(
         from signalmap.services.signals import get_usd_irr_dual_series
         return get_usd_irr_dual_series(start, end)
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -801,6 +831,7 @@ def get_iran_wage_cpi_signal(
         from signalmap.services.signals import get_iran_wage_cpi_series
         return get_iran_wage_cpi_series(start, end)
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -839,6 +870,7 @@ def get_gdp_composition_signal(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
@@ -1937,6 +1969,7 @@ def youtube_channel_comment_analysis(
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
+        log.exception("signal fetch failed")
         raise HTTPException(status_code=502, detail=f"Comment analysis failed: {e}")
 
 
