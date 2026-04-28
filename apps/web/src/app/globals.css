@@ -801,42 +801,70 @@ a.learning-study-link {
 
 .site-footer-link {
   font-size: 12px;
-  color: #9ca3af;
+  font-weight: 500;
+  color: #6b7280;
   text-decoration: none;
 }
 
 .site-footer-link:hover {
-  color: #6b7280;
+  color: #374151;
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-underline-offset: 3px;
 }
 
 .dark .site-footer-link {
-  color: #6b7280;
+  color: #9ca3af;
 }
 
 .dark .site-footer-link:hover {
-  color: #9ca3af;
-}
-
-/* Navbar — optional support (external), same weight as other nav text */
-.nav-support-link {
-  font-size: 14px;
-  color: #6b7280;
-  text-decoration: none;
-  margin-right: 2px;
-}
-
-.nav-support-link:hover {
-  color: #111827;
-}
-
-.dark .nav-support-link {
-  color: #9ca3af;
-}
-
-.dark .nav-support-link:hover {
   color: #e5e7eb;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Navbar — Support: subtle outlined control (desktop + mobile top bar) */
+.nav-support-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: #4b5563;
+  text-decoration: none;
+  padding: 5px 10px;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+@media (min-width: 768px) {
+  .nav-support-btn {
+    font-size: 13px;
+    padding: 6px 12px;
+  }
+}
+
+.nav-support-btn:hover {
+  background: #f3f4f6;
+  color: #111827;
+  border-color: #9ca3af;
+}
+
+.dark .nav-support-btn {
+  border-color: #374151;
+  color: #d1d5db;
+}
+
+.dark .nav-support-btn:hover {
+  background: hsl(var(--muted) / 0.45);
+  color: #f9fafb;
+  border-color: #6b7280;
 }
 
 /* Study page - aligned with nav */

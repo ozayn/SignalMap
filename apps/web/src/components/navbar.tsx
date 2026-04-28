@@ -95,7 +95,7 @@ export function Navbar({ supportHref }: { supportHref: string }) {
             href={supportHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="nav-support-link hidden md:inline"
+            className="nav-support-btn max-[380px]:px-2 max-[380px]:py-1 max-[380px]:text-[11px]"
             lang="en"
             aria-label={SUPPORT_LINK_ARIA}
           >
@@ -183,17 +183,6 @@ export function Navbar({ supportHref }: { supportHref: string }) {
                 />
               );
             })}
-            <a
-              href={supportHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={closeMenu}
-              className="mt-1 flex min-h-[44px] items-center border-t border-border/60 py-3 text-[14px] text-[#6b7280] hover:text-[#111827] dark:hover:text-[#e5e7eb]"
-              lang="en"
-              aria-label={SUPPORT_LINK_ARIA}
-            >
-              Support
-            </a>
           </nav>
         </div>
       </div>
