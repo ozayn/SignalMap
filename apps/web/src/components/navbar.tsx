@@ -10,8 +10,8 @@ const navLinks = [
   { href: "/studies", label: "Studies" },
   { href: "/explore", label: "Explore" },
   { href: "/methods", label: "Methods" },
-  { href: "/about", label: "About" },
   { href: "/learning", label: "Learning" },
+  { href: "/about", label: "About" },
 ];
 
 function NavLink({
