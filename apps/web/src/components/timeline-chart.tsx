@@ -67,8 +67,9 @@ import {
   STUDY_CHART_SOURCE_WRAP_CLASS,
   STUDY_CHART_STACK_GAP_CLASS,
   STUDY_CHART_TITLE_WRAP_CLASS,
+  TIMELINE_CHART_DEFAULT_HEIGHT_CLASS,
 } from "@/lib/chart-study-typography";
-import { useIsNarrowChartLayout } from "@/lib/use-is-narrow-chart-layout";
+import { useChartViewportLayout } from "@/lib/use-chart-viewport-layout";
 
 const MULTI_SERIES_FALLBACK_LEGEND_ICONS: Array<"circle" | "diamond" | "triangle" | "rect"> = [
   "circle",
@@ -128,8 +129,8 @@ function multiSeriesGroupYHeadline(
   return nameWithSuffix;
 }
 
-function shortStudyLegendName(text: string, narrow: boolean, maxLen = 24): string {
-  if (!narrow) return text;
+function shortStudyLegendName(text: string, collapseLegend: boolean, maxLen = 24): string {
+  if (!collapseLegend) return text;
   const t = text.trim();
   if (t.length <= maxLen) return t;
   return `${t.slice(0, Math.max(1, maxLen - 1))}…`;
@@ -298,7 +299,7 @@ type TimelineChartProps = {
   oilShockDates?: string[];
   /** When false, shock markers are hidden. Default true. */
   showOilShocks?: boolean;
-  /** Chart container height (default ``h-[280px] md:h-96``). Use e.g. ``h-48`` for smaller charts. */
+  /** Chart container height (default {@link TIMELINE_CHART_DEFAULT_HEIGHT_CLASS}). */
   chartHeight?: string;
   /** Override grid.right (e.g. "12%") to align x-axis with another chart above. */
   gridRight?: string;
@@ -807,7 +808,7 @@ export function TimelineChart({
   sanctionsPeriods = [],
   oilShockDates = [],
   showOilShocks = true,
-  chartHeight = "h-[280px] md:h-96",
+  chartHeight = TIMELINE_CHART_DEFAULT_HEIGHT_CLASS,
   gridRight: gridRightOverride,
   extendedDates = [],
   lastOfficialDateForExtension,
@@ -840,7 +841,7 @@ export function TimelineChart({
   const [xLabelRotate, setXLabelRotate] = useState(0);
   const [clipStart, setClipStart] = useState("");
   const [clipEnd, setClipEnd] = useState("");
-  const isNarrow = useIsNarrowChartLayout();
+  const { isCompact, isLandscapeCompact } = useChartViewportLayout();
 
   const rangeBounds = useMemo((): [string, string] | undefined => {
     if (timeRangeProp?.[0] && timeRangeProp[1]) {
@@ -1096,29 +1097,78 @@ export function TimelineChart({
   ]);
 
   useEffect(() => {
-    const updateRotate = () => setXLabelRotate(window.innerWidth < 640 ? 90 : 0);
+    let deb: ReturnType<typeof setTimeout> | undefined;
+    const updateRotate = () => {
+      clearTimeout(deb);
+      deb = setTimeout(() => {
+        setXLabelRotate(window.innerWidth < 640 ? 90 : 0);
+      }, 120);
+    };
     updateRotate();
     window.addEventListener("resize", updateRotate);
-    return () => window.removeEventListener("resize", updateRotate);
+    window.addEventListener("orientationchange", updateRotate);
+    window.visualViewport?.addEventListener("resize", updateRotate);
+    return () => {
+      window.removeEventListener("resize", updateRotate);
+      window.removeEventListener("orientationchange", updateRotate);
+      window.visualViewport?.removeEventListener("resize", updateRotate);
+      clearTimeout(deb);
+    };
   }, []);
 
+  /** One ResizeObserver on the plot box: bump layout revision when size crosses thresholds, debounce `chart.resize()`. */
   useLayoutEffect(() => {
     const el = chartRef.current;
     if (!el) return;
     let prevOk = el.clientWidth >= 2 && el.clientHeight >= 2;
+    let prevW = el.clientWidth;
+    let prevH = el.clientHeight;
+    let debResize: ReturnType<typeof setTimeout> | undefined;
+    const scheduleChartResize = () => {
+      clearTimeout(debResize);
+      debResize = setTimeout(() => {
+        const chart = chartInstanceRef.current;
+        const box = chartRef.current;
+        if (chart && box && box.clientWidth >= 2 && box.clientHeight >= 2) {
+          try {
+            chart.resize({ width: box.clientWidth, height: box.clientHeight });
+          } catch {
+            /* disposed */
+          }
+        }
+      }, 125);
+    };
     const run = () => {
-      const ok = el.clientWidth >= 2 && el.clientHeight >= 2;
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      const ok = w >= 2 && h >= 2;
       if (ok && !prevOk) setChartLayoutRevision((n) => n + 1);
+      if (ok && prevOk && (Math.abs(w - prevW) > 48 || Math.abs(h - prevH) > 48)) {
+        setChartLayoutRevision((n) => n + 1);
+      }
       prevOk = ok;
+      prevW = w;
+      prevH = h;
+      scheduleChartResize();
     };
     const ro = new ResizeObserver(run);
     ro.observe(el);
+    window.addEventListener("resize", scheduleChartResize);
+    window.addEventListener("orientationchange", scheduleChartResize);
+    window.visualViewport?.addEventListener("resize", scheduleChartResize);
     run();
-    return () => ro.disconnect();
+    scheduleChartResize();
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", scheduleChartResize);
+      window.removeEventListener("orientationchange", scheduleChartResize);
+      window.visualViewport?.removeEventListener("resize", scheduleChartResize);
+      clearTimeout(debResize);
+    };
   }, []);
 
   useEffect(() => {
-    const narrow = isNarrow;
+    const compact = isCompact;
     const color = cssHsl("--chart-primary", "hsl(238, 84%, 67%)");
     const muted = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
     const borderColor = cssHsl("--border", "hsl(240, 5.9%, 90%)");
@@ -1238,10 +1288,10 @@ export function TimelineChart({
         : null;
     const multiSeriesCount = hasMultiSeries ? multiSeries!.length : 0;
     const useGroupedMultiSeriesLegend = groupedLegendModel != null;
-    const legendTextFontSize = narrow ? Math.max(11, STUDY_CHART_LEGEND_FONT_PX - 2) : STUDY_CHART_LEGEND_FONT_PX;
-    const legendNarrowFormatter = narrow ? { formatter: (n: string) => shortStudyLegendName(n, true) } : {};
+    const legendTextFontSize = compact ? Math.max(11, STUDY_CHART_LEGEND_FONT_PX - 2) : STUDY_CHART_LEGEND_FONT_PX;
+    const legendNarrowFormatter = compact ? { formatter: (n: string) => shortStudyLegendName(n, true) } : {};
     /** Tighter gap so plain legends wrap onto multiple rows instead of one overcrowded line. */
-    const multiSeriesLegendItemGap = narrow ? 6 : 10;
+    const multiSeriesLegendItemGap = compact ? 6 : 10;
     /** Extra grid space when many series may wrap to several legend rows (plain + width legend). */
     const multiSeriesLegendBottomPctRaw = hasMultiSeries
       ? useGroupedMultiSeriesLegend
@@ -1253,7 +1303,9 @@ export function TimelineChart({
       if (!m) return pct;
       return `${Math.max(6, parseFloat(m[1]) - sub)}%`;
     };
-    const multiSeriesLegendBottomPct = narrow ? tightenPct(multiSeriesLegendBottomPctRaw, 3) : multiSeriesLegendBottomPctRaw;
+    const multiSeriesLegendBottomPct = compact
+      ? tightenPct(multiSeriesLegendBottomPctRaw, isLandscapeCompact ? 2 : 3)
+      : multiSeriesLegendBottomPctRaw;
     const comparatorResolved = comparatorSeries
       ? {
           ...comparatorSeries,
@@ -1743,12 +1795,13 @@ export function TimelineChart({
           ? "13%"
           : "8%";
 
-    const tightenTopForNarrow = (pct: string) => {
+    const tightenTopForCompact = (pct: string) => {
       const m = pct.match(/^([\d.]+)%$/);
       if (!m) return pct;
-      return `${Math.max(6, parseFloat(m[1]) - 5)}%`;
+      const sub = isLandscapeCompact ? 3 : 5;
+      return `${Math.max(6, parseFloat(m[1]) - sub)}%`;
     };
-    const gridTopUse = narrow ? tightenTopForNarrow(gridTopPct) : gridTopPct;
+    const gridTopUse = compact ? tightenTopForCompact(gridTopPct) : gridTopPct;
 
     const option: echarts.EChartsOption = {
       animation: false,
@@ -2059,32 +2112,32 @@ export function TimelineChart({
         },
       },
       grid: {
-        left: narrow ? (hasMultiSeries ? "10%" : "2%") : hasMultiSeries ? "15%" : "5%",
+        left: compact ? (hasMultiSeries ? "10%" : "2%") : hasMultiSeries ? "15%" : "5%",
         right:
           gridRightOverride ??
           (hasMultiSeries && multiSeries && multiSeries.some((s) => s.yAxisIndex >= 2)
-            ? narrow
+            ? compact
               ? "22%"
               : "30%"
             : hasOil || !hasData || hasMultiSeries
-              ? narrow
+              ? compact
                 ? "12%"
                 : "16%"
-              : narrow
+              : compact
                 ? "4%"
                 : "6%"),
         bottom: bumpGridBottomForDualYear(
           xLabelRotate
-            ? narrow
+            ? compact
               ? "14%"
               : "18%"
             : hasMultiSeries && multiSeries
               ? multiSeriesLegendBottomPct
               : (comparatorResolved && comparatorValuesForChart && hasOil) || (hasOil && secondSeries && !comparatorResolved)
-                ? narrow
+                ? compact
                   ? "11%"
                   : "13%"
-                : narrow
+                : compact
                   ? "2%"
                   : "3%"
         ),
@@ -2104,7 +2157,7 @@ export function TimelineChart({
               min: dateMin,
               max: dateMax,
               minInterval: minIntervalMs,
-              ...(narrow ? { splitNumber: 4 } : {}),
+              ...(compact ? { splitNumber: isLandscapeCompact ? 6 : 4 } : {}),
               axisLine: { lineStyle: { color: borderColor } },
               axisLabel: {
                 hideOverlap: true,
@@ -2131,7 +2184,7 @@ export function TimelineChart({
           })()
         : (() => {
             const n = dates.length;
-            const maxLabels = useSparseMultiSeriesDates ? 50 : narrow ? 4 : 12;
+            const maxLabels = useSparseMultiSeriesDates ? 50 : compact ? (isLandscapeCompact ? 7 : 4) : 12;
             const useTimeLinearLabels =
               hasMultiSeries && !!timeRange && n > 12 && spanYears > 0;
             const timeLinearTickYears: number[] = useTimeLinearLabels
@@ -2143,7 +2196,7 @@ export function TimelineChart({
                   const step =
                     stepFromProp ??
                     (() => {
-                      const want = narrow ? 4 : Math.min(10, Math.max(5, spanYears));
+                      const want = compact ? (isLandscapeCompact ? 6 : 4) : Math.min(10, Math.max(5, spanYears));
                       return Math.max(1, Math.round(spanYears / want));
                     })();
                   const out: number[] = [];
@@ -2310,11 +2363,11 @@ export function TimelineChart({
                 ...(pctNice ? { min: pctNice.min, max: pctNice.max, interval: pctNice.interval } : {}),
                 position: (isLeft ? "left" : "right") as "left" | "right",
                 offset: isRight ? rightOffset : 0,
-                name: narrow ? "" : formattedMultiAxisName,
+                name: compact ? "" : formattedMultiAxisName,
                 nameLocation: "middle" as const,
                 nameRotate: isLeft ? 90 : -90,
                 nameTextStyle: yAxisNameStyle,
-                nameGap: narrow ? 8 : yAxisNameGapForMultilineTitle(formattedMultiAxisName),
+                nameGap: compact ? 8 : yAxisNameGapForMultilineTitle(formattedMultiAxisName),
                 axisLine: { show: false },
                 splitLine: { show: isLeft, lineStyle: { color: borderColor, type: "dashed" as const } },
                 axisLabel: {
@@ -2374,11 +2427,11 @@ export function TimelineChart({
             {
               type: "value" as const,
               position: "left" as const,
-              name: narrow ? "" : leftOilAxisName,
+              name: compact ? "" : leftOilAxisName,
               nameLocation: "middle" as const,
               nameRotate: 90,
               nameTextStyle: yAxisNameStyle,
-              nameGap: narrow ? 8 : yAxisNameGapForMultilineTitle(leftOilAxisName),
+              nameGap: compact ? 8 : yAxisNameGapForMultilineTitle(leftOilAxisName),
               axisLine: { show: false },
               splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
               axisLabel: {
@@ -2394,11 +2447,11 @@ export function TimelineChart({
               type: (yAxisLog ? "log" : "value") as "value" | "log",
               ...(yAxisLog ? { logBase: 10 } : {}),
               position: "right" as const,
-              name: narrow ? "" : rightOilAxisName,
+              name: compact ? "" : rightOilAxisName,
               nameLocation: "middle" as const,
               nameRotate: -90,
               nameTextStyle: yAxisNameStyle,
-              nameGap: narrow ? 8 : yAxisNameGapForMultilineTitle(rightOilAxisName),
+              nameGap: compact ? 8 : yAxisNameGapForMultilineTitle(rightOilAxisName),
               axisLine: { show: false },
               splitLine: { show: false },
               axisLabel: {
@@ -2413,11 +2466,11 @@ export function TimelineChart({
             const singleAxisName = formatYAxisNameMultiline(localizeChartNumericDisplayString(label, chartNumeralLocale));
             return {
             type: "value",
-            name: narrow ? "" : singleAxisName,
+            name: compact ? "" : singleAxisName,
             nameLocation: "middle" as const,
             nameRotate: 90,
             nameTextStyle: yAxisNameStyle,
-            nameGap: narrow ? 8 : yAxisNameGapForMultilineTitle(singleAxisName),
+            nameGap: compact ? 8 : yAxisNameGapForMultilineTitle(singleAxisName),
             axisLine: { show: false },
             splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
             axisLabel: {
@@ -2830,11 +2883,6 @@ export function TimelineChart({
     const rafId = requestAnimationFrame(() => {
       if (!cancelled && chartRef.current) {
         chart.setOption(option, { notMerge: true });
-      }
-    });
-
-    const resize = () => {
-      if (!cancelled) {
         try {
           const box = chartRef.current;
           if (box && box.clientWidth >= 2 && box.clientHeight >= 2) {
@@ -2844,13 +2892,11 @@ export function TimelineChart({
           // Chart may be disposed
         }
       }
-    };
-    window.addEventListener("resize", resize);
+    });
 
     return () => {
       cancelled = true;
       cancelAnimationFrame(rafId);
-      window.removeEventListener("resize", resize);
     };
   }, [
     data,
@@ -2900,7 +2946,8 @@ export function TimelineChart({
     groupedLegendSelected,
     multiSeriesLegendGroupedVariant,
     chartLayoutRevision,
-    isNarrow,
+    isCompact,
+    isLandscapeCompact,
   ]);
 
   useEffect(() => {
@@ -2925,8 +2972,8 @@ export function TimelineChart({
     ? localizeChartNumericDisplayString(label.trim(), chartLocaleResolved)
     : "";
 
-  const narrowMetricCaption = useMemo(() => {
-    if (!isNarrow) return "";
+  const compactMetricCaption = useMemo(() => {
+    if (!isCompact) return "";
     const numLoc = chartLocaleResolved === "fa" ? "fa" : "en";
     if (multiSeries?.length) {
       const by = new Map<number, ChartSeries[]>();
@@ -2968,7 +3015,7 @@ export function TimelineChart({
       label.trim() + (unit ? ` (${unit})` : "") + (yAxisNameSuffix ? ` ${yAxisNameSuffix}` : "");
     return single.trim() ? localizeChartNumericDisplayString(single, numLoc) : "";
   }, [
-    isNarrow,
+    isCompact,
     chartLocaleResolved,
     multiSeries,
     secondSeries,
@@ -3017,12 +3064,12 @@ export function TimelineChart({
           {studyTitleText}
         </p>
       ) : null}
-      {narrowMetricCaption ? (
+      {compactMetricCaption ? (
         <p
           className="-mt-0.5 px-1 text-center text-[11px] font-medium leading-snug text-muted-foreground md:hidden"
           dir={chartLocaleResolved === "fa" ? "rtl" : "ltr"}
         >
-          {narrowMetricCaption}
+          {compactMetricCaption}
         </p>
       ) : null}
       {groupedLegendModel?.variant === "grid" ? (

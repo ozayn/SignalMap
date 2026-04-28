@@ -16,3 +16,13 @@ export const STUDY_CHART_SOURCE_WRAP_CLASS =
 
 /** Legend entry text (px); scroll and plain use the same hierarchy */
 export const STUDY_CHART_LEGEND_FONT_PX = 13;
+
+/** Mobile / `max-md` height segment (portrait vs landscape); pair with a `md:*` tail. */
+export const TIMELINE_CHART_MOBILE_HEIGHT_PREFIX =
+  "h-[min(52dvh,320px)] max-md:landscape:h-[min(38dvh,260px)]";
+
+/**
+ * Default `TimelineChart` canvas height: more vertical space in portrait, slightly shorter in
+ * `max-md` landscape to limit empty margin when the address bar / aspect ratio changes.
+ */
+export const TIMELINE_CHART_DEFAULT_HEIGHT_CLASS = `${TIMELINE_CHART_MOBILE_HEIGHT_PREFIX} md:h-96`;

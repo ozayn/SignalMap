@@ -116,6 +116,7 @@ import {
   toDisplayName,
 } from "@/lib/oil-trade-regions";
 import { joinExportSourceNames } from "@/lib/chart-export";
+import { TIMELINE_CHART_MOBILE_HEIGHT_PREFIX } from "@/lib/chart-study-typography";
 import { normalizeChartRangeBound, toYearInputMinMax, yearDraftFromBoundIso } from "@/lib/chart-study-range";
 import { CHART_LINE_SYMBOL_SIZE, CHART_LINE_SYMBOL_SIZE_MINI } from "@/lib/chart-series-markers";
 import {
@@ -5122,7 +5123,7 @@ export default function StudyDetailPage() {
                 timeRange={geopoliticalChartData.timeRange}
                 oilShockDates={oilShockDates}
                 showOilShocks
-                chartHeight="h-[280px] md:h-80"
+                chartHeight={`${TIMELINE_CHART_MOBILE_HEIGHT_PREFIX} md:h-80`}
                 forceTimeAxis
                 chartRangeGranularity="day"
               />
@@ -6461,7 +6462,7 @@ export default function StudyDetailPage() {
                 multiSeriesYAxisNameOverrides={gdpLevelsDualAxisYAxisNameOverrides}
                 timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
                 forceTimeRangeAxis
-                chartHeight="h-[280px] md:h-[26rem]"
+                chartHeight={`${TIMELINE_CHART_MOBILE_HEIGHT_PREFIX} md:h-[26rem]`}
                 mutedEventLines
                 xAxisYearLabel={gdpLevelsXAxisYearLabel ?? chartYearAxisLabel}
                 categoryYearTickStep={5}
@@ -6640,7 +6641,7 @@ export default function StudyDetailPage() {
                     label={L(isFa, "GDP composition (shares of GDP)", "ترکیب GDP (سهم‌ها)")}
                     events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, gdpCompositionChartEvents)}
                     anchorEventId={anchorEventId || undefined}
-                    chartHeight="h-[280px] md:h-[26rem]"
+                    chartHeight={`${TIMELINE_CHART_MOBILE_HEIGHT_PREFIX} md:h-[26rem]`}
                     multiSeries={[
                       {
                         key: "pct_consumption",
@@ -6706,7 +6707,7 @@ export default function StudyDetailPage() {
                     timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
                     forceTimeRangeAxis
                     yAxisLog
-                    chartHeight="h-[280px] md:h-80"
+                    chartHeight={`${TIMELINE_CHART_MOBILE_HEIGHT_PREFIX} md:h-80`}
                     mutedEventLines
                     xAxisYearLabel={gdpLevelsXAxisYearLabel ?? chartYearAxisLabel}
                     categoryYearTickStep={5}
@@ -6819,7 +6820,7 @@ export default function StudyDetailPage() {
                     ]}
                     timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
                     forceTimeRangeAxis
-                    chartHeight="h-[280px] md:h-[26rem]"
+                    chartHeight={`${TIMELINE_CHART_MOBILE_HEIGHT_PREFIX} md:h-[26rem]`}
                     mutedEventLines
                     xAxisYearLabel={gdpLevelsXAxisYearLabel ?? chartYearAxisLabel}
                     categoryYearTickStep={5}
@@ -7971,7 +7972,7 @@ export default function StudyDetailPage() {
                     exportFileStem="oil-economy-indexed"
                     showChartControls={false}
                     mutedEventLines
-                    chartHeight="h-[280px] md:h-96"
+                    chartHeight={`${TIMELINE_CHART_MOBILE_HEIGHT_PREFIX} md:h-96`}
                   />
                 </div>
               ) : null}
@@ -9001,7 +9002,7 @@ export default function StudyDetailPage() {
                         : `Index (${isiOverviewIndexed.baseYear} = 100)`,
                     }}
                     exportFileStem="isi-overview-indexed"
-                    chartHeight="h-[280px] md:h-96"
+                    chartHeight={`${TIMELINE_CHART_MOBILE_HEIGHT_PREFIX} md:h-96`}
                   />
                 </div>
               ) : null}
@@ -9035,7 +9036,7 @@ export default function StudyDetailPage() {
                     }}
                     multiSeriesLegendLayout="grouped"
                     multiSeriesLegendGroupedVariant="country"
-                    chartHeight="h-[280px] md:h-96"
+                    chartHeight={`${TIMELINE_CHART_MOBILE_HEIGHT_PREFIX} md:h-96`}
                   />
                 </div>
                 <div className="space-y-2 border-t border-border pt-6">
@@ -9071,7 +9072,7 @@ export default function StudyDetailPage() {
                     }}
                     multiSeriesLegendLayout="grouped"
                     multiSeriesLegendGroupedVariant="country"
-                    chartHeight="h-[280px] md:h-96"
+                    chartHeight={`${TIMELINE_CHART_MOBILE_HEIGHT_PREFIX} md:h-96`}
                   />
                 </div>
                 <div className="space-y-2 border-t border-border pt-6">
@@ -9105,7 +9106,7 @@ export default function StudyDetailPage() {
                     multiSeriesYAxisNameOverrides={{
                       0: L(isFa, "Annual growth (%)", "رشد سالانه (٪)"),
                     }}
-                    chartHeight="h-[280px] md:h-96"
+                    chartHeight={`${TIMELINE_CHART_MOBILE_HEIGHT_PREFIX} md:h-96`}
                   />
                 </div>
               </div>
@@ -9668,7 +9669,7 @@ export default function StudyDetailPage() {
                     exportFileStem="dutch-disease-overview-indexed"
                     showChartControls={false}
                     mutedEventLines
-                    chartHeight="h-[280px] md:h-96"
+                    chartHeight={`${TIMELINE_CHART_MOBILE_HEIGHT_PREFIX} md:h-96`}
                   />
                 </div>
               ) : null}
@@ -10367,7 +10368,7 @@ export default function StudyDetailPage() {
                     label="Daily return"
                     unit="%"
                     timeRange={oilTimeRange ?? study.timeRange}
-                    chartHeight="h-[280px] md:h-64"
+                    chartHeight={`${TIMELINE_CHART_MOBILE_HEIGHT_PREFIX} md:h-64`}
                     referenceLine={{ value: 0, label: "0%" }}
                     gridRight="12%"
                     chartLineRole="secondary"
