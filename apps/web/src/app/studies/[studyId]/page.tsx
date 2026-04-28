@@ -450,8 +450,8 @@ export default function StudyDetailPage() {
   const chartLocaleForCharts = faEligible ? (isFa ? ("fa" as const) : ("en" as const)) : undefined;
   const statChartLocale: "en" | "fa" = faEligible && isFa ? "fa" : "en";
   const { yearAxisMode, setYearAxisMode } = useIranStudyChartYearMode();
-  /** Jalali / both only in Persian UI; English mode always uses Gregorian (no mixed calendar lines). */
-  const chartYearAxisLabel = faEligible && isFa ? yearAxisMode : undefined;
+  /** Year calendar mode from shared toggle whenever study supports Iran FA UI (EN + FA). */
+  const chartYearAxisLabel = faEligible ? yearAxisMode : undefined;
   const faRich = IRAN_STUDY_FA_DISPLAY[studyId];
   const [showAllSignalMapImportance, setShowAllSignalMapImportance] = useState(false);
   const [data, setData] = useState<OverviewData | null>(null);
@@ -594,7 +594,8 @@ export default function StudyDetailPage() {
   const [fxDualOfficialSource, setFxDualOfficialSource] = useState<FxUsdTomanSource | null>(null);
   const [fxDualOpenSource, setFxDualOpenSource] = useState<FxUsdTomanSource | null>(null);
   const [showFxSpread, setShowFxSpread] = useState(false);
-  const [fxDualYAxisLog, setFxDualYAxisLog] = useState(false);
+  /** Iran FX regime study: overlay official WDI annual rate (default off — open market only). */
+  const [fxRegimeShowOfficial, setFxRegimeShowOfficial] = useState(false);
   const [wageNominalPoints, setWageNominalPoints] = useState<{ date: string; value: number }[]>([]);
   const [wageCpiPoints, setWageCpiPoints] = useState<{ date: string; value: number }[]>([]);
   const [wageBaseYear, setWageBaseYear] = useState<number | null>(null);
@@ -727,7 +728,7 @@ export default function StudyDetailPage() {
   const isOilBrent = study?.primarySignal.kind === "oil_brent";
   const isOilGlobalLong = study?.primarySignal.kind === "oil_global_long";
   const isGoldAndOil = study?.primarySignal.kind === "gold_and_oil";
-  const isFxUsdToman = study?.primarySignal.kind === "fx_usd_toman";
+  const isFxIranCurrencyRegime = study?.primarySignal.kind === "fx_iran_currency_regime";
   const isOilAndFx = study?.primarySignal.kind === "oil_and_fx";
   const isRealOil = study?.primarySignal.kind === "real_oil";
   const isOilPppIran = study?.primarySignal.kind === "oil_ppp_iran";
@@ -739,7 +740,6 @@ export default function StudyDetailPage() {
   const isBandEventsTimeline = study?.primarySignal.kind === "band_events_timeline";
   const isComparativeHistoryTimeline = study?.primarySignal.kind === "comparative_history_timeline";
   const isFollowerGrowthDynamics = study?.primarySignal.kind === "follower_growth_dynamics";
-  const isFxUsdIrrDual = study?.primarySignal.kind === "fx_usd_irr_dual";
   const isWageCpiReal = study?.primarySignal.kind === "wage_cpi_real";
   const isOilTradeNetwork = study?.primarySignal.kind === "oil_trade_network";
   const isOilExporterTimeseries = study?.primarySignal.kind === "oil_exporter_timeseries";
@@ -760,12 +760,12 @@ export default function StudyDetailPage() {
   const isGdpIranLocal = study?.gdpCompositionIranLocalOptions === true;
 
   useEffect(() => {
-    if (!isFxUsdToman) {
+    if (!isFxIranCurrencyRegime) {
       setFxUsdTomanYAxisLog(false);
       return;
     }
     setFxUsdTomanYAxisLog(searchParams.get("log") === "1");
-  }, [isFxUsdToman, searchParams]);
+  }, [isFxIranCurrencyRegime, searchParams]);
 
   const oilMacroDefaultsApplied = useRef(false);
   useEffect(() => {
@@ -783,7 +783,7 @@ export default function StudyDetailPage() {
     setShowTimeSeriesEventOverlay(false);
   }, [studyId]);
 
-  const useShortWindowOptions = isOilBrent || isFxUsdToman || isOilAndFx || isRealOil;
+  const useShortWindowOptions = isOilBrent || isFxIranCurrencyRegime || isOilAndFx || isRealOil;
   const windowOptions = useShortWindowOptions
     ? WINDOW_OPTIONS_FX
     : isGoldAndOil
@@ -1357,7 +1357,7 @@ export default function StudyDetailPage() {
   const gdpLevelsIndexedBaseYearLabel = useMemo(() => {
     if (gdpLevelsIndexedBaseYear == null || !gdpLevelsIndexedBaseIsoDate) return "";
     const useIranYearLabelsOnLevels =
-      isFa &&
+      faEligible &&
       isGdpIranLocal &&
       yearAxisMode !== "gregorian" &&
       (isGdpIranAccountsDual || (isGdpComposition && gdpStudyView === "levels"));
@@ -1377,6 +1377,7 @@ export default function StudyDetailPage() {
     isGdpIranAccountsDual,
     isGdpComposition,
     isFa,
+    faEligible,
   ]);
 
   const gdpLevelsDisplaySeries = useMemo(() => {
@@ -1648,12 +1649,20 @@ export default function StudyDetailPage() {
     };
   }, [networkNodesForYear, networkEdgesForYear, networkYearsData, oilTradeSource]);
 
-  const fxDualTimeRange = useMemo((): [string, string] | null => {
-    if (!study || !isFxUsdIrrDual) return null;
+  /** Iran unified FX study: optional anchor window (same controls as former USD→Toman). */
+  const fxIranRegimeTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isFxIranCurrencyRegime) return null;
+    if (anchorEventId) {
+      const ev = events.find((e) => e.id === anchorEventId);
+      if (ev) {
+        const anchorDate = ev.date ?? ev.date_start ?? ev.date_end;
+        if (anchorDate) return computeWindowRangeDays(anchorDate, effectiveWindowValue);
+      }
+    }
     const [start, end] = study.timeRange;
     const resolvedEnd = end === "today" ? new Date().toISOString().slice(0, 10) : end;
     return [start, resolvedEnd];
-  }, [study, isFxUsdIrrDual]);
+  }, [study, isFxIranCurrencyRegime, anchorEventId, events, effectiveWindowValue]);
 
   /** Spread (%) vs official *calendar year* date: open = mean of all open-market days in that Gregorian year. */
   const fxDualYearSpreadPoints = useMemo(() => {
@@ -1686,7 +1695,7 @@ export default function StudyDetailPage() {
   }, [study, isWageCpiReal, anchorEventId, events, effectiveWindowYears]);
 
   const fxTimeRange = useMemo((): [string, string] | null => {
-    if (!study || !(isFxUsdToman || isOilAndFx)) return null;
+    if (!study || !isOilAndFx) return null;
     if (anchorEventId) {
       const ev = events.find((e) => e.id === anchorEventId);
       if (ev) {
@@ -1695,7 +1704,7 @@ export default function StudyDetailPage() {
       }
     }
     return study.timeRange;
-  }, [study, isFxUsdToman, isOilAndFx, anchorEventId, events, effectiveWindowValue]);
+  }, [study, isOilAndFx, anchorEventId, events, effectiveWindowValue]);
 
   const dualTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isOilAndFx) return null;
@@ -1789,10 +1798,10 @@ export default function StudyDetailPage() {
     return sorted[sorted.length - 1] ?? null;
   }, [isOilBrent, oilPoints]);
   const latestFxObservation = useMemo(() => {
-    if (!isFxUsdToman || fxPoints.length === 0) return null;
-    const sorted = [...fxPoints].sort((a, b) => a.date.localeCompare(b.date));
+    if (!isFxIranCurrencyRegime || fxDualOpenPoints.length === 0) return null;
+    const sorted = [...fxDualOpenPoints].sort((a, b) => a.date.localeCompare(b.date));
     return sorted[sorted.length - 1] ?? null;
-  }, [isFxUsdToman, fxPoints]);
+  }, [isFxIranCurrencyRegime, fxDualOpenPoints]);
   const oilShockDates = useMemo(
     () => oilPointsWithVolatility.filter((p) => p.is_shock).map((p) => p.date),
     [oilPointsWithVolatility]
@@ -1862,7 +1871,7 @@ export default function StudyDetailPage() {
     const params = new URLSearchParams({
       study_id: isOilGeopoliticalReaction
         ? "oil_major_exporters"
-        : isFxUsdToman || isOilAndFx
+        : isFxIranCurrencyRegime || isOilAndFx
           ? "iran"
           : studyId,
     });
@@ -1871,7 +1880,7 @@ export default function StudyDetailPage() {
       isOilBrent ||
       isOilGlobalLong ||
       isGoldAndOil ||
-      isFxUsdToman ||
+      isFxIranCurrencyRegime ||
       isOilAndFx ||
       isRealOil ||
       isOilPppIran ||
@@ -1890,18 +1899,18 @@ export default function StudyDetailPage() {
       isIranMoneySupplyM2 ||
       isDutchDiseaseDiagnostics ||
       isOilEconomyOverview ||
-      isFxUsdIrrDual ||
-      isOilExporterTimeseries;
+      isOilExporterTimeseries ||
+      isFxIranCurrencyRegime;
     if (hasEventLayers && !isEventsTimeline) {
       let layers: string[];
       if (!showTimeSeriesEventOverlay) {
         layers = [];
-      } else if (isFxUsdIrrDual) {
-        layers = ["iran_core", "global_macro_oil", "world_core", "sanctions"];
       } else if (isOilExporterTimeseries) {
         layers = ["global_macro_oil", "world_core", "opec_decisions"];
       } else if (isOilEconomyOverview) {
         layers = ["iran_core", "global_macro_oil", "opec_decisions", "sanctions", "world_core"];
+      } else if (isFxIranCurrencyRegime) {
+        layers = ["iran_core", "global_macro_oil", "world_core", "sanctions"];
       } else {
         const studyLayersLen = study.eventLayers?.length ?? 0;
         if (
@@ -1962,7 +1971,7 @@ export default function StudyDetailPage() {
             ];
           } else {
             layers = studyEventLayersForFetch(study.eventLayers, chartEventToggleState, {
-              allowPresidentialLayer: isFxUsdToman || isOilPppIran,
+              allowPresidentialLayer: isFxIranCurrencyRegime || isOilPppIran,
               appendGlobalMacroOilIfMissing: true,
               studyUsesGlobalMacroOilLayer: studyUsesGlobalMacroOilLayer(study),
             });
@@ -1972,7 +1981,7 @@ export default function StudyDetailPage() {
             ...(showIranEvents ? ["iran_core"] : []),
             ...(showWorldEvents ? ["world_core", "world_1900"] : []),
             ...(showSanctionsEvents ? ["sanctions"] : []),
-            ...(showPresidentialTerms && (isFxUsdToman || isOilPppIran) ? ["iran_presidents"] : []),
+            ...(showPresidentialTerms && (isFxIranCurrencyRegime || isOilPppIran) ? ["iran_presidents"] : []),
             ...(showGlobalMacroOil && studyUsesGlobalMacroOilLayer(study) ? ["global_macro_oil"] : []),
           ];
         }
@@ -1999,7 +2008,7 @@ export default function StudyDetailPage() {
     isOilBrent,
     isOilGlobalLong,
     isGoldAndOil,
-    isFxUsdToman,
+    isFxIranCurrencyRegime,
     isOilAndFx,
     isRealOil,
     isOilPppIran,
@@ -2017,7 +2026,6 @@ export default function StudyDetailPage() {
     isIranMoneySupplyM2,
     isDutchDiseaseDiagnostics,
     isOilEconomyOverview,
-    isFxUsdIrrDual,
     isOilExporterTimeseries,
     hasTurkeyComparator,
     isEventsTimeline,
@@ -3121,8 +3129,8 @@ export default function StudyDetailPage() {
   }, [dutchFxTimeRange, isDutchDiseaseDiagnostics]);
 
   useEffect(() => {
-    if (!fxDualTimeRange || !isFxUsdIrrDual) {
-      if (isFxUsdIrrDual) {
+    if (!fxIranRegimeTimeRange || !isFxIranCurrencyRegime) {
+      if (isFxIranCurrencyRegime) {
         setFxDualOfficialPoints([]);
         setFxDualOpenPoints([]);
         setFxDualOfficialSource(null);
@@ -3130,7 +3138,7 @@ export default function StudyDetailPage() {
       }
       return;
     }
-    const [start, end] = fxDualTimeRange;
+    const [start, end] = fxIranRegimeTimeRange;
     let mounted = true;
     setLoading(true);
     setError(null);
@@ -3157,7 +3165,7 @@ export default function StudyDetailPage() {
       })
       .finally(() => mounted && setLoading(false));
     return () => { mounted = false; };
-  }, [fxDualTimeRange, isFxUsdIrrDual]);
+  }, [fxIranRegimeTimeRange, isFxIranCurrencyRegime]);
 
   useEffect(() => {
     if (!wageTimeRange || !isWageCpiReal) return;
@@ -3241,8 +3249,8 @@ export default function StudyDetailPage() {
   }, [dualTimeRange, isOilAndFx, showGold]);
 
   useEffect(() => {
-    if (!fxTimeRange || !(isFxUsdToman || isOilAndFx)) {
-      if (isFxUsdToman || isOilAndFx) {
+    if (!fxTimeRange || !isOilAndFx) {
+      if (isOilAndFx) {
         setFxPoints([]);
         setFxSource(null);
         setFxOfficialPoints([]);
@@ -3250,7 +3258,6 @@ export default function StudyDetailPage() {
       }
       return;
     }
-    if (isOilAndFx) return;
     const [start, end] = fxTimeRange;
     let mounted = true;
     setLoading(true);
@@ -3277,7 +3284,7 @@ export default function StudyDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [fxTimeRange, isFxUsdToman, isOilAndFx]);
+  }, [fxTimeRange, isOilAndFx]);
 
   useEffect(() => {
     if (!study || !isOverviewStub) return;
@@ -3303,20 +3310,17 @@ export default function StudyDetailPage() {
     );
   }, [isiDiagnosticsData]);
 
-  /** ECharts: full-history daily is heavy; downsample for long spans only. KPIs use full `fxPoints`. */
+  /** Oil + FX study only: downsample open FX for chart (usd-toman API). */
   const fxOpenPointsForChart = useMemo(
-    () => (isFxUsdToman ? downsampleFxOpenForDisplay(fxPoints, fxTimeRange) : []),
-    [isFxUsdToman, fxPoints, fxTimeRange]
+    () => (isOilAndFx ? downsampleFxOpenForDisplay(fxPoints, fxTimeRange) : []),
+    [isOilAndFx, fxPoints, fxTimeRange]
   );
 
-  /**
-   * Dual FX (iran_fx_spread): same as USD→Toman — full `fxDualOpenPoints` for means, spread, KPIs, stats;
-   * downsampled series for the open line in ECharts only.
-   */
+  /** Iran FX regime: full `fxDualOpenPoints` for KPIs/stats; downsample for ECharts open line. */
   const fxDualOpenPointsForChart = useMemo(
     () =>
-      isFxUsdIrrDual ? downsampleFxOpenForDisplay(fxDualOpenPoints, fxDualTimeRange) : [],
-    [isFxUsdIrrDual, fxDualOpenPoints, fxDualTimeRange]
+      isFxIranCurrencyRegime ? downsampleFxOpenForDisplay(fxDualOpenPoints, fxIranRegimeTimeRange) : [],
+    [isFxIranCurrencyRegime, fxDualOpenPoints, fxIranRegimeTimeRange]
   );
 
   if (!study) {
@@ -3339,13 +3343,12 @@ export default function StudyDetailPage() {
     isOilBrent ||
     isOilGlobalLong ||
     isGoldAndOil ||
-    isFxUsdToman ||
+    isFxIranCurrencyRegime ||
     isOilAndFx ||
     isRealOil ||
     isOilPppIran ||
     isOilExportCapacity ||
     isOilProductionMajorExporters ||
-    isFxUsdIrrDual ||
     isWageCpiReal ||
     isOilTradeNetwork ||
     isOilExporterTimeseries ||
@@ -3380,8 +3383,8 @@ export default function StudyDetailPage() {
       ? goldPoints.length > 0 && oilPoints.length > 0
       : isOilBrent || isOilGlobalLong
       ? oilPoints.length > 0
-      : isFxUsdToman
-        ? fxPoints.length > 0
+      : isFxIranCurrencyRegime
+        ? fxDualOpenPoints.length > 0
         : isOilAndFx
           ? oilPoints.length > 0 && fxPoints.length > 0
           : isRealOil
@@ -3428,9 +3431,7 @@ export default function StudyDetailPage() {
                             dutchManufacturingPoints.length > 0 ||
                             dutchImportsPoints.length > 0 ||
                             dutchFxPoints.length > 0
-                      : isFxUsdIrrDual
-                        ? fxDualOpenPoints.length > 0
-                        : isWageCpiReal
+                      : isWageCpiReal
                           ? wageNominalPoints.length > 0 && wageCpiPoints.length > 0
                           : isOilTradeNetwork
                             ? networkNodesForYear.length > 0
@@ -3484,14 +3485,15 @@ export default function StudyDetailPage() {
   const oilKpis = (isOilBrent || isOilGlobalLong) ? computeOilKpis(oilPoints) : null;
   const realOilKpis = isRealOil ? computeOilKpis(realOilPoints) : null;
   const pppIranKpis = isOilPppIran ? computeOilKpis(pppIranPoints) : null;
-  const fxKpis = isFxUsdToman ? computeFxKpis(fxPoints) : null;
+  const fxKpis = isFxIranCurrencyRegime ? computeFxKpis(fxDualOpenPoints) : null;
 
   /** Header date range: min/max from all data arrays. Expand to requested range when chart axis extends beyond data. */
   const displayTimeRange = (() => {
     const collect = (arr: { date: string }[]) => arr.map((p) => p.date);
 
     const allDates: string[] = [];
-    if ((isFxUsdToman || isOilAndFx) && fxPoints.length > 0) allDates.push(...collect(fxPoints));
+    if (isFxIranCurrencyRegime && fxDualOpenPoints.length > 0) allDates.push(...collect(fxDualOpenPoints));
+    if (isOilAndFx && fxPoints.length > 0) allDates.push(...collect(fxPoints));
     if ((isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isOilGeopoliticalReaction) && oilPoints.length > 0) allDates.push(...collect(oilPoints));
     if (isGoldAndOil && goldPoints.length > 0) allDates.push(...collect(goldPoints));
     if (isRealOil && realOilPoints.length > 0) allDates.push(...collect(realOilPoints));
@@ -3596,10 +3598,6 @@ export default function StudyDetailPage() {
       }
       allDates.push(...eventDates);
     }
-    if (isFxUsdIrrDual) {
-      if (fxDualOpenPoints.length > 0) allDates.push(...collect(fxDualOpenPoints));
-      if (fxDualOfficialPoints.length > 0) allDates.push(...collect(fxDualOfficialPoints));
-    }
     if (isWageCpiReal) {
       if (wageNominalPoints.length > 0) allDates.push(...collect(wageNominalPoints));
       if (wageCpiPoints.length > 0) allDates.push(...collect(wageCpiPoints));
@@ -3622,7 +3620,7 @@ export default function StudyDetailPage() {
       moneySupplyTimeRange ??
       exporterTimeRange ??
       gdpCompositionTimeRange ??
-      fxDualTimeRange ??
+      fxIranRegimeTimeRange ??
       wageTimeRange ??
       study.timeRange;
     if (allDates.length === 0) return null;
@@ -3644,7 +3642,8 @@ export default function StudyDetailPage() {
         if (data?.timeline?.length) arrays.push(data.timeline);
         if (oilPoints.length > 0) arrays.push(oilPoints);
       }
-      if ((isFxUsdToman || isOilAndFx) && fxPoints.length > 0) arrays.push(fxPoints);
+      if (isFxIranCurrencyRegime && fxDualOpenPoints.length > 0) arrays.push(fxDualOpenPoints);
+      if (isOilAndFx && fxPoints.length > 0) arrays.push(fxPoints);
       if ((isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isOilGeopoliticalReaction) && oilPoints.length > 0) arrays.push(oilPoints);
       if (isGoldAndOil && goldPoints.length > 0) arrays.push(goldPoints);
       if (isRealOil && realOilPoints.length > 0) arrays.push(realOilPoints);
@@ -3695,7 +3694,7 @@ export default function StudyDetailPage() {
         }
         if (eventPoints.length > 0) arrays.push(eventPoints);
       }
-      if (isFxUsdIrrDual) {
+      if (isFxIranCurrencyRegime) {
         if (fxDualOpenPoints.length > 0) arrays.push(fxDualOpenPoints);
         if (fxDualOfficialPoints.length > 0) arrays.push(fxDualOfficialPoints);
       }
@@ -3766,7 +3765,7 @@ export default function StudyDetailPage() {
   const { prev: prevStudy, next: nextStudy } = getPrevNextStudies(study?.id ?? studyId);
 
   const gdpLevelsXAxisYearLabel: ChartAxisYearMode | undefined =
-    isFa &&
+    faEligible &&
     isGdpIranLocal &&
     (isGdpIranAccountsDual || (isGdpComposition && gdpStudyView === "levels"))
       ? yearAxisMode
@@ -3790,12 +3789,10 @@ export default function StudyDetailPage() {
           {faEligible ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <StudyLanguageToggle locale={studyLocale} onLocaleChange={setStudyLocale} />
-              {isFa ? (
-                <span className="inline-flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground border-l border-border/60 pl-3">
-                  <span className="whitespace-nowrap shrink-0">{L(isFa, "Year axis:", "محور سال:")}</span>
-                  <StudyYearDisplayToggle size="compact" isFa={isFa} value={yearAxisMode} onChange={setYearAxisMode} />
-                </span>
-              ) : null}
+              <span className="inline-flex flex-wrap items-center gap-1.5 border-s border-border/60 ps-3 text-xs text-muted-foreground">
+                <span className="whitespace-nowrap shrink-0">{L(isFa, "Year axis:", "محور سال:")}</span>
+                <StudyYearDisplayToggle size="compact" isFa={isFa} value={yearAxisMode} onChange={setYearAxisMode} />
+              </span>
             </div>
           ) : null}
         </div>
@@ -4642,209 +4639,6 @@ export default function StudyDetailPage() {
             </p>
           </InSimpleTerms>
         </>
-      ) : isFxUsdIrrDual ? (
-        <>
-          <Card className="border-border overflow-hidden">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold tracking-tight text-foreground">
-                {L(isFa, "Official vs open-market USD/IRR", faRich?.fxDualCardTitle ?? "نرخ رسمی در برابر بازار آزاد دلار / ریال")}
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                {displayStudy.description}
-              </p>
-              <div className="flex flex-wrap items-center gap-3 pt-2">
-                <label
-                  className="flex items-center gap-1.5 text-xs font-medium text-foreground/90 cursor-pointer"
-                  title={L(isFa, "Show vertical event markers on the chart", "نمایش علامت‌های رویداد روی نمودار")}
-                >
-                  <input
-                    type="checkbox"
-                    checked={showTimeSeriesEventOverlay}
-                    onChange={(e) => setShowTimeSeriesEventOverlay(e.target.checked)}
-                    className="rounded border-border"
-                  />
-                  {L(isFa, "Event overlay", "نمایش رویدادها")}
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showFxSpread}
-                    onChange={(e) => setShowFxSpread(e.target.checked)}
-                    className="rounded border-border"
-                  />
-                  {L(isFa, "Show FX spread (%)", "نمایش شکاف نرخ (٪)")}
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={fxDualYAxisLog}
-                    onChange={(e) => setFxDualYAxisLog(e.target.checked)}
-                    className="rounded border-border"
-                  />
-                  {L(isFa, "Y-axis log scale", "محور عمودی لگاریتمی")}
-                </label>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <MultiSeriesStats
-                series={[
-                  {
-                    label: L(isFa, "Official (WDI, annual)", "رسمی (WDI، سالانه)"),
-                    unit: L(isFa, "toman/USD", "تومان/دلار"),
-                    points: fxDualOfficialPoints,
-                  },
-                  {
-                    label: L(
-                      isFa,
-                      "Open market (FRED + archive + Bonbast, same as USD→Toman)",
-                      "بازار آزاد (FRED + آرشیو + بان‌بست — همان سری اصلی)"
-                    ),
-                    unit: L(isFa, "toman/USD", "تومان/دلار"),
-                    points: fxDualOpenPoints,
-                  },
-                  ...(showFxSpread
-                    ? [
-                        {
-                          label: L(isFa, "Spread", "شکاف"),
-                          unit: "%",
-                          points: fxDualYearSpreadPoints,
-                        },
-                      ]
-                    : []),
-                ]}
-                timeRange={fxDualTimeRange ?? undefined}
-              />
-              <TimelineChart
-                chartLocale={chartLocaleForCharts}
-                exportPresentationStudyHeading={displayStudy.title}
-                xAxisYearLabel={chartYearAxisLabel}
-                exportSourceFooter={studyChartExportSource(isFa, [
-                  "World Bank (official rate, PA.NUS.FCRF); FRED PWT (XRNCUSIRA618NRUG) only where WDI has no year",
-                  "Open market: same merged series as the USD→Toman study (FRED pre-2012; rial-archive + Bonbast when available)",
-                ])}
-                data={[]}
-                valueKey="value"
-                label={L(isFa, "Official (WDI)", "رسمی (WDI)")}
-                events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
-                yAxisLog={fxDualYAxisLog}
-                yAxisNameSuffix={fxDualYAxisLog ? L(isFa, "log scale", "مقیاس لگاریتمی") : undefined}
-                multiSeries={[
-                  {
-                    key: "official",
-                    label: L(isFa, "Official (WDI, annual)", "رسمی (WDI، سالانه)"),
-                    yAxisIndex: 0,
-                    unit: L(isFa, "toman/USD", "تومان/دلار"),
-                    points: fxDualOfficialPoints,
-                    color: SIGNAL_CONCEPT.fx_official,
-                    symbol: "circle",
-                    symbolSize: CHART_LINE_SYMBOL_SIZE,
-                  },
-                  {
-                    key: "open",
-                    label: L(isFa, "Open market (merged, same as USD→Toman)", "بازار آزاد (ادغام‌شده، همان مطالعهٔ اصلی)"),
-                    yAxisIndex: 0,
-                    unit: L(isFa, "toman/USD", "تومان/دلار"),
-                    points: fxDualOpenPointsForChart,
-                    color: SIGNAL_CONCEPT.fx_open,
-                    symbol: "diamond",
-                    symbolSize: CHART_LINE_SYMBOL_SIZE,
-                  },
-                  ...(showFxSpread
-                    ? [
-                        {
-                          key: "spread",
-                          label: L(isFa, "Spread (%)", "شکاف (٪)"),
-                          yAxisIndex: 1,
-                          unit: "%",
-                          color: SIGNAL_CONCEPT.fx_spread,
-                          symbol: "triangle",
-                          symbolSize: CHART_LINE_SYMBOL_SIZE,
-                          points: fxDualYearSpreadPoints,
-                        } as ChartSeries,
-                      ]
-                    : []),
-                ]}
-                timeRange={fxDualTimeRange ?? study.timeRange}
-                mutedBands={false}
-                chartRangeGranularity="month"
-                exportFileStem="iran-fx-dual-rates"
-              />
-              <LearningNote locale={isFa ? "fa" : "en"}
-                sections={[
-                  {
-                    heading: "How to read this chart",
-                    bullets: [
-                      "Official: World Bank WDI (PA.NUS.FCRF), period-average official rate, annual, in toman per 1 USD (1 toman = 10 rials). FRED (Penn World Table, XRNCUSIRA618NRUG) fills a calendar year only if WDI has no value for that year.",
-                      "Open market: the same merged open-market history as the main USD→Toman study — FRED (annual) before the public archive, then rial-archive + Bonbast for higher-frequency points. The two level series are not cut to a common start date; use spread only as a comparison when both are defined in a year.",
-                    ],
-                  },
-                  {
-                    heading: "Why the FX spread matters",
-                    bullets: [
-                      "When official and market rates diverge, the gap reflects constraints and expectations rather than a single “true” price.",
-                      "Large or persistent spreads often coincide with capital controls, rationing of foreign exchange, or informal markets.",
-                    ],
-                  },
-                  {
-                    heading: "Measurement choices & limitations",
-                    bullets: [
-                      "Official: WDI may be null in the most recent year until the Bank republishes; FRED (PWT) is annual through its own end. No imputed “flat” extension to today on the official line when WDI is missing.",
-                      "Open market: where the merge has an annual FRED point before 2012, that year’s open line uses that value; from the archive window onward, daily/spot values apply. The official line can start or end in a different year than the open line without truncating the other series.",
-                      "Spread (%, optional): for each official calendar year, mean open-market toman/USD in that year vs official at YYYY-01-01, only when there is at least one open observation in that year.",
-                    ],
-                  },
-                  {
-                    heading: "What this study does not claim",
-                    bullets: [
-                      "This study does not explain why the spread exists or what causes it to change.",
-                      "It does not predict future rates or policy. It describes the coexistence of two rates and the gap between them.",
-                    ],
-                  },
-                ]}
-              />
-              {displayStudy.observations?.length ? <DataObservations locale={isFa ? "fa" : "en"} observations={displayStudy.observations ?? []} /> : null}
-              {study.concepts?.length ? <ConceptsUsed locale={isFa ? "fa" : "en"} conceptKeys={study.concepts} /> : null}
-              <SourceInfo
-                items={[
-                  ...(fxDualOfficialSource
-                    ? [
-                        {
-                          label: "Official (WDI + PWT backfill)",
-                          sourceName: fxDualOfficialSource.name ?? "World Bank WDI",
-                          sourceUrl: fxDualOfficialSource.url || undefined,
-                          sourceDetail: fxDualOfficialSource.publisher ?? "",
-                          unitLabel: "toman/USD",
-                          unitNote: fxDualOfficialSource.notes ?? undefined,
-                        },
-                      ]
-                    : []),
-                  ...(fxDualOpenSource
-                    ? [
-                        {
-                          label: "Open market",
-                          sourceName: fxDualOpenSource.name ?? "Bonbast + rial-archive",
-                          sourceUrl: fxDualOpenSource.url || undefined,
-                          sourceDetail: fxDualOpenSource.publisher ?? "",
-                          unitLabel: "toman/USD",
-                          unitNote: fxDualOpenSource.notes ?? undefined,
-                        },
-                      ]
-                    : []),
-                ]}
-                note="Official: WDI (annual) + PWT (FRED) for missing years. Open: same merge as the USD→Toman study (FRED pre-2012; rial-archive + Bonbast). 1 toman = 10 rials."
-              />
-              <InSimpleTerms locale={isFa ? "fa" : "en"}>
-                <p>
-                  Iran has at times had an official exchange rate set by policy and a different rate at which people actually buy and sell currency in the open market.
-                  This chart shows both: the official (proxy) series and the open-market rate. The gap between them is descriptive—it does not explain why the gap exists or what will happen next.
-                </p>
-                <p>
-                  The study emphasizes constraint and measurement: two rates can coexist, and the way we measure them (sources, frequency) affects what we see. It does not make causal or predictive claims.
-                </p>
-              </InSimpleTerms>
-            </CardContent>
-          </Card>
-        </>
       ) : isOilGeopoliticalReaction && geopoliticalStats ? (
         <div>
           {displayStudy?.unitLabel && (
@@ -5263,7 +5057,7 @@ export default function StudyDetailPage() {
             </Card>
           </div>
         </div>
-      ) : isFxUsdToman && fxKpis ? (
+      ) : isFxIranCurrencyRegime && fxKpis ? (
         <div>
           {displayStudy?.unitLabel && (
             <p className="text-sm text-muted-foreground mb-2">
@@ -5358,7 +5152,6 @@ export default function StudyDetailPage() {
         !isComparativeHistoryTimeline &&
         !isEventsTimeline &&
         !isFollowerGrowthDynamics &&
-        !isFxUsdIrrDual &&
         !isYoutubeCommentAnalysis && (
       <Card className="chart-card border-border overflow-hidden">
         <CardHeader>
@@ -5418,8 +5211,8 @@ export default function StudyDetailPage() {
                                         )
                                     : isOilExportCapacity
                                       ? "Oil price and export capacity proxy"
-                                      : isFxUsdToman
-                                        ? "USD→Toman (open market)"
+                                      : isFxIranCurrencyRegime
+                                        ? "Open market USD→toman"
                                         : isOilAndFx
                                           ? "Oil and USD/Toman"
                                           : data?.timeline?.length
@@ -5514,8 +5307,8 @@ export default function StudyDetailPage() {
                                       )
                                   : isOilExportCapacity
                                     ? "Oil price (left) and export capacity proxy (right, indexed). Sanctions markers."
-                                    : isFxUsdToman
-                                      ? "Open-market USD/toman rate (toman per USD) with event markers"
+                                    : isFxIranCurrencyRegime
+                                      ? "Default: open-market USD/toman. Optional official rate and yearly spread (distortion) when toggled."
                                       : isOilAndFx
                                         ? "Brent oil (left axis) and USD→toman (right axis) with event markers. Brent is a benchmark oil type traded on world markets."
                                         : data?.timeline?.length
@@ -6907,7 +6700,7 @@ export default function StudyDetailPage() {
             </>
           ) : (
             <>
-          {(isOverviewStub || isOilBrent || isFxUsdToman || isOilAndFx || (isOilPppIran && !hasTurkeyComparator)) && !isOilGlobalLong && !isGoldAndOil && !isRealOil && (
+          {(isOverviewStub || isOilBrent || isFxIranCurrencyRegime || isOilAndFx || (isOilPppIran && !hasTurkeyComparator)) && !isOilGlobalLong && !isGoldAndOil && !isRealOil && (
             <div className="mb-3 flex flex-shrink-0 flex-wrap items-center gap-3 border-b border-border pb-3">
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                 <input
@@ -6945,7 +6738,7 @@ export default function StudyDetailPage() {
                 />
                 Global oil/macro (curated)
               </label>
-              {(isFxUsdToman || isOilPppIran) && (
+              {(isFxIranCurrencyRegime || isOilPppIran) && (
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                   <input
                     type="checkbox"
@@ -6956,24 +6749,44 @@ export default function StudyDetailPage() {
                   Show presidential terms
                 </label>
               )}
-              {isFxUsdToman && (
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={fxUsdTomanYAxisLog}
-                    onChange={(e) => {
-                      const next = e.target.checked;
-                      setFxUsdTomanYAxisLog(next);
-                      const p = new URLSearchParams(searchParams.toString());
-                      if (next) p.set("log", "1");
-                      else p.delete("log");
-                      const qs = p.toString();
-                      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-                    }}
-                    className="rounded border-border"
-                  />
-                  {L(isFa, "Log scale", "مقیاس لگاریتمی")}
-                </label>
+              {isFxIranCurrencyRegime && (
+                <>
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={fxRegimeShowOfficial}
+                      onChange={(e) => setFxRegimeShowOfficial(e.target.checked)}
+                      className="rounded border-border"
+                    />
+                    {L(isFa, "Show official rate", "نمایش نرخ رسمی")}
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showFxSpread}
+                      onChange={(e) => setShowFxSpread(e.target.checked)}
+                      className="rounded border-border"
+                    />
+                    {L(isFa, "Show spread", "نمایش شکاف")}
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={fxUsdTomanYAxisLog}
+                      onChange={(e) => {
+                        const next = e.target.checked;
+                        setFxUsdTomanYAxisLog(next);
+                        const p = new URLSearchParams(searchParams.toString());
+                        if (next) p.set("log", "1");
+                        else p.delete("log");
+                        const qs = p.toString();
+                        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+                      }}
+                      className="rounded border-border"
+                    />
+                    {L(isFa, "Log scale", "مقیاس لگاریتمی")}
+                  </label>
+                </>
               )}
             </div>
           )}
@@ -10239,31 +10052,61 @@ export default function StudyDetailPage() {
                 </p>
               </InSimpleTerms>
             </>
-          ) : isFxUsdToman ? (
+          ) : isFxIranCurrencyRegime ? (
             <>
+              <MultiSeriesStats
+                series={[
+                  {
+                    label: L(isFa, "Open market", "بازار آزاد"),
+                    unit: L(isFa, "toman/USD", "تومان/دلار"),
+                    points: fxDualOpenPoints,
+                  },
+                  ...(fxRegimeShowOfficial
+                    ? [
+                        {
+                          label: L(isFa, "Official (WDI, annual)", "رسمی (WDI، سالانه)"),
+                          unit: L(isFa, "toman/USD", "تومان/دلار"),
+                          points: fxDualOfficialPoints,
+                        },
+                      ]
+                    : []),
+                  ...(showFxSpread
+                    ? [
+                        {
+                          label: L(isFa, "Spread (approx. %)", "شکاف (تقریبی ٪)"),
+                          unit: "%",
+                          points: fxDualYearSpreadPoints,
+                        },
+                      ]
+                    : []),
+                ]}
+                timeRange={fxIranRegimeTimeRange ?? undefined}
+              />
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
                 exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
-                exportSourceFooter={studyChartExportSource(
-                  isFa,
-                  [fxSource?.name, fxOfficialSource?.name].filter(Boolean) as string[]
-                )}
+                exportSourceFooter={studyChartExportSource(isFa, [
+                  "World Bank (official rate, PA.NUS.FCRF); FRED PWT (XRNCUSIRA618NRUG) only where WDI has no year",
+                  "Open market: FRED pre-2012; rial-archive + Bonbast when available",
+                ])}
                 data={[]}
                 valueKey="value"
-                label={L(isFa, "Open market (USD→Toman)", "بازار آزاد (دلار→تومان)")}
+                label={L(isFa, "Open market (USD→toman)", "بازار آزاد (دلار→تومان)")}
                 events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                 anchorEventId={anchorEventId || undefined}
-                timeRange={fxTimeRange ?? study.timeRange}
+                timeRange={fxIranRegimeTimeRange ?? study.timeRange}
                 highlightLatestPoint
                 forceTimeAxis
                 yAxisLog={fxUsdTomanYAxisLog}
                 yAxisNameSuffix={
                   fxUsdTomanYAxisLog ? L(isFa, "(log₁₀ scale)", "(لگ ۱۰)") : undefined
                 }
+                chartRangeGranularity="month"
+                exportFileStem="iran-fx-regime"
                 multiSeries={[
                   {
-                    key: "fx_open",
+                    key: "open",
                     label: L(
                       isFa,
                       "Open market (archive + Bonbast; FRED annual pre-2012)",
@@ -10271,27 +10114,24 @@ export default function StudyDetailPage() {
                     ),
                     yAxisIndex: 0,
                     unit: L(isFa, "toman/USD", "تومان/دلار"),
-                    points: fxOpenPointsForChart.length > 0 ? fxOpenPointsForChart : fxPoints,
-                    color: SIGNAL_CONCEPT.exchange_rate,
+                    points:
+                      fxDualOpenPointsForChart.length > 0 ? fxDualOpenPointsForChart : fxDualOpenPoints,
+                    color: SIGNAL_CONCEPT.fx_open,
                     symbol: "circle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                     showSymbol: false,
                     lineWidth: 2.25,
                     linePattern: "solid",
                   },
-                  ...(fxOfficialPoints.length > 0
+                  ...(fxRegimeShowOfficial && fxDualOfficialPoints.length > 0
                     ? [
                         {
-                          key: "fx_official",
-                          label: L(
-                            isFa,
-                            "Official annual (WDI FCRF + FRED backfill)",
-                            "رسمی سالانه (WDI FCRF + FRED اگر WDI نبود)"
-                          ),
+                          key: "official",
+                          label: L(isFa, "Official (WDI, annual)", "رسمی (WDI، سالانه)"),
                           yAxisIndex: 0,
                           unit: L(isFa, "toman/USD", "تومان/دلار"),
-                          points: fxOfficialPoints,
-                          color: "hsl(220, 14%, 46%)",
+                          points: fxDualOfficialPoints,
+                          color: SIGNAL_CONCEPT.fx_official,
                           symbol: "diamond",
                           symbolSize: CHART_LINE_SYMBOL_SIZE * 0.85,
                           showSymbol: false,
@@ -10300,46 +10140,95 @@ export default function StudyDetailPage() {
                         } satisfies ChartSeries,
                       ]
                     : []),
+                  ...(showFxSpread && fxDualYearSpreadPoints.length > 0
+                    ? [
+                        {
+                          key: "spread",
+                          label: L(isFa, "Spread (%)", "شکاف (٪)"),
+                          yAxisIndex: 1,
+                          unit: "%",
+                          color: SIGNAL_CONCEPT.fx_spread,
+                          symbol: "triangle",
+                          symbolSize: CHART_LINE_SYMBOL_SIZE,
+                          points: fxDualYearSpreadPoints,
+                        } as ChartSeries,
+                      ]
+                    : []),
                 ]}
               />
-              {(fxSource || fxOfficialSource) && (
+              <LearningNote locale={isFa ? "fa" : "en"}
+                sections={[
+                  {
+                    heading: L(isFa, "Three rates", "سه نما"),
+                    bullets: [
+                      L(
+                        isFa,
+                        "Open market: the merged Bonbast / rial-archive / FRED series—closest to the exchange rate people actually trade at in normal times.",
+                        "بازار آزاد: سری ادغام‌شدهٔ بان‌بست / آرشیو / FRED — نزدیک‌تر به نرخی که در شرایط عادی معامله می‌شود."
+                      ),
+                      L(
+                        isFa,
+                        "Official rate: policy-controlled proxy from international statistics (WDI annual, with FRED backfill)—not a street quote.",
+                        "نرخ رسمی: پراکسی کنترل‌شدهٔ سیاست از آمار بین‌المللی (WDI سالانه، با پرکن FRED) — نه قیمت خیابان."
+                      ),
+                      L(
+                        isFa,
+                        "Spread (optional): yearly gap between mean open and official, expressed as a percentage—useful as a distortion indicator when both exist for that year.",
+                        "شکاف (اختیاری): فاصلهٔ سالانه بین میانگین بازار آزاد و رسمی به صورت درصد — وقتی هر دو برای آن سال هستند، به‌عنوان نشانگر اعوجاج مفید است."
+                      ),
+                    ],
+                  },
+                  {
+                    heading: L(isFa, "Measurement limits", "محدودیت اندازه‌گیری"),
+                    bullets: [
+                      L(
+                        isFa,
+                        "Official and open lines may start/end in different years; spread is only computed when both sides have data in the same calendar year.",
+                        "خطوط رسمی و آزاد ممکن است سال شروع/پایان متفاوت داشته باشند؛ شکاف فقط وقتی هر دو در همان سال میلادی داده دارند محاسبه می‌شود."
+                      ),
+                    ],
+                  },
+                ]}
+              />
+              {(fxDualOpenSource || fxDualOfficialSource) && (
                 <SourceInfo
                   items={[
-                    ...(fxSource
+                    ...(fxDualOpenSource
                       ? [
                           {
-                            label: L(isFa, "Open market (chart)", "بازار آزاد (نمودار)"),
-                            sourceName: fxSource.name,
-                            sourceUrl: fxSource.url,
-                            sourceDetail: fxSource.publisher,
+                            label: L(isFa, "Open market", "بازار آزاد"),
+                            sourceName: fxDualOpenSource.name ?? "Bonbast + rial-archive",
+                            sourceUrl: fxDualOpenSource.url || undefined,
+                            sourceDetail: fxDualOpenSource.publisher ?? "",
                             unitLabel: L(isFa, "toman/USD", "تومان/دلار"),
-                            unitNote: "1 toman = 10 rials",
+                            unitNote: fxDualOpenSource.notes ?? undefined,
                           },
                         ]
                       : []),
-                    ...(fxOfficialSource
+                    ...(fxDualOfficialSource
                       ? [
                           {
-                            label: L(isFa, "Official (dashed line)", "رسمی (خط چین‌دار)"),
-                            sourceName: fxOfficialSource.name,
-                            sourceUrl: fxOfficialSource.url,
-                            sourceDetail: fxOfficialSource.publisher,
-                            unitLabel: L(isFa, "toman/USD (annual average)", "تومان/دلار (میانگین سال)"),
-                            unitNote: fxOfficialSource.notes,
+                            label: L(isFa, "Official (WDI + PWT backfill)", "رسمی (WDI + پرکن PWT)"),
+                            sourceName: fxDualOfficialSource.name ?? "World Bank WDI",
+                            sourceUrl: fxDualOfficialSource.url || undefined,
+                            sourceDetail: fxDualOfficialSource.publisher ?? "",
+                            unitLabel: L(isFa, "toman/USD", "تومان/دلار"),
+                            unitNote: fxDualOfficialSource.notes ?? undefined,
                           },
                         ]
                       : []),
                   ]}
+                  note="Official: WDI (annual) + PWT (FRED) for missing years. Open: FRED pre-2012; rial-archive + Bonbast. 1 toman = 10 rials."
                 />
               )}
               {study.concepts?.length ? <ConceptsUsed locale={isFa ? "fa" : "en"} conceptKeys={study.concepts} /> : null}
               <InSimpleTerms locale={isFa ? "fa" : "en"}>
                 <p>
-                  The solid line is the open-market rate (Bonbast and the public rial archive where available; before that, annual data from the same merge as elsewhere on SignalMap).
-                  The dashed line, when shown, is the official period-average rate from international statistics (World Bank, with a fill from FRED where WDI is missing a year)—annual only, for comparison, not a substitute for a market quote.
-                </p>
-                <p>
-                  When the open rate rises, more tomans are needed to buy one dollar. The toman is Iran’s main currency unit (one toman equals ten rials). This is descriptive context, not an explanation of causes.
+                  {L(
+                    isFa,
+                    "By default you see only the open-market rate—the signal closest to the lived economy. Turn on the official rate to compare policy-controlled reference levels. The optional spread summarizes how far those two diverge in a year (when both are defined)—a distortion indicator, not a causal explanation.",
+                    "پیش‌فرض فقط بازار آزاد است — نزدیک‌تر به نرخ تجربه‌شده. نرخ رسمی را برای مقایسهٔ سیاست می‌توان روشن کرد؛ شکاف سالانه فاصلهٔ آن دو را توصیفی نشان می‌دهد، نه علت یا پیش‌بینی."
+                  )}
                 </p>
               </InSimpleTerms>
             </>

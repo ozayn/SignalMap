@@ -361,6 +361,8 @@ export function FollowerGrowthChart({
           onEndChange={setClipEnd}
           onExportPng={handleExportPng}
           mode="full"
+          startYearLabel={chartLocaleResolved === "fa" ? "سال شروع" : "Start Year"}
+          endYearLabel={chartLocaleResolved === "fa" ? "سال پایان" : "End Year"}
         />
       ) : showExportOnlyToolbar ? (
         <StudyChartControls
@@ -372,6 +374,8 @@ export function FollowerGrowthChart({
           onEndChange={setClipEnd}
           onExportPng={handleExportPng}
           mode="exportOnly"
+          startYearLabel={chartLocaleResolved === "fa" ? "سال شروع" : "Start Year"}
+          endYearLabel={chartLocaleResolved === "fa" ? "سال پایان" : "End Year"}
         />
       ) : null}
       <p className={STUDY_CHART_TITLE_WRAP_CLASS} dir={chartLocaleResolved === "fa" ? "rtl" : "ltr"}>

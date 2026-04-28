@@ -94,7 +94,7 @@ export function getSignalTags(study: StudyMeta): string[] {
   ) {
     tags.push("Oil");
   }
-  if (kind === "fx_usd_toman" || kind === "oil_and_fx" || kind === "fx_usd_irr_dual") {
+  if (kind === "fx_iran_currency_regime" || kind === "oil_and_fx") {
     tags.push("FX");
   }
   if (kind === "gold_and_oil") tags.push("Gold");
@@ -176,7 +176,7 @@ function subjectSearchAliasBits(study: StudyMeta): string[] {
     b.push("نقدینگی", "M2", "broad money", "money supply", "پول وسیع", "نقدینگی m2", "رشد نقدینگی", "liquidity");
   }
 
-  if (k === "fx_usd_toman" || k === "oil_and_fx" || k === "fx_usd_irr_dual") {
+  if (k === "fx_iran_currency_regime" || k === "oil_and_fx") {
     b.push("نرخ ارز", "نرخ آزاد", "نرخ رسمی", "تومان", "toman", "dollar", "forex", "دلار", "foreign exchange", "FX");
   }
 
@@ -292,12 +292,22 @@ function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
         tags: [],
         keywords: ["gold", "conflict", "monetary", "1900", "shocks"],
       };
-    case "fx_usd_toman":
+    case "fx_iran_currency_regime":
       return {
         countries: ["iran"],
         themes: ["fx", "macro"],
         tags: [],
-        keywords: ["toman", "rial", "exchange rate", "open market", "currency"],
+        keywords: [
+          "toman",
+          "rial",
+          "exchange rate",
+          "open market",
+          "official rate",
+          "spread",
+          "multiple exchange rates",
+          "currency",
+          "irr",
+        ],
       };
     case "oil_and_fx":
       return {
@@ -405,13 +415,6 @@ function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
         themes: ["social", "macro"],
         tags: [],
         keywords: ["twitter", "instagram", "youtube", "followers", "growth model", "logistic"],
-      };
-    case "fx_usd_irr_dual":
-      return {
-        countries: ["iran"],
-        themes: ["fx", "macro"],
-        tags: [],
-        keywords: ["official rate", "spread", "multiple exchange rates", "irr"],
       };
     case "wage_cpi_real":
       return {

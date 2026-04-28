@@ -20,6 +20,13 @@ console.log(
  * Behind a reverse proxy with a different host, you may need:
  * `experimental.serverActions.allowedOrigins` (see Next.js docs) so same-origin checks pass.
  */
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+  async redirects() {
+    return [
+      { source: "/studies/usd-toman", destination: "/studies/iran-fx-regime", permanent: true },
+      { source: "/studies/iran_fx_spread", destination: "/studies/iran-fx-regime", permanent: true },
+    ];
+  },
+};
 
 export default nextConfig;

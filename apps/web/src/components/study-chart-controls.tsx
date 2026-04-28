@@ -20,6 +20,9 @@ export type StudyChartControlsProps = {
    * `full`: start/end + export (default).
    */
   mode?: StudyChartControlsMode;
+  /** Visible labels for year range inputs (default English). */
+  startYearLabel?: string;
+  endYearLabel?: string;
 };
 
 /** Toolbar row: inputs and export share one baseline (bottom-aligned). */
@@ -52,6 +55,8 @@ export function StudyChartControls({
   onExportPng,
   disabledExport,
   mode = "full",
+  startYearLabel = "Start Year",
+  endYearLabel = "End Year",
 }: StudyChartControlsProps) {
   const minD = minDate.slice(0, 10);
   const maxD = maxDate.slice(0, 10);
@@ -139,7 +144,7 @@ export function StudyChartControls({
   return (
     <div className={TOOLBAR_ROW}>
       <label className="flex w-[5.5rem] shrink-0 flex-col" dir="ltr">
-        <span className={FIELD_LABEL}>Start Year</span>
+        <span className={FIELD_LABEL}>{startYearLabel}</span>
         <input
           type="text"
           inputMode="numeric"
@@ -163,7 +168,7 @@ export function StudyChartControls({
         />
       </label>
       <label className="flex w-[5.5rem] shrink-0 flex-col" dir="ltr">
-        <span className={FIELD_LABEL}>End Year</span>
+        <span className={FIELD_LABEL}>{endYearLabel}</span>
         <input
           type="text"
           inputMode="numeric"

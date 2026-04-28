@@ -1338,6 +1338,12 @@ export function TimelineChart({
     const dateMin = minDate ? Date.parse(minDate) : 0;
     const dateMax = maxDate ? Date.parse(maxDate) : 0;
     const spanDays = dateMax && dateMin ? (dateMax - dateMin) / 86400000 : 0;
+    /**
+     * Year-sized ticks (YYYY / Jalali / both), not month+day. Matches multi-year windows like 1970–1990.
+     * Avoids repeated "Jan 1" when ticks fall on year boundaries but span was misclassified as "short" (<400d).
+     * Sub-year or ~one calendar year (e.g. 2024–2025 ~366d): allow month/day granularity.
+     */
+    const timeAxisPreferYearLabels = spanYears >= 2 || spanDays >= 400;
     const useTimeAxis =
       forceTimeAxis || spanYears > 40 || (spanDays > 0 && spanDays < 400);
 
@@ -1374,7 +1380,7 @@ export function TimelineChart({
         ? `{gy|${localizeChartNumericDisplayString(gregorian, chartNumeralLocale)}}\n{jy|${localizeChartNumericDisplayString(jalali, chartNumeralLocale)}}`
         : localizeChartNumericDisplayString(gregorian, chartNumeralLocale);
     };
-    const isShortSpanTimeAxis = useTimeAxis && spanDays < 400;
+    const isShortSpanTimeAxis = useTimeAxis && !timeAxisPreferYearLabels;
     const dualYearStackedAxisActive =
       axisYearMode === "both" && (!useTimeAxis || !isShortSpanTimeAxis);
     const bumpGridBottomForDualYear = (bottomPct: string) => {
@@ -1987,14 +1993,12 @@ export function TimelineChart({
       },
       xAxis: useTimeAxis
         ? (() => {
-            const spanDays = dateMax && dateMin ? (dateMax - dateMin) / 86400000 : 0;
-            const isShortSpan = spanDays < 400;
             const dayMs = 86400000;
             /** ~one Gregorian year: prevents multiple time ticks in the same year with a year-only label (USD→Toman, long spans). */
             const approxYearMs = 365 * dayMs;
-            const minIntervalMs = isShortSpan
-              ? Math.max(dayMs, Math.ceil(spanDays / 6) * dayMs)
-              : approxYearMs;
+            const minIntervalMs = timeAxisPreferYearLabels
+              ? approxYearMs
+              : Math.max(dayMs, Math.ceil(spanDays / 6) * dayMs);
             return {
               type: "time",
               min: dateMin,
@@ -2004,12 +2008,8 @@ export function TimelineChart({
               axisLabel: {
                 hideOverlap: true,
                 formatter: (value: number) =>
-                  isShortSpan
-                    ? new Date(value).toLocaleDateString(chartNumeralLocale === "fa" ? "fa-IR" : undefined, {
-                        month: "short",
-                        day: "numeric",
-                      })
-                    : axisYearMode === "both"
+                  timeAxisPreferYearLabels
+                    ? axisYearMode === "both"
                       ? (() => {
                           const iso = new Date(value).toISOString().slice(0, 10);
                           const { gregorian, jalali } = getChartAxisYearDisplayParts(iso);
@@ -2017,8 +2017,12 @@ export function TimelineChart({
                             ? `{gy|${localizeChartNumericDisplayString(gregorian, chartNumeralLocale)}}\n{jy|${localizeChartNumericDisplayString(jalali, chartNumeralLocale)}}`
                             : localizeChartNumericDisplayString(gregorian, chartNumeralLocale);
                         })()
-                      : formatChartTimeAxisYearLabel(value, axisYearMode, chartNumeralLocale),
-                ...(axisYearMode === "both" && !isShortSpan ? { rich: axisLabelBothRich } : {}),
+                      : formatChartTimeAxisYearLabel(value, axisYearMode, chartNumeralLocale)
+                    : new Date(value).toLocaleDateString(chartNumeralLocale === "fa" ? "fa-IR" : undefined, {
+                        month: "short",
+                        day: "numeric",
+                      }),
+                ...(axisYearMode === "both" && timeAxisPreferYearLabels ? { rich: axisLabelBothRich } : {}),
                 color: mutedFg,
                 fontSize: xAxisTickFont,
               },
@@ -2785,6 +2789,8 @@ export function TimelineChart({
           onEndChange={setClipEnd}
           onExportPng={handleExportPng}
           mode="full"
+          startYearLabel={chartLocaleResolved === "fa" ? "سال شروع" : "Start Year"}
+          endYearLabel={chartLocaleResolved === "fa" ? "سال پایان" : "End Year"}
         />
       ) : showExportOnlyToolbar ? (
         <StudyChartControls
@@ -2796,6 +2802,8 @@ export function TimelineChart({
           onEndChange={setClipEnd}
           onExportPng={handleExportPng}
           mode="exportOnly"
+          startYearLabel={chartLocaleResolved === "fa" ? "سال شروع" : "Start Year"}
+          endYearLabel={chartLocaleResolved === "fa" ? "سال پایان" : "End Year"}
         />
       ) : null}
       {studyTitleText ? (

@@ -12,7 +12,7 @@ export type StudyVisualAnchor =
 export function getStudyVisualAnchor(study: StudyMeta): StudyVisualAnchor {
   const k = study.primarySignal.kind as PrimarySignal["kind"];
 
-  if (k === "fx_usd_toman" || k === "fx_usd_irr_dual") return "fx";
+  if (k === "fx_iran_currency_regime") return "fx";
 
   if (
     k === "gold_and_oil" ||

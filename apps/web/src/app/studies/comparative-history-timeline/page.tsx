@@ -24,7 +24,7 @@ export default function ComparativeHistoryTimelinePage() {
   const { yearAxisMode, setYearAxisMode } = useIranStudyChartYearMode();
   const [showAllImportance, setShowAllImportance] = useState(false);
   const isFa = lang === "fa";
-  const chartYearAxis = isFa ? yearAxisMode : undefined;
+  const chartYearAxis = yearAxisMode;
 
   useEffect(() => {
     if (study && isStudyListedForDeployment(study)) {
@@ -74,12 +74,10 @@ export default function ComparativeHistoryTimelinePage() {
         <div className="flex flex-col items-stretch gap-2 sm:items-end">
           <div className="flex flex-wrap items-center justify-end gap-2">
             <StudyLanguageToggle locale={lang} onLocaleChange={setLang} />
-            {isFa ? (
-              <span className="inline-flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="shrink-0 whitespace-nowrap">{L(isFa, "Year axis:", "محور سال:")}</span>
-                <StudyYearDisplayToggle size="compact" isFa={isFa} value={yearAxisMode} onChange={setYearAxisMode} />
-              </span>
-            ) : null}
+            <span className="inline-flex flex-wrap items-center gap-1.5 border-s border-border/60 ps-3 text-xs text-muted-foreground">
+              <span className="shrink-0 whitespace-nowrap">{L(isFa, "Year axis:", "محور سال:")}</span>
+              <StudyYearDisplayToggle size="compact" isFa={isFa} value={yearAxisMode} onChange={setYearAxisMode} />
+            </span>
           </div>
         </div>
       </div>

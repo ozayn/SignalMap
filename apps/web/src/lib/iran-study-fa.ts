@@ -7,12 +7,11 @@ import { IRAN_STUDY_FA_DISPLAY } from "@/lib/iran-study-fa-copy";
  */
 export const IRAN_FA_STUDY_IDS = new Set<string>([
   "iran",
-  "usd-toman",
+  "iran-fx-regime",
   "oil-and-fx",
   "iran_oil_ppp",
   "iran_oil_ppp_turkey",
   "iran_oil_export_capacity",
-  "iran_fx_spread",
   "iran_real_wage_cpi",
   "iran-gdp-composition",
   "iran-gdp-accounts-dual",

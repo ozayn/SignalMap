@@ -3,7 +3,7 @@ export type PrimarySignal =
   | { kind: "oil_brent" }
   | { kind: "oil_global_long" }
   | { kind: "gold_and_oil" }
-  | { kind: "fx_usd_toman" }
+  | { kind: "fx_iran_currency_regime" }
   | { kind: "oil_and_fx" }
   | { kind: "real_oil" }
   | { kind: "oil_ppp_iran" }
@@ -15,7 +15,6 @@ export type PrimarySignal =
   | { kind: "comparative_history_timeline" }
   | { kind: "iran_dynasties_timeline" }
   | { kind: "follower_growth_dynamics" }
-  | { kind: "fx_usd_irr_dual" }
   | { kind: "wage_cpi_real" }
   | { kind: "oil_trade_network" }
   | { kind: "oil_exporter_timeseries" }
@@ -120,17 +119,30 @@ export const STUDIES: StudyMeta[] = [
     unitLabel: "USD per barrel",
   },
   {
-    id: "usd-toman",
+    id: "iran-fx-regime",
     number: 3,
-    title: "USD→Toman (Open Market) — Socio-economic Signal",
+    title: "Iran Currency Regime — Official vs Open Market",
     timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
     description:
-      "Open-market toman per US dollar as a lived-economy pressure indicator (Bonbast / rial archive from 2012; FRED PWT annual pre-archive). Official WDI annual shown dashed for comparison. For official vs open and spread, see the dual-rate study.",
+      "Open-market USD→toman is the lived-economy signal (Bonbast / rial archive; FRED annual pre-archive). Toggle in the official policy rate and the yearly spread—how far open and official diverge—as a distortion indicator.",
     status: "active",
     groupPlacements: [{ group: "core", order: 1 }],
-    primarySignal: { kind: "fx_usd_toman" },
-    concepts: ["fx", "spread", "event_overlay"],
+    primarySignal: { kind: "fx_iran_currency_regime" },
+    concepts: [
+      "fx",
+      "spread",
+      "event_overlay",
+      "exchange_rate_regime",
+      "multiple_exchange_rates",
+      "official_exchange_rate",
+      "fx_rate",
+      "capital_controls",
+      "measurement_vs_reality",
+      "fx_spread",
+      "derived_series",
+    ],
     unitLabel: "toman per USD",
+    tags: ["FX", "Iran"],
   },
   {
     id: "oil-and-fx",
@@ -342,32 +354,6 @@ export const STUDIES: StudyMeta[] = [
     keywords: ["Iran", "iran", "history", "dynasty", "dynasties", "BCE", "chronology", "Persia", "vertical", "Achaemenid", "Sasanian"],
     primarySignal: { kind: "iran_dynasties_timeline" },
     concepts: ["event_overlay"],
-  },
-  {
-    id: "iran_fx_spread",
-    number: 12,
-    title: "Dual Exchange Rates in Iran — Official vs Open Market",
-    timeRange: ["1960-01-01", new Date().toISOString().slice(0, 10)],
-    description:
-      "Regime / distortion view: WDI official toman/USD vs. open market on the same merged history as the open-market study (FRED + rial archive + Bonbast). Yearly spread (%) only where a calendar year has both official and open data.",
-    status: "active",
-    tags: ["Dual", "Spread"],
-    groupPlacements: [{ group: "iran", order: 5 }],
-    primarySignal: { kind: "fx_usd_irr_dual" },
-    concepts: [
-      "fx",
-      "spread",
-      "exchange_rate_regime",
-      "multiple_exchange_rates",
-      "official_exchange_rate",
-      "fx_rate",
-      "capital_controls",
-      "price_controls",
-      "sanctions",
-      "measurement_vs_reality",
-      "fx_spread",
-      "derived_series",
-    ],
   },
   {
     id: "oil_geopolitical_reaction",

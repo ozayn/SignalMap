@@ -705,15 +705,13 @@ function IranDynastiesVerticalTimelineInner({
                 {tLang("Horizontal", "افقی", lang)}
               </button>
             </div>
-            {lang === "fa" ? (
-              <StudyYearDisplayToggle
-                value={yearAxisMode}
-                onChange={setYearAxisMode}
-                isFa
-                className="shrink-0"
-                size="compact"
-              />
-            ) : null}
+            <StudyYearDisplayToggle
+              value={yearAxisMode}
+              onChange={setYearAxisMode}
+              isFa={lang === "fa"}
+              className="shrink-0"
+              size="compact"
+            />
             {showLanguageToggle ? <StudyLanguageToggle locale={lang} onLocaleChange={setLang} /> : null}
           </div>
         </div>
