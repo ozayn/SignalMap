@@ -68,6 +68,7 @@ import {
   STUDY_CHART_STACK_GAP_CLASS,
   STUDY_CHART_TITLE_WRAP_CLASS,
 } from "@/lib/chart-study-typography";
+import { useIsNarrowChartLayout } from "@/lib/use-is-narrow-chart-layout";
 
 const MULTI_SERIES_FALLBACK_LEGEND_ICONS: Array<"circle" | "diamond" | "triangle" | "rect"> = [
   "circle",
@@ -81,6 +82,57 @@ function isTomanFxUnit(unit: string | undefined): boolean {
   if (!unit) return false;
   if (/toman/i.test(unit)) return true;
   return unit.includes("تومان");
+}
+
+/** One-line y-axis headline for a stacked ECharts y-axis group (kept in sync with in-chart naming). */
+function multiSeriesGroupYHeadline(
+  seriesOnAxis: ChartSeries[],
+  opts: { yAxisLog: boolean; yAxisNameSuffix?: string; yAxisIndex: number }
+): string {
+  const first = seriesOnAxis[0]!;
+  const useLog = opts.yAxisLog && opts.yAxisIndex === 0;
+  const allSameUnit = seriesOnAxis.length > 1 && seriesOnAxis.every((s) => s.unit === first.unit);
+  const unitFx = first.unit?.trim() ?? "";
+  const compactTomanAxisHeadline = (): string | null => {
+    if (!isTomanFxUnit(unitFx) || seriesOnAxis.length !== 1) return null;
+    const lab = first.label.trim();
+    const m = /^(.+?)\s*\(([\s\S]+)\)\s*$/.exec(lab);
+    if (!m) return null;
+    const inner = m[2]!.trim();
+    if (
+      inner.length > 26 ||
+      /[;؛]/.test(inner) ||
+      /bonbast|rial-archive|fred|آرشیو|بان‌بست|میانگین|annual\s+pre-/i.test(inner)
+    ) {
+      return `${m[1]!.trim()} (${unitFx})`;
+    }
+    return null;
+  };
+  const shortName =
+    first.unit?.includes("toman")
+      ? seriesOnAxis.length > 1
+        ? "Toman/USD"
+        : compactTomanAxisHeadline() ?? `${first.label} (${unitFx || "toman/USD"})`
+      : first.unit === "USD/oz"
+        ? useLog
+          ? "Gold (USD/oz, log scale)"
+          : "Gold (USD/oz)"
+        : allSameUnit && first.unit
+          ? first.unit
+          : first.unit && first.label.includes(`(${first.unit})`)
+            ? first.label
+            : first.unit
+              ? `${first.label} (${first.unit})`
+              : first.label;
+  const nameWithSuffix = opts.yAxisNameSuffix ? `${shortName} ${opts.yAxisNameSuffix}` : shortName;
+  return nameWithSuffix;
+}
+
+function shortStudyLegendName(text: string, narrow: boolean, maxLen = 24): string {
+  if (!narrow) return text;
+  const t = text.trim();
+  if (t.length <= maxLen) return t;
+  return `${t.slice(0, Math.max(1, maxLen - 1))}…`;
 }
 
 type LegendEndShape = ComparatorLineSymbol;
@@ -246,7 +298,7 @@ type TimelineChartProps = {
   oilShockDates?: string[];
   /** When false, shock markers are hidden. Default true. */
   showOilShocks?: boolean;
-  /** Chart container height (default h-80 md:h-96). Use e.g. "h-48" for smaller charts. */
+  /** Chart container height (default ``h-[280px] md:h-96``). Use e.g. ``h-48`` for smaller charts. */
   chartHeight?: string;
   /** Override grid.right (e.g. "12%") to align x-axis with another chart above. */
   gridRight?: string;
@@ -755,7 +807,7 @@ export function TimelineChart({
   sanctionsPeriods = [],
   oilShockDates = [],
   showOilShocks = true,
-  chartHeight = "h-80 md:h-96",
+  chartHeight = "h-[280px] md:h-96",
   gridRight: gridRightOverride,
   extendedDates = [],
   lastOfficialDateForExtension,
@@ -788,6 +840,7 @@ export function TimelineChart({
   const [xLabelRotate, setXLabelRotate] = useState(0);
   const [clipStart, setClipStart] = useState("");
   const [clipEnd, setClipEnd] = useState("");
+  const isNarrow = useIsNarrowChartLayout();
 
   const rangeBounds = useMemo((): [string, string] | undefined => {
     if (timeRangeProp?.[0] && timeRangeProp[1]) {
@@ -1065,6 +1118,7 @@ export function TimelineChart({
   }, []);
 
   useEffect(() => {
+    const narrow = isNarrow;
     const color = cssHsl("--chart-primary", "hsl(238, 84%, 67%)");
     const muted = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
     const borderColor = cssHsl("--border", "hsl(240, 5.9%, 90%)");
@@ -1184,15 +1238,22 @@ export function TimelineChart({
         : null;
     const multiSeriesCount = hasMultiSeries ? multiSeries!.length : 0;
     const useGroupedMultiSeriesLegend = groupedLegendModel != null;
-    const legendTextFontSize = STUDY_CHART_LEGEND_FONT_PX;
+    const legendTextFontSize = narrow ? Math.max(11, STUDY_CHART_LEGEND_FONT_PX - 2) : STUDY_CHART_LEGEND_FONT_PX;
+    const legendNarrowFormatter = narrow ? { formatter: (n: string) => shortStudyLegendName(n, true) } : {};
     /** Tighter gap so plain legends wrap onto multiple rows instead of one overcrowded line. */
-    const multiSeriesLegendItemGap = 10;
+    const multiSeriesLegendItemGap = narrow ? 6 : 10;
     /** Extra grid space when many series may wrap to several legend rows (plain + width legend). */
-    const multiSeriesLegendBottomPct = hasMultiSeries
+    const multiSeriesLegendBottomPctRaw = hasMultiSeries
       ? useGroupedMultiSeriesLegend
         ? "11%"
         : `${Math.min(28, Math.round(12 + Math.ceil(multiSeriesCount / 3) * 3.5))}%`
       : "11%";
+    const tightenPct = (pct: string, sub: number) => {
+      const m = pct.match(/^([\d.]+)%$/);
+      if (!m) return pct;
+      return `${Math.max(6, parseFloat(m[1]) - sub)}%`;
+    };
+    const multiSeriesLegendBottomPct = narrow ? tightenPct(multiSeriesLegendBottomPctRaw, 3) : multiSeriesLegendBottomPctRaw;
     const comparatorResolved = comparatorSeries
       ? {
           ...comparatorSeries,
@@ -1682,6 +1743,13 @@ export function TimelineChart({
           ? "13%"
           : "8%";
 
+    const tightenTopForNarrow = (pct: string) => {
+      const m = pct.match(/^([\d.]+)%$/);
+      if (!m) return pct;
+      return `${Math.max(6, parseFloat(m[1]) - 5)}%`;
+    };
+    const gridTopUse = narrow ? tightenTopForNarrow(gridTopPct) : gridTopPct;
+
     const option: echarts.EChartsOption = {
       animation: false,
       backgroundColor: "transparent",
@@ -1699,6 +1767,7 @@ export function TimelineChart({
               itemWidth: 28,
               itemHeight: 11,
               textStyle: { color: mutedFg, fontSize: legendTextFontSize },
+              ...legendNarrowFormatter,
               data: [
                 {
                   name: secondSeries?.label ?? "Iran (PPP)",
@@ -1736,6 +1805,7 @@ export function TimelineChart({
                     itemHeight: 11,
                     itemGap: multiSeriesLegendItemGap,
                     textStyle: { color: mutedFg, fontSize: legendTextFontSize },
+                    ...legendNarrowFormatter,
                     data: multiSeriesLegendData,
                   },
             }
@@ -1752,6 +1822,7 @@ export function TimelineChart({
                   itemWidth: 28,
                   itemHeight: 11,
                   textStyle: { color: mutedFg, fontSize: legendTextFontSize },
+                  ...legendNarrowFormatter,
                   data: hasData
                     ? [
                         {
@@ -1988,24 +2059,36 @@ export function TimelineChart({
         },
       },
       grid: {
-        left: hasMultiSeries ? "15%" : "5%",
+        left: narrow ? (hasMultiSeries ? "10%" : "2%") : hasMultiSeries ? "15%" : "5%",
         right:
           gridRightOverride ??
           (hasMultiSeries && multiSeries && multiSeries.some((s) => s.yAxisIndex >= 2)
-            ? "30%"
+            ? narrow
+              ? "22%"
+              : "30%"
             : hasOil || !hasData || hasMultiSeries
-              ? "16%"
-              : "6%"),
+              ? narrow
+                ? "12%"
+                : "16%"
+              : narrow
+                ? "4%"
+                : "6%"),
         bottom: bumpGridBottomForDualYear(
           xLabelRotate
-            ? "18%"
+            ? narrow
+              ? "14%"
+              : "18%"
             : hasMultiSeries && multiSeries
               ? multiSeriesLegendBottomPct
               : (comparatorResolved && comparatorValuesForChart && hasOil) || (hasOil && secondSeries && !comparatorResolved)
-                ? "13%"
-                : "3%"
+                ? narrow
+                  ? "11%"
+                  : "13%"
+                : narrow
+                  ? "2%"
+                  : "3%"
         ),
-        top: gridTopPct,
+        top: gridTopUse,
         containLabel: true,
       },
       xAxis: useTimeAxis
@@ -2021,6 +2104,7 @@ export function TimelineChart({
               min: dateMin,
               max: dateMax,
               minInterval: minIntervalMs,
+              ...(narrow ? { splitNumber: 4 } : {}),
               axisLine: { lineStyle: { color: borderColor } },
               axisLabel: {
                 hideOverlap: true,
@@ -2047,7 +2131,7 @@ export function TimelineChart({
           })()
         : (() => {
             const n = dates.length;
-            const maxLabels = useSparseMultiSeriesDates ? 50 : 12;
+            const maxLabels = useSparseMultiSeriesDates ? 50 : narrow ? 4 : 12;
             const useTimeLinearLabels =
               hasMultiSeries && !!timeRange && n > 12 && spanYears > 0;
             const timeLinearTickYears: number[] = useTimeLinearLabels
@@ -2059,7 +2143,7 @@ export function TimelineChart({
                   const step =
                     stepFromProp ??
                     (() => {
-                      const want = Math.min(10, Math.max(5, spanYears));
+                      const want = narrow ? 4 : Math.min(10, Math.max(5, spanYears));
                       return Math.max(1, Math.round(spanYears / want));
                     })();
                   const out: number[] = [];
@@ -2226,11 +2310,11 @@ export function TimelineChart({
                 ...(pctNice ? { min: pctNice.min, max: pctNice.max, interval: pctNice.interval } : {}),
                 position: (isLeft ? "left" : "right") as "left" | "right",
                 offset: isRight ? rightOffset : 0,
-                name: formattedMultiAxisName,
+                name: narrow ? "" : formattedMultiAxisName,
                 nameLocation: "middle" as const,
                 nameRotate: isLeft ? 90 : -90,
                 nameTextStyle: yAxisNameStyle,
-                nameGap: yAxisNameGapForMultilineTitle(formattedMultiAxisName),
+                nameGap: narrow ? 8 : yAxisNameGapForMultilineTitle(formattedMultiAxisName),
                 axisLine: { show: false },
                 splitLine: { show: isLeft, lineStyle: { color: borderColor, type: "dashed" as const } },
                 axisLabel: {
@@ -2290,11 +2374,11 @@ export function TimelineChart({
             {
               type: "value" as const,
               position: "left" as const,
-              name: leftOilAxisName,
+              name: narrow ? "" : leftOilAxisName,
               nameLocation: "middle" as const,
               nameRotate: 90,
               nameTextStyle: yAxisNameStyle,
-              nameGap: yAxisNameGapForMultilineTitle(leftOilAxisName),
+              nameGap: narrow ? 8 : yAxisNameGapForMultilineTitle(leftOilAxisName),
               axisLine: { show: false },
               splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
               axisLabel: {
@@ -2310,11 +2394,11 @@ export function TimelineChart({
               type: (yAxisLog ? "log" : "value") as "value" | "log",
               ...(yAxisLog ? { logBase: 10 } : {}),
               position: "right" as const,
-              name: rightOilAxisName,
+              name: narrow ? "" : rightOilAxisName,
               nameLocation: "middle" as const,
               nameRotate: -90,
               nameTextStyle: yAxisNameStyle,
-              nameGap: yAxisNameGapForMultilineTitle(rightOilAxisName),
+              nameGap: narrow ? 8 : yAxisNameGapForMultilineTitle(rightOilAxisName),
               axisLine: { show: false },
               splitLine: { show: false },
               axisLabel: {
@@ -2329,11 +2413,11 @@ export function TimelineChart({
             const singleAxisName = formatYAxisNameMultiline(localizeChartNumericDisplayString(label, chartNumeralLocale));
             return {
             type: "value",
-            name: singleAxisName,
+            name: narrow ? "" : singleAxisName,
             nameLocation: "middle" as const,
             nameRotate: 90,
             nameTextStyle: yAxisNameStyle,
-            nameGap: yAxisNameGapForMultilineTitle(singleAxisName),
+            nameGap: narrow ? 8 : yAxisNameGapForMultilineTitle(singleAxisName),
             axisLine: { show: false },
             splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
             axisLabel: {
@@ -2816,6 +2900,7 @@ export function TimelineChart({
     groupedLegendSelected,
     multiSeriesLegendGroupedVariant,
     chartLayoutRevision,
+    isNarrow,
   ]);
 
   useEffect(() => {
@@ -2839,6 +2924,63 @@ export function TimelineChart({
   const studyTitleText = label.trim()
     ? localizeChartNumericDisplayString(label.trim(), chartLocaleResolved)
     : "";
+
+  const narrowMetricCaption = useMemo(() => {
+    if (!isNarrow) return "";
+    const numLoc = chartLocaleResolved === "fa" ? "fa" : "en";
+    if (multiSeries?.length) {
+      const by = new Map<number, ChartSeries[]>();
+      for (const s of multiSeries) {
+        const list = by.get(s.yAxisIndex) ?? [];
+        list.push(s);
+        by.set(s.yAxisIndex, list);
+      }
+      const parts = [...by.keys()]
+        .sort((a, b) => a - b)
+        .map((idx) => {
+          const ov = multiSeriesYAxisNameOverrides?.[idx];
+          if (ov?.trim()) {
+            return localizeChartNumericDisplayString(ov.trim().replace(/\n/g, " "), numLoc);
+          }
+          const grp = by.get(idx);
+          if (!grp?.length) return "";
+          return localizeChartNumericDisplayString(
+            multiSeriesGroupYHeadline(grp, { yAxisLog, yAxisNameSuffix, yAxisIndex: idx }),
+            numLoc
+          );
+        })
+        .filter(Boolean);
+      return parts.join(" · ");
+    }
+    if (secondSeries) {
+      const hasPrimaryData = data.length > 0;
+      const leftBase =
+        (hasPrimaryData ? label : secondSeries.label) + (unit ? ` (${unit})` : "");
+      const rightBase = indexComparator
+        ? "Index (100)"
+        : `${secondSeries.label ?? ""}${
+            secondSeries.unit?.includes("toman") ? " (toman/USD)" : secondSeries.unit ? ` (${secondSeries.unit})` : ""
+          }`;
+      const suffix = yAxisNameSuffix ? ` ${yAxisNameSuffix}` : "";
+      return localizeChartNumericDisplayString(`${leftBase} · ${rightBase}${suffix}`, numLoc);
+    }
+    const single =
+      label.trim() + (unit ? ` (${unit})` : "") + (yAxisNameSuffix ? ` ${yAxisNameSuffix}` : "");
+    return single.trim() ? localizeChartNumericDisplayString(single, numLoc) : "";
+  }, [
+    isNarrow,
+    chartLocaleResolved,
+    multiSeries,
+    secondSeries,
+    label,
+    unit,
+    yAxisLog,
+    yAxisNameSuffix,
+    multiSeriesYAxisNameOverrides,
+    data,
+    indexComparator,
+  ]);
+
   const sourceLine = formatStudyExportSourceLine(exportSourceFooter, chartLocaleResolved);
 
   const inner = (
@@ -2873,6 +3015,14 @@ export function TimelineChart({
       {studyTitleText ? (
         <p className={STUDY_CHART_TITLE_WRAP_CLASS} dir={chartLocaleResolved === "fa" ? "rtl" : "ltr"}>
           {studyTitleText}
+        </p>
+      ) : null}
+      {narrowMetricCaption ? (
+        <p
+          className="-mt-0.5 px-1 text-center text-[11px] font-medium leading-snug text-muted-foreground md:hidden"
+          dir={chartLocaleResolved === "fa" ? "rtl" : "ltr"}
+        >
+          {narrowMetricCaption}
         </p>
       ) : null}
       {groupedLegendModel?.variant === "grid" ? (

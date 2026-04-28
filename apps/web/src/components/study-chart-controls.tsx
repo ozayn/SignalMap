@@ -27,11 +27,11 @@ export type StudyChartControlsProps = {
 
 /** Toolbar row: inputs and export share one baseline (bottom-aligned). */
 const TOOLBAR_ROW =
-  "flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-border/40 pb-2";
+  "flex flex-wrap items-end gap-x-2 gap-y-1.5 border-b border-border/40 pb-1.5 md:gap-x-3 md:gap-y-2 md:pb-2";
 
 /** Caption above each control; fixed min-height so Export lines up with inputs. */
 const FIELD_LABEL =
-  "mb-0.5 block min-h-[0.875rem] text-[10px] font-medium uppercase tracking-wide text-muted-foreground";
+  "mb-0 block min-h-[0.75rem] text-[9px] font-medium uppercase tracking-wide text-muted-foreground md:mb-0.5 md:min-h-[0.875rem] md:text-[10px]";
 
 /** Shared 32px control height with charts’ range inputs. */
 const CONTROL_INPUT =
@@ -143,7 +143,8 @@ export function StudyChartControls({
 
   return (
     <div className={TOOLBAR_ROW}>
-      <label className="flex w-[5.5rem] shrink-0 flex-col" dir="ltr">
+      <div className="flex min-w-0 shrink-0 items-end gap-2 md:contents">
+      <label className="flex w-[4.25rem] shrink-0 flex-col md:w-[5.5rem]" dir="ltr">
         <span className={FIELD_LABEL}>{startYearLabel}</span>
         <input
           type="text"
@@ -167,7 +168,7 @@ export function StudyChartControls({
           className={CONTROL_INPUT}
         />
       </label>
-      <label className="flex w-[5.5rem] shrink-0 flex-col" dir="ltr">
+      <label className="flex w-[4.25rem] shrink-0 flex-col md:w-[5.5rem]" dir="ltr">
         <span className={FIELD_LABEL}>{endYearLabel}</span>
         <input
           type="text"
@@ -191,6 +192,7 @@ export function StudyChartControls({
           className={CONTROL_INPUT}
         />
       </label>
+      </div>
       {exportButton}
     </div>
   );

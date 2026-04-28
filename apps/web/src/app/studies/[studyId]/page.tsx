@@ -13,6 +13,7 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TimelineChart, type ChartSeries } from "@/components/timeline-chart";
+import { StudyChartHeaderControlsShell } from "@/components/study-chart-header-controls-shell";
 import { StudyChartExportFilenameProvider } from "@/components/study-chart-export-filename-context";
 import { COUNTRY_COMPARATOR_STYLES } from "@/lib/chart-country-series-styles";
 import { SourceInfo } from "@/components/source-info";
@@ -5121,7 +5122,7 @@ export default function StudyDetailPage() {
                 timeRange={geopoliticalChartData.timeRange}
                 oilShockDates={oilShockDates}
                 showOilShocks
-                chartHeight="h-72 md:h-80"
+                chartHeight="h-[280px] md:h-80"
                 forceTimeAxis
                 chartRangeGranularity="day"
               />
@@ -5519,8 +5520,8 @@ export default function StudyDetailPage() {
         !isFollowerGrowthDynamics &&
         !isYoutubeCommentAnalysis && (
       <Card className="chart-card border-border overflow-hidden">
-        <CardHeader>
-          <div className="flex items-center justify-between gap-4 mb-2">
+        <CardHeader className="space-y-1.5 pb-2 md:space-y-3 md:pb-6">
+          <div className="flex items-center justify-between gap-4 mb-1 md:mb-2">
             <CardTitle className="text-lg font-semibold tracking-tight text-foreground shrink-0">
               {isOilTradeNetwork
                 ? "Network"
@@ -5615,7 +5616,7 @@ export default function StudyDetailPage() {
               />
             ))}
           </div>
-          <p className="text-sm text-muted-foreground">
+          <p className="mb-1 text-sm text-muted-foreground md:mb-3">
             {isOilTradeNetwork
               ? "Oil trade flows between major exporters and importers. Nodes are countries/regions; edge width reflects trade volume (thousand barrels/day). Drag nodes, zoom, pan."
               : isGdpGlobalComparison
@@ -5734,7 +5735,7 @@ export default function StudyDetailPage() {
               )}
             </p>
           ) : null}
-          <div className="flex flex-wrap items-center gap-3 pt-2">
+          <StudyChartHeaderControlsShell>
             {hasTimeSeriesEventOverlayControl && (
               <label
                 className="flex items-center gap-1.5 text-xs font-medium text-foreground/90 cursor-pointer"
@@ -6006,7 +6007,7 @@ export default function StudyDetailPage() {
                 </label>
               </>
             )}
-          </div>
+          </StudyChartHeaderControlsShell>
         </CardHeader>
         <CardContent>
           {isOilTradeNetwork ? (
@@ -6460,7 +6461,7 @@ export default function StudyDetailPage() {
                 multiSeriesYAxisNameOverrides={gdpLevelsDualAxisYAxisNameOverrides}
                 timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
                 forceTimeRangeAxis
-                chartHeight="h-80 md:h-[26rem]"
+                chartHeight="h-[280px] md:h-[26rem]"
                 mutedEventLines
                 xAxisYearLabel={gdpLevelsXAxisYearLabel ?? chartYearAxisLabel}
                 categoryYearTickStep={5}
@@ -6639,7 +6640,7 @@ export default function StudyDetailPage() {
                     label={L(isFa, "GDP composition (shares of GDP)", "ترکیب GDP (سهم‌ها)")}
                     events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, gdpCompositionChartEvents)}
                     anchorEventId={anchorEventId || undefined}
-                    chartHeight="h-80 md:h-[26rem]"
+                    chartHeight="h-[280px] md:h-[26rem]"
                     multiSeries={[
                       {
                         key: "pct_consumption",
@@ -6705,7 +6706,7 @@ export default function StudyDetailPage() {
                     timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
                     forceTimeRangeAxis
                     yAxisLog
-                    chartHeight="h-64 md:h-80"
+                    chartHeight="h-[280px] md:h-80"
                     mutedEventLines
                     xAxisYearLabel={gdpLevelsXAxisYearLabel ?? chartYearAxisLabel}
                     categoryYearTickStep={5}
@@ -6818,7 +6819,7 @@ export default function StudyDetailPage() {
                     ]}
                     timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? study.timeRange}
                     forceTimeRangeAxis
-                    chartHeight="h-72 md:h-[26rem]"
+                    chartHeight="h-[280px] md:h-[26rem]"
                     mutedEventLines
                     xAxisYearLabel={gdpLevelsXAxisYearLabel ?? chartYearAxisLabel}
                     categoryYearTickStep={5}
@@ -7970,7 +7971,7 @@ export default function StudyDetailPage() {
                     exportFileStem="oil-economy-indexed"
                     showChartControls={false}
                     mutedEventLines
-                    chartHeight="h-80 md:h-96"
+                    chartHeight="h-[280px] md:h-96"
                   />
                 </div>
               ) : null}
@@ -9000,7 +9001,7 @@ export default function StudyDetailPage() {
                         : `Index (${isiOverviewIndexed.baseYear} = 100)`,
                     }}
                     exportFileStem="isi-overview-indexed"
-                    chartHeight="h-80 md:h-96"
+                    chartHeight="h-[280px] md:h-96"
                   />
                 </div>
               ) : null}
@@ -9034,7 +9035,7 @@ export default function StudyDetailPage() {
                     }}
                     multiSeriesLegendLayout="grouped"
                     multiSeriesLegendGroupedVariant="country"
-                    chartHeight="h-80 md:h-96"
+                    chartHeight="h-[280px] md:h-96"
                   />
                 </div>
                 <div className="space-y-2 border-t border-border pt-6">
@@ -9070,7 +9071,7 @@ export default function StudyDetailPage() {
                     }}
                     multiSeriesLegendLayout="grouped"
                     multiSeriesLegendGroupedVariant="country"
-                    chartHeight="h-80 md:h-96"
+                    chartHeight="h-[280px] md:h-96"
                   />
                 </div>
                 <div className="space-y-2 border-t border-border pt-6">
@@ -9104,7 +9105,7 @@ export default function StudyDetailPage() {
                     multiSeriesYAxisNameOverrides={{
                       0: L(isFa, "Annual growth (%)", "رشد سالانه (٪)"),
                     }}
-                    chartHeight="h-80 md:h-96"
+                    chartHeight="h-[280px] md:h-96"
                   />
                 </div>
               </div>
@@ -9667,7 +9668,7 @@ export default function StudyDetailPage() {
                     exportFileStem="dutch-disease-overview-indexed"
                     showChartControls={false}
                     mutedEventLines
-                    chartHeight="h-80 md:h-96"
+                    chartHeight="h-[280px] md:h-96"
                   />
                 </div>
               ) : null}
@@ -10366,7 +10367,7 @@ export default function StudyDetailPage() {
                     label="Daily return"
                     unit="%"
                     timeRange={oilTimeRange ?? study.timeRange}
-                    chartHeight="h-56 md:h-64"
+                    chartHeight="h-[280px] md:h-64"
                     referenceLine={{ value: 0, label: "0%" }}
                     gridRight="12%"
                     chartLineRole="secondary"

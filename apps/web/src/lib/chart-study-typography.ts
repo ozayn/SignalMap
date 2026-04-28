@@ -4,7 +4,7 @@
  */
 
 /** Flex stack: toolbar → title → plot → source */
-export const STUDY_CHART_STACK_GAP_CLASS = "gap-1.5";
+export const STUDY_CHART_STACK_GAP_CLASS = "gap-1 md:gap-1.5";
 
 /** Centered series title above the plot (replaces in-canvas ECharts title for alignment). */
 export const STUDY_CHART_TITLE_WRAP_CLASS =
