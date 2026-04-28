@@ -229,27 +229,26 @@ export default function StudiesPage() {
             const rows = getBrowseRowsForGroup(listed, group).filter(({ study }) => filteredIds.has(study.id));
             if (rows.length === 0) return null;
             return (
-              <section key={group} className={sectionIndex === 0 ? "" : "section-block"}>
-                <div
-                  className={`${sectionIndex === 0 ? "mt-0 " : ""}border-b border-[#f1f5f9] dark:border-[#1f2937] pb-1.5 mb-3.5`}
-                >
-                  <h2
-                    className="font-semibold text-[#111827] dark:text-[#e5e7eb]"
-                    style={{ fontSize: "clamp(16px, 1.8vw, 18px)" }}
-                  >
-                    {meta.title}
-                  </h2>
+              <section key={group} className={sectionIndex === 0 ? "" : "pt-14"}>
+                <div className="mb-6">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <h2
+                      className="font-semibold tracking-[-0.01em] text-[#111827] dark:text-[#e5e7eb]"
+                      style={{ fontSize: "clamp(17px, 2vw, 19px)" }}
+                    >
+                      {meta.title}
+                    </h2>
+                    {group === "discourse" ? (
+                      <span className="inline-flex items-center rounded-full bg-[#f3f4f6] px-2 py-0.5 text-[10px] font-medium leading-none text-[#6b7280] dark:bg-[#1f2937] dark:text-[#9ca3af]">
+                        In progress
+                      </span>
+                    ) : null}
+                  </div>
                   <p
-                    className="mt-0.5 text-[#6b7280] dark:text-[#9ca3af]"
-                    style={{ fontSize: "clamp(12px, 1.2vw, 14px)" }}
+                    className="mt-1.5 max-w-3xl text-[11px] leading-relaxed text-[#9ca3af] dark:text-[#94a3b8]"
                   >
                     {meta.description}
                   </p>
-                  {group === "discourse" ? (
-                    <p className="mt-1 text-[11px] leading-snug text-[#9ca3af] dark:text-[#94a3b8]/90">
-                      This section is in progress. Some data and features are incomplete.
-                    </p>
-                  ) : null}
                 </div>
                 <div className="studies-grid">
                   {rows.map(({ study, order }) => {

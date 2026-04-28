@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { StudyMeta } from "@/lib/studies";
+import { getStudyVisualAnchor, studyVisualAnchorDotClass } from "@/lib/study-visual-anchor";
 
 type StudyCardProps = {
   study: StudyMeta;
@@ -7,80 +8,70 @@ type StudyCardProps = {
 };
 
 export function StudyCard({ study, signalTags }: StudyCardProps) {
+  const anchor = getStudyVisualAnchor(study);
+  const dotClass = studyVisualAnchorDotClass(anchor);
+
   return (
-    <Link
-      href={`/studies/${study.id}`}
-      tabIndex={0}
-      className="study-card"
-    >
-      <div>
-        <p
-          className="uppercase tracking-wide text-[#9ca3af] dark:text-[#9ca3af] mb-1.5"
-          style={{ fontSize: "clamp(10px, 1vw, 11px)" }}
-        >
-          Study {study.number}
-        </p>
-        <h3
-          className="font-semibold text-[#111827] dark:text-[#e5e7eb] leading-[1.35]"
-          style={{ fontSize: "clamp(14px, 1.4vw, 16px)" }}
-        >
-          {study.title}
-        </h3>
-        {study.subtitle ? (
-          <p
-            className="text-[#6b7280] dark:text-[#9ca3af] mt-1 line-clamp-2"
-            style={{ fontSize: "clamp(11px, 1.1vw, 13px)" }}
-          >
-            {study.subtitle}
+    <Link href={`/studies/${study.id}`} tabIndex={0} className="study-card">
+      <div className="flex min-h-0 min-w-0 flex-1 gap-2.5">
+        <span
+          className={`study-card__anchor mt-[3px] h-[7px] w-[7px] shrink-0 rounded-full ${dotClass}`}
+          aria-hidden
+        />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <p className="study-card__meta uppercase tracking-wide text-[#9ca3af] dark:text-[#9ca3af] mb-1">
+            Study {study.number}
           </p>
-        ) : null}
-        <p
-          className="text-[#6b7280] dark:text-[#9ca3af] mt-1.5 line-clamp-2"
-          style={{ fontSize: "clamp(12px, 1.2vw, 14px)" }}
-        >
-          {study.description}
-        </p>
-      </div>
-      {signalTags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-4 pt-4 border-t border-[#f1f5f9] dark:border-[#1f2937]">
-          {signalTags.map((tag) => (
-            <span
-              key={tag}
-              className="bg-[#f3f4f6] dark:bg-[#1f2937] rounded-md px-1.5 py-0.5 text-[#4b5563] dark:text-[#9ca3af] mr-1 last:mr-0"
-              style={{ fontSize: "clamp(10px, 1vw, 11px)" }}
-            >
-              {tag}
-            </span>
-          ))}
+          <h3 className="study-card__title text-[#111827] dark:text-[#e5e7eb] leading-snug">{study.title}</h3>
+          {study.subtitle ? (
+            <p className="study-card__subtitle text-[#9ca3af] dark:text-[#94a3b8] mt-0.5 line-clamp-1">
+              {study.subtitle}
+            </p>
+          ) : null}
+          <p className="study-card__desc text-[#9ca3af] dark:text-[#94a3b8] mt-1 line-clamp-1">{study.description}</p>
+          {signalTags.length > 0 ? (
+            <div className="study-card__tags mt-2.5 flex flex-wrap gap-x-2 gap-y-0.5">
+              {signalTags.map((tag) => (
+                <span key={tag} className="study-card__tag">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
-      )}
+      </div>
     </Link>
   );
 }
 
 /** Compact row for list view on the studies index. */
 export function StudyListRow({ study, signalTags }: StudyCardProps) {
+  const anchor = getStudyVisualAnchor(study);
+  const dotClass = studyVisualAnchorDotClass(anchor);
+
   return (
-    <Link
-      href={`/studies/${study.id}`}
-      tabIndex={0}
-      className="study-list-row"
-    >
-      <div className="study-list-row__main">
-        <span className="study-list-row__num">Study {study.number}</span>
-        <h3 className="study-list-row__title">{study.title}</h3>
-        {study.subtitle ? <p className="study-list-row__subtitle">{study.subtitle}</p> : null}
-        <p className="study-list-row__desc">{study.description}</p>
-      </div>
-      {signalTags.length > 0 ? (
-        <div className="study-list-row__tags">
-          {signalTags.map((tag) => (
-            <span key={tag} className="study-list-row__tag">
-              {tag}
-            </span>
-          ))}
+    <Link href={`/studies/${study.id}`} tabIndex={0} className="study-list-row">
+      <div className="study-list-row__main flex min-w-0 gap-2.5">
+        <span
+          className={`study-list-row__anchor mt-1 h-[7px] w-[7px] shrink-0 rounded-full ${dotClass}`}
+          aria-hidden
+        />
+        <div className="min-w-0 flex-1">
+          <span className="study-list-row__num">Study {study.number}</span>
+          <h3 className="study-list-row__title">{study.title}</h3>
+          {study.subtitle ? <p className="study-list-row__subtitle">{study.subtitle}</p> : null}
+          <p className="study-list-row__desc">{study.description}</p>
+          {signalTags.length > 0 ? (
+            <div className="study-list-row__tags">
+              {signalTags.map((tag) => (
+                <span key={tag} className="study-list-row__tag">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
     </Link>
   );
 }
