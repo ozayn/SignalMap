@@ -4,44 +4,9 @@ import * as echarts from "echarts";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchJson } from "@/lib/api";
-
-type Point = { date: string; value: number };
-
-type FxUsdTomanSignalData = {
-  points: Point[];
-};
-
-type CpiInflationResponse = {
-  series?: { iran?: Point[] };
-};
-
-type OilSignalData = {
-  points: Point[];
-};
-
-const FX_START = "2015-01-01";
-const CPI_START = "2000-01-01";
-const OIL_START = "2015-01-01";
-const MAX_FX_POINTS = 96;
-const MAX_CPI_POINTS = 40;
-const MAX_OIL_POINTS = 96;
-
-function downsampleSeries(points: Point[], maxPoints: number): Point[] {
-  const valid = points.filter((p) => Number.isFinite(p.value));
-  const sorted = [...valid].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
-  if (sorted.length <= maxPoints) return sorted;
-  const out: Point[] = [];
-  const n = sorted.length;
-  const target = maxPoints;
-  for (let i = 0; i < target; i++) {
-    const idx = Math.round((i * (n - 1)) / Math.max(1, target - 1));
-    out.push(sorted[idx]!);
-  }
-  return out;
-}
+import { HOME_PREVIEW_CARDS_META } from "@/lib/home-preview-config";
+import type { HomePreviewCardPayload } from "@/lib/home-preview-models";
+import type { HomePreviewPoint } from "@/lib/home-preview-series";
 
 function isAbortError(e: unknown): boolean {
   if (e instanceof DOMException && e.name === "AbortError") return true;
@@ -49,11 +14,21 @@ function isAbortError(e: unknown): boolean {
   return false;
 }
 
+function fallbackCards(): HomePreviewCardPayload[] {
+  return HOME_PREVIEW_CARDS_META.map((m) => ({
+    id: m.id,
+    title: m.title,
+    href: m.href,
+    subtitle: m.subtitle,
+    points: [],
+  }));
+}
+
 function MiniChart({
   points,
   lineColor,
 }: {
-  points: Point[] | undefined;
+  points: HomePreviewPoint[];
   lineColor: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -126,9 +101,6 @@ function MiniChart({
     };
   }, [points, lineColor]);
 
-  if (points === undefined) {
-    return <div className="h-[96px] w-full animate-pulse rounded-md bg-muted/45 dark:bg-muted/25" />;
-  }
   if (points.length < 2) {
     return <div className="h-[96px] w-full rounded-md bg-muted/25 dark:bg-muted/15" />;
   }
@@ -139,14 +111,14 @@ function MiniChart({
 function PreviewCard({
   href,
   title,
-  description,
+  subtitle,
   points,
   lineColor,
 }: {
   href: string;
   title: string;
-  description: string;
-  points: Point[] | undefined;
+  subtitle: string;
+  points: HomePreviewPoint[];
   lineColor: string;
 }) {
   return (
@@ -160,7 +132,7 @@ function PreviewCard({
       <div className="mt-3 min-h-[96px] flex-1">
         <MiniChart points={points} lineColor={lineColor} />
       </div>
-      <p className="mt-3 text-[13px] leading-snug text-[#6b7280] dark:text-[#9ca3af]">{description}</p>
+      <p className="mt-3 text-[13px] leading-snug text-[#6b7280] dark:text-[#9ca3af]">{subtitle}</p>
     </Link>
   );
 }
@@ -168,9 +140,7 @@ function PreviewCard({
 export function HomePreviewSection() {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const [fx, setFx] = useState<Point[] | undefined>(undefined);
-  const [cpi, setCpi] = useState<Point[] | undefined>(undefined);
-  const [oil, setOil] = useState<Point[] | undefined>(undefined);
+  const [cards, setCards] = useState<HomePreviewCardPayload[] | null>(null);
 
   useEffect(() => setMounted(true), []);
 
@@ -186,33 +156,19 @@ export function HomePreviewSection() {
   useEffect(() => {
     let cancelled = false;
     const ac = new AbortController();
-    const end = new Date().toISOString().slice(0, 10);
 
-    Promise.all([
-      fetchJson<FxUsdTomanSignalData>(
-        `/api/signals/fx/usd-toman?start=${encodeURIComponent(FX_START)}&end=${encodeURIComponent(end)}`,
-        ac.signal
-      ),
-      fetchJson<CpiInflationResponse>(
-        `/api/signals/wdi/cpi-inflation-yoy?start=${encodeURIComponent(CPI_START)}&end=${encodeURIComponent(end)}`,
-        ac.signal
-      ),
-      fetchJson<OilSignalData>(
-        `/api/signals/oil/brent?start=${encodeURIComponent(OIL_START)}&end=${encodeURIComponent(end)}`,
-        ac.signal
-      ),
-    ])
-      .then(([fxRes, cpiRes, oilRes]) => {
+    fetch("/api/homepage/previews", { signal: ac.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`preview ${res.status}`);
+        return res.json() as Promise<{ cards: HomePreviewCardPayload[] }>;
+      })
+      .then((data) => {
         if (cancelled) return;
-        setFx(downsampleSeries(fxRes.points ?? [], MAX_FX_POINTS));
-        setCpi(downsampleSeries(cpiRes.series?.iran ?? [], MAX_CPI_POINTS));
-        setOil(downsampleSeries(oilRes.points ?? [], MAX_OIL_POINTS));
+        setCards(Array.isArray(data.cards) ? data.cards : fallbackCards());
       })
       .catch((err: unknown) => {
         if (cancelled || isAbortError(err)) return;
-        setFx([]);
-        setCpi([]);
-        setOil([]);
+        setCards(fallbackCards());
       });
 
     return () => {
@@ -221,30 +177,34 @@ export function HomePreviewSection() {
     };
   }, []);
 
+  if (cards === null) {
+    return (
+      <section className="home-preview" aria-label="Signal previews" aria-busy="true">
+        <div className="mx-auto grid max-w-[960px] gap-5 md:grid-cols-3 md:gap-6 md:items-stretch">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="min-h-[196px] animate-pulse rounded-lg border border-border/35 bg-muted/20 dark:border-border/25 dark:bg-muted/10"
+            />
+          ))}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="home-preview" aria-label="Signal previews">
       <div className="mx-auto grid max-w-[960px] gap-5 md:grid-cols-3 md:gap-6 md:items-stretch">
-        <PreviewCard
-          href="/studies/iran-fx-regime"
-          title="USD → Toman"
-          description="Open-market rate over time."
-          points={fx}
-          lineColor={colors[0]!}
-        />
-        <PreviewCard
-          href="/studies/inflation-rate"
-          title="Inflation (CPI)"
-          description="Annual CPI inflation (% YoY), Iran."
-          points={cpi}
-          lineColor={colors[1]!}
-        />
-        <PreviewCard
-          href="/studies/iran"
-          title="Brent (USD/bbl)"
-          description="Nominal Brent crude benchmark."
-          points={oil}
-          lineColor={colors[2]!}
-        />
+        {cards.map((card, i) => (
+          <PreviewCard
+            key={card.id}
+            href={card.href}
+            title={card.title}
+            subtitle={card.subtitle}
+            points={card.points.length >= 2 ? card.points : []}
+            lineColor={colors[i] ?? colors[0]!}
+          />
+        ))}
       </div>
     </section>
   );
