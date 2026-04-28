@@ -53,6 +53,7 @@ import { type ComparatorLineSymbol, countryComparatorSeriesStyle } from "@/lib/c
 import {
   isOilProductionVolumeKey,
   resolveTimelineMultiSeriesColors,
+  SIGNAL_CONCEPT,
 } from "@/lib/signalmap-chart-colors";
 import { localizeChartNumericDisplayString, localizeChartNumericDisplayStringSafe } from "@/lib/chart-numerals-fa";
 import {
@@ -1653,8 +1654,10 @@ export function TimelineChart({
     const comparatorLineSymbolSize = comparatorSeries?.symbolSize ?? CHART_LINE_SYMBOL_SIZE;
 
     const pubOilPrimary = oilPublicationLayout && isClassicOilChart;
+    /** Align publication Brent / global oil line with `SIGNAL_CONCEPT.oil_price` (same red as gold+oil & multi-series oil keys). */
+    const oilPriceLineColor = SIGNAL_CONCEPT.oil_price;
     const oilPrimaryLineColor = pubOilPrimary
-      ? color
+      ? oilPriceLineColor
       : comparatorResolved && comparatorValuesForChart
         ? color
         : oilColor;
