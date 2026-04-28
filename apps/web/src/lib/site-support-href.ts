@@ -1,5 +1,11 @@
 import "server-only";
 
+/**
+ * `ENABLE_SUPPORT_URL_DEBUG` is read **only** in `app/debug/support-url/page.tsx` to show or 404
+ * that route. It must **never** be referenced here — `resolveSignalMapSupportHref()` always
+ * uses the same env precedence regardless of that flag.
+ */
+
 const FALLBACK_SUPPORT_HREF = "https://github.com/ozayn/SignalMap";
 
 const NEXT_PUBLIC_SUPPORT_KEY = "NEXT_PUBLIC_SIGNALMAP_SUPPORT_URL" as const;
@@ -36,7 +42,7 @@ export function resolveSignalMapSupportHref(): string {
   return FALLBACK_SUPPORT_HREF;
 }
 
-/** Safe fields for `/debug/support-url` when `ENABLE_SUPPORT_URL_DEBUG=1`. No secrets. */
+/** Safe fields for `/debug/support-url` (gated in the page, not here). No secrets. */
 export function getSupportUrlDiagnostics(): {
   SIGNALMAP_SUPPORT_URL_configured: boolean;
   NEXT_PUBLIC_SIGNALMAP_SUPPORT_URL_configured_bracket: boolean;

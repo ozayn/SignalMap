@@ -1,6 +1,9 @@
 import { SUPPORT_LINK_ARIA, supportMethodsCopy } from "@/lib/site-support";
 import { resolveSignalMapSupportHref } from "@/lib/site-support-href";
 
+/** Same as root layout: resolve support URL at request time (runtime env on Railway). */
+export const dynamic = "force-dynamic";
+
 export default function MethodsPage() {
   const supportHref = resolveSignalMapSupportHref();
   return (

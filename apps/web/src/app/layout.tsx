@@ -10,6 +10,13 @@ import { Analytics } from "@/components/analytics";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", preload: false });
 
+/**
+ * Support href must be resolved with **runtime** `process.env` (e.g. Railway / Stripe URL).
+ * Without this, the root layout can be generated at build time and bake in the GitHub fallback.
+ * `ENABLE_SUPPORT_URL_DEBUG` does not affect this — it only gates `/debug/support-url`.
+ */
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "SignalMap",
   description: "Longitudinal studies of emotion, language, and interaction",
