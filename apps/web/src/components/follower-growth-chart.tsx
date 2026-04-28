@@ -12,11 +12,18 @@ import {
   logisticCurve,
   type Point,
 } from "@/lib/growth-models";
+import { ExportChartModal } from "@/components/export-chart-modal";
 import { StudyChartControls } from "@/components/study-chart-controls";
 import { downloadEchartsRaster, slugifyChartFilename, type DownloadEchartsRasterOptions } from "@/lib/chart-export";
 import { buildStudyChartExportFilenameStem } from "@/lib/chart-export-filename";
 import { useStudyChartExportFilenameContext } from "@/components/study-chart-export-filename-context";
-import { buildPresentationExportTitle, formatStudyExportSourceLine } from "@/lib/chart-export-presentation";
+import {
+  buildPresentationExportTitle,
+  DEFAULT_EXPORT_CHART_FONT_SIZES,
+  formatStudyExportSourceLine,
+  type ExportChartFontSizes,
+  type ExportChartSettings,
+} from "@/lib/chart-export-presentation";
 import {
   CHART_Y_AXIS_LABEL_MARGIN,
   CHART_Y_AXIS_NAME_GAP,
@@ -79,6 +86,11 @@ export function FollowerGrowthChart({
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
   const [clipStart, setClipStart] = useState("");
   const [clipEnd, setClipEnd] = useState("");
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportModalDefaults, setExportModalDefaults] = useState<{
+    title: string;
+    fontSizes: ExportChartFontSizes;
+  }>({ title: "", fontSizes: { ...DEFAULT_EXPORT_CHART_FONT_SIZES } });
 
   const points: Point[] = data.map((d) => ({ date: d.date, value: d.value }));
 
@@ -119,60 +131,71 @@ export function FollowerGrowthChart({
 
   const exportFilenameCtx = useStudyChartExportFilenameContext();
 
-  const handleExportPng = useCallback(() => {
-    const chart = chartInstanceRef.current;
-    if (!chart) return;
-    const backgroundColor = cssHsl("--background", "hsl(0, 0%, 100%)");
-    const stem =
-      exportFilenameCtx && rangeBounds && chartRange
-        ? buildStudyChartExportFilenameStem({
-            studySlug: exportFilenameCtx.studySlug,
-            chartFileStem: exportFileStem,
-            locale: exportFilenameCtx.locale,
-            yearAxisMode: "gregorian",
-            selectedStart: chartRange[0],
-            selectedEnd: chartRange[1],
-            defaultStart: rangeBounds[0],
-            defaultEnd: rangeBounds[1],
-            rangeGranularity: "year",
-          })
-        : slugifyChartFilename(exportFileStem ?? metricLabel);
-    const footerColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
-    const titleColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
-    const resolvedTitle = buildPresentationExportTitle({
-      studyHeading: exportPresentationStudyHeading,
-      metricLabel,
-      timeRange: chartRange,
-      chartLocale: chartLocale ?? "en",
-      yearAxisMode: "gregorian",
+  const buildExportPresentationTitle = useCallback(
+    () =>
+      buildPresentationExportTitle({
+        studyHeading: exportPresentationStudyHeading,
+        metricLabel,
+        timeRange: chartRange,
+        chartLocale: chartLocale ?? "en",
+        yearAxisMode: "gregorian",
+      }),
+    [chartLocale, chartRange, exportPresentationStudyHeading, metricLabel]
+  );
+
+  const openExportModal = useCallback(() => {
+    setExportModalDefaults({
+      title: buildExportPresentationTitle(),
+      fontSizes: { ...DEFAULT_EXPORT_CHART_FONT_SIZES },
     });
-    requestAnimationFrame(() => {
+    setExportModalOpen(true);
+  }, [buildExportPresentationTitle]);
+
+  const handleExportDownload = useCallback(
+    (settings: ExportChartSettings) => {
+      setExportModalOpen(false);
+      const chart = chartInstanceRef.current;
+      if (!chart) return;
+      const backgroundColor = cssHsl("--background", "hsl(0, 0%, 100%)");
+      const stem =
+        exportFilenameCtx && rangeBounds && chartRange
+          ? buildStudyChartExportFilenameStem({
+              studySlug: exportFilenameCtx.studySlug,
+              chartFileStem: exportFileStem,
+              locale: exportFilenameCtx.locale,
+              yearAxisMode: "gregorian",
+              selectedStart: chartRange[0],
+              selectedEnd: chartRange[1],
+              defaultStart: rangeBounds[0],
+              defaultEnd: rangeBounds[1],
+              rangeGranularity: "year",
+            })
+          : slugifyChartFilename(exportFileStem ?? metricLabel);
+      const footerColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
+      const titleColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
+      const titleForExport = settings.titleText.trim();
       requestAnimationFrame(() => {
-        try {
-          const exportOpts: DownloadEchartsRasterOptions = {
-            exportSourceFooter: exportSourceFooter?.trim(),
-            exportSourceFooterColor: footerColor,
-            exportPresentationTitle: resolvedTitle,
-            exportPresentationDirection: (chartLocale ?? "en") === "fa" ? "rtl" : "ltr",
-            exportPresentationLocale: (chartLocale ?? "en") === "fa" ? "fa" : "en",
-            exportPresentationTitleColor: titleColor,
-          };
-          downloadEchartsRaster(chart, "png", stem, backgroundColor, exportOpts);
-        } catch {
-          // Instance may be disposed mid-frame
-        }
+        requestAnimationFrame(() => {
+          try {
+            const exportOpts: DownloadEchartsRasterOptions = {
+              exportSourceFooter: exportSourceFooter?.trim(),
+              exportSourceFooterColor: footerColor,
+              exportPresentationTitle: titleForExport,
+              exportPresentationAllowEmptyTitle: true,
+              exportPresentationFontSizes: settings.fontSizes,
+              exportPresentationDirection: (chartLocale ?? "en") === "fa" ? "rtl" : "ltr",
+              exportPresentationLocale: (chartLocale ?? "en") === "fa" ? "fa" : "en",
+              exportPresentationTitleColor: titleColor,
+            };
+            downloadEchartsRaster(chart, "png", stem, backgroundColor, exportOpts);
+          } catch {
+            // Instance may be disposed mid-frame
+          }
+        });
       });
-    });
-  }, [
-    chartLocale,
-    chartRange,
-    exportFileStem,
-    exportFilenameCtx,
-    exportPresentationStudyHeading,
-    exportSourceFooter,
-    metricLabel,
-    rangeBounds,
-  ]);
+    },
+    [chartLocale, chartRange, exportFileStem, exportFilenameCtx, exportSourceFooter, metricLabel, rangeBounds]
+  );
 
   useEffect(() => {
     const colorRaw = cssHsl("--chart-primary", "hsl(238, 84%, 67%)");
@@ -347,6 +370,15 @@ export function FollowerGrowthChart({
   const sourceText = formatStudyExportSourceLine(exportSourceFooter, chartLocaleResolved);
 
   return (
+    <>
+      <ExportChartModal
+        open={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        defaultTitle={exportModalDefaults.title}
+        defaultFontSizes={exportModalDefaults.fontSizes}
+        onExport={handleExportDownload}
+        titleDir={chartLocaleResolved === "fa" ? "rtl" : "ltr"}
+      />
     <div className={`min-w-0 flex flex-col ${STUDY_CHART_STACK_GAP_CLASS}`}>
       <p className="text-xs leading-snug text-muted-foreground">
         Raw data (scatter + line). Fitted models are descriptive only; no extrapolation beyond last point.
@@ -359,7 +391,7 @@ export function FollowerGrowthChart({
           endValue={clipEnd}
           onStartChange={setClipStart}
           onEndChange={setClipEnd}
-          onExportPng={handleExportPng}
+          onExportPng={openExportModal}
           mode="full"
           startYearLabel={chartLocaleResolved === "fa" ? "سال شروع" : "Start Year"}
           endYearLabel={chartLocaleResolved === "fa" ? "سال پایان" : "End Year"}
@@ -372,7 +404,7 @@ export function FollowerGrowthChart({
           endValue={clipEnd}
           onStartChange={setClipStart}
           onEndChange={setClipEnd}
-          onExportPng={handleExportPng}
+          onExportPng={openExportModal}
           mode="exportOnly"
           startYearLabel={chartLocaleResolved === "fa" ? "سال شروع" : "Start Year"}
           endYearLabel={chartLocaleResolved === "fa" ? "سال پایان" : "End Year"}
@@ -388,5 +420,6 @@ export function FollowerGrowthChart({
         </p>
       ) : null}
     </div>
+    </>
   );
 }

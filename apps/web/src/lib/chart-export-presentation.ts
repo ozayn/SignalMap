@@ -39,6 +39,51 @@ export const PRESENTATION_EXPORT_FONTS = {
   seriesLabel: 19,
 } as const;
 
+/** Full font metrics used when building the offscreen export option (defaults + optional overrides). */
+export type PresentationExportFonts = { [K in keyof typeof PRESENTATION_EXPORT_FONTS]: number };
+
+/** User-facing font knobs in the export modal (maps into `PRESENTATION_EXPORT_FONTS`). */
+export type ExportChartFontSizes = {
+  title: number;
+  axisName: number;
+  axisTick: number;
+  legend: number;
+  source: number;
+};
+
+export const DEFAULT_EXPORT_CHART_FONT_SIZES: ExportChartFontSizes = {
+  title: PRESENTATION_EXPORT_FONTS.title,
+  axisName: PRESENTATION_EXPORT_FONTS.axisName,
+  axisTick: PRESENTATION_EXPORT_FONTS.axisLabel,
+  legend: PRESENTATION_EXPORT_FONTS.legend,
+  source: PRESENTATION_EXPORT_FONTS.sourceGraphic,
+};
+
+export type ExportChartSettings = {
+  titleText: string;
+  fontSizes: ExportChartFontSizes;
+};
+
+/** Merge modal font sizes with presentation defaults (derived fields scale from ratios in `PRESENTATION_EXPORT_FONTS`). */
+export function mergePresentationExportFonts(partial?: Partial<ExportChartFontSizes>): PresentationExportFonts {
+  const o: ExportChartFontSizes = { ...DEFAULT_EXPORT_CHART_FONT_SIZES, ...partial };
+  const axisLabel = o.axisTick;
+  const r = PRESENTATION_EXPORT_FONTS;
+  return {
+    ...r,
+    title: o.title,
+    axisName: o.axisName,
+    axisNameLineHeight: Math.max(14, Math.round(o.axisName * (r.axisNameLineHeight / r.axisName))),
+    axisLabel: o.axisTick,
+    legend: o.legend,
+    legendPage: Math.max(10, Math.round(o.legend * (r.legendPage / r.legend))),
+    sourceGraphic: o.source,
+    markLineLabel: Math.round(axisLabel * (r.markLineLabel / r.axisLabel)),
+    tooltip: Math.round(axisLabel * (r.tooltip / r.axisLabel)),
+    seriesLabel: Math.round(axisLabel * (r.seriesLabel / r.axisLabel)),
+  } satisfies PresentationExportFonts;
+}
+
 /** Context for slide-style PNG export: title + source are drawn on the offscreen ECharts canvas (not the outer composite). */
 export type PresentationEchartsExportContext = {
   chartTitle: string;
@@ -378,7 +423,10 @@ function asArray<T>(v: T | T[] | undefined): T[] {
   return Array.isArray(v) ? v : [v];
 }
 
-function scaleRichForPresentation(rich: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+function scaleRichForPresentation(
+  rich: Record<string, unknown> | undefined,
+  axisLabelTargetPx: number
+): Record<string, unknown> | undefined {
   if (!rich || typeof rich !== "object") return undefined;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rich)) {
@@ -389,7 +437,7 @@ function scaleRichForPresentation(rich: Record<string, unknown> | undefined): Re
     const o = v as Record<string, unknown>;
     const fs = typeof o.fontSize === "number" ? o.fontSize : 12;
     const lh = typeof o.lineHeight === "number" ? o.lineHeight : Math.round(fs * 1.25);
-    const factor = PRESENTATION_EXPORT_FONTS.axisLabel / 12;
+    const factor = axisLabelTargetPx / 12;
     out[k] = {
       ...o,
       fontSize: Math.round(fs * factor),
@@ -609,7 +657,8 @@ const EXPORT_AUX_LEGEND_SOURCE_RESERVE_MIN = 52;
  */
 function buildPresentationExportAuxGraphics(
   ctx: PresentationEchartsExportContext,
-  sourceReservedFromBottom: number
+  sourceReservedFromBottom: number,
+  fonts: PresentationExportFonts
 ): unknown[] {
   const countries = ctx.countryColorKey ?? [];
   const ls = ctx.lineStyleKey;
@@ -625,7 +674,7 @@ function buildPresentationExportAuxGraphics(
   const rtl = (ctx.direction ?? "ltr") === "rtl";
   const textFill = "#0f172a";
   const stroke = "#0f172a";
-  const fontSize = Math.max(16, PRESENTATION_EXPORT_FONTS.legend - 4);
+  const fontSize = Math.max(16, fonts.legend - 4);
   const font = `${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
   const g: unknown[] = [];
   const margin = 56;
@@ -761,12 +810,19 @@ function buildPresentationExportAuxGraphics(
   return g;
 }
 
-function buildPresentationTitlePatch(opt: Record<string, unknown>, ctx: PresentationEchartsExportContext): Record<string, unknown> {
+function buildPresentationTitlePatch(
+  opt: Record<string, unknown>,
+  ctx: PresentationEchartsExportContext,
+  fonts: PresentationExportFonts
+): Record<string, unknown> {
   const rawTitle = opt.title;
   const title0 = (Array.isArray(rawTitle) ? rawTitle[0] : rawTitle) as Record<string, unknown> | undefined;
   const prevTs = (title0?.textStyle ?? {}) as Record<string, unknown>;
   const displayTitle = localizeChartNumericDisplayString(ctx.chartTitle.trim(), ctx.chartLocale ?? "en");
-  const fs = PRESENTATION_EXPORT_FONTS.title;
+  if (!ctx.chartTitle.trim()) {
+    return { ...(title0 ?? {}), show: false };
+  }
+  const fs = fonts.title;
   const subRaw = ctx.chartSubtitle?.trim();
   const subtextDisplay = subRaw ? localizeChartNumericDisplayString(subRaw, ctx.chartLocale ?? "en") : "";
   const subFs = Math.max(16, Math.round(fs * 0.48));
@@ -1072,9 +1128,9 @@ export function buildExportDataFitAxisPatch(
  */
 export function buildPresentationEchartsPatch(
   opt: Record<string, unknown>,
-  ctx: PresentationEchartsExportContext
+  ctx: PresentationEchartsExportContext,
+  fonts: PresentationExportFonts = PRESENTATION_EXPORT_FONTS
 ): Record<string, unknown> {
-  const fonts = PRESENTATION_EXPORT_FONTS;
   const gridPatch = normalizePresentationGridPatch(opt);
   const chartLocale: "en" | "fa" = ctx.chartLocale === "fa" ? "fa" : "en";
   const dir = ctx.direction ?? "ltr";
@@ -1162,7 +1218,7 @@ export function buildPresentationEchartsPatch(
       ...al,
       fontSize: fonts.axisLabel,
       margin,
-      ...(rich ? { rich: scaleRichForPresentation(rich) } : {}),
+      ...(rich ? { rich: scaleRichForPresentation(rich, fonts.axisLabel) } : {}),
     };
     if (isY && isValueY) {
       axisLabelOut.formatter = nextFormatter;
@@ -1337,10 +1393,10 @@ export function buildPresentationEchartsPatch(
     gridBase.bottom = zonedExportFooterMinBottom;
   }
 
-  const auxGraphics = buildPresentationExportAuxGraphics(ctx, sourceBottomReserveForAux);
+  const auxGraphics = buildPresentationExportAuxGraphics(ctx, sourceBottomReserveForAux, fonts);
 
   const out: Record<string, unknown> = {
-    title: buildPresentationTitlePatch(opt, ctx),
+    title: buildPresentationTitlePatch(opt, ctx, fonts),
     animation: false,
     grid: gridBase,
     graphic: [...prevGraphics, ...sourceGraphic, ...auxGraphics],

@@ -8,8 +8,13 @@ import {
   buildPresentationEchartsPatch,
   compactExportSlideTitleString,
   formatStudyExportSourceLine,
+  mergePresentationExportFonts,
+  type ExportChartFontSizes,
   type PresentationSlideLayout,
 } from "@/lib/chart-export-presentation";
+import { buildYAxisBoundaryTickFormatterPatch } from "@/lib/chart-y-axis-boundary-tick-filter";
+
+export type { ExportChartFontSizes, ExportChartSettings } from "@/lib/chart-export-presentation";
 
 /** Raster formats supported today; extend with `"svg"` when wiring vector export. */
 export type ChartRasterExportFormat = "png";
@@ -214,6 +219,13 @@ export type DownloadEchartsRasterOptions = {
   exportPresentationLocale?: "en" | "fa";
   /** Title text color (CSS). */
   exportPresentationTitleColor?: string;
+  /**
+   * When true, an empty `exportPresentationTitle` hides the export title (no `"Chart"` fallback).
+   * Used by the export modal when the user clears the title field.
+   */
+  exportPresentationAllowEmptyTitle?: boolean;
+  /** Partial font overrides for the offscreen presentation export only (not the live chart). */
+  exportPresentationFontSizes?: Partial<ExportChartFontSizes>;
 };
 
 /** Dedupe and join source publisher strings for an export footer body (no `Source:` prefix). */
@@ -585,8 +597,14 @@ async function exportPresentationPngFromLiveChart(
   backgroundColor: string,
   opts: DownloadEchartsRasterOptions
 ): Promise<string> {
-  const compactTitle = compactExportSlideTitleString((opts.exportPresentationTitle ?? "").trim() || "Chart");
-  const layout = layoutPresentationSlideChrome(compactTitle, opts.exportSourceFooter?.trim(), true);
+  const rawTitleInput = (opts.exportPresentationTitle ?? "").trim();
+  const compactTitle =
+    rawTitleInput === ""
+      ? ""
+      : opts.exportPresentationAllowEmptyTitle === true
+        ? compactExportSlideTitleString(rawTitleInput) || rawTitleInput
+        : compactExportSlideTitleString(rawTitleInput || "Chart") || "Chart";
+  const layout = layoutPresentationSlideChrome(compactTitle || " ", opts.exportSourceFooter?.trim(), true);
 
   const hidden = document.createElement("div");
   hidden.setAttribute("aria-hidden", "true");
@@ -606,8 +624,12 @@ async function exportPresentationPngFromLiveChart(
     // Presentation title is export-only; dropping any `title` from the snapshot avoids inheriting or leaking title state.
     delete exportSnapshot.title;
 
+    const exportFonts = mergePresentationExportFonts(opts.exportPresentationFontSizes);
+
     /** Build patch from the snapshot before any `setOption` so the snapshot cannot be altered by the export instance merge. */
-    const presentationPatch = buildPresentationEchartsPatch(exportSnapshot, {
+    const presentationPatch = buildPresentationEchartsPatch(
+      exportSnapshot,
+      {
       chartTitle: compactTitle,
       chartSubtitle: opts.exportPresentationSubtitle?.trim(),
       countryColorKey: opts.exportPresentationCountryKey,
@@ -616,7 +638,9 @@ async function exportPresentationPngFromLiveChart(
       direction: opts.exportPresentationDirection ?? "ltr",
       chartLocale: opts.exportPresentationLocale ?? "en",
       chartPixelHeight: layout.chartSlotBaseH,
-    });
+    },
+      exportFonts
+    );
     exportChart.setOption(exportSnapshot as never, { notMerge: true });
     exportChart.setOption(presentationPatch as never, false);
     exportChart.resize({
@@ -638,6 +662,10 @@ async function exportPresentationPngFromLiveChart(
       });
       if (axisFitPatch) {
         exportChart.setOption(axisFitPatch as never, false);
+      }
+      const yBoundaryPatch = buildYAxisBoundaryTickFormatterPatch(exportChart.getOption() as Record<string, unknown>);
+      if (yBoundaryPatch) {
+        exportChart.setOption(yBoundaryPatch as never, false);
       }
 
       if (process.env.NODE_ENV === "development") {

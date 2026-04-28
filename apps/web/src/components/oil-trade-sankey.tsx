@@ -1,14 +1,20 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import { useTheme } from "next-themes";
 import * as echarts from "echarts";
 import { formatNumberCompact } from "@/lib/format-number-compact";
 import { Button } from "@/components/ui/button";
+import { ExportChartModal } from "@/components/export-chart-modal";
 import { useStudyChartExportFilenameContext } from "@/components/study-chart-export-filename-context";
 import { downloadEchartsRaster, slugifyChartFilename, type DownloadEchartsRasterOptions } from "@/lib/chart-export";
 import { buildStudyChartExportFilenameStem } from "@/lib/chart-export-filename";
-import { buildPresentationExportTitle } from "@/lib/chart-export-presentation";
+import {
+  buildPresentationExportTitle,
+  DEFAULT_EXPORT_CHART_FONT_SIZES,
+  type ExportChartFontSizes,
+  type ExportChartSettings,
+} from "@/lib/chart-export-presentation";
 import { cssHsl } from "@/lib/utils";
 
 export type SankeyEdge = { source: string; target: string; value: number };
@@ -67,34 +73,20 @@ export function OilTradeSankey({
 }: OilTradeSankeyProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportModalDefaults, setExportModalDefaults] = useState<{
+    title: string;
+    fontSizes: ExportChartFontSizes;
+  }>({ title: "", fontSizes: { ...DEFAULT_EXPORT_CHART_FONT_SIZES } });
   const exportFilenameCtx = useStudyChartExportFilenameContext();
   const { resolvedTheme } = useTheme();
   const labelColor = resolvedTheme === "dark" ? "#9ca3af" : "#374151";
 
-  const handleExportPng = useCallback(() => {
-    const inst = chartInstanceRef.current;
-    if (!inst) return;
+  const buildExportPresentationTitle = useCallback(() => {
     const y = (year && String(year).slice(0, 4)) || new Date().getFullYear().toString();
     const yStart = `${y}-01-01`;
     const yEnd = `${y}-12-31`;
-    const backgroundColor = cssHsl("--background", "hsl(0, 0%, 100%)");
-    const footerColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
-    const titleColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
-    const stem =
-      exportFilenameCtx && exportFileStem
-        ? buildStudyChartExportFilenameStem({
-            studySlug: exportFilenameCtx.studySlug,
-            chartFileStem: exportFileStem,
-            locale: exportFilenameCtx.locale,
-            yearAxisMode: "gregorian",
-            selectedStart: yStart,
-            selectedEnd: yEnd,
-            defaultStart: yStart,
-            defaultEnd: yEnd,
-            rangeGranularity: "year",
-          })
-        : slugifyChartFilename(exportFileStem ?? DEFAULT_SANKEY_EXPORT_STEM);
-    const resolvedTitle =
+    return (
       exportPresentationTitleProp?.trim() ||
       buildPresentationExportTitle({
         studyHeading: exportPresentationStudyHeading ?? "Oil trade",
@@ -102,34 +94,66 @@ export function OilTradeSankey({
         timeRange: [yStart, yEnd],
         chartLocale,
         yearAxisMode: "gregorian",
-      });
-    const exportOpts: DownloadEchartsRasterOptions = {
-      exportSourceFooter: exportSourceFooter?.trim(),
-      exportSourceFooterColor: footerColor,
-      exportPresentationTitle: resolvedTitle,
-      exportPresentationDirection: chartLocale === "fa" ? "rtl" : "ltr",
-      exportPresentationLocale: chartLocale === "fa" ? "fa" : "en",
-      exportPresentationTitleColor: titleColor,
-    };
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        try {
-          downloadEchartsRaster(inst, "png", stem, backgroundColor, exportOpts);
-        } catch {
-          /* */
-        }
-      });
+      })
+    );
+  }, [year, exportPresentationTitleProp, exportPresentationStudyHeading, isAllDataMode, chartLocale]);
+
+  const openExportModal = useCallback(() => {
+    setExportModalDefaults({
+      title: buildExportPresentationTitle(),
+      fontSizes: { ...DEFAULT_EXPORT_CHART_FONT_SIZES },
     });
-  }, [
-    year,
-    exportFileStem,
-    exportFilenameCtx,
-    exportPresentationTitleProp,
-    exportPresentationStudyHeading,
-    exportSourceFooter,
-    isAllDataMode,
-    chartLocale,
-  ]);
+    setExportModalOpen(true);
+  }, [buildExportPresentationTitle]);
+
+  const handleExportDownload = useCallback(
+    (settings: ExportChartSettings) => {
+      setExportModalOpen(false);
+      const inst = chartInstanceRef.current;
+      if (!inst) return;
+      const y = (year && String(year).slice(0, 4)) || new Date().getFullYear().toString();
+      const yStart = `${y}-01-01`;
+      const yEnd = `${y}-12-31`;
+      const backgroundColor = cssHsl("--background", "hsl(0, 0%, 100%)");
+      const footerColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
+      const titleColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
+      const stem =
+        exportFilenameCtx && exportFileStem
+          ? buildStudyChartExportFilenameStem({
+              studySlug: exportFilenameCtx.studySlug,
+              chartFileStem: exportFileStem,
+              locale: exportFilenameCtx.locale,
+              yearAxisMode: "gregorian",
+              selectedStart: yStart,
+              selectedEnd: yEnd,
+              defaultStart: yStart,
+              defaultEnd: yEnd,
+              rangeGranularity: "year",
+            })
+          : slugifyChartFilename(exportFileStem ?? DEFAULT_SANKEY_EXPORT_STEM);
+      const titleForExport = settings.titleText.trim();
+      const exportOpts: DownloadEchartsRasterOptions = {
+        exportSourceFooter: exportSourceFooter?.trim(),
+        exportSourceFooterColor: footerColor,
+        exportPresentationTitle: titleForExport,
+        exportPresentationAllowEmptyTitle: true,
+        exportPresentationFontSizes: settings.fontSizes,
+        exportPresentationDirection: chartLocale === "fa" ? "rtl" : "ltr",
+        exportPresentationLocale: chartLocale === "fa" ? "fa" : "en",
+        exportPresentationTitleColor: titleColor,
+      };
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          try {
+            downloadEchartsRaster(inst, "png", stem, backgroundColor, exportOpts);
+          } catch {
+            /* */
+          }
+        });
+      });
+    },
+    [year, exportFileStem, exportFilenameCtx, exportSourceFooter, chartLocale]
+  );
 
   useEffect(() => {
     const el = chartRef.current;
@@ -301,13 +325,21 @@ export function OilTradeSankey({
 
   return (
     <div className="w-full min-w-0">
+      <ExportChartModal
+        open={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        defaultTitle={exportModalDefaults.title}
+        defaultFontSizes={exportModalDefaults.fontSizes}
+        onExport={handleExportDownload}
+        titleDir={chartLocale === "fa" ? "rtl" : "ltr"}
+      />
       <div className="mb-2 flex flex-wrap items-center justify-end gap-2">
         <Button
           type="button"
           variant="outline"
           size="sm"
           className="h-8 shrink-0 rounded-md px-2.5 text-xs font-normal leading-none"
-          onClick={handleExportPng}
+          onClick={openExportModal}
         >
           Export PNG
         </Button>

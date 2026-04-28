@@ -20,7 +20,14 @@ import {
 } from "@/lib/chart-export";
 import { buildStudyChartExportFilenameStem } from "@/lib/chart-export-filename";
 import { useStudyChartExportFilenameContext } from "@/components/study-chart-export-filename-context";
-import { buildPresentationExportTitle, formatStudyExportSourceLine } from "@/lib/chart-export-presentation";
+import {
+  buildPresentationExportTitle,
+  DEFAULT_EXPORT_CHART_FONT_SIZES,
+  formatStudyExportSourceLine,
+  type ExportChartFontSizes,
+  type ExportChartSettings,
+} from "@/lib/chart-export-presentation";
+import { ExportChartModal } from "@/components/export-chart-modal";
 import { StudyChartControls } from "@/components/study-chart-controls";
 import { timelineChartFaUi } from "@/lib/timeline-chart-fa";
 import {
@@ -31,6 +38,12 @@ import {
   yAxisNameGapForMultilineTitle,
 } from "@/lib/chart-axis-label";
 import { nicePercentShareAxisRange } from "@/lib/chart-axis-nice";
+import {
+  paddedLinearAxisExtentFromData,
+  paddedLogAxisExtentFromData,
+  wrapYAxisTickFormatterForBoundaryArtifacts,
+  type YAxisBoundaryTickCtx,
+} from "@/lib/chart-y-axis-boundary-tick-filter";
 import {
   formatChartCategoryAxisYearLabel,
   formatChartTimeAxisYearLabel,
@@ -841,6 +854,11 @@ export function TimelineChart({
   const [xLabelRotate, setXLabelRotate] = useState(0);
   const [clipStart, setClipStart] = useState("");
   const [clipEnd, setClipEnd] = useState("");
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportModalDefaults, setExportModalDefaults] = useState<{
+    title: string;
+    fontSizes: ExportChartFontSizes;
+  }>({ title: "", fontSizes: { ...DEFAULT_EXPORT_CHART_FONT_SIZES } });
   const { isCompact, isLandscapeCompact } = useChartViewportLayout();
 
   const rangeBounds = useMemo((): [string, string] | undefined => {
@@ -997,32 +1015,8 @@ export function TimelineChart({
     setClipEnd("");
   }, [rangeBounds?.[0], rangeBounds?.[1]]);
 
-  const handleExportPng = useCallback(() => {
-    const chart = chartInstanceRef.current;
-    if (!chart) return;
-    const backgroundColor = cssHsl("--background", "hsl(0, 0%, 100%)");
-    const yearAxisForFile = xAxisYearLabel ?? "gregorian";
-    const stem =
-      exportFilenameCtx &&
-      rangeBounds?.[0] &&
-      rangeBounds[1] &&
-      chartRange?.[0] &&
-      chartRange[1]
-        ? buildStudyChartExportFilenameStem({
-            studySlug: exportFilenameCtx.studySlug,
-            chartFileStem: exportFileStem,
-            locale: exportFilenameCtx.locale,
-            yearAxisMode: yearAxisForFile,
-            selectedStart: chartRange[0],
-            selectedEnd: chartRange[1],
-            defaultStart: rangeBounds[0],
-            defaultEnd: rangeBounds[1],
-            rangeGranularity: studyExportRangeGranularity,
-          })
-        : slugifyChartFilename(exportFileStem ?? label);
-    const footerColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
-    const titleColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
-    const resolvedTitle =
+  const buildExportPresentationTitle = useCallback((): string => {
+    return (
       exportPresentationTitle?.trim() ??
       buildPresentationExportTitle({
         studyHeading: exportPresentationStudyHeading,
@@ -1030,71 +1024,121 @@ export function TimelineChart({
         timeRange: chartRange,
         chartLocale: chartLocale ?? "en",
         yearAxisMode: xAxisYearLabel ?? "gregorian",
-      });
-    const isCountryGroupOn = (labels: string[]) =>
-      labels.length > 0 && labels.every((name) => groupedLegendSelected == null || groupedLegendSelected[name] !== false);
-
-    const exportPresentationCountryKey =
-      groupedLegendModel?.variant === "country"
-        ? groupedLegendModel.countries
-            .filter((c) => isCountryGroupOn(c.seriesLabels))
-            .map((c) => ({ label: c.legendGroup, color: c.lineColor }))
-        : undefined;
-
-    const exportPresentationLineStyleKey =
-      groupedLegendModel?.variant === "country" && groupedLegendModel.lineStyleKey
-        ? groupedLegendModel.lineStyleKey
-        : undefined;
-
-    const useExportAuxLegend =
-      (exportPresentationCountryKey?.length ?? 0) > 0 && exportPresentationLineStyleKey != null;
-
-    const exportPresentationSubtitle =
-      groupedLegendModel?.variant === "country" && !useExportAuxLegend
-        ? buildCountryGroupedExportSubtitle({
-            model: groupedLegendModel,
-            selected: groupedLegendSelected,
-            chartLocale: chartLocale ?? "en",
-          })
-        : undefined;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        try {
-          const exportOpts: DownloadEchartsRasterOptions = {
-            exportSourceFooter: exportSourceFooter?.trim(),
-            exportSourceFooterColor: footerColor,
-            exportPresentationTitle: resolvedTitle,
-            exportPresentationSubtitle,
-            ...(useExportAuxLegend
-              ? {
-                  exportPresentationCountryKey: exportPresentationCountryKey,
-                  exportPresentationLineStyleKey: exportPresentationLineStyleKey,
-                }
-              : {}),
-            exportPresentationDirection: (chartLocale ?? "en") === "fa" ? "rtl" : "ltr",
-            exportPresentationLocale: (chartLocale ?? "en") === "fa" ? "fa" : "en",
-            exportPresentationTitleColor: titleColor,
-          };
-          downloadEchartsRaster(chart, "png", stem, backgroundColor, exportOpts);
-        } catch {
-          // Instance may be disposed mid-frame
-        }
-      });
-    });
+      })
+    );
   }, [
     chartLocale,
     chartRange,
-    exportFileStem,
-    exportFilenameCtx,
     exportPresentationStudyHeading,
     exportPresentationTitle,
-    exportSourceFooter,
     label,
-    rangeBounds,
     xAxisYearLabel,
-    groupedLegendModel,
-    groupedLegendSelected,
   ]);
+
+  const openExportModal = useCallback(() => {
+    setExportModalDefaults({
+      title: buildExportPresentationTitle(),
+      fontSizes: { ...DEFAULT_EXPORT_CHART_FONT_SIZES },
+    });
+    setExportModalOpen(true);
+  }, [buildExportPresentationTitle]);
+
+  const handleExportDownload = useCallback(
+    (settings: ExportChartSettings) => {
+      setExportModalOpen(false);
+      const chart = chartInstanceRef.current;
+      if (!chart) return;
+      const backgroundColor = cssHsl("--background", "hsl(0, 0%, 100%)");
+      const yearAxisForFile = xAxisYearLabel ?? "gregorian";
+      const stem =
+        exportFilenameCtx &&
+        rangeBounds?.[0] &&
+        rangeBounds[1] &&
+        chartRange?.[0] &&
+        chartRange[1]
+          ? buildStudyChartExportFilenameStem({
+              studySlug: exportFilenameCtx.studySlug,
+              chartFileStem: exportFileStem,
+              locale: exportFilenameCtx.locale,
+              yearAxisMode: yearAxisForFile,
+              selectedStart: chartRange[0],
+              selectedEnd: chartRange[1],
+              defaultStart: rangeBounds[0],
+              defaultEnd: rangeBounds[1],
+              rangeGranularity: studyExportRangeGranularity,
+            })
+          : slugifyChartFilename(exportFileStem ?? label);
+      const footerColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
+      const titleColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
+      const isCountryGroupOn = (labels: string[]) =>
+        labels.length > 0 && labels.every((name) => groupedLegendSelected == null || groupedLegendSelected[name] !== false);
+
+      const exportPresentationCountryKey =
+        groupedLegendModel?.variant === "country"
+          ? groupedLegendModel.countries
+              .filter((c) => isCountryGroupOn(c.seriesLabels))
+              .map((c) => ({ label: c.legendGroup, color: c.lineColor }))
+          : undefined;
+
+      const exportPresentationLineStyleKey =
+        groupedLegendModel?.variant === "country" && groupedLegendModel.lineStyleKey
+          ? groupedLegendModel.lineStyleKey
+          : undefined;
+
+      const useExportAuxLegend =
+        (exportPresentationCountryKey?.length ?? 0) > 0 && exportPresentationLineStyleKey != null;
+
+      const exportPresentationSubtitle =
+        groupedLegendModel?.variant === "country" && !useExportAuxLegend
+          ? buildCountryGroupedExportSubtitle({
+              model: groupedLegendModel,
+              selected: groupedLegendSelected,
+              chartLocale: chartLocale ?? "en",
+            })
+          : undefined;
+
+      const titleForExport = settings.titleText.trim();
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          try {
+            const exportOpts: DownloadEchartsRasterOptions = {
+              exportSourceFooter: exportSourceFooter?.trim(),
+              exportSourceFooterColor: footerColor,
+              exportPresentationTitle: titleForExport,
+              exportPresentationAllowEmptyTitle: true,
+              exportPresentationFontSizes: settings.fontSizes,
+              exportPresentationSubtitle,
+              ...(useExportAuxLegend
+                ? {
+                    exportPresentationCountryKey: exportPresentationCountryKey,
+                    exportPresentationLineStyleKey: exportPresentationLineStyleKey,
+                  }
+                : {}),
+              exportPresentationDirection: (chartLocale ?? "en") === "fa" ? "rtl" : "ltr",
+              exportPresentationLocale: (chartLocale ?? "en") === "fa" ? "fa" : "en",
+              exportPresentationTitleColor: titleColor,
+            };
+            downloadEchartsRaster(chart, "png", stem, backgroundColor, exportOpts);
+          } catch {
+            // Instance may be disposed mid-frame
+          }
+        });
+      });
+    },
+    [
+      chartLocale,
+      chartRange,
+      exportFileStem,
+      exportFilenameCtx,
+      exportSourceFooter,
+      label,
+      rangeBounds,
+      xAxisYearLabel,
+      groupedLegendModel,
+      groupedLegendSelected,
+    ]
+  );
 
   useEffect(() => {
     let deb: ReturnType<typeof setTimeout> | undefined;
@@ -2356,6 +2400,51 @@ export function TimelineChart({
                 }
                 pctNice = nicePercentShareAxisRange(nums);
               }
+
+              let boundaryCtx: YAxisBoundaryTickCtx | null = null;
+              const skipBoundaryFilter =
+                (isGdpCompactMultiSeriesFormat(multiSeriesValueFormat) &&
+                  Boolean(first.unit || multiSeriesValueFormat === "gdp_indexed")) ||
+                Boolean(first.unit?.includes("%") && !isGdpCompactMultiSeriesFormat(multiSeriesValueFormat));
+              if (!skipBoundaryFilter && multiSeriesValues) {
+                if (pctNice) {
+                  boundaryCtx = {
+                    axisType: "value",
+                    min: pctNice.min,
+                    max: pctNice.max,
+                    interval: pctNice.interval,
+                  };
+                } else if (isGoldLogAxis) {
+                  boundaryCtx = { axisType: "log", min: 10, max: 3000, interval: null };
+                } else if (useLog && isLeft) {
+                  const nums: number[] = [];
+                  for (const s of seriesOnAxis) {
+                    const si = multiSeries.indexOf(s);
+                    for (const v of multiSeriesValues[si] ?? []) {
+                      if (typeof v === "number" && Number.isFinite(v) && v > 0) nums.push(v);
+                    }
+                  }
+                  if (nums.length > 0) {
+                    const pad = paddedLogAxisExtentFromData(Math.min(...nums), Math.max(...nums));
+                    if (pad) boundaryCtx = { axisType: "log", min: pad.min, max: pad.max, interval: null };
+                  }
+                } else if (yAxisMin != null && yAxisMax != null && isLeft) {
+                  boundaryCtx = { axisType: "value", min: yAxisMin, max: yAxisMax, interval: null };
+                } else {
+                  const nums: number[] = [];
+                  for (const s of seriesOnAxis) {
+                    const si = multiSeries.indexOf(s);
+                    for (const v of multiSeriesValues[si] ?? []) {
+                      if (typeof v === "number" && Number.isFinite(v)) nums.push(v);
+                    }
+                  }
+                  if (nums.length > 0) {
+                    const pad = paddedLinearAxisExtentFromData(Math.min(...nums), Math.max(...nums));
+                    if (pad) boundaryCtx = { axisType: "value", min: pad.min, max: pad.max, interval: null };
+                  }
+                }
+              }
+
               return {
                 type: (useLog ? "log" : "value") as "value" | "log",
                 ...(useLog ? { logBase: 10 } : {}),
@@ -2396,10 +2485,13 @@ export function TimelineChart({
                           },
                         }
                       : {
-                            formatter: (v: number | string) => {
-                              const n = typeof v === "number" ? v : Number(v);
-                              return Number.isFinite(n) ? formatEconomicAxisTick(n, chartNumeralLocale) : String(v);
-                            },
+                            formatter: wrapYAxisTickFormatterForBoundaryArtifacts(
+                              (v: number | string) => {
+                                const n = typeof v === "number" ? v : Number(v);
+                                return Number.isFinite(n) ? formatEconomicAxisTick(n, chartNumeralLocale) : String(v);
+                              },
+                              boundaryCtx
+                            ),
                           }),
                 },
               };
@@ -2423,6 +2515,25 @@ export function TimelineChart({
                 chartNumeralLocale
               )
             );
+            const primaryVals = values.filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+            const leftOilPad = primaryVals.length
+              ? paddedLinearAxisExtentFromData(Math.min(...primaryVals), Math.max(...primaryVals))
+              : null;
+            const leftOilBoundaryCtx: YAxisBoundaryTickCtx | null = leftOilPad
+              ? { axisType: "value", min: leftOilPad.min, max: leftOilPad.max, interval: null }
+              : null;
+            const rightVals = oilValuesForChart.filter(
+              (x): x is number => typeof x === "number" && Number.isFinite(x) && (yAxisLog ? x > 0 : true)
+            );
+            const rightOilPad =
+              rightVals.length === 0
+                ? null
+                : yAxisLog
+                  ? paddedLogAxisExtentFromData(Math.min(...rightVals), Math.max(...rightVals))
+                  : paddedLinearAxisExtentFromData(Math.min(...rightVals), Math.max(...rightVals));
+            const rightOilBoundaryCtx: YAxisBoundaryTickCtx | null = rightOilPad
+              ? { axisType: yAxisLog ? "log" : "value", min: rightOilPad.min, max: rightOilPad.max, interval: null }
+              : null;
             return [
             {
               type: "value" as const,
@@ -2436,10 +2547,13 @@ export function TimelineChart({
               splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
               axisLabel: {
                 ...yAxisTickLabelBase,
-                formatter: (v: number | string) => {
-                  const n = typeof v === "number" ? v : Number(v);
-                  return Number.isFinite(n) ? formatEconomicAxisTick(n, chartNumeralLocale) : String(v);
-                },
+                formatter: wrapYAxisTickFormatterForBoundaryArtifacts(
+                  (v: number | string) => {
+                    const n = typeof v === "number" ? v : Number(v);
+                    return Number.isFinite(n) ? formatEconomicAxisTick(n, chartNumeralLocale) : String(v);
+                  },
+                  leftOilBoundaryCtx
+                ),
               },
               show: hasData,
             },
@@ -2456,14 +2570,26 @@ export function TimelineChart({
               splitLine: { show: false },
               axisLabel: {
                 ...yAxisTickLabelBase,
-                formatter: (v: number) =>
-                  typeof v === "number" ? formatEconomicAxisTick(v, chartNumeralLocale) : String(v),
+                formatter: wrapYAxisTickFormatterForBoundaryArtifacts(
+                  (v: number | string) => {
+                    const n = typeof v === "number" ? v : Number(v);
+                    return Number.isFinite(n) ? formatEconomicAxisTick(n, chartNumeralLocale) : String(v);
+                  },
+                  rightOilBoundaryCtx
+                ),
               },
             },
           ];
           })()
         : (() => {
             const singleAxisName = formatYAxisNameMultiline(localizeChartNumericDisplayString(label, chartNumeralLocale));
+            const singleVals = values.filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+            const singlePad = singleVals.length
+              ? paddedLinearAxisExtentFromData(Math.min(...singleVals), Math.max(...singleVals))
+              : null;
+            const singleBoundaryCtx: YAxisBoundaryTickCtx | null = singlePad
+              ? { axisType: "value", min: singlePad.min, max: singlePad.max, interval: null }
+              : null;
             return {
             type: "value",
             name: compact ? "" : singleAxisName,
@@ -2475,10 +2601,13 @@ export function TimelineChart({
             splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
             axisLabel: {
               ...yAxisTickLabelBase,
-              formatter: (v: number | string) => {
-                const n = typeof v === "number" ? v : Number(v);
-                return Number.isFinite(n) ? formatEconomicAxisTick(n, chartNumeralLocale) : String(v);
-              },
+              formatter: wrapYAxisTickFormatterForBoundaryArtifacts(
+                (v: number | string) => {
+                  const n = typeof v === "number" ? v : Number(v);
+                  return Number.isFinite(n) ? formatEconomicAxisTick(n, chartNumeralLocale) : String(v);
+                },
+                singleBoundaryCtx
+              ),
             },
           };
           })(),
@@ -3040,7 +3169,7 @@ export function TimelineChart({
           endValue={clipEnd}
           onStartChange={setClipStart}
           onEndChange={setClipEnd}
-          onExportPng={handleExportPng}
+          onExportPng={openExportModal}
           mode="full"
           startYearLabel={chartLocaleResolved === "fa" ? "سال شروع" : "Start Year"}
           endYearLabel={chartLocaleResolved === "fa" ? "سال پایان" : "End Year"}
@@ -3053,7 +3182,7 @@ export function TimelineChart({
           endValue={clipEnd}
           onStartChange={setClipStart}
           onEndChange={setClipEnd}
-          onExportPng={handleExportPng}
+          onExportPng={openExportModal}
           mode="exportOnly"
           startYearLabel={chartLocaleResolved === "fa" ? "سال شروع" : "Start Year"}
           endYearLabel={chartLocaleResolved === "fa" ? "سال پایان" : "End Year"}
@@ -3116,13 +3245,32 @@ export function TimelineChart({
     </div>
   );
 
+  const exportModal = (
+    <ExportChartModal
+      open={exportModalOpen}
+      onClose={() => setExportModalOpen(false)}
+      defaultTitle={exportModalDefaults.title}
+      defaultFontSizes={exportModalDefaults.fontSizes}
+      onExport={handleExportDownload}
+      titleDir={chartLocaleResolved === "fa" ? "rtl" : "ltr"}
+    />
+  );
+
   if (chartLocaleResolved === "fa") {
     return (
-      <div className="min-w-0" dir="ltr" lang="en">
-        {inner}
-      </div>
+      <>
+        {exportModal}
+        <div className="min-w-0" dir="ltr" lang="en">
+          {inner}
+        </div>
+      </>
     );
   }
 
-  return inner;
+  return (
+    <>
+      {exportModal}
+      {inner}
+    </>
+  );
 }
