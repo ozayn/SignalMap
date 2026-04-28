@@ -1,5 +1,11 @@
 import type { NextConfig } from "next";
 
+/** Build-time visibility (Railway build logs): NEXT_PUBLIC must be set when `next build` runs to be inlined. */
+console.log(
+  "[signalmap web build] NEXT_PUBLIC_SIGNALMAP_SUPPORT_URL configured:",
+  Boolean(process.env.NEXT_PUBLIC_SIGNALMAP_SUPPORT_URL?.trim())
+);
+
 /**
  * Deployment note (Railway / rolling releases):
  * This app does not define Next.js Server Actions (`"use server"` / bound `formAction`).
