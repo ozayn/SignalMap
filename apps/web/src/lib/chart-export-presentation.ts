@@ -447,16 +447,30 @@ function scaleRichForPresentation(
   return out;
 }
 
-/** Grid margins (logical px @ 1920 wide): room for title, long FA axis names, dual Y, legend, and source. */
-const PRESENTATION_EXPORT_GRID = {
-  /** Wider for Y-axis name vs tick space (billion-scaled $ axes, Farsi). */
-  left: 100,
-  right: 100,
-  top: 80,
-  /** Base space below the plot: x-axis band, legend, and (when used) a lower source zone without squashing. */
-  bottom: 86,
-  containLabel: true as const,
-};
+/** Base space below the plot: x-axis band, legend, and (when used) a lower source zone without squashing. */
+const PRESENTATION_EXPORT_GRID_BOTTOM = 86;
+/** Default top margin before title font bumps (logical px @ slide width). */
+const PRESENTATION_EXPORT_GRID_TOP_BASE = 80;
+
+/**
+ * Slide `grid` margins (logical px @ 1920 wide). `left`/`right` scale with axis font sizes so rotated
+ * y-axis titles and tick labels do not touch the canvas edge on PNG export.
+ */
+function createPresentationExportGrid(fonts: PresentationExportFonts): Record<string, unknown> {
+  const r = PRESENTATION_EXPORT_FONTS;
+  const axisFontScale = Math.max(fonts.axisName / r.axisName, fonts.axisLabel / r.axisLabel, 1);
+  const titleFontScale = Math.max(fonts.title / r.title, 1);
+  const left = Math.round(Math.min(188, Math.max(96, 112 * axisFontScale + 14)));
+  const right = Math.round(Math.min(156, Math.max(92, 104 * axisFontScale + 10)));
+  const top = Math.round(Math.min(128, PRESENTATION_EXPORT_GRID_TOP_BASE + (titleFontScale - 1) * 22));
+  return {
+    left,
+    right,
+    top,
+    bottom: PRESENTATION_EXPORT_GRID_BOTTOM,
+    containLabel: true as const,
+  };
+}
 
 /** Pixels from canvas bottom to the bottom edge of the source text block. */
 const PRESENTATION_SOURCE_TEXT_BOTTOM = 20;
@@ -855,9 +869,9 @@ function buildPresentationTitlePatch(
   };
 }
 
-function normalizePresentationGridPatch(opt: Record<string, unknown>): unknown {
+function normalizePresentationGridPatch(opt: Record<string, unknown>, fonts: PresentationExportFonts): unknown {
   const raw = opt.grid;
-  const tight = { ...PRESENTATION_EXPORT_GRID };
+  const tight = createPresentationExportGrid(fonts);
   if (raw == null) return tight;
   if (Array.isArray(raw)) {
     if (raw.length === 0) return tight;
@@ -1131,7 +1145,7 @@ export function buildPresentationEchartsPatch(
   ctx: PresentationEchartsExportContext,
   fonts: PresentationExportFonts = PRESENTATION_EXPORT_FONTS
 ): Record<string, unknown> {
-  const gridPatch = normalizePresentationGridPatch(opt);
+  const gridPatch = normalizePresentationGridPatch(opt, fonts);
   const chartLocale: "en" | "fa" = ctx.chartLocale === "fa" ? "fa" : "en";
   const dir = ctx.direction ?? "ltr";
   /** Compact block (~half slide width) so the chart dominates and text isn’t a full‑width bar. */
@@ -1184,7 +1198,13 @@ export function buildPresentationEchartsPatch(
       typeof ax.type === "string" ? ax.type : isY ? "value" : "category";
     const isValueY = isY && (axisType === "value" || axisType === "log");
     const nameStr = typeof ax.name === "string" ? ax.name : "";
-    const nameGapBase = isY && isValueY && hasName ? 108 : 86;
+    /** Distance from y-axis name to axis line (px); ~58–74 keeps labels off the plot without hugging the image edge. */
+    const nameGapBase =
+      isY && isValueY && hasName
+        ? Math.round(Math.max(58, Math.min(74, 50 + fonts.axisName * 0.95)))
+        : isY && hasName
+          ? Math.round(Math.max(54, Math.min(72, 46 + fonts.axisName * 0.92)))
+          : 86;
     const nameGapPatch =
       typeof ax.nameGap === "number"
         ? { nameGap: Math.max(nameGapBase, Math.round(ax.nameGap * (isY && hasName ? 1.22 : 1.1))) }
@@ -1363,22 +1383,25 @@ export function buildPresentationEchartsPatch(
         })()
       : null;
 
+  const exportGridTemplate = createPresentationExportGrid(fonts);
   const gridBase =
     typeof gridPatch === "object" && gridPatch != null && !Array.isArray(gridPatch)
-      ? ({ ...(gridPatch as Record<string, unknown>) } as Record<string, unknown>)
-      : { ...PRESENTATION_EXPORT_GRID };
+      ? ({ ...exportGridTemplate, ...(gridPatch as Record<string, unknown>) } as Record<string, unknown>)
+      : { ...exportGridTemplate };
+  gridBase.containLabel = true;
   const subtitleBump = ctx.chartSubtitle?.trim() ? 64 : 0;
   const auxBump = exportAuxLegendHeight(ctx);
   if (subtitleBump > 0) {
-    const curTop = typeof gridBase.top === "number" ? gridBase.top : PRESENTATION_EXPORT_GRID.top;
+    const curTop = typeof gridBase.top === "number" ? gridBase.top : (exportGridTemplate.top as number);
     gridBase.top = curTop + subtitleBump;
   }
   if (auxBump > 0) {
-    const curBot = typeof gridBase.bottom === "number" ? gridBase.bottom : PRESENTATION_EXPORT_GRID.bottom;
+    const curBot =
+      typeof gridBase.bottom === "number" ? gridBase.bottom : PRESENTATION_EXPORT_GRID_BOTTOM;
     gridBase.bottom = curBot + auxBump;
   }
   if (hasExportSource) {
-    const curB = typeof gridBase.bottom === "number" ? gridBase.bottom : PRESENTATION_EXPORT_GRID.bottom;
+    const curB = typeof gridBase.bottom === "number" ? gridBase.bottom : PRESENTATION_EXPORT_GRID_BOTTOM;
     const n = sourceLinesList.length;
     const perLineNudge = 8 + Math.max(0, n - 1) * PRESENTATION_FOOTER_EXTRA_GRID_PER_WRAPPED_LINE;
     const zonedExportFooterMinBottom = Math.max(

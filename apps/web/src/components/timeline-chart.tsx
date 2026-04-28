@@ -2156,7 +2156,7 @@ export function TimelineChart({
         },
       },
       grid: {
-        left: compact ? (hasMultiSeries ? "10%" : "2%") : hasMultiSeries ? "15%" : "5%",
+        left: compact ? (hasMultiSeries ? "11%" : "3%") : hasMultiSeries ? "17%" : "6%",
         right:
           gridRightOverride ??
           (hasMultiSeries && multiSeries && multiSeries.some((s) => s.yAxisIndex >= 2)
