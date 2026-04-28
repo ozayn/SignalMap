@@ -84,31 +84,24 @@ export default function StudiesPage() {
 
   return (
     <div className="studies-container py-12">
-      <header className="mb-6">
+      <header className="mb-4">
         <h1
           className="font-semibold tracking-[-0.01em] text-[#111827] dark:text-[#e5e7eb]"
           style={{ fontSize: "clamp(22px, 2.5vw, 30px)" }}
         >
           Studies
         </h1>
-        <p
-          className="mt-1 text-[#6b7280] dark:text-[#9ca3af] max-w-2xl"
-          style={{ fontSize: "clamp(12px, 1.2vw, 14px)" }}
-        >
-          Studies are grouped by theme (core, Iran, global, policy, welfare, discourse) using each study’s browse
-          metadata. Search and filters are unchanged; they are independent of these section names.
+        <p className="mt-1 max-w-xl text-[13px] leading-snug text-[#9ca3af] dark:text-[#94a3b8]">
+          Explore SignalMap studies by theme, country, or signal.
         </p>
       </header>
 
-      <div className="mb-8 space-y-4 border-b border-[#f1f5f9] dark:border-[#1f2937] pb-6">
+      <div className="mb-8 space-y-3 border-b border-[#f1f5f9] dark:border-[#1f2937] pb-5">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-[#9ca3af] w-full sm:w-auto sm:mr-1">
-            View
-          </span>
           <div
             className="inline-flex rounded-lg border border-[#e5e7eb] dark:border-[#374151] p-0.5 bg-[#fafafa] dark:bg-[#0f172a]"
             role="group"
-            aria-label="Studies layout"
+            aria-label="Studies layout: grouped, grid, or list"
           >
             {VIEW_OPTIONS.map((opt) => (
               <button
@@ -136,19 +129,17 @@ export default function StudiesPage() {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search titles, topics, countries (English or Persian)…"
+            placeholder="Search titles, topics, countries…"
             className="w-full rounded-lg border border-[#e5e7eb] dark:border-[#374151] bg-white dark:bg-[#111827] px-3 py-2 text-sm text-[#111827] dark:text-[#e5e7eb] placeholder:text-[#9ca3af] outline-none focus:ring-2 focus:ring-[#111827]/15 dark:focus:ring-[#e5e7eb]/20"
           />
-          <p className="mt-1.5 text-[11px] leading-snug text-[#9ca3af]">
-            Matches English and Persian study text (including Persian titles and descriptions where available), concepts,
-            signal tags, browse themes/countries, and section labels. Diacritics, Arabic–Persian character variants, and
-            digit shapes are normalized. Use several words to narrow (all words must match).
+          <p className="mt-1 text-[10px] leading-snug text-[#9ca3af]/90 dark:text-[#94a3b8]/80">
+            Search supports English and Persian.
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-y-2 gap-x-4 items-start">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-[#9ca3af] mr-1">Country</span>
+        <div className="flex flex-wrap gap-x-3 gap-y-1.5 items-start">
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-[#9ca3af] mr-0.5">Country</span>
             {STUDY_COUNTRY_OPTIONS.map(({ id, label }) => {
               const on = countryFilter.has(id);
               return (
@@ -167,8 +158,8 @@ export default function StudiesPage() {
               );
             })}
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-[#9ca3af] mr-1">Theme</span>
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-[#9ca3af] mr-0.5">Theme</span>
             {STUDY_THEME_OPTIONS.map(({ id, label }) => {
               const on = themeFilter.has(id);
               return (
