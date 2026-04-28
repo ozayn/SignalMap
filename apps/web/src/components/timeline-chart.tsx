@@ -25,10 +25,10 @@ import { StudyChartControls } from "@/components/study-chart-controls";
 import { timelineChartFaUi } from "@/lib/timeline-chart-fa";
 import {
   CHART_Y_AXIS_LABEL_MARGIN,
-  CHART_Y_AXIS_NAME_GAP,
   CHART_Y_AXIS_TICK_FONT_SIZE,
   chartYAxisNameTextStyle,
   formatYAxisNameMultiline,
+  yAxisNameGapForMultilineTitle,
 } from "@/lib/chart-axis-label";
 import { nicePercentShareAxisRange } from "@/lib/chart-axis-nice";
 import {
@@ -291,6 +291,8 @@ type TimelineChartProps = {
   indexedTooltipBaseLabel?: string;
   /** Override multi-series y-axis titles (key = ``yAxisIndex``), e.g. dual-axis reference layouts. */
   multiSeriesYAxisNameOverrides?: Partial<Record<number, string>>;
+  /** Muted one-line note below the plot (e.g. methodology moved off a crowded y-axis). */
+  yAxisDetailNote?: string;
   /**
    * When ``grouped`` and every series defines ``legendGroup`` + ``legendMetric``, the default ECharts legend
    * is hidden and a compact legend is rendered (toggle still drives the chart).
@@ -773,6 +775,7 @@ export function TimelineChart({
   multiSeriesValueFormat,
   indexedTooltipBaseLabel,
   multiSeriesYAxisNameOverrides,
+  yAxisDetailNote,
   multiSeriesLegendLayout = "default",
   multiSeriesLegendGroupedVariant = "grid",
   chartLocale,
@@ -2126,11 +2129,28 @@ export function TimelineChart({
               const useLog = yAxisLog && isLeft;
               const rightOffset = hasMultipleRight && yAxisIndex === 2 ? 90 : 0;
               const allSameUnit = seriesOnAxis.length > 1 && seriesOnAxis.every((s) => s.unit === first.unit);
+              const unitFx = first.unit?.trim() ?? "";
+              /** Long FX legend text often puts sources inside `(…)`; keep the y-axis to headline + unit only. */
+              const compactTomanAxisHeadline = (): string | null => {
+                if (!isTomanFxUnit(unitFx) || seriesOnAxis.length !== 1) return null;
+                const lab = first.label.trim();
+                const m = /^(.+?)\s*\(([\s\S]+)\)\s*$/.exec(lab);
+                if (!m) return null;
+                const inner = m[2]!.trim();
+                if (
+                  inner.length > 26 ||
+                  /[;؛]/.test(inner) ||
+                  /bonbast|rial-archive|fred|آرشیو|بان‌بست|میانگین|annual\s+pre-/i.test(inner)
+                ) {
+                  return `${m[1]!.trim()} (${unitFx})`;
+                }
+                return null;
+              };
               const shortName =
                 first.unit?.includes("toman")
                   ? seriesOnAxis.length > 1
                     ? "Toman/USD"
-                    : `${first.label} (toman/USD)`
+                    : compactTomanAxisHeadline() ?? `${first.label} (${unitFx || "toman/USD"})`
                   : first.unit === "USD/oz"
                     ? useLog
                       ? "Gold (USD/oz, log scale)"
@@ -2147,6 +2167,9 @@ export function TimelineChart({
                 multiSeriesYAxisNameOverrides?.[yAxisIndex] != null && multiSeriesYAxisNameOverrides[yAxisIndex] !== ""
                   ? multiSeriesYAxisNameOverrides[yAxisIndex]!
                   : nameWithSuffix;
+              const formattedMultiAxisName = formatYAxisNameMultiline(
+                localizeChartNumericDisplayString(axisTitle, chartNumeralLocale)
+              );
               const isGoldLogAxis = useLog && first.unit === "USD/oz";
               const tomanOrRateLogAxis = useLog && isLeft && isTomanFxUnit(first.unit);
               const tomanLogAxisMin =
@@ -2200,11 +2223,11 @@ export function TimelineChart({
                 ...(pctNice ? { min: pctNice.min, max: pctNice.max, interval: pctNice.interval } : {}),
                 position: (isLeft ? "left" : "right") as "left" | "right",
                 offset: isRight ? rightOffset : 0,
-                name: formatYAxisNameMultiline(localizeChartNumericDisplayString(axisTitle, chartNumeralLocale)),
+                name: formattedMultiAxisName,
                 nameLocation: "middle" as const,
                 nameRotate: isLeft ? 90 : -90,
                 nameTextStyle: yAxisNameStyle,
-                nameGap: CHART_Y_AXIS_NAME_GAP,
+                nameGap: yAxisNameGapForMultilineTitle(formattedMultiAxisName),
                 axisLine: { show: false },
                 splitLine: { show: isLeft, lineStyle: { color: borderColor, type: "dashed" as const } },
                 axisLabel: {
@@ -2243,20 +2266,32 @@ export function TimelineChart({
             });
           })()
         : hasOil || !hasData
-        ? [
+        ? (() => {
+            const leftOilAxisName = formatYAxisNameMultiline(
+              localizeChartNumericDisplayString(
+                (hasData ? label : secondSeries?.label ?? "Brent oil") + (unit ? ` (${unit})` : ""),
+                chartNumeralLocale
+              )
+            );
+            const rightOilAxisName = formatYAxisNameMultiline(
+              localizeChartNumericDisplayString(
+                useIndexed && indexBaseYear != null
+                  ? `Index (base=${indexBaseYear})` + (yAxisNameSuffix ? ` ${yAxisNameSuffix}` : "")
+                  : (secondSeries?.label ?? "Brent oil") +
+                      (secondSeries?.unit?.includes("toman") ? " (toman/USD)" : secondSeries?.unit ? ` (${secondSeries.unit})` : "") +
+                      (yAxisNameSuffix ? ` ${yAxisNameSuffix}` : ""),
+                chartNumeralLocale
+              )
+            );
+            return [
             {
               type: "value" as const,
               position: "left" as const,
-              name: formatYAxisNameMultiline(
-                localizeChartNumericDisplayString(
-                  (hasData ? label : secondSeries?.label ?? "Brent oil") + (unit ? ` (${unit})` : ""),
-                  chartNumeralLocale
-                )
-              ),
+              name: leftOilAxisName,
               nameLocation: "middle" as const,
               nameRotate: 90,
               nameTextStyle: yAxisNameStyle,
-              nameGap: CHART_Y_AXIS_NAME_GAP,
+              nameGap: yAxisNameGapForMultilineTitle(leftOilAxisName),
               axisLine: { show: false },
               splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
               axisLabel: {
@@ -2272,20 +2307,11 @@ export function TimelineChart({
               type: (yAxisLog ? "log" : "value") as "value" | "log",
               ...(yAxisLog ? { logBase: 10 } : {}),
               position: "right" as const,
-              name: formatYAxisNameMultiline(
-                localizeChartNumericDisplayString(
-                  useIndexed && indexBaseYear != null
-                    ? `Index (base=${indexBaseYear})` + (yAxisNameSuffix ? ` ${yAxisNameSuffix}` : "")
-                    : (secondSeries?.label ?? "Brent oil") +
-                        (secondSeries?.unit?.includes("toman") ? " (toman/USD)" : secondSeries?.unit ? ` (${secondSeries.unit})` : "") +
-                        (yAxisNameSuffix ? ` ${yAxisNameSuffix}` : ""),
-                  chartNumeralLocale
-                )
-              ),
+              name: rightOilAxisName,
               nameLocation: "middle" as const,
               nameRotate: -90,
               nameTextStyle: yAxisNameStyle,
-              nameGap: CHART_Y_AXIS_NAME_GAP,
+              nameGap: yAxisNameGapForMultilineTitle(rightOilAxisName),
               axisLine: { show: false },
               splitLine: { show: false },
               axisLabel: {
@@ -2294,14 +2320,17 @@ export function TimelineChart({
                   typeof v === "number" ? formatEconomicAxisTick(v, chartNumeralLocale) : String(v),
               },
             },
-          ]
-        : {
+          ];
+          })()
+        : (() => {
+            const singleAxisName = formatYAxisNameMultiline(localizeChartNumericDisplayString(label, chartNumeralLocale));
+            return {
             type: "value",
-            name: formatYAxisNameMultiline(localizeChartNumericDisplayString(label, chartNumeralLocale)),
+            name: singleAxisName,
             nameLocation: "middle" as const,
             nameRotate: 90,
             nameTextStyle: yAxisNameStyle,
-            nameGap: CHART_Y_AXIS_NAME_GAP,
+            nameGap: yAxisNameGapForMultilineTitle(singleAxisName),
             axisLine: { show: false },
             splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
             axisLabel: {
@@ -2311,7 +2340,8 @@ export function TimelineChart({
                 return Number.isFinite(n) ? formatEconomicAxisTick(n, chartNumeralLocale) : String(v);
               },
             },
-          },
+          };
+          })(),
       series: [
         ...(hasMultiSeries && multiSeries && multiSeriesValues
           ? [
@@ -2870,6 +2900,14 @@ export function TimelineChart({
         </div>
       ) : null}
       <div ref={chartRef} className={`chart-area ${chartHeight} w-full min-w-[2px]`} />
+      {yAxisDetailNote ? (
+        <p
+          className={`text-xs text-muted-foreground leading-snug max-w-3xl ${chartLocaleResolved === "fa" ? "text-right ml-auto" : ""}`}
+          dir={chartLocaleResolved === "fa" ? "rtl" : "ltr"}
+        >
+          {localizeChartNumericDisplayStringSafe(yAxisDetailNote, chartLocaleResolved === "fa" ? "fa" : "en")}
+        </p>
+      ) : null}
       {sourceLine ? (
         <p className={STUDY_CHART_SOURCE_WRAP_CLASS} dir="ltr">
           {localizeChartNumericDisplayStringSafe(sourceLine, chartLocaleResolved === "fa" ? "fa" : "en")}

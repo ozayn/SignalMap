@@ -10663,6 +10663,11 @@ export default function StudyDetailPage() {
                 }
                 chartRangeGranularity="month"
                 exportFileStem="iran-fx-regime"
+                yAxisDetailNote={L(
+                  isFa,
+                  "محور: تومان بازار آزاد به ازای هر دلار. سری: ادغام آرشیو نرخ ریال + بان‌بست؛ پیش از ۲۰۱۲ سالانهٔ FRED.",
+                  "Y-axis: open-market tomans per USD. Series: merged rial-archive + Bonbast; pre-2012 uses annual FRED."
+                )}
                 multiSeries={[
                   {
                     key: "open",
