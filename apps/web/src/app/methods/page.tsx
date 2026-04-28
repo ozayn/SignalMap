@@ -1,7 +1,8 @@
-import { getSignalMapSupportHref, SUPPORT_LINK_ARIA, supportMethodsCopy } from "@/lib/site-support";
+import { SUPPORT_LINK_ARIA, supportMethodsCopy } from "@/lib/site-support";
+import { resolveSignalMapSupportHref } from "@/lib/site-support-href";
 
 export default function MethodsPage() {
-  const supportHref = getSignalMapSupportHref();
+  const supportHref = resolveSignalMapSupportHref();
   return (
     <div className="page-container">
       <h1>Methods</h1>

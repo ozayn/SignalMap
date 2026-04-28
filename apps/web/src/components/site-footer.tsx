@@ -1,14 +1,13 @@
 "use client";
 
-import { getSignalMapSupportHref, SUPPORT_LINK_ARIA } from "@/lib/site-support";
+import { SUPPORT_LINK_ARIA } from "@/lib/site-support";
 
-export function SiteFooter() {
-  const href = getSignalMapSupportHref();
+export function SiteFooter({ supportHref }: { supportHref: string }) {
   return (
     <footer className="site-footer" role="contentinfo" lang="en">
       <div className="nav-container site-footer-inner">
         <a
-          href={href}
+          href={supportHref}
           target="_blank"
           rel="noopener noreferrer"
           className="site-footer-link"

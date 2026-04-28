@@ -4,6 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Navbar } from "@/components/navbar";
 import { SiteFooter } from "@/components/site-footer";
+import { resolveSignalMapSupportHref } from "@/lib/site-support-href";
 import { SuppressDevLogs } from "@/components/suppress-dev-logs";
 import { Analytics } from "@/components/analytics";
 
@@ -26,6 +27,7 @@ const gaId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || "";
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const supportHref = resolveSignalMapSupportHref();
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -52,9 +54,9 @@ export default function RootLayout({
           <div className="flex min-h-screen w-full flex-col">
             <SuppressDevLogs />
             {gaId && <Analytics gaId={gaId} />}
-            <Navbar />
+            <Navbar supportHref={supportHref} />
             <main className="main-content min-w-0 overflow-x-hidden">{children}</main>
-            <SiteFooter />
+            <SiteFooter supportHref={supportHref} />
           </div>
         </ThemeProvider>
       </body>

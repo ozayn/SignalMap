@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { getSignalMapSupportHref, SUPPORT_LINK_ARIA } from "@/lib/site-support";
+import { SUPPORT_LINK_ARIA } from "@/lib/site-support";
 import { ThemeToggle } from "./theme-toggle";
 
 const navLinks = [
@@ -37,11 +37,10 @@ function NavLink({
   );
 }
 
-export function Navbar() {
+export function Navbar({ supportHref }: { supportHref: string }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const hamburgerRef = useRef<HTMLButtonElement>(null);
-  const supportHref = getSignalMapSupportHref();
 
   const closeMenu = () => {
     setMobileOpen(false);
