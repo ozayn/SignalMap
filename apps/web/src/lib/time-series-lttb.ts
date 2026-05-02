@@ -110,28 +110,51 @@ function lttbCore(data: [number, number][], threshold: number): [number, number]
 
 const DISPLAY_CAP = 2200;
 const ALWAYS_FULL_BELOW = 2000;
-const SPAN_DAYS_FULL_CAP = 460;
+/** Visible span ≤ ~15 years: keep daily (or dense) detail; only cap if absurd point count. */
+const SPAN_DAYS_DENSE_FULL = Math.round(15 * 365.25);
+const DENSE_WINDOW_POINT_CAP = 8000;
+const DENSE_WINDOW_DOWNSAMPLE_TO = 400;
 
 /**
- * For USD→Toman: keep full daily when the selected window is short; downsample
- * when there are many points over a long span (full history).
+ * For USD→Toman: clip to the visible range, keep full resolution for windows up
+ * to ~15 years, and downsample long spans with week+LTTB (not yearly buckets).
  */
 export function downsampleFxOpenForDisplay(
   points: { date: string; value: number }[],
   timeRange: [string, string] | null
 ): { date: string; value: number }[] {
   if (points.length === 0) return points;
-  if (points.length <= ALWAYS_FULL_BELOW) return points;
-  if (timeRange) {
-    const t0 = Date.parse(timeRange[0]);
-    const t1 = Date.parse(timeRange[1]);
-    if (Number.isFinite(t0) && Number.isFinite(t1)) {
-      const span = Math.max(0, t1 - t0) / 86400000;
-      if (span <= SPAN_DAYS_FULL_CAP) return points;
-    }
+
+  let work = points;
+  if (timeRange?.[0] != null && timeRange?.[1] != null) {
+    const a = String(timeRange[0]).slice(0, 10);
+    const b = String(timeRange[1]).slice(0, 10);
+    work = points.filter((p) => {
+      const d = p.date.slice(0, 10);
+      return d >= a && d <= b;
+    });
   }
-  const d = downsampleTimeSeriesLttb(points, DISPLAY_CAP);
-  return ensureLatestPointOnSeries(d, points);
+  if (work.length === 0) return work;
+
+  const spanDays =
+    timeRange?.[0] != null && timeRange?.[1] != null
+      ? (() => {
+          const t0 = Date.parse(String(timeRange[0]).slice(0, 10));
+          const t1 = Date.parse(String(timeRange[1]).slice(0, 10));
+          if (!Number.isFinite(t0) || !Number.isFinite(t1)) return Number.POSITIVE_INFINITY;
+          return Math.max(0, t1 - t0) / 86400000;
+        })()
+      : Number.POSITIVE_INFINITY;
+
+  if (spanDays <= SPAN_DAYS_DENSE_FULL) {
+    if (work.length <= DENSE_WINDOW_POINT_CAP) return work;
+    const d = downsampleTimeSeriesLttb(work, DENSE_WINDOW_DOWNSAMPLE_TO);
+    return ensureLatestPointOnSeries(d, work);
+  }
+
+  if (work.length <= ALWAYS_FULL_BELOW) return work;
+  const d = downsampleTimeSeriesLttb(work, DISPLAY_CAP);
+  return ensureLatestPointOnSeries(d, work);
 }
 
 /** If downsampling dropped the true last date, append it so the line end matches open-market "latest". */

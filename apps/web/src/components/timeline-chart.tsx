@@ -50,6 +50,7 @@ import {
   formatChartTooltipYearLine,
   getChartAxisYearDisplayParts,
   type ChartAxisYearMode,
+  type ChartTooltipDateResolution,
 } from "@/lib/chart-axis-year";
 import {
   formatChartTooltipNumber,
@@ -68,6 +69,7 @@ import {
   resolveTimelineMultiSeriesColors,
   SIGNAL_CONCEPT,
 } from "@/lib/signalmap-chart-colors";
+import { downsampleFxOpenForDisplay } from "@/lib/time-series-lttb";
 import { localizeChartNumericDisplayString, localizeChartNumericDisplayStringSafe } from "@/lib/chart-numerals-fa";
 import {
   CHART_LINE_SYMBOL_ITEM_OPACITY,
@@ -1372,17 +1374,28 @@ export function TimelineChart({
     const hasFallback = !hasData && (hasOil || hasMultiSeries || (timeRangeProp && events.length > 0));
     if (!chartRef.current || (!hasData && !hasFallback)) return;
 
+    const multiSeriesEffective =
+      multiSeries && rangeLo && rangeHi && forceTimeAxis
+        ? multiSeries.map((s) =>
+            s.key === "open"
+              ? { ...s, points: downsampleFxOpenForDisplay(s.points, [rangeLo, rangeHi]) }
+              : s
+          )
+        : multiSeries;
+
     const allMultiSeriesDates =
-      hasMultiSeries && multiSeries
-        ? [...new Set(multiSeries.flatMap((s) => s.points.map((p) => p.date)))].filter((d) => {
+      hasMultiSeries && multiSeriesEffective
+        ? [...new Set(multiSeriesEffective.flatMap((s) => s.points.map((p) => p.date)))].filter((d) => {
             if (!timeRange) return true;
             return d >= timeRange[0] && d <= timeRange[1];
           }).sort()
         : [];
+    const multiSeriesUnionDateCap =
+      forceTimeAxis && chartRangeGranularityProp !== "year" ? 25000 : 3000;
     const useUnionDates =
       hasMultiSeries &&
       allMultiSeriesDates.length > 100 &&
-      allMultiSeriesDates.length <= 3000 &&
+      allMultiSeriesDates.length <= multiSeriesUnionDateCap &&
       timeRange;
     const useSparseMultiSeriesDates =
       hasMultiSeries &&
@@ -1394,7 +1407,12 @@ export function TimelineChart({
         ? parseInt(timeRange[1].slice(0, 4), 10) - parseInt(timeRange[0].slice(0, 4), 10)
         : 0;
     const useYearlyAxisForMultiSeries =
-      hasMultiSeries && timeRange && useUnionDates && spanYearsFromRange > 0 && spanYearsFromRange <= 20;
+      hasMultiSeries &&
+      timeRange &&
+      useUnionDates &&
+      !forceTimeAxis &&
+      spanYearsFromRange > 0 &&
+      spanYearsFromRange <= 20;
     const useTimeRangeForBands =
       useTimeRangeForDateAxis &&
       !hasData &&
@@ -1543,6 +1561,9 @@ export function TimelineChart({
       jalaliColor: axisYearJalaliColor,
       labelColor: mutedFg,
     };
+    /** Year-only axes keep "Year:" / سال labels; day-level / FX / mixed-frequency use full calendar dates in tooltips. */
+    const tooltipDateResolution: ChartTooltipDateResolution =
+      useYearlyMultiSeries || useYearlyAxisForMultiSeries ? "year_bucket" : "calendar";
     const formatCategoryAxisYearTick = (value: string) => {
       if (axisYearMode !== "both")
         return formatChartCategoryAxisYearLabel(value, axisYearMode, chartNumeralLocale);
@@ -1570,8 +1591,8 @@ export function TimelineChart({
       : mutedBands || (hasMultiSeries && useUnionDates) || (hasMultiSeries && timeRange)
         ? valueAtDateOrNearest
         : valueAtDate;
-    const multiSeriesValues = hasMultiSeries && multiSeries
-      ? multiSeries.map((s) => dates.map((d) => valueFn(s.points, d)))
+    const multiSeriesValues = hasMultiSeries && multiSeriesEffective
+      ? multiSeriesEffective.map((s) => dates.map((d) => valueFn(s.points, d)))
       : null;
 
     if (dates.length === 0) return;
@@ -1585,9 +1606,9 @@ export function TimelineChart({
               if (idx == null) return null;
               const dateStr = dates[idx]!;
               const yVal =
-                hasMultiSeries && multiSeries
+                hasMultiSeries && multiSeriesEffective
                   ? (() => {
-                      const oilIdx = multiSeries.findIndex((s) => s.key === "oil");
+                      const oilIdx = multiSeriesEffective.findIndex((s) => s.key === "oil");
                       if (oilIdx < 0) return null;
                       return multiSeriesValues?.[oilIdx]?.[idx] ?? null;
                     })()
@@ -1605,9 +1626,9 @@ export function TimelineChart({
     const latestPointData =
       highlightLatestPoint && hasOil
         ? (() => {
-            const vals = hasMultiSeries && multiSeries
+            const vals = hasMultiSeries && multiSeriesEffective
               ? (() => {
-                  const oilIdx = multiSeries.findIndex((s) => s.key === "oil");
+                  const oilIdx = multiSeriesEffective.findIndex((s) => s.key === "oil");
                   if (oilIdx < 0) return null;
                   return multiSeriesValues?.[oilIdx] ?? null;
                 })()
@@ -2078,7 +2099,8 @@ export function TimelineChart({
               axisYearMode,
               chartLocale === "fa" ? "fa" : "en",
               tooltipYearLineColors,
-              chartNumeralLocale
+              chartNumeralLocale,
+              tooltipDateResolution
             )
           );
           const pt = hasData && idx < dataResolved.length ? dataResolved[idx] : null;
@@ -2101,8 +2123,8 @@ export function TimelineChart({
               );
             }
           }
-          if (hasMultiSeries && multiSeries && multiSeriesValues) {
-            multiSeries.forEach((s, i) => {
+          if (hasMultiSeries && multiSeriesEffective && multiSeriesValues) {
+            multiSeriesEffective.forEach((s, i) => {
               const val = multiSeriesValues[i]?.[idx];
               const formatted =
                 val != null
@@ -2295,16 +2317,16 @@ export function TimelineChart({
               },
             };
           })(),
-      yAxis: hasMultiSeries && multiSeries
+      yAxis: hasMultiSeries && multiSeriesEffective
         ? (() => {
             const byIndex = new Map<number, ChartSeries[]>();
-            for (const s of multiSeries) {
+            for (const s of multiSeriesEffective) {
               const list = byIndex.get(s.yAxisIndex) ?? [];
               list.push(s);
               byIndex.set(s.yAxisIndex, list);
             }
             const sortedIndices = [...byIndex.keys()].sort((a, b) => a - b);
-            const hasMultipleRight = multiSeries.filter((x) => x.yAxisIndex >= 1).length > 1;
+            const hasMultipleRight = multiSeriesEffective.filter((x) => x.yAxisIndex >= 1).length > 1;
             return sortedIndices.map((yAxisIndex) => {
               const seriesOnAxis = byIndex.get(yAxisIndex)!;
               const first = seriesOnAxis[0]!;
@@ -2361,7 +2383,7 @@ export function TimelineChart({
                   ? (() => {
                       const nums: number[] = [];
                       for (const s of seriesOnAxis) {
-                        const si = multiSeries.indexOf(s);
+                        const si = multiSeriesEffective.indexOf(s);
                         for (const v of multiSeriesValues[si] ?? []) {
                           if (typeof v === "number" && Number.isFinite(v) && v > 0) nums.push(v);
                         }
@@ -2392,7 +2414,7 @@ export function TimelineChart({
               if (pctEligible && multiSeriesValues) {
                 const nums: number[] = [];
                 for (const s of seriesOnAxis) {
-                  const si = multiSeries.indexOf(s);
+                  const si = multiSeriesEffective.indexOf(s);
                   if (si < 0) continue;
                   for (const v of multiSeriesValues[si] ?? []) {
                     if (typeof v === "number" && Number.isFinite(v)) nums.push(v);
@@ -2419,7 +2441,7 @@ export function TimelineChart({
                 } else if (useLog && isLeft) {
                   const nums: number[] = [];
                   for (const s of seriesOnAxis) {
-                    const si = multiSeries.indexOf(s);
+                    const si = multiSeriesEffective.indexOf(s);
                     for (const v of multiSeriesValues[si] ?? []) {
                       if (typeof v === "number" && Number.isFinite(v) && v > 0) nums.push(v);
                     }
@@ -2433,7 +2455,7 @@ export function TimelineChart({
                 } else {
                   const nums: number[] = [];
                   for (const s of seriesOnAxis) {
-                    const si = multiSeries.indexOf(s);
+                    const si = multiSeriesEffective.indexOf(s);
                     for (const v of multiSeriesValues[si] ?? []) {
                       if (typeof v === "number" && Number.isFinite(v)) nums.push(v);
                     }
@@ -2612,7 +2634,7 @@ export function TimelineChart({
           };
           })(),
       series: [
-        ...(hasMultiSeries && multiSeries && multiSeriesValues
+        ...(hasMultiSeries && multiSeriesEffective && multiSeriesValues
           ? [
               {
                 name: "events",
@@ -2675,7 +2697,7 @@ export function TimelineChart({
                       }
                     : undefined,
               },
-              ...multiSeries.map((s, i) => {
+              ...multiSeriesEffective.map((s, i) => {
                 const isGold = s.key === "gold";
                 const isOil = s.key === "oil";
                 const isOfficial = s.key === "official";

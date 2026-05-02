@@ -3683,13 +3683,6 @@ export default function StudyDetailPage() {
     [isOilAndFx, fxPoints, fxTimeRange]
   );
 
-  /** Iran FX regime: full `fxDualOpenPoints` for KPIs/stats; downsample for ECharts open line. */
-  const fxDualOpenPointsForChart = useMemo(
-    () =>
-      isFxIranCurrencyRegime ? downsampleFxOpenForDisplay(fxDualOpenPoints, fxIranRegimeTimeRange) : [],
-    [isFxIranCurrencyRegime, fxDualOpenPoints, fxIranRegimeTimeRange]
-  );
-
   if (!study) {
     return (
       <div className="study-page-container py-12 space-y-4">
@@ -10710,8 +10703,7 @@ export default function StudyDetailPage() {
                     ),
                     yAxisIndex: 0,
                     unit: L(isFa, "toman/USD", "تومان/دلار"),
-                    points:
-                      fxDualOpenPointsForChart.length > 0 ? fxDualOpenPointsForChart : fxDualOpenPoints,
+                    points: fxDualOpenPoints,
                     color: SIGNAL_CONCEPT.fx_open,
                     symbol: "circle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
