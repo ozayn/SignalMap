@@ -4061,10 +4061,7 @@ export default function StudyDetailPage() {
         }
         if (eventPoints.length > 0) arrays.push(eventPoints);
       }
-      if (isFxIranCurrencyRegime) {
-        if (fxDualOpenPoints.length > 0) arrays.push(fxDualOpenPoints);
-        if (fxDualOfficialPoints.length > 0) arrays.push(fxDualOfficialPoints);
-      }
+      // Iran FX regime: "Data through" follows the open‑market series only (same as Latest KPI), not official WDI end dates.
       if (isWageCpiReal) {
         if (wageNominalPoints.length > 0) arrays.push(wageNominalPoints);
         if (wageCpiPoints.length > 0) arrays.push(wageCpiPoints);
@@ -4208,7 +4205,17 @@ export default function StudyDetailPage() {
               <span className="text-muted-foreground/35 hidden sm:inline" aria-hidden>
                 ·
               </span>
-              <span>
+              <span
+                title={
+                  isFxIranCurrencyRegime
+                    ? L(
+                        isFa,
+                        "Most recent date in the merged open‑market USD→toman series (not cache refresh time).",
+                        "آخرین تاریخ در سری ادغام‌شدهٔ بازار آزاد (دلار→تومان)، نه زمان به‌روزرسانی کش.",
+                      )
+                    : undefined
+                }
+              >
                 {L(isFa, "Data through", "داده تا")}
                 {": "}
                 {(isOilTradeNetwork || isOilExporterTimeseries || isGdpMacroNationalAccounts)
@@ -4222,8 +4229,14 @@ export default function StudyDetailPage() {
               <span className="text-muted-foreground/35 hidden sm:inline" aria-hidden>
                 ·
               </span>
-              <span>
-                {L(isFa, "Updated", "به‌روز")}
+              <span
+                title={L(
+                  isFa,
+                  "When SignalMap last checked or refreshed its processed/cached copy of this study’s data—not necessarily a new observation from the source.",
+                  "زمانی که SignalMap آخرین بار دادهٔ پردازش‌شده یا کش این مطالعه را بررسی یا بازسازی کرده؛ لزوماً به معنای مشاهدهٔ جدید از منبع نیست.",
+                )}
+              >
+                {L(isFa, "Refreshed", "تازه‌سازی")}
                 {": "}
                 {new Date(lastUpdated).toLocaleString(undefined, {
                   year: "numeric",
@@ -5433,10 +5446,20 @@ export default function StudyDetailPage() {
           )}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="border-border">
-              <CardHeader className="pb-1">
-                <CardTitle className="text-sm font-normal text-muted-foreground">
-                  Latest
+              <CardHeader className="space-y-0.5 pb-1">
+                <CardTitle
+                  className="text-sm font-normal text-muted-foreground"
+                  title={L(
+                    isFa,
+                    "Date and value from the last point in the merged open‑market series (Bonbast / rial archive / FRED pre‑2012)—not system clock.",
+                    "تاریخ و مقدار از آخرین نقطهٔ سری ادغام‌شدهٔ بازار آزاد (بان‌بست / آرشیو نرخ ریال / FRED پیش از ۲۰۱۲)—نه زمان سامانه.",
+                  )}
+                >
+                  {L(isFa, "Latest", "آخرین")}
                 </CardTitle>
+                <p className="text-[11px] font-normal leading-snug text-muted-foreground/90">
+                  {L(isFa, "Open market", "بازار آزاد")}
+                </p>
               </CardHeader>
               <CardContent>
                 <StatValueWithDate chartLocale={statChartLocale}
@@ -5487,6 +5510,13 @@ export default function StudyDetailPage() {
               </CardContent>
             </Card>
           </div>
+          <p className="mt-3 max-w-3xl text-xs leading-relaxed text-muted-foreground">
+            {L(
+              isFa,
+              "Refreshed (in the page header) is when SignalMap last processed this study’s cached data. Data through and Latest use the most recent open‑market (USD→toman) observation in the merged series.",
+              "تازه‌سازی (در بالای صفحه) یعنی آخرین باری که SignalMap دادهٔ کش‌شدهٔ این مطالعه را پردازش کرده است. «داده تا» و «آخرین»، جدیدترین مشاهدهٔ بازار آزاد (دلار→تومان) در سری ادغام‌شده را نشان می‌دهند.",
+            )}
+          </p>
         </div>
       ) : data?.kpis && data.kpis.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-3">
