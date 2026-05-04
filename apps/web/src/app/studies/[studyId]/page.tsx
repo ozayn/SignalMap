@@ -15,9 +15,9 @@ import {
   IPC_PRESET_CHIP,
   IPC_PRESET_UI_ORDER,
   IPC_PRESIDENT_PRESETS,
-  ipcCurrentGregorianYear,
   type IpcPresidentPreset,
 } from "@/lib/iran-economy-period-comparison-presets";
+import { useHydrationSafeGregorianYear } from "@/lib/use-hydration-safe-gregorian-year";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -463,6 +463,8 @@ export default function StudyDetailPage() {
   }, [study, studyId, isFa]);
   const chartLocaleForCharts = faEligible ? (isFa ? ("fa" as const) : ("en" as const)) : undefined;
   const statChartLocale: "en" | "fa" = faEligible && isFa ? "fa" : "en";
+  /** Same on SSR and first client paint; avoids `<input max={year}>` hydration drift vs `Date`. */
+  const ipcGregorianYear = useHydrationSafeGregorianYear();
   const { yearAxisMode, setYearAxisMode } = useIranStudyChartYearMode();
   /** Year calendar mode from shared toggle whenever study supports Iran FA UI (EN + FA). */
   const chartYearAxisLabel = faEligible ? yearAxisMode : undefined;
@@ -668,7 +670,7 @@ export default function StudyDetailPage() {
   const [recoLoadDetail, setRecoLoadDetail] = useState<string | null>(null);
   /** Iran economy period-comparison study: outer/focus Gregorian years + band labels (EN/FA for regimeArea). */
   const [ipcOuterStartYear, setIpcOuterStartYear] = useState(IPC_DEFAULT_OUTER_START);
-  const [ipcOuterEndYear, setIpcOuterEndYear] = useState(() => ipcCurrentGregorianYear());
+  const [ipcOuterEndYear, setIpcOuterEndYear] = useState(ipcGregorianYear);
   const [ipcFocusStartYear, setIpcFocusStartYear] = useState(1989);
   const [ipcFocusEndYear, setIpcFocusEndYear] = useState(1997);
   const [ipcBandLabelEn, setIpcBandLabelEn] = useState(IPC_PRESIDENT_PRESETS.rafsanjani.labelEn);
@@ -892,10 +894,9 @@ export default function StudyDetailPage() {
 
   useEffect(() => {
     if (studyId === "iran-economy-1368-1376" || studyId === "iran-economy-period-comparison") {
-      setYearAxisMode("jalali");
       setShowTimeSeriesEventOverlay(true);
     }
-  }, [studyId, setYearAxisMode, setShowTimeSeriesEventOverlay]);
+  }, [studyId, setShowTimeSeriesEventOverlay]);
 
   useEffect(() => {
     if (!shouldFetchUsCpiMonthly) {
@@ -1240,13 +1241,13 @@ export default function StudyDetailPage() {
   }, [study, isIranEconomyReconstruction1368]);
 
   const ipcOuterResolved = useMemo(() => {
-    const cy = ipcCurrentGregorianYear();
+    const cy = ipcGregorianYear;
     let os = Math.min(ipcOuterStartYear, ipcOuterEndYear);
     let oe = Math.max(ipcOuterStartYear, ipcOuterEndYear);
     os = Math.max(1960, Math.min(os, cy));
     oe = Math.max(os, Math.min(oe, cy));
     return { start: os, end: oe };
-  }, [ipcOuterStartYear, ipcOuterEndYear]);
+  }, [ipcOuterStartYear, ipcOuterEndYear, ipcGregorianYear]);
 
   const ipcFocusResolved = useMemo(() => {
     const { start: os, end: oe } = ipcOuterResolved;
@@ -1473,7 +1474,7 @@ export default function StudyDetailPage() {
 
   const applyIpcPreset = useCallback((id: IpcPresidentPreset) => {
     const cfg = IPC_PRESIDENT_PRESETS[id];
-    const cy = ipcCurrentGregorianYear();
+    const cy = new Date().getFullYear();
     setIpcPresetId(id);
     if (cfg.outerOnly) {
       if (cfg.outerStart != null) setIpcOuterStartYear(cfg.outerStart);
@@ -4785,6 +4786,7 @@ export default function StudyDetailPage() {
         className={`study-page-container study-page-minimal py-8 md:py-10 min-w-0${isFa ? " study-page-fa" : ""}`}
         dir={isFa ? "rtl" : "ltr"}
         lang={isFa ? "fa" : "en"}
+        suppressHydrationWarning
       >
       <header className="study-header">
         <div className="flex items-center gap-4 flex-wrap">
@@ -9812,22 +9814,22 @@ export default function StudyDetailPage() {
                 </div>
                 <div className="space-y-2 border-t border-border pt-6">
                   <h3 className="text-sm font-semibold text-foreground">
-                    {L(isFa, "3. Outcome — GDP growth (annual %)", `۳. پیامد — ${faEconomic.gdpGrowth} (٪ سالانه)`)}
+                    {L(isFa, "3. Outcome — Real GDP growth (annual %)", `۳. پیامد — ${faEconomic.realGdpGrowth} (٪ سالانه)`)}
                   </h3>
                   <TimelineChart
                     chartLocale={chartLocaleForCharts}
                     exportPresentationStudyHeading={displayStudy.title}
                     exportPresentationTitle={L(
                       isFa,
-                      `${displayStudy.title} — GDP growth`,
-                      `${displayStudy.title} — ${faEconomic.gdpGrowth}`
+                      `${displayStudy.title} — Real GDP growth`,
+                      `${displayStudy.title} — ${faEconomic.realGdpGrowth}`
                     )}
                     exportSourceFooter={studyChartExportSource(isFa, [
                       isiDiagnosticsData?.source?.name ?? "World Bank World Development Indicators",
                     ])}
                     data={[]}
                     valueKey="value"
-                    label={L(isFa, "GDP growth (annual %)", `${faEconomic.gdpGrowth} (٪ سالانه)`)}
+                    label={L(isFa, "Real GDP growth (annual %)", `${faEconomic.realGdpGrowth} (٪ سالانه)`)}
                     events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, isiFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
                     multiSeries={isiGdpGrowthMultiSeries.map((s) => ({
@@ -9897,7 +9899,7 @@ export default function StudyDetailPage() {
                       unitNote: L(isFa, "NV.IND.TOTL.ZS", "NV.IND.TOTL.ZS"),
                     },
                     {
-                      label: L(isFa, "GDP growth (annual %)", `${faEconomic.gdpGrowth} (٪ سالانه)`),
+                      label: L(isFa, "Real GDP growth (annual %)", `${faEconomic.realGdpGrowth} (٪ سالانه)`),
                       sourceName: isiDiagnosticsData.source.name ?? "World Bank World Development Indicators",
                       sourceUrl: `https://data.worldbank.org/indicator/${isiDiagnosticsData.indicator_ids.gdp_growth_pct}`,
                       sourceDetail: isiDiagnosticsData.source.publisher ?? "World Bank",
@@ -9923,7 +9925,7 @@ export default function StudyDetailPage() {
                       {L(
                         isFa,
                         "These charts do not prove causality. Use the indexed overview for pattern timing; use raw % of GDP panels for levels; GDP growth is a coarse outcome measure. Compare Brazil, Argentina, India, Turkey, and Iran on the same definitions from WDI.",
-                        "این نمودها علیت را ثابت نمی‌کنند. نمای شاخص‌شده برای زمان‌بندی الگو؛ پانل‌های خام٪ از GDP برای سطح؛ رشد GDP معیار خشن پیامد است. برزیل، آرژانتین، هند، ترکیه و ایران با تعاریف یکسان WDI مقایسه می‌شوند."
+                        "این نمودها علیت را ثابت نمی‌کنند. نمای شاخص‌شده برای زمان‌بندی الگو؛ پانل‌های خام به‌صورت درصدی از تولید ناخالص داخلی برای سطح؛ رشد واقعی سالانهٔ تولید ناخالص داخلی معیار خشن پیامد است. برزیل، آرژانتین، هند، ترکیه و ایران با تعاریف یکسان WDI مقایسه می‌شوند."
                       )}
                     </p>
                   </>
@@ -10427,8 +10429,8 @@ export default function StudyDetailPage() {
                           exportPresentationStudyHeading={displayStudy.title}
                           exportPresentationTitle={L(
                             isFa,
-                            `${displayStudy.title} — GDP growth`,
-                            `${displayStudy.title} — ${faEconomic.gdpGrowth}`
+                            `${displayStudy.title} — Real GDP growth`,
+                            `${displayStudy.title} — ${faEconomic.realGdpGrowth}`
                           )}
                           exportSourceFooter={studyChartExportSource(isFa, [
                             recoIsiSource?.name ?? "World Bank WDI",
@@ -10436,7 +10438,7 @@ export default function StudyDetailPage() {
                           ])}
                           data={recoGdpGrowthPoints}
                           valueKey="value"
-                          label={L(isFa, "GDP growth", faEconomic.gdpGrowth)}
+                          label={L(isFa, "Real GDP growth", faEconomic.realGdpGrowth)}
                           unit="%"
                           events={reconstructionChartEvents}
                           timeRange={reconstructionTimeRange ?? study.timeRange}
@@ -10468,8 +10470,8 @@ export default function StudyDetailPage() {
                           exportPresentationStudyHeading={displayStudy.title}
                           exportPresentationTitle={L(
                             isFa,
-                            `${displayStudy.title} — Oil rents`,
-                            `${displayStudy.title} — ${faEconomic.oilRents}`
+                            `${displayStudy.title} — Oil rents (% of GDP)`,
+                            `${displayStudy.title} — ${faEconomic.oilRentsPctGdp}`
                           )}
                           exportSourceFooter={studyChartExportSource(isFa, [
                             recoDutchSource?.name ?? "World Bank WDI",
@@ -10477,7 +10479,7 @@ export default function StudyDetailPage() {
                           ])}
                           data={recoOilRentsPoints}
                           valueKey="value"
-                          label={L(isFa, "Oil rents", faEconomic.oilRents)}
+                          label={L(isFa, "Oil rents (% of GDP)", faEconomic.oilRentsPctGdp)}
                           unit="%"
                           events={reconstructionChartEvents}
                           timeRange={reconstructionTimeRange ?? study.timeRange}
@@ -10899,7 +10901,7 @@ export default function StudyDetailPage() {
                   <input
                     type="number"
                     min={1960}
-                    max={ipcCurrentGregorianYear()}
+                    max={ipcGregorianYear}
                     value={ipcOuterStartYear}
                     onChange={(e) => {
                       const v = parseInt(e.target.value, 10);
@@ -10914,7 +10916,7 @@ export default function StudyDetailPage() {
                   <input
                     type="number"
                     min={1960}
-                    max={ipcCurrentGregorianYear()}
+                    max={ipcGregorianYear}
                     value={ipcOuterEndYear}
                     onChange={(e) => {
                       const v = parseInt(e.target.value, 10);
@@ -10929,7 +10931,7 @@ export default function StudyDetailPage() {
                   <input
                     type="number"
                     min={1960}
-                    max={ipcCurrentGregorianYear()}
+                    max={ipcGregorianYear}
                     value={ipcFocusStartYear}
                     onChange={(e) => {
                       markIpcCustomFocusLabel();
@@ -10945,7 +10947,7 @@ export default function StudyDetailPage() {
                   <input
                     type="number"
                     min={1960}
-                    max={ipcCurrentGregorianYear()}
+                    max={ipcGregorianYear}
                     value={ipcFocusEndYear}
                     onChange={(e) => {
                       markIpcCustomFocusLabel();
@@ -11160,7 +11162,7 @@ export default function StudyDetailPage() {
                     {L(
                       isFa,
                       "World Bank WDI NY.GDP.PETR.RT.ZS — oil rents as a share of GDP (annual).",
-                      "WDI بانک جهانی NY.GDP.PETR.RT.ZS — اجاره نفت به‌صورت سهم از GDP (سالانه)."
+                      "WDI بانک جهانی NY.GDP.PETR.RT.ZS — رانت نفتی به‌صورت درصدی از تولید ناخالص داخلی (سالانه)."
                     )}
                   </p>
                   <TimelineChart
@@ -12104,7 +12106,7 @@ export default function StudyDetailPage() {
                   ...(showFxSpread
                     ? [
                         {
-                          label: L(isFa, "Spread (approx. %)", "شکاف (تقریبی ٪)"),
+                          label: L(isFa, "Spread (approx. %)", faEconomic.fxSpreadApproxPct),
                           unit: "%",
                           points: fxDualYearSpreadPoints,
                         },
@@ -12179,7 +12181,7 @@ export default function StudyDetailPage() {
                     ? [
                         {
                           key: "spread",
-                          label: L(isFa, "Spread (%)", "شکاف (٪)"),
+                          label: L(isFa, "Spread (%)", faEconomic.fxSpreadPct),
                           yAxisIndex: 1,
                           unit: "%",
                           color: SIGNAL_CONCEPT.fx_spread,

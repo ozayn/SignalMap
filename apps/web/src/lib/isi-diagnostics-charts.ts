@@ -4,6 +4,7 @@
 
 import type { ChartSeries } from "@/components/timeline-chart";
 import { countryComparatorSeriesStyle } from "@/lib/chart-country-series-styles";
+import { enEconomic, faEconomic } from "@/lib/signalmap-i18n/economic-terms";
 import { SIGNAL_CONCEPT } from "@/lib/signalmap-chart-colors";
 import { indexSeriesTo100, resolveCommonIndexBaseYear } from "@/lib/dutch-disease-overview-index";
 import type { GdpLevelPoint } from "@/lib/gdp-levels-indexed";
@@ -90,32 +91,32 @@ export function buildIsiOverviewIndexedSeries(
   const multi: ChartSeries[] = [];
   const a = mk(
     "isi_ov_imp",
-    "Imports (% of GDP), indexed",
-    "واردات (٪ GDP)، شاخص‌شده",
+    `${enEconomic.imports} (${enEconomic.pctOfGdp}), indexed`,
+    `${faEconomic.imports} — ${faEconomic.gdpPctUnit}، شاخص‌شده`,
     imp,
     SIGNAL_CONCEPT.isi_imports,
     "circle"
   );
   const b = mk(
     "isi_ov_exp",
-    "Exports (% of GDP), indexed",
-    "صادرات (٪ GDP)، شاخص‌شده",
+    `${enEconomic.exports} (${enEconomic.pctOfGdp}), indexed`,
+    `${faEconomic.exports} — ${faEconomic.gdpPctUnit}، شاخص‌شده`,
     exp,
     SIGNAL_CONCEPT.isi_exports,
     "diamond"
   );
   const c = mk(
     "isi_ov_mfg",
-    "Manufacturing (% of GDP), indexed",
-    "تولیدات کارخانه‌ای (٪ GDP)، شاخص‌شده",
+    `${enEconomic.manufacturingValueAdded} (${enEconomic.pctOfGdp}), indexed`,
+    `${faEconomic.manufacturingValueAdded} — ${faEconomic.gdpPctUnit}، شاخص‌شده`,
     mfg,
     SIGNAL_CONCEPT.isi_manufacturing,
     "rect"
   );
   const d = mk(
     "isi_ov_ind",
-    "Industry (% of GDP), indexed",
-    "صنعت (٪ GDP)، شاخص‌شده",
+    `${enEconomic.industryValueAdded} (${enEconomic.pctOfGdp}), indexed`,
+    `${faEconomic.industryValueAdded} — ${faEconomic.gdpPctUnit}، شاخص‌شده`,
     ind,
     SIGNAL_CONCEPT.isi_industry,
     "triangle"
@@ -191,9 +192,9 @@ export function buildIsiIndustrialMultiSeries(bundle: IsiDiagnosticsSeriesBundle
     if (mfg.length > 0) {
       out.push({
         key: `${c}_mfg`,
-        label: isFa ? `${lab} — تولیدات کارخانه‌ای` : `${lab} — manufacturing`,
+        label: isFa ? `${lab} — ${faEconomic.manufacturingValueAdded}` : `${lab} — ${enEconomic.manufacturingValueAdded}`,
         legendGroup: lab,
-        legendMetric: isFa ? "تولیدات کارخانه‌ای" : "Manufacturing",
+        legendMetric: isFa ? faEconomic.manufacturingValueAdded : enEconomic.manufacturingValueAdded,
         yAxisIndex: 0,
         unit: "%",
         points: mfg,
@@ -216,9 +217,9 @@ export function buildIsiIndustrialMultiSeries(bundle: IsiDiagnosticsSeriesBundle
                 : "circle";
       out.push({
         key: `${c}_industry`,
-        label: isFa ? `${lab} — صنعت` : `${lab} — industry`,
+        label: isFa ? `${lab} — ${faEconomic.industryValueAdded}` : `${lab} — ${enEconomic.industryValueAdded}`,
         legendGroup: lab,
-        legendMetric: isFa ? "صنعت" : "Industry",
+        legendMetric: isFa ? faEconomic.industryValueAdded : enEconomic.industryValueAdded,
         yAxisIndex: 0,
         unit: "%",
         points: ind,

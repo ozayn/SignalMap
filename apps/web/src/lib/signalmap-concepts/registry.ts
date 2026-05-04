@@ -97,7 +97,7 @@ const list: Record<SignalMapCoreConceptId, SignalMapConcept> = {
     title_en: "Gross domestic product (GDP)",
     title_fa: "تولید ناخالص داخلی (GDP)",
     short_en: "The value of final goods and services produced within a country’s borders in a period (commonly in nominal and real terms). In composition charts, shares of GDP (consumption, investment, government) show the structure of the economy, not a universal welfare measure.",
-    short_fa: "ارزش کالا و خدمات نهایی تولیدشده داخل مرز در یک دوره (اغلب اسمی و واقعی). در نمودار «سهم از GDP»، ساختار اقتصاد دیده می‌شود — نه معیار تک‌خطی رفاه.",
+    short_fa: "ارزش کالا و خدمات نهایی تولیدشده داخل مرز در یک دوره (اغلب اسمی و واقعی). در نمودار سهم‌ها از تولید ناخالص داخلی، ساختار اقتصاد دیده می‌شود — نه معیار تک‌خطی رفاه.",
     example_en: "If household consumption is 50% of GDP and investment 25%, the economy tilts more toward current spending than toward building long-lived capital—interpretation is descriptive.",
     example_fa: "اگر مصرف نهایی خانوار بخش بزرگ‌تری از GDP باشد و تشکیل سرمایه بخش کوچک‌تری، در این نما «تمایل ساختاری» بیشتر به هزینه جاری دیده می‌شود — صرفاً توصیفی.",
     tags: ["gdp", "value_added", "composition", "income", "expenditure", "national_accounts"],

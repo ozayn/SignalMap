@@ -166,14 +166,18 @@ export function IranEconomyPeriodComparisonPanels({
                 <TimelineChart
                   chartLocale={chartLocaleForCharts}
                   exportPresentationStudyHeading={exportStudyHeading}
-                  exportPresentationTitle={L(isFa, `${studyTitle} — GDP growth`, `${studyTitle} — ${faEconomic.gdpGrowth}`)}
+                  exportPresentationTitle={L(
+                    isFa,
+                    `${studyTitle} — ${enEconomic.realGdpGrowth}`,
+                    `${studyTitle} — ${faEconomic.realGdpGrowth}`
+                  )}
                   exportSourceFooter={studyChartExportSource(isFa, [
                     recoIsiSource?.name ?? "World Bank WDI",
                     recoIsiIndicatorIds?.gdp_growth_pct ?? "NY.GDP.MKTP.KD.ZG",
                   ])}
                   data={recoGdpGrowthPoints}
                   valueKey="value"
-                  label={L(isFa, "GDP growth", faEconomic.gdpGrowth)}
+                  label={L(isFa, enEconomic.realGdpGrowth, faEconomic.realGdpGrowth)}
                   unit="%"
                   events={events}
                   timeRange={timeRange}
@@ -210,7 +214,7 @@ export function IranEconomyPeriodComparisonPanels({
                   exportSourceFooter={studyChartExportSource(isFa, [recoDutchSource?.name ?? "World Bank WDI", "NY.GDP.PETR.RT.ZS"])}
                   data={recoOilRentsPoints}
                   valueKey="value"
-                  label={L(isFa, "Oil rents", faEconomic.oilRents)}
+                  label={L(isFa, enEconomic.oilRentsPctGdp, faEconomic.oilRentsPctGdp)}
                   unit="%"
                   events={events}
                   timeRange={timeRange}

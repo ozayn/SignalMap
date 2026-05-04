@@ -193,7 +193,7 @@ function subjectSearchAliasBits(study: StudyMeta): string[] {
   }
 
   if (k === "dutch_disease_diagnostics_iran" || concepts.has("dutch_disease_pattern")) {
-    b.push("بیماری هلندی", "Dutch disease", "resource curse", "اجاره نفت", "نفت");
+    b.push("بیماری هلندی", "Dutch disease", "resource curse", "رانت نفتی", "نفت");
   }
 
   if (k === "isi_diagnostics") {

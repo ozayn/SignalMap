@@ -1,6 +1,12 @@
 /** Default Gregorian year range (Islamic Republic start → current year). */
 export const IPC_DEFAULT_OUTER_START = 1979;
 
+/**
+ * Gregorian year used as the `useSyncExternalStore` server snapshot (SSR + first client paint).
+ * Bump when the calendar rolls forward so year clamps / defaults stay aligned with `ipcCurrentGregorianYear()`.
+ */
+export const IPC_SSR_GREGORIAN_YEAR_SNAPSHOT = 2026;
+
 export function ipcCurrentGregorianYear(): number {
   return new Date().getFullYear();
 }
