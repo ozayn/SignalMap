@@ -670,6 +670,20 @@ export default function StudyDetailPage() {
   const [recoFxOpenPoints, setRecoFxOpenPoints] = useState<{ date: string; value: number }[]>([]);
   const [recoFxOfficialSource, setRecoFxOfficialSource] = useState<FxUsdTomanSource | null>(null);
   const [recoFxOpenSource, setRecoFxOpenSource] = useState<FxUsdTomanSource | null>(null);
+  const [recoDemandConsumptionPoints, setRecoDemandConsumptionPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoDemandInvestmentPoints, setRecoDemandInvestmentPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoDemandGdpPoints, setRecoDemandGdpPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoDemandNominalSource, setRecoDemandNominalSource] = useState<{
+    name?: string;
+    url?: string;
+    publisher?: string;
+  } | null>(null);
+  const [recoDemandIndicatorIds, setRecoDemandIndicatorIds] = useState<Record<string, string> | null>(null);
+  const [recoDemandRealConsumptionPoints, setRecoDemandRealConsumptionPoints] = useState<{ date: string; value: number }[]>(
+    []
+  );
+  const [recoDemandRealInvestmentPoints, setRecoDemandRealInvestmentPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoDemandRealGdpPoints, setRecoDemandRealGdpPoints] = useState<{ date: string; value: number }[]>([]);
   /** Iran economy macro dashboards: log y-axis for official vs open FX levels chart only. */
   const [iranEconomyFxLevelsLogScale, setIranEconomyFxLevelsLogScale] = useState(false);
   const iranFxLogDefaultAppliedRef = useRef(false);
@@ -3878,6 +3892,14 @@ export default function StudyDetailPage() {
         setRecoFxOpenPoints([]);
         setRecoFxOfficialSource(null);
         setRecoFxOpenSource(null);
+        setRecoDemandConsumptionPoints([]);
+        setRecoDemandInvestmentPoints([]);
+        setRecoDemandGdpPoints([]);
+        setRecoDemandNominalSource(null);
+        setRecoDemandIndicatorIds(null);
+        setRecoDemandRealConsumptionPoints([]);
+        setRecoDemandRealInvestmentPoints([]);
+        setRecoDemandRealGdpPoints([]);
         setRecoLoadFailed(false);
         setRecoLoadDetail(null);
       }
@@ -3917,8 +3939,20 @@ export default function StudyDetailPage() {
         official: { points: { date: string; value: number }[]; source?: FxUsdTomanSource };
         open_market: { points: { date: string; value: number }[]; source?: FxUsdTomanSource };
       }>(`/api/signals/fx/usd-irr-dual?start=${start}&end=${end}`, ac.signal),
+      fetchJson<{
+        series?: {
+          consumption_usd?: { date: string; value: number }[];
+          investment_usd?: { date: string; value: number }[];
+          gdp_usd?: { date: string; value: number }[];
+          consumption_kd?: { date: string; value: number }[];
+          investment_kd?: { date: string; value: number }[];
+          gdp_kd?: { date: string; value: number }[];
+        };
+        source?: { name?: string; url?: string; publisher?: string };
+        indicator_ids?: Record<string, string>;
+      }>(`/api/signals/wdi/iran-demand-nominal-usd?start=${enc(start)}&end=${enc(end)}`, ac.signal),
     ])
-      .then(([inf, isi, dutch, money, fx]) => {
+      .then(([inf, isi, dutch, money, fx, demand]) => {
         if (!mounted) return;
         setRecoInflationIranPoints(inf.series?.iran ?? []);
         setRecoInflationSource(inf.source ?? null);
@@ -3941,12 +3975,26 @@ export default function StudyDetailPage() {
         setRecoFxOpenPoints(fx.open_market?.points ?? []);
         setRecoFxOfficialSource(fx.official?.source ?? null);
         setRecoFxOpenSource(fx.open_market?.source ?? null);
+        setRecoDemandConsumptionPoints(demand.series?.consumption_usd ?? []);
+        setRecoDemandInvestmentPoints(demand.series?.investment_usd ?? []);
+        setRecoDemandGdpPoints(demand.series?.gdp_usd ?? []);
+        setRecoDemandNominalSource(demand.source ?? null);
+        setRecoDemandIndicatorIds(demand.indicator_ids ?? null);
+        setRecoDemandRealConsumptionPoints(demand.series?.consumption_kd ?? []);
+        setRecoDemandRealInvestmentPoints(demand.series?.investment_kd ?? []);
+        setRecoDemandRealGdpPoints(demand.series?.gdp_kd ?? []);
         const n =
           (inf.series?.iran?.length ?? 0) +
           (s?.gdp_growth_pct?.iran?.length ?? 0) +
           (dutch.series?.oil_rents_pct_gdp?.length ?? 0) +
           (money.series?.broad_money_growth_pct?.length ?? 0) +
-          (fx.open_market?.points?.length ?? 0);
+          (fx.open_market?.points?.length ?? 0) +
+          (demand.series?.consumption_usd?.length ?? 0) +
+          (demand.series?.investment_usd?.length ?? 0) +
+          (demand.series?.gdp_usd?.length ?? 0) +
+          (demand.series?.consumption_kd?.length ?? 0) +
+          (demand.series?.investment_kd?.length ?? 0) +
+          (demand.series?.gdp_kd?.length ?? 0);
         if (n === 0) {
           setRecoLoadFailed(true);
           setRecoLoadDetail("All reconstruction bundles returned empty in this window.");
@@ -3979,6 +4027,14 @@ export default function StudyDetailPage() {
         setRecoFxOpenPoints([]);
         setRecoFxOfficialSource(null);
         setRecoFxOpenSource(null);
+        setRecoDemandConsumptionPoints([]);
+        setRecoDemandInvestmentPoints([]);
+        setRecoDemandGdpPoints([]);
+        setRecoDemandNominalSource(null);
+        setRecoDemandIndicatorIds(null);
+        setRecoDemandRealConsumptionPoints([]);
+        setRecoDemandRealInvestmentPoints([]);
+        setRecoDemandRealGdpPoints([]);
         setRecoLoadFailed(true);
         setRecoLoadDetail(e instanceof Error ? e.message : "Reconstruction dashboard fetch failed");
       })
@@ -10526,7 +10582,203 @@ export default function StudyDetailPage() {
                   <Card className="chart-card border-border md:col-span-2">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-base font-semibold">
-                        {L(isFa, "3. Oil rents (% of GDP)", `۳. ${faEconomic.oilRentsPctGdp}`)}
+                        {L(
+                          isFa,
+                          "3. Consumption, investment, and GDP (nominal)",
+                          `۳. مصرف، سرمایه‌گذاری و تولید ناخالص داخلی (اسمی)`
+                        )}
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground max-w-3xl">
+                        {L(
+                          isFa,
+                          "WDI current US$: NE.CON.TOTL.CD (consumption), NE.GDI.TOTL.CD (investment), NY.GDP.MKTP.CD (GDP) — Iran. Nominal only (not mixed with constant-price series).",
+                          "WDI دلار جاری: NE.CON.TOTL.CD (مصرف)، NE.GDI.TOTL.CD (سرمایه‌گذاری)، NY.GDP.MKTP.CD (GDP) — ایران. فقط اسمی (بدون ترکیب با سری‌های قیمت ثابت)."
+                        )}
+                      </p>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      {recoDemandConsumptionPoints.length > 0 ||
+                      recoDemandInvestmentPoints.length > 0 ||
+                      recoDemandGdpPoints.length > 0 ? (
+                        <TimelineChart
+                          chartLocale={chartLocaleForCharts}
+                          exportPresentationStudyHeading={displayStudy.title}
+                          exportPresentationTitle={L(
+                            isFa,
+                            `${displayStudy.title} — Consumption, investment, GDP (nominal)`,
+                            `${displayStudy.title} — مصرف، سرمایه‌گذاری و GDP (اسمی)`
+                          )}
+                          exportSourceFooter={studyChartExportSource(isFa, [
+                            recoDemandNominalSource?.name ?? "World Bank WDI",
+                            recoDemandIndicatorIds?.consumption_usd ?? "NE.CON.TOTL.CD",
+                            recoDemandIndicatorIds?.investment_usd ?? "NE.GDI.TOTL.CD",
+                            recoDemandIndicatorIds?.gdp_usd ?? "NY.GDP.MKTP.CD",
+                          ])}
+                          data={[]}
+                          valueKey="value"
+                          label={L(isFa, "Nominal demand aggregates", "جمع تقاضای اسمی")}
+                          events={reconstructionChartEvents}
+                          multiSeries={[
+                            {
+                              key: "level_consumption",
+                              label: L(isFa, "Final consumption expenditure", "مصرف"),
+                              yAxisIndex: 0,
+                              unit: L(isFa, "current US$", "دلار جاری آمریکا"),
+                              points: recoDemandConsumptionPoints,
+                              color: SIGNAL_CONCEPT.consumption,
+                              symbol: "circle",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE,
+                              smooth: true,
+                            },
+                            {
+                              key: "level_investment",
+                              label: L(isFa, "Gross capital formation (investment)", "سرمایه‌گذاری"),
+                              yAxisIndex: 0,
+                              unit: L(isFa, "current US$", "دلار جاری آمریکا"),
+                              points: recoDemandInvestmentPoints,
+                              color: SIGNAL_CONCEPT.investment,
+                              symbol: "diamond",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE,
+                              smooth: true,
+                            },
+                            {
+                              key: "level_gdp",
+                              label: L(isFa, "GDP", "تولید ناخالص داخلی"),
+                              yAxisIndex: 1,
+                              unit: L(isFa, "current US$", "دلار جاری آمریکا"),
+                              points: recoDemandGdpPoints,
+                              color: SIGNAL_CONCEPT.gdp,
+                              symbol: "triangle",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE,
+                              smooth: true,
+                            },
+                          ]}
+                          timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartRangeGranularity="year"
+                          xAxisYearLabel={chartYearAxisLabel}
+                          exportFileStem="iran-reco-demand-nominal"
+                          showChartControls
+                          chartHeight="h-56 md:h-64"
+                          mutedEventLines
+                          multiSeriesValueFormat="gdp_absolute"
+                          multiSeriesYAxisNameOverrides={{
+                            0: L(
+                              isFa,
+                              "Consumption & investment (current US$)",
+                              "مصرف و سرمایه‌گذاری (دلار جاری آمریکا)"
+                            ),
+                            1: L(isFa, "GDP (current US$)", "تولید ناخالص داخلی (دلار جاری آمریکا)"),
+                          }}
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground py-6">
+                          {L(isFa, "Data unavailable for this window.", "داده در این بازه در دسترس نیست.")}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Card className="chart-card border-border md:col-span-2">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-semibold">
+                        {L(
+                          isFa,
+                          "4. Consumption, investment, and GDP (real)",
+                          `۴. مصرف، سرمایه‌گذاری و تولید ناخالص داخلی (واقعی)`
+                        )}
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground max-w-3xl">
+                        {L(
+                          isFa,
+                          "WDI constant 2015 US$: NE.CON.TOTL.KD, NE.GDI.TOTL.KD, NY.GDP.MKTP.KD — Iran. Real series only (separate from nominal chart).",
+                          "WDI دلار ثابت ۲۰۱۵: NE.CON.TOTL.KD، NE.GDI.TOTL.KD، NY.GDP.MKTP.KD — ایران. فقط سری‌های واقعی (جدای از نمودار اسمی)."
+                        )}
+                      </p>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      {recoDemandRealConsumptionPoints.length > 0 ||
+                      recoDemandRealInvestmentPoints.length > 0 ||
+                      recoDemandRealGdpPoints.length > 0 ? (
+                        <TimelineChart
+                          chartLocale={chartLocaleForCharts}
+                          exportPresentationStudyHeading={displayStudy.title}
+                          exportPresentationTitle={L(
+                            isFa,
+                            `${displayStudy.title} — Consumption, investment, GDP (real)`,
+                            `${displayStudy.title} — مصرف، سرمایه‌گذاری و GDP (واقعی)`
+                          )}
+                          exportSourceFooter={studyChartExportSource(isFa, [
+                            recoDemandNominalSource?.name ?? "World Bank WDI",
+                            recoDemandIndicatorIds?.consumption_kd ?? "NE.CON.TOTL.KD",
+                            recoDemandIndicatorIds?.investment_kd ?? "NE.GDI.TOTL.KD",
+                            recoDemandIndicatorIds?.gdp_kd ?? "NY.GDP.MKTP.KD",
+                          ])}
+                          data={[]}
+                          valueKey="value"
+                          label={L(isFa, "Real demand aggregates", "جمع تقاضای واقعی")}
+                          events={reconstructionChartEvents}
+                          multiSeries={[
+                            {
+                              key: "real_consumption",
+                              label: L(isFa, "Final consumption expenditure", "مصرف"),
+                              yAxisIndex: 0,
+                              unit: L(isFa, "constant US$", "دلار ثابت"),
+                              points: recoDemandRealConsumptionPoints,
+                              color: SIGNAL_CONCEPT.consumption,
+                              symbol: "circle",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE,
+                              smooth: true,
+                            },
+                            {
+                              key: "real_investment",
+                              label: L(isFa, "Gross capital formation (investment)", "سرمایه‌گذاری"),
+                              yAxisIndex: 0,
+                              unit: L(isFa, "constant US$", "دلار ثابت"),
+                              points: recoDemandRealInvestmentPoints,
+                              color: SIGNAL_CONCEPT.investment,
+                              symbol: "diamond",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE,
+                              smooth: true,
+                            },
+                            {
+                              key: "real_gdp",
+                              label: L(isFa, "GDP", "تولید ناخالص داخلی"),
+                              yAxisIndex: 1,
+                              unit: L(isFa, "constant US$", "دلار ثابت"),
+                              points: recoDemandRealGdpPoints,
+                              color: SIGNAL_CONCEPT.gdp,
+                              symbol: "triangle",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE,
+                              smooth: true,
+                            },
+                          ]}
+                          timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartRangeGranularity="year"
+                          xAxisYearLabel={chartYearAxisLabel}
+                          exportFileStem="iran-reco-demand-real"
+                          showChartControls
+                          chartHeight="h-56 md:h-64"
+                          mutedEventLines
+                          multiSeriesValueFormat="gdp_absolute"
+                          multiSeriesYAxisNameOverrides={{
+                            0: L(
+                              isFa,
+                              "Consumption & investment (constant US$)",
+                              "مصرف و سرمایه‌گذاری (دلار ثابت)"
+                            ),
+                            1: L(isFa, "GDP (constant US$)", "تولید ناخالص داخلی (دلار ثابت)"),
+                          }}
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground py-6">
+                          {L(isFa, "Data unavailable for this window.", "داده در این بازه در دسترس نیست.")}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Card className="chart-card border-border md:col-span-2">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-semibold">
+                        {L(isFa, "5. Oil rents (% of GDP)", `۵. ${faEconomic.oilRentsPctGdp}`)}
                       </CardTitle>
                       <p className="text-xs text-muted-foreground">WDI NY.GDP.PETR.RT.ZS — Iran.</p>
                     </CardHeader>
@@ -10567,7 +10819,7 @@ export default function StudyDetailPage() {
                   <Card className="chart-card border-border md:col-span-2">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-base font-semibold">
-                        {L(isFa, "4. Exchange rate: official vs open market (annual)", `۴. ${faEconomic.fxTitleOfficialVsOpenAnnual}`)}
+                        {L(isFa, "6. Exchange rate: official vs open market (annual)", `۶. ${faEconomic.fxTitleOfficialVsOpenAnnual}`)}
                       </CardTitle>
                       <p className="text-xs text-muted-foreground max-w-3xl">
                         {L(
@@ -10689,7 +10941,7 @@ export default function StudyDetailPage() {
                   <Card className="chart-card border-border md:col-span-2">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-base font-semibold">
-                        {L(isFa, "5. Broad money (M2) growth vs CPI inflation (annual %)", `۵. ${faEconomic.liquidityAndCpiTitle}`)}
+                        {L(isFa, "7. Broad money (M2) growth vs CPI inflation (annual %)", `۷. ${faEconomic.liquidityAndCpiTitle}`)}
                       </CardTitle>
                       <p className="text-xs text-muted-foreground max-w-3xl">
                         {L(
@@ -10759,7 +11011,7 @@ export default function StudyDetailPage() {
                   <Card className="chart-card border-border md:col-span-2">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-base font-semibold">
-                        {L(isFa, "6. Imports & exports (% of GDP)", `۶. ${faEconomic.importsExportsPctGdp}`)}
+                        {L(isFa, "8. Imports & exports (% of GDP)", `۸. ${faEconomic.importsExportsPctGdp}`)}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-0">
@@ -10817,7 +11069,7 @@ export default function StudyDetailPage() {
                   <Card className="chart-card border-border md:col-span-2">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-base font-semibold">
-                        {L(isFa, "7. Manufacturing & industry (% of GDP)", `۷. ${faEconomic.manufacturingIndustryPanelTitle}`)}
+                        {L(isFa, "9. Manufacturing & industry (% of GDP)", `۹. ${faEconomic.manufacturingIndustryPanelTitle}`)}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-0">
@@ -10875,7 +11127,7 @@ export default function StudyDetailPage() {
                   <Card className="chart-card border-border md:col-span-2">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-base font-semibold">
-                        {L(isFa, "8. Real wages / purchasing power", `۸. دستمزد واقعی / ${faEconomic.purchasingPower}`)}
+                        {L(isFa, "10. Real wages / purchasing power", `۱۰. دستمزد واقعی / ${faEconomic.purchasingPower}`)}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-0">
@@ -10917,6 +11169,28 @@ export default function StudyDetailPage() {
                       isFa,
                       "% of GDP or % growth",
                       `${faEconomic.pctOfGdp} یا ٪ رشد`
+                    ),
+                  },
+                  {
+                    label: L(isFa, "Consumption, investment, GDP (nominal)", "مصرف، سرمایه‌گذاری و GDP (اسمی)"),
+                    sourceName: recoDemandNominalSource?.name ?? "World Bank WDI",
+                    sourceUrl: recoDemandNominalSource?.url ?? "https://data.worldbank.org/country/iran",
+                    sourceDetail: recoDemandNominalSource?.publisher ?? "World Bank",
+                    unitLabel: L(
+                      isFa,
+                      "current US$ (NE.CON.TOTL.CD, NE.GDI.TOTL.CD, NY.GDP.MKTP.CD)",
+                      "دلار جاری (NE.CON.TOTL.CD، NE.GDI.TOTL.CD، NY.GDP.MKTP.CD)"
+                    ),
+                  },
+                  {
+                    label: L(isFa, "Consumption, investment, GDP (real)", "مصرف، سرمایه‌گذاری و GDP (واقعی)"),
+                    sourceName: recoDemandNominalSource?.name ?? "World Bank WDI",
+                    sourceUrl: recoDemandNominalSource?.url ?? "https://data.worldbank.org/country/iran",
+                    sourceDetail: recoDemandNominalSource?.publisher ?? "World Bank",
+                    unitLabel: L(
+                      isFa,
+                      "constant 2015 US$ (NE.CON.TOTL.KD, NE.GDI.TOTL.KD, NY.GDP.MKTP.KD)",
+                      "دلار ثابت ۲۰۱۵ (NE.CON.TOTL.KD، NE.GDI.TOTL.KD، NY.GDP.MKTP.KD)"
                     ),
                   },
                   {
@@ -11076,6 +11350,14 @@ export default function StudyDetailPage() {
                   recoInflationIranPoints={recoInflationIranPoints}
                   recoInflationSource={recoInflationSource}
                   recoGdpGrowthPoints={recoGdpGrowthPoints}
+                  recoDemandConsumptionPoints={recoDemandConsumptionPoints}
+                  recoDemandInvestmentPoints={recoDemandInvestmentPoints}
+                  recoDemandGdpPoints={recoDemandGdpPoints}
+                  recoDemandRealConsumptionPoints={recoDemandRealConsumptionPoints}
+                  recoDemandRealInvestmentPoints={recoDemandRealInvestmentPoints}
+                  recoDemandRealGdpPoints={recoDemandRealGdpPoints}
+                  recoDemandNominalSource={recoDemandNominalSource}
+                  recoDemandIndicatorIds={recoDemandIndicatorIds}
                   recoImportsPoints={recoImportsPoints}
                   recoExportsPoints={recoExportsPoints}
                   recoManufacturingPoints={recoManufacturingPoints}
@@ -11126,6 +11408,28 @@ export default function StudyDetailPage() {
                     sourceUrl: recoIsiSource?.url ?? "https://data.worldbank.org/country/iran",
                     sourceDetail: recoIsiSource?.publisher ?? "World Bank",
                     unitLabel: L(isFa, "% of GDP or % growth", `${faEconomic.pctOfGdp} یا ٪ رشد`),
+                  },
+                  {
+                    label: L(isFa, "Consumption, investment, GDP (nominal)", "مصرف، سرمایه‌گذاری و GDP (اسمی)"),
+                    sourceName: recoDemandNominalSource?.name ?? "World Bank WDI",
+                    sourceUrl: recoDemandNominalSource?.url ?? "https://data.worldbank.org/country/iran",
+                    sourceDetail: recoDemandNominalSource?.publisher ?? "World Bank",
+                    unitLabel: L(
+                      isFa,
+                      "current US$ (NE.CON.TOTL.CD, NE.GDI.TOTL.CD, NY.GDP.MKTP.CD)",
+                      "دلار جاری (NE.CON.TOTL.CD، NE.GDI.TOTL.CD، NY.GDP.MKTP.CD)"
+                    ),
+                  },
+                  {
+                    label: L(isFa, "Consumption, investment, GDP (real)", "مصرف، سرمایه‌گذاری و GDP (واقعی)"),
+                    sourceName: recoDemandNominalSource?.name ?? "World Bank WDI",
+                    sourceUrl: recoDemandNominalSource?.url ?? "https://data.worldbank.org/country/iran",
+                    sourceDetail: recoDemandNominalSource?.publisher ?? "World Bank",
+                    unitLabel: L(
+                      isFa,
+                      "constant 2015 US$ (NE.CON.TOTL.KD, NE.GDI.TOTL.KD, NY.GDP.MKTP.KD)",
+                      "دلار ثابت ۲۰۱۵ (NE.CON.TOTL.KD، NE.GDI.TOTL.KD، NY.GDP.MKTP.KD)"
+                    ),
                   },
                   {
                     label: L(isFa, "Oil rents", faEconomic.oilRents),

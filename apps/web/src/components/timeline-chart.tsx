@@ -256,6 +256,8 @@ export type ChartSeries = {
   showSymbol?: boolean;
   /** ECharts ``lineStyle.type`` for multi-series (e.g. dashed exports vs solid imports). */
   linePattern?: "solid" | "dashed" | "dotted";
+  /** ECharts line smoothing (default false for macro annual series). */
+  smooth?: boolean;
   /**
    * With ``multiSeriesLegendLayout="grouped"``: row label (e.g. country) and column header (e.g. Imports)
    * for a table-style legend above the chart.
@@ -2807,7 +2809,7 @@ export function TimelineChart({
                   type: "line" as const,
                   yAxisIndex: s.yAxisIndex,
                   data: useTimeAxis ? toTimeData(valuesForEcharts) : valuesForEcharts,
-                  smooth: false,
+                  smooth: s.smooth ?? false,
                   connectNulls: true,
                   step: (isGold ? "start" : false) as "start" | false,
                   symbol: seriesShape,

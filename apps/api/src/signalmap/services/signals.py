@@ -1304,6 +1304,37 @@ DUTCH_DISEASE_DIAGNOSTICS_SOURCE = {
 }
 
 
+IRAN_DEMAND_NOMINAL_USD_SOURCE = {
+    "name": "World Bank World Development Indicators",
+    "publisher": "World Bank",
+    "url": "https://data.worldbank.org/country/iran",
+}
+
+
+def get_iran_demand_nominal_usd(start: str, end: str) -> dict:
+    """
+    Iran: annual demand aggregates — nominal (.CD) and real constant-price (.KD) from WDI.
+    Descriptive only.
+    """
+    from signalmap.sources.world_bank_iran_demand_nominal import fetch_iran_demand_nominal_usd_bundle
+
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    ck = f"signal:iran_demand_nominal_usd:v2:{start_year}:{end_year}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    bundle = fetch_iran_demand_nominal_usd_bundle(start_year, end_year)
+    result = {
+        **bundle,
+        "source": IRAN_DEMAND_NOMINAL_USD_SOURCE,
+        "resolution": "annual",
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
+
+
 def get_dutch_disease_diagnostics_iran(start: str, end: str) -> dict:
     """
     Iran-only annual WDI bundle for exploratory structural diagnostics (not a composite “Dutch disease index”):
