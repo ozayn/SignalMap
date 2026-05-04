@@ -1320,7 +1320,7 @@ def get_iran_demand_nominal_usd(start: str, end: str) -> dict:
 
     start_year = int(start[:4])
     end_year = int(end[:4])
-    ck = f"signal:iran_demand_nominal_usd:v2:{start_year}:{end_year}"
+    ck = f"signal:iran_demand_nominal_usd:v3:{start_year}:{end_year}"
     cached = cache_get(ck)
     if cached is not None:
         return cached

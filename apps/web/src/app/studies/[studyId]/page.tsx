@@ -3950,7 +3950,10 @@ export default function StudyDetailPage() {
         };
         source?: { name?: string; url?: string; publisher?: string };
         indicator_ids?: Record<string, string>;
-      }>(`/api/signals/wdi/iran-demand-nominal-usd?start=${enc(start)}&end=${enc(end)}`, ac.signal),
+      }>(
+        `/api/signals/wdi/iran-demand-nominal-usd?start=${enc(start)}&end=${enc(end)}&_sm_bd=3`,
+        ac.signal
+      ),
     ])
       .then(([inf, isi, dutch, money, fx, demand]) => {
         if (!mounted) return;
@@ -10768,6 +10771,16 @@ export default function StudyDetailPage() {
                             1: L(isFa, "GDP (constant US$)", "تولید ناخالص داخلی (دلار ثابت)"),
                           }}
                         />
+                      ) : recoDemandConsumptionPoints.length > 0 ||
+                        recoDemandInvestmentPoints.length > 0 ||
+                        recoDemandGdpPoints.length > 0 ? (
+                        <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
+                          {L(
+                            isFa,
+                            "Constant-price (real) series did not load (empty response). The nominal chart above uses an older-compatible payload; deploy the latest SignalMap API (bundle with NE.CON.TOTL.KD, NE.GDI.TOTL.KD, NY.GDP.MKTP.KD) and hard-refresh, or wait for CDN cache to expire.",
+                            "سری‌های قیمت ثابت (واقعی) بارگذاری نشدند (پاسخ خالی). نمودار اسمی بالا با پاسخ قدیمی‌تر سازگار است؛ آخرین نسخهٔ API سیگنال‌مپ (شامل NE.CON.TOTL.KD، NE.GDI.TOTL.KD، NY.GDP.MKTP.KD) را مستقر کنید و صفحه را سخت‌ریفرش کنید، یا تا انقضای کش CDN صبر کنید."
+                          )}
+                        </p>
                       ) : (
                         <p className="text-xs text-muted-foreground py-6">
                           {L(isFa, "Data unavailable for this window.", "داده در این بازه در دسترس نیست.")}

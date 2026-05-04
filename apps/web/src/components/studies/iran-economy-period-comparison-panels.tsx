@@ -441,6 +441,16 @@ export function IranEconomyPeriodComparisonPanels({
                     1: L(isFa, "GDP (constant US$)", "تولید ناخالص داخلی (دلار ثابت)"),
                   }}
                 />
+              ) : recoDemandConsumptionPoints.length > 0 ||
+                recoDemandInvestmentPoints.length > 0 ||
+                recoDemandGdpPoints.length > 0 ? (
+                <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
+                  {L(
+                    isFa,
+                    "Constant-price (real) series did not load (empty response). The nominal chart uses an older-compatible payload; deploy the latest SignalMap API and hard-refresh, or wait for CDN cache to expire.",
+                    "سری‌های قیمت ثابت (واقعی) بارگذاری نشدند (پاسخ خالی). نمودار اسمی با پاسخ قدیمی‌تر سازگار است؛ آخرین API را مستقر کنید و صفحه را سخت‌ریفرش کنید، یا تا انقضای کش CDN صبر کنید."
+                  )}
+                </p>
               ) : (
                 <p className="text-xs text-muted-foreground py-6">{L(isFa, "Data unavailable for this window.", "داده در این بازه در دسترس نیست.")}</p>
               )}
