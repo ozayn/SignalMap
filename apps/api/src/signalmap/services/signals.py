@@ -343,6 +343,28 @@ def _cpi_annual_average_by_year() -> dict[int, float]:
     return {y: sum(vals) / len(vals) for y, vals in sorted(buckets.items()) if vals}
 
 
+def get_us_cpi_monthly_series(start: str, end: str) -> dict:
+    """
+    US CPIAUCSL monthly index (1982-84=100), trimmed to [start, end] for client-side deflation.
+    """
+    rows = fetch_cpi_series()
+    s = start[:10]
+    e = end[:10]
+    out = [p for p in rows if isinstance(p.get("date"), str) and s <= p["date"][:10] <= e]
+    return {
+        "signal": "fred_us_cpi_monthly",
+        "unit": "index (1982-84=100)",
+        "index_basis": "1982-84=100",
+        "source": {
+            "name": "FRED",
+            "series_id": "CPIAUCSL",
+            "publisher": "Federal Reserve Bank of St. Louis",
+            "url": "https://fred.stlouisfed.org/series/CPIAUCSL",
+        },
+        "points": out,
+    }
+
+
 def get_real_oil_series(start: str, end: str) -> dict:
     """
     Real oil price: nominal (Brent) / CPI * CPI_base.

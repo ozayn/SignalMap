@@ -297,6 +297,9 @@ type TimelineChartProps = {
   referenceLine?: { value: number; label?: string };
   /** Lightly shaded band for a descriptive period (e.g. approximate structural break). */
   regimeArea?: { xStart: string; xEnd: string; label?: string };
+  /** Inclusive Gregorian years; tooltip adds `focusHoverHint` when the hovered point falls in this range. */
+  focusGregorianYearRange?: { startYear: number; endYear: number };
+  focusHoverHint?: { en: string; fa: string };
   /** Use timeRange for date axis when band overlays (e.g. presidential terms) need full range. Use for dense/short-range data (e.g. FX). */
   useTimeRangeForDateAxis?: boolean;
   /** Comparator series on same axis as secondSeries (e.g. Turkey PPP). Thinner, muted. */
@@ -318,6 +321,8 @@ type TimelineChartProps = {
   chartHeight?: string;
   /** Override grid.right (e.g. "12%") to align x-axis with another chart above. */
   gridRight?: string;
+  /** Override grid.left (number = px, string = % or px). When omitted, FA charts use wider defaults so vertical y-axis titles are not clipped. */
+  gridLeft?: number | string;
   /** Dates that are synthetic extensions (e.g. current year when data ends earlier). */
   extendedDates?: string[];
   /** Last official data year for extension tooltip (e.g. "2025"). */
@@ -374,6 +379,11 @@ type TimelineChartProps = {
   multiSeriesLegendGroupedVariant?: "grid" | "country";
   /** FA: tooltip chrome + LTR wrapper; series names still come from props (pass Persian labels from the page). */
   chartLocale?: "en" | "fa";
+  /**
+   * Optional muted line under the calendar date in the axis tooltip (e.g. “Nominal USD” vs
+   * “Real USD (2020-adjusted)”).
+   */
+  tooltipValueBasisNote?: string;
 };
 
 type GroupedLegendCell = {
@@ -817,6 +827,8 @@ export function TimelineChart({
   chartLineRole = "primary",
   referenceLine,
   regimeArea,
+  focusGregorianYearRange,
+  focusHoverHint,
   useTimeRangeForDateAxis = false,
   comparatorSeries,
   indexComparator = false,
@@ -825,6 +837,7 @@ export function TimelineChart({
   showOilShocks = true,
   chartHeight = TIMELINE_CHART_DEFAULT_HEIGHT_CLASS,
   gridRight: gridRightOverride,
+  gridLeft: gridLeftOverride,
   extendedDates = [],
   lastOfficialDateForExtension,
   highlightLatestPoint = false,
@@ -848,6 +861,7 @@ export function TimelineChart({
   multiSeriesLegendLayout = "default",
   multiSeriesLegendGroupedVariant = "grid",
   chartLocale,
+  tooltipValueBasisNote,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
@@ -2103,6 +2117,30 @@ export function TimelineChart({
               tooltipDateResolution
             )
           );
+          if (focusGregorianYearRange && focusHoverHint && dateStr.length >= 4) {
+            const yHover = parseInt(dateStr.slice(0, 4), 10);
+            if (
+              Number.isFinite(yHover) &&
+              yHover >= focusGregorianYearRange.startYear &&
+              yHover <= focusGregorianYearRange.endYear
+            ) {
+              const hint = chartLocale === "fa" ? focusHoverHint.fa : focusHoverHint.en;
+              lines.push(
+                `<span style="font-size:10px;color:#888">${localizeChartNumericDisplayStringSafe(
+                  hint,
+                  chartNumeralLocale
+                )}</span>`
+              );
+            }
+          }
+          if (tooltipValueBasisNote) {
+            lines.push(
+              `<span style="font-size:10px;color:#888">${localizeChartNumericDisplayStringSafe(
+                tooltipValueBasisNote,
+                chartNumeralLocale
+              )}</span>`
+            );
+          }
           const pt = hasData && idx < dataResolved.length ? dataResolved[idx] : null;
           if (pt) {
             const val = pt[valueKey];
@@ -2178,7 +2216,20 @@ export function TimelineChart({
         },
       },
       grid: {
-        left: compact ? (hasMultiSeries ? "11%" : "3%") : hasMultiSeries ? "17%" : "6%",
+        left: (() => {
+          const defaultGridLeft = compact
+            ? hasMultiSeries
+              ? "11%"
+              : "3%"
+            : hasMultiSeries
+              ? "17%"
+              : "6%";
+          const faWidenGridLeftPx =
+            chartNumeralLocale === "fa" && !compact ? (hasMultiSeries ? 100 : 88) : null;
+          if (gridLeftOverride != null && gridLeftOverride !== "")
+            return gridLeftOverride;
+          return faWidenGridLeftPx ?? defaultGridLeft;
+        })(),
         right:
           gridRightOverride ??
           (hasMultiSeries && multiSeries && multiSeries.some((s) => s.yAxisIndex >= 2)
@@ -2656,13 +2707,13 @@ export function TimelineChart({
                       }
                     : undefined,
                 markArea:
-                  rangeBandData.length > 0 || sanctionsPeriods.length > 0
+                  rangeBandData.length > 0 || sanctionsPeriods.length > 0 || regimeArea
                     ? {
                         silent: false,
                         z: 0,
                         itemStyle: {
                           color: withAlphaHsl(muted, RangeBandOpacity),
-                          borderColor: withAlphaHsl(muted, 0.2),
+                          borderColor: withAlphaHsl(muted, regimeArea ? 0.12 : 0.2),
                           borderWidth: 1,
                         },
                         data: [
@@ -2693,6 +2744,26 @@ export function TimelineChart({
                               ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }];
                             })
                             .filter((x): x is [{ xAxis: string; itemStyle?: object }, { xAxis: string }] => x != null),
+                          ...(regimeArea
+                            ? [
+                                [
+                                  {
+                                    xAxis: regimeArea.xStart,
+                                    itemStyle: { color: withAlphaHsl(muted, 0.04), borderColor: "transparent" },
+                                    label: regimeArea.label
+                                      ? {
+                                          show: true,
+                                          formatter: localizeChartNumericDisplayString(regimeArea.label, chartNumeralLocale),
+                                          color: mutedFg,
+                                          fontSize: 9,
+                                          position: "insideTop" as const,
+                                        }
+                                      : undefined,
+                                  },
+                                  { xAxis: regimeArea.xEnd },
+                                ] as [{ xAxis: string; itemStyle?: object; label?: object }, { xAxis: string }],
+                              ]
+                            : []),
                         ],
                       }
                     : undefined,
@@ -3076,6 +3147,8 @@ export function TimelineChart({
     chartLineRole,
     referenceLine,
     regimeArea,
+    focusGregorianYearRange,
+    focusHoverHint,
     useTimeRangeForDateAxis,
     comparatorSeries,
     indexComparator,
@@ -3083,6 +3156,7 @@ export function TimelineChart({
     oilShockDates,
     showOilShocks,
     gridRightOverride,
+    gridLeftOverride,
     xLabelRotate,
     extendedDates,
     lastOfficialDateForExtension,

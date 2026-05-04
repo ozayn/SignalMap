@@ -9,10 +9,19 @@ import {
   type StudyLocale,
 } from "@/lib/iran-study-fa";
 import { IRAN_STUDY_FA_DISPLAY } from "@/lib/iran-study-fa-copy";
+import { enEconomic, faEconomic } from "@/lib/signalmap-i18n/economic-terms";
+import {
+  IPC_DEFAULT_OUTER_START,
+  IPC_PRESET_CHIP,
+  IPC_PRESET_UI_ORDER,
+  IPC_PRESIDENT_PRESETS,
+  ipcCurrentGregorianYear,
+  type IpcPresidentPreset,
+} from "@/lib/iran-economy-period-comparison-presets";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TimelineChart, type ChartSeries } from "@/components/timeline-chart";
+import { TimelineChart, type ChartSeries, type TimelineEvent as ChartTimelineEvent } from "@/components/timeline-chart";
 import { StudyChartHeaderControlsShell } from "@/components/study-chart-header-controls-shell";
 import { StudyChartExportFilenameProvider } from "@/components/study-chart-export-filename-context";
 import { COUNTRY_COMPARATOR_STYLES } from "@/lib/chart-country-series-styles";
@@ -25,6 +34,7 @@ import { ConceptsUsed } from "@/components/concepts-used";
 import { CurrentSnapshot } from "@/components/current-snapshot";
 import { IranMoneySupplyMethodology } from "@/components/studies/iran-money-supply-methodology";
 import { InSimpleTerms } from "@/components/in-simple-terms";
+import { IranEconomyPeriodComparisonPanels } from "@/components/studies/iran-economy-period-comparison-panels";
 import { EventsTimeline, type TimelineEvent } from "@/components/events-timeline";
 import { SignalMapBandTimeline } from "@/components/signalmap-band-timeline";
 import {
@@ -126,6 +136,8 @@ import {
 } from "@/lib/study-event-layer-toggles";
 import { withTimeSeriesEventOverlay } from "@/lib/time-series-event-overlay";
 import { downsampleFxOpenForDisplay } from "@/lib/time-series-lttb";
+import { NominalRealToggle } from "@/components/nominal-real-toggle";
+import { deflateNominalUsdPointsWithUsCpi, USD_CPI_REAL_BASE_YEAR } from "@/lib/usd-cpi-deflate";
 import { trackEvent } from "@/lib/analytics";
 import { formatStatDate, decodeHtmlEntities } from "@/lib/utils";
 import {
@@ -522,7 +534,10 @@ export default function StudyDetailPage() {
   const [oilEconomyPriceRealPoints, setOilEconomyPriceRealPoints] = useState<{ date: string; value: number }[]>([]);
   const [oilEconomyRevenueRealPoints, setOilEconomyRevenueRealPoints] = useState<{ date: string; value: number }[]>([]);
   const [oilEconomyInflation, setOilEconomyInflation] = useState<OilEconomyInflationBlock | null>(null);
-  const [oilEconomyUsdMode, setOilEconomyUsdMode] = useState<"nominal" | "real">("nominal");
+  const [oilEconomyUsdMode, setOilEconomyUsdMode] = useState<"nominal" | "real">("real");
+  /** Nominal vs US-CPI real USD for eligible monetary charts (default: real). */
+  const [monetarySeriesMode, setMonetarySeriesMode] = useState<"nominal" | "real">("real");
+  const [usCpiMonthlyPoints, setUsCpiMonthlyPoints] = useState<{ date: string; value: number }[]>([]);
   const [productionUsPoints, setProductionUsPoints] = useState<{ date: string; value: number }[]>([]);
   const [productionSaudiPoints, setProductionSaudiPoints] = useState<{ date: string; value: number }[]>([]);
   const [productionRussiaPoints, setProductionRussiaPoints] = useState<{ date: string; value: number }[]>([]);
@@ -620,6 +635,50 @@ export default function StudyDetailPage() {
   const [dutchWdiSeriesWarnings, setDutchWdiSeriesWarnings] = useState<Record<string, string> | null>(null);
   const [dutchFxPoints, setDutchFxPoints] = useState<{ date: string; value: number }[]>([]);
   const [dutchFxSource, setDutchFxSource] = useState<FxUsdTomanSource | null>(null);
+  /** Iran reconstruction dashboard (1368–1376 SH): parallel WDI / FX panels. */
+  const [recoInflationIranPoints, setRecoInflationIranPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoInflationSource, setRecoInflationSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(
+    null
+  );
+  const [recoGdpGrowthPoints, setRecoGdpGrowthPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoImportsPoints, setRecoImportsPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoExportsPoints, setRecoExportsPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoManufacturingPoints, setRecoManufacturingPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoIndustryPoints, setRecoIndustryPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoIsiSource, setRecoIsiSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(null);
+  const [recoIsiIndicatorIds, setRecoIsiIndicatorIds] = useState<Record<string, string> | null>(null);
+  const [recoOilRentsPoints, setRecoOilRentsPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoDutchSource, setRecoDutchSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(null);
+  const [recoM2Points, setRecoM2Points] = useState<{ date: string; value: number }[]>([]);
+  const [recoM2CpiPoints, setRecoM2CpiPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoMoneyWdiSource, setRecoMoneyWdiSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(
+    null
+  );
+  const [recoMoneyCitation, setRecoMoneyCitation] = useState<{ en: string; fa: string } | null>(null);
+  const [recoMoneyIndicatorIds, setRecoMoneyIndicatorIds] = useState<{
+    broad_money_growth: string;
+    cpi_inflation_yoy_iran: string;
+  } | null>(null);
+  const [recoFxOfficialPoints, setRecoFxOfficialPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoFxOpenPoints, setRecoFxOpenPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoFxOfficialSource, setRecoFxOfficialSource] = useState<FxUsdTomanSource | null>(null);
+  const [recoFxOpenSource, setRecoFxOpenSource] = useState<FxUsdTomanSource | null>(null);
+  const [recoLoading, setRecoLoading] = useState(false);
+  const [recoLoadFailed, setRecoLoadFailed] = useState(false);
+  const [recoLoadDetail, setRecoLoadDetail] = useState<string | null>(null);
+  /** Iran economy period-comparison study: outer/focus Gregorian years + band labels (EN/FA for regimeArea). */
+  const [ipcOuterStartYear, setIpcOuterStartYear] = useState(IPC_DEFAULT_OUTER_START);
+  const [ipcOuterEndYear, setIpcOuterEndYear] = useState(() => ipcCurrentGregorianYear());
+  const [ipcFocusStartYear, setIpcFocusStartYear] = useState(1989);
+  const [ipcFocusEndYear, setIpcFocusEndYear] = useState(1997);
+  const [ipcBandLabelEn, setIpcBandLabelEn] = useState(IPC_PRESIDENT_PRESETS.rafsanjani.labelEn);
+  const [ipcBandLabelFa, setIpcBandLabelFa] = useState(IPC_PRESIDENT_PRESETS.rafsanjani.labelFa);
+  const [ipcPresetId, setIpcPresetId] = useState<IpcPresidentPreset | "custom">("rafsanjani");
+  const [ipcWageNominalPoints, setIpcWageNominalPoints] = useState<{ date: string; value: number }[]>([]);
+  const [ipcWageCpiPoints, setIpcWageCpiPoints] = useState<{ date: string; value: number }[]>([]);
+  const [ipcWageBaseYear, setIpcWageBaseYear] = useState<number | null>(null);
+  const [ipcWageSource, setIpcWageSource] = useState<{ nominal: string; cpi: string } | null>(null);
+  const [ipcWageLoadFailed, setIpcWageLoadFailed] = useState(false);
   const [fxDualOfficialPoints, setFxDualOfficialPoints] = useState<{ date: string; value: number }[]>([]);
   const [fxDualOpenPoints, setFxDualOpenPoints] = useState<{ date: string; value: number }[]>([]);
   const [fxDualOfficialSource, setFxDualOfficialSource] = useState<FxUsdTomanSource | null>(null);
@@ -786,9 +845,78 @@ export default function StudyDetailPage() {
   const isIranMoneySupplyM2 = study?.primarySignal.kind === "iran_money_supply_m2";
   const isDutchDiseaseDiagnostics = study?.primarySignal.kind === "dutch_disease_diagnostics_iran";
   const isOilEconomyOverview = study?.primarySignal.kind === "oil_economy_overview";
+  const isIranEconomyReconstruction1368 =
+    study?.primarySignal.kind === "iran_economy_reconstruction_1368_1376";
+  const isIranEconomyPeriodComparison = study?.primarySignal.kind === "iran_economy_period_comparison";
+  const isIranEconomyMacroDashboard = isIranEconomyReconstruction1368 || isIranEconomyPeriodComparison;
   /** WDI national-accounts levels bundle (composition study or dual-axis reference study). */
   const isGdpMacroNationalAccounts = isGdpComposition || isGdpIranAccountsDual;
   const isGdpIranLocal = study?.gdpCompositionIranLocalOptions === true;
+
+  const shouldFetchUsCpiMonthly = useMemo(
+    () =>
+      Boolean(
+        study &&
+          (isOilBrent ||
+            isOilGlobalLong ||
+            isGoldAndOil ||
+            isOilAndFx ||
+            isOilGeopoliticalReaction ||
+            isOilExportCapacity ||
+            (isGdpGlobalComparison && gdpGlobalDisplayMode === "absolute") ||
+            (isGdpMacroNationalAccounts &&
+              isGdpIranLocal &&
+              gdpStudyView === "levels" &&
+              gdpLevelsValueType === "usd"))
+      ),
+    [
+      study,
+      isOilBrent,
+      isOilGlobalLong,
+      isGoldAndOil,
+      isOilAndFx,
+      isOilGeopoliticalReaction,
+      isOilExportCapacity,
+      isGdpGlobalComparison,
+      gdpGlobalDisplayMode,
+      isGdpMacroNationalAccounts,
+      isGdpIranLocal,
+      gdpStudyView,
+      gdpLevelsValueType,
+    ]
+  );
+
+  useEffect(() => {
+    setMonetarySeriesMode("real");
+  }, [studyId]);
+
+  useEffect(() => {
+    if (studyId === "iran-economy-1368-1376" || studyId === "iran-economy-period-comparison") {
+      setYearAxisMode("jalali");
+      setShowTimeSeriesEventOverlay(true);
+    }
+  }, [studyId, setYearAxisMode, setShowTimeSeriesEventOverlay]);
+
+  useEffect(() => {
+    if (!shouldFetchUsCpiMonthly) {
+      setUsCpiMonthlyPoints([]);
+      return;
+    }
+    let mounted = true;
+    const end = new Date().toISOString().slice(0, 10);
+    fetchJson<{ points?: { date: string; value: number }[] }>(
+      `/api/signals/fred/us-cpi-monthly?start=${encodeURIComponent("1947-01-01")}&end=${encodeURIComponent(end)}`
+    )
+      .then((res) => {
+        if (mounted) setUsCpiMonthlyPoints(res.points ?? []);
+      })
+      .catch(() => {
+        if (mounted) setUsCpiMonthlyPoints([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [shouldFetchUsCpiMonthly]);
 
   useEffect(() => {
     if (!isFxIranCurrencyRegime) {
@@ -819,7 +947,9 @@ export default function StudyDetailPage() {
       isInflationCpiYoy ||
       isGdpGlobalComparison ||
       isPovertyHeadcountIran ||
-      isIranMoneySupplyM2
+      isIranMoneySupplyM2 ||
+      isIranEconomyReconstruction1368 ||
+      isIranEconomyPeriodComparison
     )
       setLoading(false);
   }, [
@@ -831,6 +961,8 @@ export default function StudyDetailPage() {
     isGdpGlobalComparison,
     isPovertyHeadcountIran,
     isIranMoneySupplyM2,
+    isIranEconomyReconstruction1368,
+    isIranEconomyPeriodComparison,
   ]);
 
   useEffect(() => {
@@ -1100,6 +1232,37 @@ export default function StudyDetailPage() {
     return [start, resolvedEnd];
   }, [study, isDutchDiseaseDiagnostics, anchorEventId, events, effectiveWindowValue]);
 
+  const reconstructionTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isIranEconomyReconstruction1368) return null;
+    const [start, end] = study.timeRange;
+    const resolvedEnd = end === "today" ? new Date().toISOString().slice(0, 10) : end;
+    return [start, resolvedEnd];
+  }, [study, isIranEconomyReconstruction1368]);
+
+  const ipcOuterResolved = useMemo(() => {
+    const cy = ipcCurrentGregorianYear();
+    let os = Math.min(ipcOuterStartYear, ipcOuterEndYear);
+    let oe = Math.max(ipcOuterStartYear, ipcOuterEndYear);
+    os = Math.max(1960, Math.min(os, cy));
+    oe = Math.max(os, Math.min(oe, cy));
+    return { start: os, end: oe };
+  }, [ipcOuterStartYear, ipcOuterEndYear]);
+
+  const ipcFocusResolved = useMemo(() => {
+    const { start: os, end: oe } = ipcOuterResolved;
+    let fs = Math.min(ipcFocusStartYear, ipcFocusEndYear);
+    let fe = Math.max(ipcFocusStartYear, ipcFocusEndYear);
+    fs = Math.max(os, Math.min(fs, oe));
+    fe = Math.max(fs, Math.min(fe, oe));
+    return { start: fs, end: fe };
+  }, [ipcFocusStartYear, ipcFocusEndYear, ipcOuterResolved]);
+
+  const ipcTimeRange = useMemo((): [string, string] | null => {
+    if (!study || !isIranEconomyPeriodComparison) return null;
+    const { start, end } = ipcOuterResolved;
+    return [`${start}-01-01`, `${end}-12-31`];
+  }, [study, isIranEconomyPeriodComparison, ipcOuterResolved]);
+
   const exporterTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isOilExporterTimeseries) return null;
     const [start, end] = study.timeRange;
@@ -1177,14 +1340,36 @@ export default function StudyDetailPage() {
       saudi_arabia: gdpGlobalSaudiArabiaPoints,
       world: gdpGlobalWorldPoints,
     };
-    if (gdpGlobalDisplayMode !== "indexed") return raw;
+    if (gdpGlobalDisplayMode === "indexed") {
+      return {
+        us: indexGdpComparisonTo100Base2000(raw.us),
+        china: indexGdpComparisonTo100Base2000(raw.china),
+        iran: indexGdpComparisonTo100Base2000(raw.iran),
+        turkey: indexGdpComparisonTo100Base2000(raw.turkey),
+        saudi_arabia: indexGdpComparisonTo100Base2000(raw.saudi_arabia),
+        world: indexGdpComparisonTo100Base2000(raw.world),
+      };
+    }
+    if (
+      monetarySeriesMode !== "real" ||
+      usCpiMonthlyPoints.length === 0 ||
+      !gdpGlobalPerCountryBasis ||
+      Object.keys(gdpGlobalPerCountryBasis).length === 0
+    ) {
+      return raw;
+    }
+    const basis = gdpGlobalPerCountryBasis;
+    const deflateIfCurrent = (pts: { date: string; value: number }[], isoKey: string) =>
+      basis[isoKey] === "current_usd"
+        ? deflateNominalUsdPointsWithUsCpi(pts, usCpiMonthlyPoints, USD_CPI_REAL_BASE_YEAR)
+        : pts;
     return {
-      us: indexGdpComparisonTo100Base2000(raw.us),
-      china: indexGdpComparisonTo100Base2000(raw.china),
-      iran: indexGdpComparisonTo100Base2000(raw.iran),
-      turkey: indexGdpComparisonTo100Base2000(raw.turkey),
-      saudi_arabia: indexGdpComparisonTo100Base2000(raw.saudi_arabia),
-      world: indexGdpComparisonTo100Base2000(raw.world),
+      us: deflateIfCurrent(raw.us, "united_states"),
+      china: deflateIfCurrent(raw.china, "china"),
+      iran: deflateIfCurrent(raw.iran, "iran"),
+      turkey: deflateIfCurrent(raw.turkey, "turkey"),
+      saudi_arabia: deflateIfCurrent(raw.saudi_arabia, "saudi_arabia"),
+      world: deflateIfCurrent(raw.world, "world"),
     };
   }, [
     isGdpGlobalComparison,
@@ -1195,6 +1380,9 @@ export default function StudyDetailPage() {
     gdpGlobalTurkeyPoints,
     gdpGlobalSaudiArabiaPoints,
     gdpGlobalWorldPoints,
+    monetarySeriesMode,
+    usCpiMonthlyPoints,
+    gdpGlobalPerCountryBasis,
   ]);
 
   const povertyFilteredEvents = useMemo(() => {
@@ -1211,6 +1399,116 @@ export default function StudyDetailPage() {
     if (!isDutchDiseaseDiagnostics) return events;
     return events.filter((e) => isStudyEventLayerVisible(e.layer, chartEventToggleState));
   }, [isDutchDiseaseDiagnostics, events, chartEventToggleState]);
+
+  const reconstructionFilteredApiEvents = useMemo(() => {
+    if (!isIranEconomyReconstruction1368) return events;
+    return events.filter((e) => isStudyEventLayerVisible(e.layer, chartEventToggleState));
+  }, [isIranEconomyReconstruction1368, events, chartEventToggleState]);
+
+  const reconstructionPeriodMarkers = useMemo((): Event[] => {
+    if (!isIranEconomyReconstruction1368) return [];
+    return [
+      {
+        id: "reco-khamenei-sl-1989",
+        layer: "iran_core",
+        date: "1989-06-04",
+        title: "Khamenei becomes Supreme Leader",
+        title_fa: "رهبری آیت‌الله خامنه‌ای",
+      },
+      {
+        id: "reco-rafsanjani-1-1989",
+        layer: "iran_core",
+        date: "1989-08-03",
+        title: "Rafsanjani presidency begins",
+        title_fa: "آغاز ریاست‌جمهوری رفسنجانی",
+      },
+      {
+        id: "reco-rafsanjani-2-1993",
+        layer: "iran_core",
+        date: "1993-08-04",
+        title: "Second Rafsanjani term (inauguration)",
+        title_fa: "دور دوم ریاست‌جمهوری رفسنجانی (حدود)",
+      },
+      {
+        id: "reco-fx-pressure-1995",
+        layer: "iran_core",
+        date: "1995-07-01",
+        title: "FX / inflation pressure (context marker)",
+        title_fa: "فشار ارزی/تورمی (نشانگر زمینه‌ای)",
+      },
+      {
+        id: "reco-khatami-1997",
+        layer: "iran_core",
+        date: "1997-05-23",
+        title: "Khatami elected — end of Rafsanjani era",
+        title_fa: "انتخاب خاتمی — پایان دوره رفسنجانی",
+      },
+    ];
+  }, [isIranEconomyReconstruction1368]);
+
+  const reconstructionChartEvents = useMemo((): Event[] => {
+    return [...reconstructionPeriodMarkers, ...(showTimeSeriesEventOverlay ? reconstructionFilteredApiEvents : [])];
+  }, [reconstructionPeriodMarkers, showTimeSeriesEventOverlay, reconstructionFilteredApiEvents]);
+
+  const ipcFilteredApiEvents = useMemo(() => {
+    if (!isIranEconomyPeriodComparison) return events;
+    return events.filter((e) => isStudyEventLayerVisible(e.layer, chartEventToggleState));
+  }, [isIranEconomyPeriodComparison, events, chartEventToggleState]);
+
+  const ipcChartEvents = useMemo((): ChartTimelineEvent[] => {
+    if (!isIranEconomyPeriodComparison) return [];
+    return showTimeSeriesEventOverlay ? (ipcFilteredApiEvents as ChartTimelineEvent[]) : [];
+  }, [isIranEconomyPeriodComparison, showTimeSeriesEventOverlay, ipcFilteredApiEvents]);
+
+  const ipcRegimeAreaBounds = useMemo(() => {
+    if (!isIranEconomyPeriodComparison) return null;
+    const { start, end } = ipcFocusResolved;
+    return { xStart: `${start}-07-01`, xEnd: `${end}-07-01` };
+  }, [isIranEconomyPeriodComparison, ipcFocusResolved]);
+
+  const ipcRegimeAreaWithLabel = useMemo(() => {
+    if (!ipcRegimeAreaBounds) return undefined;
+    return { ...ipcRegimeAreaBounds, label: L(isFa, ipcBandLabelEn, ipcBandLabelFa) };
+  }, [ipcRegimeAreaBounds, isFa, ipcBandLabelEn, ipcBandLabelFa]);
+
+  const applyIpcPreset = useCallback((id: IpcPresidentPreset) => {
+    const cfg = IPC_PRESIDENT_PRESETS[id];
+    const cy = ipcCurrentGregorianYear();
+    setIpcPresetId(id);
+    if (cfg.outerOnly) {
+      if (cfg.outerStart != null) setIpcOuterStartYear(cfg.outerStart);
+      if (cfg.outerUseCurrentEnd) setIpcOuterEndYear(cy);
+      return;
+    }
+    if (cfg.focusStart != null) setIpcFocusStartYear(cfg.focusStart);
+    if (cfg.focusUseCurrentEnd) setIpcFocusEndYear(cy);
+    else if (cfg.focusEnd != null) setIpcFocusEndYear(cfg.focusEnd);
+    setIpcBandLabelEn(cfg.labelEn);
+    setIpcBandLabelFa(cfg.labelFa);
+  }, []);
+
+  const markIpcCustomFocusLabel = useCallback(() => {
+    setIpcPresetId("custom");
+    setIpcBandLabelEn("Focus period");
+    setIpcBandLabelFa("دوره انتخابی");
+  }, []);
+
+  const recoOpenAnnualMean = useMemo(
+    () => (recoFxOpenPoints.length > 0 ? annualMeanPointsByGregorianYear(recoFxOpenPoints) : []),
+    [recoFxOpenPoints]
+  );
+
+  const recoFxSpreadPctPoints = useMemo(() => {
+    const byY = new Map(recoFxOfficialPoints.map((p) => [p.date.slice(0, 4), p.value]));
+    const out: { date: string; value: number }[] = [];
+    for (const p of recoOpenAnnualMean) {
+      const y = p.date.slice(0, 4);
+      const off = byY.get(y);
+      if (off == null || off <= 0) continue;
+      out.push({ date: p.date, value: Math.round((p.value / off - 1) * 1000) / 10 });
+    }
+    return out;
+  }, [recoFxOfficialPoints, recoOpenAnnualMean]);
 
   /** Indexed overlay (100 = value in base year): WDI shares + optional annual-mean open-market FX. */
   const dutchOverviewIndexed = useMemo(() => {
@@ -1251,21 +1549,21 @@ export default function StudyDetailPage() {
     };
     pushIfFinite(
       "dutch_ov_oil",
-      L(isFa, "Oil rents (% of GDP), indexed", "اجاره نفت (٪ GDP)، شاخص‌شده"),
+      L(isFa, "Oil rents (% of GDP), indexed", `${faEconomic.oilRentsPctGdp}، شاخص‌شده`),
       dutchOilRentsPoints,
       SIGNAL_CONCEPT.dutch_oil_rents,
       "circle"
     );
     pushIfFinite(
       "dutch_ov_mfg",
-      L(isFa, "Manufacturing (% of GDP), indexed", "تولیدات کارخانه‌ای (٪ GDP)، شاخص‌شده"),
+      L(isFa, "Manufacturing (% of GDP), indexed", `${faEconomic.manufacturingPctGdp}، شاخص‌شده`),
       dutchManufacturingPoints,
       SIGNAL_CONCEPT.dutch_manufacturing,
       "rect"
     );
     pushIfFinite(
       "dutch_ov_imp",
-      L(isFa, "Imports (% of GDP), indexed", "واردات (٪ GDP)، شاخص‌شده"),
+      L(isFa, "Imports (% of GDP), indexed", `${faEconomic.imports} — ${faEconomic.gdpPctUnit}، شاخص‌شده`),
       dutchImportsPoints,
       SIGNAL_CONCEPT.dutch_imports,
       "diamond"
@@ -1273,7 +1571,7 @@ export default function StudyDetailPage() {
     if (annualFx.length > 0) {
       pushIfFinite(
         "dutch_ov_fx",
-        L(isFa, "Open-market toman/USD (annual mean), indexed", "تومان/دلار بازار (میانگین سال)، شاخص‌شده"),
+        L(isFa, "Open-market toman/USD (annual mean), indexed", `${faEconomic.openMarketAnnualMean}، شاخص‌شده`),
         annualFx,
         SIGNAL_CONCEPT.dutch_fx_index,
         "triangle"
@@ -1442,17 +1740,28 @@ export default function StudyDetailPage() {
         investment: gdpLevelInvestmentPoints,
       };
     }
+    const usdCpiReal =
+      isGdpIranLocal &&
+      gdpStudyView === "levels" &&
+      gdpLevelsValueType === "usd" &&
+      monetarySeriesMode === "real" &&
+      usCpiMonthlyPoints.length > 0;
+    const c0 = usdCpiReal
+      ? deflateNominalUsdPointsWithUsCpi(gdpLevelConsumptionPoints, usCpiMonthlyPoints, USD_CPI_REAL_BASE_YEAR)
+      : gdpLevelConsumptionPoints;
+    const g0 = usdCpiReal
+      ? deflateNominalUsdPointsWithUsCpi(gdpLevelGdpPoints, usCpiMonthlyPoints, USD_CPI_REAL_BASE_YEAR)
+      : gdpLevelGdpPoints;
+    const i0 = usdCpiReal
+      ? deflateNominalUsdPointsWithUsCpi(gdpLevelInvestmentPoints, usCpiMonthlyPoints, USD_CPI_REAL_BASE_YEAR)
+      : gdpLevelInvestmentPoints;
     if (gdpLevelsDisplayMode !== "indexed" || gdpLevelsIndexedBaseYear == null) {
-      return {
-        consumption: gdpLevelConsumptionPoints,
-        gdp: gdpLevelGdpPoints,
-        investment: gdpLevelInvestmentPoints,
-      };
+      return { consumption: c0, gdp: g0, investment: i0 };
     }
     return {
-      consumption: indexSeriesAtBaseYear(gdpLevelConsumptionPoints, gdpLevelsIndexedBaseYear),
-      gdp: indexSeriesAtBaseYear(gdpLevelGdpPoints, gdpLevelsIndexedBaseYear),
-      investment: indexSeriesAtBaseYear(gdpLevelInvestmentPoints, gdpLevelsIndexedBaseYear),
+      consumption: indexSeriesAtBaseYear(c0, gdpLevelsIndexedBaseYear),
+      gdp: indexSeriesAtBaseYear(g0, gdpLevelsIndexedBaseYear),
+      investment: indexSeriesAtBaseYear(i0, gdpLevelsIndexedBaseYear),
     };
   }, [
     isGdpMacroNationalAccounts,
@@ -1461,6 +1770,11 @@ export default function StudyDetailPage() {
     gdpLevelConsumptionPoints,
     gdpLevelGdpPoints,
     gdpLevelInvestmentPoints,
+    isGdpIranLocal,
+    gdpStudyView,
+    gdpLevelsValueType,
+    monetarySeriesMode,
+    usCpiMonthlyPoints,
   ]);
 
   /** Reference-style dual-axis: left = consumption + investment; right = GDP (same unit basis as levels view). */
@@ -1471,7 +1785,7 @@ export default function StudyDetailPage() {
       return isFaInner
         ? {
             0: `مصرف و سرمایه‌گذاری (× در برابر ${gdpLevelsIndexedBaseYearLabel})`,
-            1: `تولید ناخالص داخلی (× در برابر ${gdpLevelsIndexedBaseYearLabel})`,
+            1: `${faEconomic.gdp} (× در برابر ${gdpLevelsIndexedBaseYearLabel})`,
           }
         : {
             0: `Consumption & investment (× vs ${gdpLevelsIndexedBaseYearLabel})`,
@@ -1482,7 +1796,7 @@ export default function StudyDetailPage() {
     return isFaInner
       ? {
           0: `مصرف و سرمایه‌گذاری (${u})`,
-          1: `تولید ناخالص داخلی (${u})`,
+          1: `${faEconomic.gdp} (${u})`,
         }
       : {
           0: `Consumption & investment (${u})`,
@@ -1829,6 +2143,33 @@ export default function StudyDetailPage() {
     [wageRealPoints],
   );
 
+  const ipcWageRealPoints = useMemo(() => {
+    if (ipcWageNominalPoints.length === 0 || ipcWageCpiPoints.length === 0 || ipcWageBaseYear == null) return [];
+    const cpiByDate = new Map(ipcWageCpiPoints.map((p) => [p.date, p.value]));
+    const baseYearStr = String(ipcWageBaseYear);
+    const cpiBasePoint = [...ipcWageCpiPoints]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .find((p) => p.date.slice(0, 4) === baseYearStr);
+    const cpiBase = cpiBasePoint?.value;
+    if (cpiBase == null || cpiBase <= 0) return [];
+    return ipcWageNominalPoints
+      .map((p) => {
+        const cpi = cpiByDate.get(p.date);
+        if (cpi == null || cpi <= 0) return null;
+        return { date: p.date, value: Math.round((p.value * cpiBase) / cpi * 100) / 100 };
+      })
+      .filter((q): q is { date: string; value: number } => q != null);
+  }, [ipcWageNominalPoints, ipcWageCpiPoints, ipcWageBaseYear]);
+
+  const ipcWageRealKTomans = useMemo(
+    () =>
+      ipcWageRealPoints.map((p) => ({
+        date: p.date,
+        value: Math.round(p.value * MILLION_RIALS_TO_K_TOMANS * 10) / 10,
+      })),
+    [ipcWageRealPoints],
+  );
+
   const sanctionsPeriodsFromEvents = useMemo(() => {
     if (!isOilExportCapacity || !showSanctionsPeriods || !showTimeSeriesEventOverlay || !study) return undefined;
     const rangeEnd = exportCapacityTimeRange?.[1] ?? study.timeRange[1];
@@ -1842,15 +2183,128 @@ export default function StudyDetailPage() {
       }));
   }, [isOilExportCapacity, showSanctionsPeriods, showTimeSeriesEventOverlay, study, events, exportCapacityTimeRange]);
 
+  const exportCapacityOilDisplayed = useMemo(() => {
+    if (!isOilExportCapacity || monetarySeriesMode === "nominal" || usCpiMonthlyPoints.length === 0)
+      return exportCapacityOilPoints;
+    return deflateNominalUsdPointsWithUsCpi(exportCapacityOilPoints, usCpiMonthlyPoints, USD_CPI_REAL_BASE_YEAR);
+  }, [isOilExportCapacity, monetarySeriesMode, usCpiMonthlyPoints, exportCapacityOilPoints]);
+
+  const oilPointsUsdDisplay = useMemo(() => {
+    const eligible =
+      isOilBrent ||
+      isOilGlobalLong ||
+      isGoldAndOil ||
+      isOilAndFx ||
+      isOilGeopoliticalReaction;
+    if (!eligible || monetarySeriesMode === "nominal" || usCpiMonthlyPoints.length === 0) return oilPoints;
+    return deflateNominalUsdPointsWithUsCpi(oilPoints, usCpiMonthlyPoints, USD_CPI_REAL_BASE_YEAR) as typeof oilPoints;
+  }, [
+    isOilBrent,
+    isOilGlobalLong,
+    isGoldAndOil,
+    isOilAndFx,
+    isOilGeopoliticalReaction,
+    monetarySeriesMode,
+    usCpiMonthlyPoints,
+    oilPoints,
+  ]);
+
+  const goldPointsUsdDisplay = useMemo(() => {
+    const wantGold =
+      (isGoldAndOil || (isOilAndFx && showGold)) &&
+      monetarySeriesMode === "real" &&
+      usCpiMonthlyPoints.length > 0;
+    if (!wantGold) return goldPoints;
+    return deflateNominalUsdPointsWithUsCpi(goldPoints, usCpiMonthlyPoints, USD_CPI_REAL_BASE_YEAR);
+  }, [isGoldAndOil, isOilAndFx, showGold, monetarySeriesMode, usCpiMonthlyPoints, goldPoints]);
+
+  const usdTooltipBasisNote = useMemo(
+    () =>
+      monetarySeriesMode === "nominal"
+        ? L(isFa, "Nominal USD", "دلار اسمی")
+        : L(isFa, `Real USD (${USD_CPI_REAL_BASE_YEAR}-adjusted)`, `دلار واقعی (تعدیل ${USD_CPI_REAL_BASE_YEAR})`),
+    [monetarySeriesMode, isFa]
+  );
+
+  const cpiDeflationExtraExport = useMemo(
+    () =>
+      monetarySeriesMode === "real" && usCpiMonthlyPoints.length > 0
+        ? "FRED CPIAUCSL (US CPI; 2020 USD)"
+        : null,
+    [monetarySeriesMode, usCpiMonthlyPoints.length]
+  );
+
+  const wageTooltipBasisNote = useMemo(
+    () =>
+      !isWageCpiReal
+        ? ""
+        : monetarySeriesMode === "nominal"
+          ? L(isFa, "Nominal (k tomans/month)", "اسمی (هزار تومان/ماه)")
+          : L(isFa, "Real (CPI-adjusted)", "واقعی (تعدیل‌شده با CPI)"),
+    [isWageCpiReal, monetarySeriesMode, isFa]
+  );
+
+  const wageChartMultiSeries = useMemo((): ChartSeries[] => {
+    if (!isWageCpiReal) return [];
+    if (monetarySeriesMode === "nominal") {
+      return [
+        {
+          key: "nominal",
+          label: L(isFa, "Nominal minimum wage", "دستمزد اسمی"),
+          yAxisIndex: 0,
+          unit: "k tomans/month",
+          points: wageNominalKTomans,
+          color: SIGNAL_CONCEPT.wage_nominal,
+          symbol: "circle",
+          symbolSize: CHART_LINE_SYMBOL_SIZE,
+        },
+      ];
+    }
+    const series: ChartSeries[] = [
+      {
+        key: "real",
+        label: L(isFa, "Real minimum wage", "دستمزد واقعی"),
+        yAxisIndex: 0,
+        unit: `k tomans/month (${wageBaseYear ?? ""} prices)`,
+        points: wageRealKTomans,
+        color: SIGNAL_CONCEPT.wage_real,
+        symbol: "diamond",
+        symbolSize: CHART_LINE_SYMBOL_SIZE,
+      },
+    ];
+    if (showWageIndex) {
+      series.push({
+        key: "index",
+        label: L(isFa, "Real wage index", "شاخص دستمزد واقعی"),
+        yAxisIndex: 1,
+        unit: "Index (base=100)",
+        points: wageIndexPoints,
+        color: SIGNAL_CONCEPT.wage_index,
+        symbol: "triangle",
+        symbolSize: CHART_LINE_SYMBOL_SIZE,
+      });
+    }
+    return series;
+  }, [
+    isWageCpiReal,
+    monetarySeriesMode,
+    showWageIndex,
+    wageNominalKTomans,
+    wageRealKTomans,
+    wageIndexPoints,
+    wageBaseYear,
+    isFa,
+  ]);
+
   const oilPointsWithVolatility = useMemo(
-    () => enrichOilPointsWithVolatility(oilPoints),
-    [oilPoints]
+    () => enrichOilPointsWithVolatility(oilPointsUsdDisplay),
+    [oilPointsUsdDisplay]
   );
   const latestBrentObservation = useMemo(() => {
-    if (!isOilBrent || oilPoints.length === 0) return null;
-    const sorted = [...oilPoints].sort((a, b) => a.date.localeCompare(b.date));
+    if (!isOilBrent || oilPointsUsdDisplay.length === 0) return null;
+    const sorted = [...oilPointsUsdDisplay].sort((a, b) => a.date.localeCompare(b.date));
     return sorted[sorted.length - 1] ?? null;
-  }, [isOilBrent, oilPoints]);
+  }, [isOilBrent, oilPointsUsdDisplay]);
   const latestFxObservation = useMemo(() => {
     if (!isFxIranCurrencyRegime || fxDualOpenPoints.length === 0) return null;
     const sorted = [...fxDualOpenPoints].sort((a, b) => a.date.localeCompare(b.date));
@@ -1896,9 +2350,9 @@ export default function StudyDetailPage() {
   }, [isOilGeopoliticalReaction, oilPointsWithVolatility]);
 
   const geopoliticalChartData = useMemo(() => {
-    if (!isOilGeopoliticalReaction || oilPoints.length === 0)
+    if (!isOilGeopoliticalReaction || oilPointsUsdDisplay.length === 0)
       return { timeRange: null as [string, string] | null, points: [] as Array<{ date: string; value: number }> };
-    const sorted = [...oilPoints].sort((a, b) => a.date.localeCompare(b.date));
+    const sorted = [...oilPointsUsdDisplay].sort((a, b) => a.date.localeCompare(b.date));
     const endDate = sorted[sorted.length - 1]?.date;
     if (!endDate) return { timeRange: null, points: [] };
     const start = new Date(endDate);
@@ -1909,7 +2363,7 @@ export default function StudyDetailPage() {
       timeRange: [startStr, endDate] as [string, string],
       points: filtered,
     };
-  }, [isOilGeopoliticalReaction, oilPoints, geopoliticalWindowDays]);
+  }, [isOilGeopoliticalReaction, oilPointsUsdDisplay, geopoliticalWindowDays]);
   const dailyReturnPoints = useMemo(() => {
     const byDate = new Map(oilPointsWithVolatility.map((p) => [p.date, p.daily_return]));
     const dates = [...new Set(oilPointsWithVolatility.map((p) => p.date))].sort();
@@ -1953,6 +2407,8 @@ export default function StudyDetailPage() {
       isIranMoneySupplyM2 ||
       isDutchDiseaseDiagnostics ||
       isOilEconomyOverview ||
+      isIranEconomyReconstruction1368 ||
+      isIranEconomyPeriodComparison ||
       isOilExporterTimeseries ||
       isFxIranCurrencyRegime;
     if (hasEventLayers && !isEventsTimeline) {
@@ -1982,7 +2438,9 @@ export default function StudyDetailPage() {
             isIsiDiagnostics ||
             isPovertyHeadcountIran ||
             isIranMoneySupplyM2 ||
-            isDutchDiseaseDiagnostics) &&
+            isDutchDiseaseDiagnostics ||
+            isIranEconomyReconstruction1368 ||
+            isIranEconomyPeriodComparison) &&
             studyLayersLen > 0) ||
           (hasTurkeyComparator && studyLayersLen > 0)
         ) {
@@ -2016,7 +2474,9 @@ export default function StudyDetailPage() {
             isIsiDiagnostics ||
             isPovertyHeadcountIran ||
             isIranMoneySupplyM2 ||
-            isDutchDiseaseDiagnostics
+            isDutchDiseaseDiagnostics ||
+            isIranEconomyReconstruction1368 ||
+            isIranEconomyPeriodComparison
           ) {
             layers = [
               ...(showIranEvents ? ["iran_core"] : []),
@@ -2080,6 +2540,8 @@ export default function StudyDetailPage() {
     isIranMoneySupplyM2,
     isDutchDiseaseDiagnostics,
     isOilEconomyOverview,
+    isIranEconomyReconstruction1368,
+    isIranEconomyPeriodComparison,
     isOilExporterTimeseries,
     hasTurkeyComparator,
     isEventsTimeline,
@@ -3319,6 +3781,190 @@ export default function StudyDetailPage() {
     };
   }, [moneySupplyTimeRange, isIranMoneySupplyM2]);
 
+  const iranEconomyMacroFetchRange = useMemo((): [string, string] | null => {
+    if (isIranEconomyReconstruction1368) return reconstructionTimeRange;
+    if (isIranEconomyPeriodComparison) return ipcTimeRange;
+    return null;
+  }, [isIranEconomyReconstruction1368, reconstructionTimeRange, isIranEconomyPeriodComparison, ipcTimeRange]);
+
+  useEffect(() => {
+    if (!iranEconomyMacroFetchRange || !isIranEconomyMacroDashboard) {
+      if (isIranEconomyMacroDashboard) {
+        setRecoInflationIranPoints([]);
+        setRecoInflationSource(null);
+        setRecoGdpGrowthPoints([]);
+        setRecoImportsPoints([]);
+        setRecoExportsPoints([]);
+        setRecoManufacturingPoints([]);
+        setRecoIndustryPoints([]);
+        setRecoIsiSource(null);
+        setRecoIsiIndicatorIds(null);
+        setRecoOilRentsPoints([]);
+        setRecoDutchSource(null);
+        setRecoM2Points([]);
+        setRecoM2CpiPoints([]);
+        setRecoMoneyWdiSource(null);
+        setRecoMoneyCitation(null);
+        setRecoMoneyIndicatorIds(null);
+        setRecoFxOfficialPoints([]);
+        setRecoFxOpenPoints([]);
+        setRecoFxOfficialSource(null);
+        setRecoFxOpenSource(null);
+        setRecoLoadFailed(false);
+        setRecoLoadDetail(null);
+      }
+      return;
+    }
+    const [start, end] = iranEconomyMacroFetchRange;
+    const ac = new AbortController();
+    let mounted = true;
+    setRecoLoading(true);
+    setRecoLoadFailed(false);
+    setRecoLoadDetail(null);
+    const enc = (s: string) => encodeURIComponent(s);
+    Promise.all([
+      fetchJson<{
+        series?: { iran?: { date: string; value: number }[] };
+        source?: { name?: string; url?: string; publisher?: string };
+      }>(`/api/signals/wdi/cpi-inflation-yoy?start=${enc(start)}&end=${enc(end)}`, ac.signal),
+      fetchJson<{
+        series?: IsiDiagnosticsSeriesBundle;
+        source?: { name?: string; url?: string; publisher?: string };
+        indicator_ids?: Record<string, string>;
+      }>(`/api/signals/wdi/isi-diagnostics?start=${enc(start)}&end=${enc(end)}`, ac.signal),
+      fetchJson<{
+        series?: { oil_rents_pct_gdp?: { date: string; value: number }[] };
+        source?: { name?: string; url?: string; publisher?: string };
+      }>(`/api/signals/wdi/dutch-disease-diagnostics-iran?start=${enc(start)}&end=${enc(end)}`, ac.signal),
+      fetchJson<{
+        series?: {
+          broad_money_growth_pct?: { date: string; value: number }[];
+          cpi_inflation_yoy_iran_pct?: { date: string; value: number }[];
+        };
+        source?: { name?: string; url?: string; publisher?: string };
+        citation?: { en: string; fa: string };
+        indicator_ids?: { broad_money_growth: string; cpi_inflation_yoy_iran: string };
+      }>(`/api/signals/wdi/iran-money-supply-m2?start=${enc(start)}&end=${enc(end)}`, ac.signal),
+      fetchJson<{
+        official: { points: { date: string; value: number }[]; source?: FxUsdTomanSource };
+        open_market: { points: { date: string; value: number }[]; source?: FxUsdTomanSource };
+      }>(`/api/signals/fx/usd-irr-dual?start=${start}&end=${end}`, ac.signal),
+    ])
+      .then(([inf, isi, dutch, money, fx]) => {
+        if (!mounted) return;
+        setRecoInflationIranPoints(inf.series?.iran ?? []);
+        setRecoInflationSource(inf.source ?? null);
+        const s = isi.series;
+        setRecoGdpGrowthPoints(s?.gdp_growth_pct?.iran ?? []);
+        setRecoImportsPoints(s?.imports_pct_gdp?.iran ?? []);
+        setRecoExportsPoints(s?.exports_pct_gdp?.iran ?? []);
+        setRecoManufacturingPoints(s?.manufacturing_pct_gdp?.iran ?? []);
+        setRecoIndustryPoints(s?.industry_pct_gdp?.iran ?? []);
+        setRecoIsiSource(isi.source ?? null);
+        setRecoIsiIndicatorIds(isi.indicator_ids ?? null);
+        setRecoOilRentsPoints(dutch.series?.oil_rents_pct_gdp ?? []);
+        setRecoDutchSource(dutch.source ?? null);
+        setRecoM2Points(money.series?.broad_money_growth_pct ?? []);
+        setRecoM2CpiPoints(money.series?.cpi_inflation_yoy_iran_pct ?? []);
+        setRecoMoneyWdiSource(money.source ?? null);
+        setRecoMoneyCitation(money.citation ?? null);
+        setRecoMoneyIndicatorIds(money.indicator_ids ?? null);
+        setRecoFxOfficialPoints(fx.official?.points ?? []);
+        setRecoFxOpenPoints(fx.open_market?.points ?? []);
+        setRecoFxOfficialSource(fx.official?.source ?? null);
+        setRecoFxOpenSource(fx.open_market?.source ?? null);
+        const n =
+          (inf.series?.iran?.length ?? 0) +
+          (s?.gdp_growth_pct?.iran?.length ?? 0) +
+          (dutch.series?.oil_rents_pct_gdp?.length ?? 0) +
+          (money.series?.broad_money_growth_pct?.length ?? 0) +
+          (fx.open_market?.points?.length ?? 0);
+        if (n === 0) {
+          setRecoLoadFailed(true);
+          setRecoLoadDetail("All reconstruction bundles returned empty in this window.");
+        } else {
+          setRecoLoadFailed(false);
+          setRecoLoadDetail(null);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!mounted) return;
+        const aborted = e instanceof Error && (e.name === "AbortError" || e.message.includes("aborted"));
+        if (aborted) return;
+        setRecoInflationIranPoints([]);
+        setRecoInflationSource(null);
+        setRecoGdpGrowthPoints([]);
+        setRecoImportsPoints([]);
+        setRecoExportsPoints([]);
+        setRecoManufacturingPoints([]);
+        setRecoIndustryPoints([]);
+        setRecoIsiSource(null);
+        setRecoIsiIndicatorIds(null);
+        setRecoOilRentsPoints([]);
+        setRecoDutchSource(null);
+        setRecoM2Points([]);
+        setRecoM2CpiPoints([]);
+        setRecoMoneyWdiSource(null);
+        setRecoMoneyCitation(null);
+        setRecoMoneyIndicatorIds(null);
+        setRecoFxOfficialPoints([]);
+        setRecoFxOpenPoints([]);
+        setRecoFxOfficialSource(null);
+        setRecoFxOpenSource(null);
+        setRecoLoadFailed(true);
+        setRecoLoadDetail(e instanceof Error ? e.message : "Reconstruction dashboard fetch failed");
+      })
+      .finally(() => {
+        if (mounted) setRecoLoading(false);
+      });
+    return () => {
+      mounted = false;
+      ac.abort();
+    };
+  }, [iranEconomyMacroFetchRange, isIranEconomyMacroDashboard]);
+
+  useEffect(() => {
+    if (!isIranEconomyPeriodComparison) {
+      setIpcWageNominalPoints([]);
+      setIpcWageCpiPoints([]);
+      setIpcWageBaseYear(null);
+      setIpcWageSource(null);
+      setIpcWageLoadFailed(false);
+      return;
+    }
+    if (!ipcTimeRange) return;
+    const [start, end] = ipcTimeRange;
+    const ac = new AbortController();
+    let mounted = true;
+    setIpcWageLoadFailed(false);
+    fetchJson<{
+      nominal: { date: string; value: number }[];
+      cpi: { date: string; value: number }[];
+      base_year: number;
+      source: { nominal: string; cpi: string };
+    }>(`/api/signals/wage/iran-minimum-cpi?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`, ac.signal)
+      .then((res) => {
+        if (!mounted) return;
+        setIpcWageNominalPoints(res.nominal ?? []);
+        setIpcWageCpiPoints(res.cpi ?? []);
+        setIpcWageBaseYear(res.base_year ?? null);
+        setIpcWageSource(res.source ?? null);
+        setIpcWageLoadFailed(false);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setIpcWageNominalPoints([]);
+        setIpcWageCpiPoints([]);
+        setIpcWageBaseYear(null);
+        setIpcWageSource(null);
+        setIpcWageLoadFailed(true);
+      });
+    return () => {
+      mounted = false;
+      ac.abort();
+    };
+  }, [ipcTimeRange, isIranEconomyPeriodComparison]);
+
   useEffect(() => {
     if (!dutchTimeRange || !isDutchDiseaseDiagnostics) {
       if (isDutchDiseaseDiagnostics) {
@@ -3723,6 +4369,8 @@ export default function StudyDetailPage() {
     isIranMoneySupplyM2 ||
     isDutchDiseaseDiagnostics ||
     isOilEconomyOverview ||
+    isIranEconomyReconstruction1368 ||
+    isIranEconomyPeriodComparison ||
     isGlobalEventsTimeline ||
     isBandEventsTimeline ||
     isComparativeHistoryTimeline;
@@ -3813,7 +4461,9 @@ export default function StudyDetailPage() {
                                       gdpLevelConsumptionPoints.length > 0 &&
                                       gdpLevelGdpPoints.length > 0 &&
                                       gdpLevelInvestmentPoints.length > 0
-                                    : false;
+                                    : isIranEconomyReconstruction1368 || isIranEconomyPeriodComparison
+                                      ? !recoLoading
+                                      : false;
   if (loading && (isOverviewStub ? !data : isSingleSignalStudy && !singleSignalReady) || (isYoutubeCommentAnalysis && analysisLoading)) {
     return (
       <div className="study-page-container py-12 animate-pulse space-y-8">
@@ -3852,6 +4502,7 @@ export default function StudyDetailPage() {
     const collect = (arr: { date: string }[]) => arr.map((p) => p.date);
 
     const allDates: string[] = [];
+    if (isIranEconomyPeriodComparison && ipcTimeRange) return ipcTimeRange;
     if (isFxIranCurrencyRegime && fxDualOpenPoints.length > 0) allDates.push(...collect(fxDualOpenPoints));
     if (isOilAndFx && fxPoints.length > 0) allDates.push(...collect(fxPoints));
     if ((isOilBrent || isOilGlobalLong || isGoldAndOil || isOilAndFx || isOilGeopoliticalReaction) && oilPoints.length > 0) allDates.push(...collect(oilPoints));
@@ -5116,11 +5767,15 @@ export default function StudyDetailPage() {
           </div>
           {geopoliticalChartData.timeRange && geopoliticalChartData.points.length > 0 && (
             <div className="chart-container">
+              <div className="mb-2 flex flex-wrap items-center gap-3">
+                <NominalRealToggle mode={monetarySeriesMode} onChange={setMonetarySeriesMode} isFa={isFa} />
+              </div>
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
                 exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
-                exportSourceFooter={studyChartExportSource(isFa, [oilSource?.name])}
+                exportSourceFooter={studyChartExportSource(isFa, [oilSource?.name, cpiDeflationExtraExport])}
+                tooltipValueBasisNote={usdTooltipBasisNote}
                 data={geopoliticalChartData.points}
                 valueKey="value"
                 label="Brent oil"
@@ -5550,7 +6205,7 @@ export default function StudyDetailPage() {
               {isOilTradeNetwork
                 ? "Network"
                 : isGdpGlobalComparison
-                  ? L(isFa, "GDP comparison (World Bank WDI)", "مقایسهٔ GDP (WDI بانک جهانی)")
+                  ? L(isFa, "GDP comparison (World Bank WDI)", `مقایسهٔ ${faEconomic.gdp} (WDI بانک جهانی)`)
                   : isIsiDiagnostics
                     ? L(
                         isFa,
@@ -5565,7 +6220,7 @@ export default function StudyDetailPage() {
                     ? L(
                         isFa,
                         "Broad money growth (M2) and CPI (Iran, annual %)",
-                        "رشد پول وسیع (M2) و CPI (ایران، ٪ سالانه)"
+                        `${faEconomic.m2Growth} و ${faEconomic.cpiInflation} (ایران، ٪ سالانه)`
                       )
                   : isPovertyHeadcountIran
                     ? "Poverty headcount ratio (Iran)"
@@ -5746,6 +6401,14 @@ export default function StudyDetailPage() {
                   {L(isFa, "Log scale (left axis)", "مقیاس لگاریتمی (محور چپ)")}
                 </label>
               ) : null}
+              {gdpGlobalDisplayMode === "absolute" ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {L(isFa, "Dollar basis", "مبنای دلاری")}
+                  </span>
+                  <NominalRealToggle mode={monetarySeriesMode} onChange={setMonetarySeriesMode} isFa={isFa} />
+                </div>
+              ) : null}
             </div>
           ) : null}
           {gdpGlobalPerCountryBasis &&
@@ -5788,7 +6451,9 @@ export default function StudyDetailPage() {
               !isIsiDiagnostics &&
               !isPovertyHeadcountIran &&
               !isIranMoneySupplyM2 &&
-              !isDutchDiseaseDiagnostics && (
+              !isDutchDiseaseDiagnostics &&
+              !isIranEconomyReconstruction1368 &&
+              !isIranEconomyPeriodComparison && (
               <>
                 <select
                   value={anchorEventId}
@@ -5880,7 +6545,9 @@ export default function StudyDetailPage() {
               isIsiDiagnostics ||
               isPovertyHeadcountIran ||
               isIranMoneySupplyM2 ||
-              isDutchDiseaseDiagnostics) && (
+              isDutchDiseaseDiagnostics ||
+              isIranEconomyReconstruction1368 ||
+              isIranEconomyPeriodComparison) && (
               <>
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                   <input
@@ -6380,6 +7047,14 @@ export default function StudyDetailPage() {
                       Toman
                     </button>
                   </div>
+                  {gdpLevelsValueType === "usd" ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-muted-foreground shrink-0">
+                        {L(isFa, "Current US$ basis", "مبنای دلار جاری")}
+                      </span>
+                      <NominalRealToggle mode={monetarySeriesMode} onChange={setMonetarySeriesMode} isFa={isFa} />
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               <p className="mb-3 text-sm text-muted-foreground border-l-2 border-primary/40 pl-3">
@@ -6440,7 +7115,11 @@ export default function StudyDetailPage() {
                 exportPresentationStudyHeading={displayStudy.title}
                 exportSourceFooter={studyChartExportSource(isFa, [
                   gdpCompositionSource?.name ?? "World Bank World Development Indicators",
+                  isGdpIranLocal && gdpLevelsValueType === "usd" ? cpiDeflationExtraExport : null,
                 ])}
+                tooltipValueBasisNote={
+                  isGdpIranLocal && gdpLevelsValueType === "usd" ? usdTooltipBasisNote : undefined
+                }
                 data={[]}
                 valueKey="value"
                 label={L(
@@ -6473,7 +7152,7 @@ export default function StudyDetailPage() {
                   },
                   {
                     key: "dual_level_gdp",
-                    label: L(isFa, "GDP", "تولید ناخالص داخلی"),
+                    label: L(isFa, "GDP", faEconomic.gdp),
                     yAxisIndex: 1,
                     unit: gdpLevelsUnit ?? "US$",
                     points: gdpLevelsDisplaySeries.gdp,
@@ -6628,6 +7307,14 @@ export default function StudyDetailPage() {
                           Toman
                         </button>
                       </div>
+                      {gdpLevelsValueType === "usd" ? (
+                        <div className="flex flex-wrap items-center gap-2 ml-1">
+                          <span className="text-muted-foreground shrink-0">
+                            {L(isFa, "Current US$ basis", "مبنای دلار جاری")}
+                          </span>
+                          <NominalRealToggle mode={monetarySeriesMode} onChange={setMonetarySeriesMode} isFa={isFa} />
+                        </div>
+                      ) : null}
                     </>
                   ) : null}
                 </div>
@@ -6638,19 +7325,19 @@ export default function StudyDetailPage() {
                     series={[
                       {
                         label: L(isFa, "Final consumption expenditure", "مصرف نهایی"),
-                        unit: L(isFa, "% of GDP", "٪ از تولید ناخالص داخلی"),
+                        unit: L(isFa, "% of GDP", faEconomic.gdpPctUnit),
                         points: gdpConsumptionPoints,
                       },
                       {
                         label: L(isFa, "Gross capital formation", "تشکیل سرمایهٔ ناخالص"),
-                        unit: L(isFa, "% of GDP", "٪ از تولید ناخالص داخلی"),
+                        unit: L(isFa, "% of GDP", faEconomic.gdpPctUnit),
                         points: gdpInvestmentPoints,
                       },
                     ]}
                     timeRange={gdpCompositionChartTimeRange ?? gdpCompositionTimeRange ?? undefined}
                   />
                   <p className="text-xs font-medium text-muted-foreground mb-1.5 mt-1">
-                    {L(isFa, "Shares of GDP", "سهم‌ها از تولید ناخالص داخلی")}
+                    {L(isFa, "Shares of GDP", faEconomic.sharesOfGdp)}
                   </p>
                   <TimelineChart
                     chartLocale={chartLocaleForCharts}
@@ -6661,7 +7348,7 @@ export default function StudyDetailPage() {
                     ])}
                     data={[]}
                     valueKey="value"
-                    label={L(isFa, "GDP composition (shares of GDP)", "ترکیب GDP (سهم‌ها)")}
+                    label={L(isFa, "GDP composition (shares of GDP)", faEconomic.gdpCompositionTitle)}
                     events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, gdpCompositionChartEvents)}
                     anchorEventId={anchorEventId || undefined}
                     chartHeight={`${TIMELINE_CHART_MOBILE_HEIGHT_PREFIX} md:h-[26rem]`}
@@ -6670,7 +7357,7 @@ export default function StudyDetailPage() {
                         key: "pct_consumption",
                         label: L(isFa, "Final consumption expenditure", "مصرف نهایی"),
                         yAxisIndex: 0,
-                        unit: L(isFa, "% of GDP", "٪ از GDP"),
+                        unit: L(isFa, "% of GDP", faEconomic.gdpPctUnit),
                         points: gdpConsumptionPoints,
                         color: SIGNAL_CONCEPT.consumption,
                         symbol: "circle",
@@ -6680,7 +7367,7 @@ export default function StudyDetailPage() {
                         key: "pct_investment",
                         label: L(isFa, "Gross capital formation", "تشکیل سرمایهٔ ناخالص"),
                         yAxisIndex: 0,
-                        unit: L(isFa, "% of GDP", "٪ از GDP"),
+                        unit: L(isFa, "% of GDP", faEconomic.gdpPctUnit),
                         points: gdpInvestmentPoints,
                         color: SIGNAL_CONCEPT.investment,
                         symbol: "diamond",
@@ -6698,7 +7385,7 @@ export default function StudyDetailPage() {
               {(!isGdpIranLocal || gdpStudyView === "levels") ? (
                 <>
                   <p className="text-xs font-medium text-muted-foreground mb-1.5 mt-1">
-                    {L(isFa, "Nominal GDP (companion)", "تولید ناخالص داخلی اسمی (همراه)")}
+                    {L(isFa, "Nominal GDP (companion)", faEconomic.nominalGdpCompanion)}
                   </p>
                   <p className="text-xs text-muted-foreground mb-2">
                     Current US$, log scale—same period as the levels chart. Always US dollars. Use the header year-axis
@@ -6712,13 +7399,13 @@ export default function StudyDetailPage() {
                     ])}
                     data={[]}
                     valueKey="value"
-                    label={L(isFa, "GDP (nominal)", "GDP اسمی")}
+                    label={L(isFa, "GDP (nominal)", faEconomic.nominalGdpLevel)}
                     events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, gdpCompositionChartEvents)}
                     anchorEventId={anchorEventId || undefined}
                     multiSeries={[
                       {
                         key: "gdp_nominal",
-                        label: L(isFa, "GDP (nominal)", "GDP اسمی"),
+                        label: L(isFa, "GDP (nominal)", faEconomic.nominalGdpLevel),
                         yAxisIndex: 0,
                         unit: L(isFa, "current US$", "دلار جاری آمریکا"),
                         points: gdpNominalPoints,
@@ -6803,7 +7490,11 @@ export default function StudyDetailPage() {
                     exportPresentationStudyHeading={displayStudy.title}
                     exportSourceFooter={studyChartExportSource(isFa, [
                       gdpCompositionSource?.name ?? "World Bank World Development Indicators",
+                      gdpLevelsValueType === "usd" ? cpiDeflationExtraExport : null,
                     ])}
+                    tooltipValueBasisNote={
+                      isGdpIranLocal && gdpLevelsValueType === "usd" ? usdTooltipBasisNote : undefined
+                    }
                     data={[]}
                     valueKey="value"
                     label={L(isFa, "National accounts (levels)", "حساب‌های ملی (سطوح)")}
@@ -6822,7 +7513,7 @@ export default function StudyDetailPage() {
                       },
                       {
                         key: "level_gdp",
-                        label: L(isFa, "GDP", "تولید ناخالص داخلی"),
+                        label: L(isFa, "GDP", faEconomic.gdp),
                         yAxisIndex: 0,
                         unit: gdpLevelsUnit ?? "US$",
                         points: gdpLevelsDisplaySeries.gdp,
@@ -7398,12 +8089,15 @@ export default function StudyDetailPage() {
             </>
           ) : isOilExportCapacity ? (
             <>
+              <div className="mb-2 flex flex-wrap items-center gap-3">
+                <NominalRealToggle mode={monetarySeriesMode} onChange={setMonetarySeriesMode} isFa={isFa} />
+              </div>
               <MultiSeriesStats
                 series={[
                   {
                     label: L(isFa, "Oil price", "قیمت نفت"),
                     unit: L(isFa, "USD/bbl", "دلار/بشکه"),
-                    points: exportCapacityOilPoints,
+                    points: exportCapacityOilDisplayed,
                   },
                   {
                     label: L(isFa, "Export capacity proxy", "نمایندهٔ ظرفیت صادرات"),
@@ -7423,7 +8117,9 @@ export default function StudyDetailPage() {
                   "FRED DCOILBRENTEU",
                   "EIA / tanker tracking estimates",
                   "Derived (price × volume, indexed)",
+                  cpiDeflationExtraExport,
                 ])}
+                tooltipValueBasisNote={usdTooltipBasisNote}
                 data={[]}
                 valueKey="value"
                 label={L(isFa, "Oil price", "قیمت نفت")}
@@ -7434,7 +8130,7 @@ export default function StudyDetailPage() {
                     label: L(isFa, "Oil price", "قیمت نفت"),
                     yAxisIndex: 0,
                     unit: L(isFa, "USD/bbl", "دلار/بشکه"),
-                    points: exportCapacityOilPoints,
+                    points: exportCapacityOilDisplayed,
                     color: SIGNAL_CONCEPT.oil_price,
                     symbol: "triangle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
@@ -8514,7 +9210,11 @@ export default function StudyDetailPage() {
               ) : null}
               {inflationWdiLoading && !inflationLoadFailed && !inflationDataReady ? (
                 <p className="text-sm text-muted-foreground mb-4">
-                  {L(isFa, "Loading World Bank CPI inflation series…", "در حال بارگذاری سری تورم CPI بانک جهانی…")}
+                  {L(
+                    isFa,
+                    "Loading World Bank CPI inflation series…",
+                    `در حال بارگذاری سری ${faEconomic.cpiInflation} بانک جهانی…`
+                  )}
                 </p>
               ) : null}
               {inflationSeriesWarnings && Object.keys(inflationSeriesWarnings).length > 0 && inflationDataReady ? (
@@ -8571,7 +9271,7 @@ export default function StudyDetailPage() {
                 ])}
                 data={[]}
                 valueKey="value"
-                label={L(isFa, "Inflation rate", "نرخ تورم")}
+                label={L(isFa, "Inflation rate", faEconomic.inflation)}
                 events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, inflationFilteredEvents)}
                 anchorEventId={anchorEventId || undefined}
                 multiSeries={[
@@ -8641,7 +9341,7 @@ export default function StudyDetailPage() {
                 xAxisYearLabel={chartYearAxisLabel}
                 exportFileStem="inflation-rate"
                 multiSeriesYAxisNameOverrides={{
-                  0: L(isFa, "Inflation rate (% YoY)", "نرخ تورم (٪ نسبت به سال قبل)"),
+                  0: L(isFa, "Inflation rate (% YoY)", `${faEconomic.inflation} (${faEconomic.yoyAnnual})`),
                 }}
               />
               </>
@@ -8655,7 +9355,7 @@ export default function StudyDetailPage() {
                 <SourceInfo
                   items={[
                     {
-                      label: L(isFa, "CPI inflation", "تورم شاخص قیمت مصرف‌کننده"),
+                      label: L(isFa, "CPI inflation", faEconomic.cpiInflation),
                       sourceName: inflationSource.name ?? "World Bank World Development Indicators",
                       sourceUrl: inflationSource.url ?? "https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG",
                       sourceDetail: inflationSource.publisher ?? "World Bank",
@@ -8700,7 +9400,7 @@ export default function StudyDetailPage() {
               ) : null}
               {gdpGlobalWdiLoading && !gdpGlobalLoadFailed && !gdpGlobalDataReady ? (
                 <p className="text-sm text-muted-foreground mb-4">
-                  {L(isFa, "Loading World Bank GDP series…", "در حال بارگذاری سری GDP بانک جهانی…")}
+                  {L(isFa, "Loading World Bank GDP series…", `در حال بارگذاری سری ${faEconomic.gdp} بانک جهانی…`)}
                 </p>
               ) : null}
               {gdpGlobalSeriesWarnings && Object.keys(gdpGlobalSeriesWarnings).length > 0 && gdpGlobalDataReady ? (
@@ -8772,15 +9472,19 @@ export default function StudyDetailPage() {
                 exportPresentationStudyHeading={displayStudy.title}
                 exportPresentationTitle={
                   gdpGlobalDisplayMode === "indexed"
-                    ? L(isFa, "GDP — indexed (2000 = 100)", "GDP — شاخص‌شده (۲۰۰۰ = ۱۰۰)")
-                    : L(isFa, "GDP — levels (US$)", "GDP — سطح (دلار)")
+                    ? L(isFa, "GDP — indexed (2000 = 100)", `${faEconomic.gdp} — شاخص‌شده (۲۰۰۰ = ۱۰۰)`)
+                    : L(isFa, "GDP — levels (US$)", `${faEconomic.gdp} — سطح (دلار)`)
                 }
                 exportSourceFooter={studyChartExportSource(isFa, [
                   gdpGlobalSource?.name ?? "World Bank World Development Indicators",
+                  cpiDeflationExtraExport,
                 ])}
+                tooltipValueBasisNote={
+                  gdpGlobalDisplayMode === "absolute" ? usdTooltipBasisNote : undefined
+                }
                 data={[]}
                 valueKey="value"
-                label={L(isFa, "GDP (total)", "GDP (کل)")}
+                label={L(isFa, "GDP (total)", `${faEconomic.gdp} (کل)`)}
                 events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, gdpGlobalFilteredEvents)}
                 anchorEventId={anchorEventId || undefined}
                 yAxisLog={gdpGlobalDisplayMode === "absolute" && gdpGlobalAbsoluteLog}
@@ -8878,8 +9582,8 @@ export default function StudyDetailPage() {
                 multiSeriesYAxisNameOverrides={{
                   0:
                     gdpGlobalDisplayMode === "indexed"
-                      ? L(isFa, "GDP index (2000 = 100 when available)", "شاخص GDP (۲۰۰۰ = ۱۰۰ در صورت وجود)")
-                      : L(isFa, "GDP (US$)", "GDP (دلار)"),
+                      ? L(isFa, "GDP index (2000 = 100 when available)", `شاخص ${faEconomic.gdp} (۲۰۰۰ = ۱۰۰ در صورت وجود)`)
+                      : L(isFa, "GDP (US$)", `${faEconomic.gdp} (دلار)`),
                 }}
               />
               </>
@@ -8893,14 +9597,14 @@ export default function StudyDetailPage() {
                 <SourceInfo
                   items={[
                     {
-                      label: L(isFa, "GDP (total)", "GDP (کل)"),
+                      label: L(isFa, "GDP (total)", `${faEconomic.gdp} (کل)`),
                       sourceName: gdpGlobalSource.name ?? "World Bank World Development Indicators",
                       sourceUrl: gdpGlobalSource.url ?? "https://data.worldbank.org/indicator/NY.GDP.MKTP.KD",
                       sourceDetail: gdpGlobalSource.publisher ?? "World Bank",
                       unitLabel:
                         gdpGlobalDisplayMode === "indexed"
                           ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
-                          : L(isFa, "US$ total GDP", "GDP کل به دلار"),
+                          : L(isFa, "US$ total GDP", `${faEconomic.gdp} کل به دلار`),
                       unitNote: L(
                         isFa,
                         gdpGlobalPerCountryIndicatorId
@@ -9032,18 +9736,22 @@ export default function StudyDetailPage() {
               <div className="space-y-8">
                 <div className="space-y-2">
                   <h3 className="text-sm font-semibold text-foreground">
-                    {L(isFa, "1. Trade structure (imports vs exports, % of GDP)", "۱. ساختار تجارت (واردات در برابر صادرات، ٪ از GDP)")}
+                    {L(
+                      isFa,
+                      "1. Trade structure (imports vs exports, % of GDP)",
+                      `۱. ساختار تجارت (${faEconomic.imports} در برابر ${faEconomic.exports}، ${faEconomic.gdpPctUnit})`
+                    )}
                   </h3>
                   <TimelineChart
                     chartLocale={chartLocaleForCharts}
                     exportPresentationStudyHeading={displayStudy.title}
-                    exportPresentationTitle={L(isFa, "ISI — Trade (% of GDP)", "ISI — تجارت (٪ GDP)")}
+                    exportPresentationTitle={L(isFa, "ISI — Trade (% of GDP)", `ISI — تجارت (${faEconomic.gdpPctUnit})`)}
                     exportSourceFooter={studyChartExportSource(isFa, [
                       isiDiagnosticsData?.source?.name ?? "World Bank World Development Indicators",
                     ])}
                     data={[]}
                     valueKey="value"
-                    label={L(isFa, "Trade, % of GDP", "تجارت، ٪ GDP")}
+                    label={L(isFa, "Trade, % of GDP", `تجارت، ${faEconomic.gdpPctUnit}`)}
                     events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, isiFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
                     multiSeries={isiTradeMultiSeries.map((s) => ({
@@ -9055,7 +9763,7 @@ export default function StudyDetailPage() {
                     xAxisYearLabel={chartYearAxisLabel}
                     exportFileStem="isi-trade-structure"
                     multiSeriesYAxisNameOverrides={{
-                      0: L(isFa, "Share of GDP (%)", "سهم از GDP (٪)"),
+                      0: L(isFa, "Share of GDP (%)", faEconomic.gdpPctUnit),
                     }}
                     multiSeriesLegendLayout="grouped"
                     multiSeriesLegendGroupedVariant="country"
@@ -9067,19 +9775,23 @@ export default function StudyDetailPage() {
                     {L(
                       isFa,
                       "2. Industrial structure (manufacturing & industry, % of GDP)",
-                      "۲. ساختار صنعتی (تولیدات کارخانه‌ای و صنعت، ٪ از GDP)"
+                      `۲. ${faEconomic.manufacturingIndustryPanelTitle}`
                     )}
                   </h3>
                   <TimelineChart
                     chartLocale={chartLocaleForCharts}
                     exportPresentationStudyHeading={displayStudy.title}
-                    exportPresentationTitle={L(isFa, "ISI — Industry (% of GDP)", "ISI — صنعت (٪ GDP)")}
+                    exportPresentationTitle={L(
+                      isFa,
+                      "ISI — Industry (% of GDP)",
+                      `ISI — ${faEconomic.manufacturingIndustryPanelTitle}`
+                    )}
                     exportSourceFooter={studyChartExportSource(isFa, [
                       isiDiagnosticsData?.source?.name ?? "World Bank World Development Indicators",
                     ])}
                     data={[]}
                     valueKey="value"
-                    label={L(isFa, "Industry, % of GDP", "صنعت، ٪ GDP")}
+                    label={L(isFa, "Industry, % of GDP", `صنعت، ${faEconomic.gdpPctUnit}`)}
                     events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, isiFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
                     multiSeries={isiIndustrialMultiSeries.map((s) => ({
@@ -9091,7 +9803,7 @@ export default function StudyDetailPage() {
                     xAxisYearLabel={chartYearAxisLabel}
                     exportFileStem="isi-industrial-structure"
                     multiSeriesYAxisNameOverrides={{
-                      0: L(isFa, "Share of GDP (%)", "سهم از GDP (٪)"),
+                      0: L(isFa, "Share of GDP (%)", faEconomic.gdpPctUnit),
                     }}
                     multiSeriesLegendLayout="grouped"
                     multiSeriesLegendGroupedVariant="country"
@@ -9100,7 +9812,7 @@ export default function StudyDetailPage() {
                 </div>
                 <div className="space-y-2 border-t border-border pt-6">
                   <h3 className="text-sm font-semibold text-foreground">
-                    {L(isFa, "3. Outcome — GDP growth (annual %)", "۳. پیامد — رشد GDP (٪ سالانه)")}
+                    {L(isFa, "3. Outcome — GDP growth (annual %)", `۳. پیامد — ${faEconomic.gdpGrowth} (٪ سالانه)`)}
                   </h3>
                   <TimelineChart
                     chartLocale={chartLocaleForCharts}
@@ -9108,14 +9820,14 @@ export default function StudyDetailPage() {
                     exportPresentationTitle={L(
                       isFa,
                       `${displayStudy.title} — GDP growth`,
-                      `${displayStudy.title} — رشد GDP`
+                      `${displayStudy.title} — ${faEconomic.gdpGrowth}`
                     )}
                     exportSourceFooter={studyChartExportSource(isFa, [
                       isiDiagnosticsData?.source?.name ?? "World Bank World Development Indicators",
                     ])}
                     data={[]}
                     valueKey="value"
-                    label={L(isFa, "GDP growth (annual %)", "رشد GDP (٪ سالانه)")}
+                    label={L(isFa, "GDP growth (annual %)", `${faEconomic.gdpGrowth} (٪ سالانه)`)}
                     events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, isiFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
                     multiSeries={isiGdpGrowthMultiSeries.map((s) => ({
@@ -9153,39 +9865,39 @@ export default function StudyDetailPage() {
                 <SourceInfo
                   items={[
                     {
-                      label: L(isFa, "Imports (% of GDP)", "واردات (٪ از GDP)"),
+                      label: L(isFa, "Imports (% of GDP)", `${faEconomic.imports} — ${faEconomic.gdpPctUnit}`),
                       sourceName: isiDiagnosticsData.source.name ?? "World Bank World Development Indicators",
                       sourceUrl: `https://data.worldbank.org/indicator/${isiDiagnosticsData.indicator_ids.imports_pct_gdp}`,
                       sourceDetail: isiDiagnosticsData.source.publisher ?? "World Bank",
-                      unitLabel: L(isFa, "% of GDP", "٪ از GDP"),
+                      unitLabel: L(isFa, "% of GDP", faEconomic.gdpPctUnit),
                       unitNote: L(isFa, "NE.IMP.GNFS.ZS", "NE.IMP.GNFS.ZS"),
                     },
                     {
-                      label: L(isFa, "Exports (% of GDP)", "صادرات (٪ از GDP)"),
+                      label: L(isFa, "Exports (% of GDP)", `${faEconomic.exports} — ${faEconomic.gdpPctUnit}`),
                       sourceName: isiDiagnosticsData.source.name ?? "World Bank World Development Indicators",
                       sourceUrl: `https://data.worldbank.org/indicator/${isiDiagnosticsData.indicator_ids.exports_pct_gdp}`,
                       sourceDetail: isiDiagnosticsData.source.publisher ?? "World Bank",
-                      unitLabel: L(isFa, "% of GDP", "٪ از GDP"),
+                      unitLabel: L(isFa, "% of GDP", faEconomic.gdpPctUnit),
                       unitNote: L(isFa, "NE.EXP.GNFS.ZS", "NE.EXP.GNFS.ZS"),
                     },
                     {
-                      label: L(isFa, "Manufacturing (% of GDP)", "تولیدات کارخانه‌ای (٪ از GDP)"),
+                      label: L(isFa, "Manufacturing (% of GDP)", faEconomic.manufacturingPctGdp),
                       sourceName: isiDiagnosticsData.source.name ?? "World Bank World Development Indicators",
                       sourceUrl: `https://data.worldbank.org/indicator/${isiDiagnosticsData.indicator_ids.manufacturing_pct_gdp}`,
                       sourceDetail: isiDiagnosticsData.source.publisher ?? "World Bank",
-                      unitLabel: L(isFa, "% of GDP", "٪ از GDP"),
+                      unitLabel: L(isFa, "% of GDP", faEconomic.gdpPctUnit),
                       unitNote: L(isFa, "NV.IND.MANF.ZS", "NV.IND.MANF.ZS"),
                     },
                     {
-                      label: L(isFa, "Industry (% of GDP)", "صنعت (٪ از GDP)"),
+                      label: L(isFa, "Industry (% of GDP)", faEconomic.industryPctGdp),
                       sourceName: isiDiagnosticsData.source.name ?? "World Bank World Development Indicators",
                       sourceUrl: `https://data.worldbank.org/indicator/${isiDiagnosticsData.indicator_ids.industry_pct_gdp}`,
                       sourceDetail: isiDiagnosticsData.source.publisher ?? "World Bank",
-                      unitLabel: L(isFa, "% of GDP", "٪ از GDP"),
+                      unitLabel: L(isFa, "% of GDP", faEconomic.gdpPctUnit),
                       unitNote: L(isFa, "NV.IND.TOTL.ZS", "NV.IND.TOTL.ZS"),
                     },
                     {
-                      label: L(isFa, "GDP growth (annual %)", "رشد GDP (٪ سالانه)"),
+                      label: L(isFa, "GDP growth (annual %)", `${faEconomic.gdpGrowth} (٪ سالانه)`),
                       sourceName: isiDiagnosticsData.source.name ?? "World Bank World Development Indicators",
                       sourceUrl: `https://data.worldbank.org/indicator/${isiDiagnosticsData.indicator_ids.gdp_growth_pct}`,
                       sourceDetail: isiDiagnosticsData.source.publisher ?? "World Bank",
@@ -9232,7 +9944,11 @@ export default function StudyDetailPage() {
               ) : null}
               {moneySupplyWdiLoading && !moneySupplyLoadFailed && !moneySupplyDataReady ? (
                 <p className="text-sm text-muted-foreground mb-4">
-                  {L(isFa, "Loading money supply and CPI series…", "در حال بارگذاری سری نقدینگی و CPI…")}
+                  {L(
+                    isFa,
+                    "Loading money supply and CPI series…",
+                    `در حال بارگذاری سری ${faEconomic.m2Growth} و ${faEconomic.cpiInflation}…`
+                  )}
                 </p>
               ) : null}
               {moneySupplyDataReady ? (
@@ -9241,12 +9957,12 @@ export default function StudyDetailPage() {
                 locale={isFa ? "fa" : "en"}
                 series={[
                   {
-                    label: L(isFa, "Broad money growth (M2)", "رشد نقدینگی (M2)"),
+                    label: L(isFa, "Broad money growth (M2)", faEconomic.m2Growth),
                     unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
                     points: moneySupplyM2Points,
                   },
                   {
-                    label: L(isFa, "CPI inflation — Iran (WDI)", "تورم CPI — ایران (WDI)"),
+                    label: L(isFa, "CPI inflation — Iran (WDI)", `${faEconomic.cpiInflation} — ایران (WDI)`),
                     unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
                     points: moneySupplyCpiPoints,
                   },
@@ -9259,7 +9975,7 @@ export default function StudyDetailPage() {
                 exportPresentationTitle={L(
                   isFa,
                   "Broad money growth (annual %)",
-                  "رشد نقدینگی (٪ سالانه)"
+                  `${faEconomic.m2Growth} (٪ سالانه)`
                 )}
                 exportSourceFooter={studyChartExportSource(isFa, [
                   moneySupplyCitation
@@ -9270,7 +9986,7 @@ export default function StudyDetailPage() {
                 ])}
                 data={[]}
                 valueKey="value"
-                label={L(isFa, "Broad money growth", "رشد نقدینگی")}
+                label={L(isFa, "Broad money growth", faEconomic.m2Growth)}
                 events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, moneySupplyFilteredEvents)}
                 anchorEventId={anchorEventId || undefined}
                 multiSeries={[
@@ -9279,7 +9995,7 @@ export default function StudyDetailPage() {
                     label: L(
                       isFa,
                       "M2 growth (WDI/IFS through 2016; 2017+ = CBI-style liquidity YoY)",
-                      "رشد M2 (WDI/IFS تا ۲۰۱۶؛ ۲۰۱۷+ = ٪نقدینگی به‌سبک بانک مرکزی)"
+                      faEconomic.m2Growth
                     ),
                     yAxisIndex: 0,
                     unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
@@ -9304,14 +10020,14 @@ export default function StudyDetailPage() {
                   {L(
                     isFa,
                     "M2 growth vs CPI inflation (same calendar year)",
-                    "رشد M2 در برابر تورم CPI (همان سال میلادی)"
+                    `${faEconomic.m2Growth} در برابر ${faEconomic.cpiInflation} (همان سال میلادی)`
                   )}
                 </h3>
                 <p className="text-xs text-muted-foreground max-w-3xl">
                   {L(
                     isFa,
                     "Both series use the same WDI year alignment. CPI can extend after M2 stops; compare only overlapping years for timing statements.",
-                    "هر دو سری WDI و سال میلادی یکسان‌اند. CPI ممکن است بعد از توقف M2 ادامه یابد؛ برای زمان‌بندی فقط سال‌های هم‌پوشان را در نظر بگیرید."
+                    `هر دو سری WDI و سال میلادی یکسان‌اند. ${faEconomic.cpiInflation} ممکن است پس از توقف دادهٔ ${faEconomic.m2Growth} ادامه یابد؛ برای زمان‌بندی فقط سال‌های هم‌پوشان را در نظر بگیرید.`
                   )}
                 </p>
                 <TimelineChart
@@ -9320,7 +10036,7 @@ export default function StudyDetailPage() {
                   exportPresentationTitle={L(
                     isFa,
                     "M2 growth and CPI inflation (Iran)",
-                    "رشد M2 و تورم CPI (ایران)"
+                    `${faEconomic.m2Growth} و ${faEconomic.cpiInflation} (ایران)`
                   )}
                   exportSourceFooter={studyChartExportSource(isFa, [
                     moneySupplyCitation
@@ -9336,13 +10052,13 @@ export default function StudyDetailPage() {
                   ])}
                   data={[]}
                   valueKey="value"
-                  label={L(isFa, "Liquidity vs prices", "نقدینگی در برابر قیمت‌ها")}
+                  label={L(isFa, "Liquidity vs prices", `${faEconomic.m2Growth} و ${faEconomic.cpiInflation}`)}
                   events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, moneySupplyFilteredEvents)}
                   anchorEventId={anchorEventId || undefined}
                   multiSeries={[
                     {
                       key: "m2_cmp",
-                      label: L(isFa, "Broad money growth", "رشد نقدینگی"),
+                      label: L(isFa, "Broad money growth", faEconomic.m2Growth),
                       yAxisIndex: 0,
                       unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
                       points: moneySupplyM2Points,
@@ -9352,7 +10068,7 @@ export default function StudyDetailPage() {
                     },
                     {
                       key: "cpi_iran",
-                      label: L(isFa, "CPI inflation (Iran)", "تورم CPI (ایران)"),
+                      label: L(isFa, "CPI inflation (Iran)", `${faEconomic.cpiInflation} (ایران)`),
                       yAxisIndex: 0,
                       unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
                       points: moneySupplyCpiPoints,
@@ -9387,7 +10103,7 @@ export default function StudyDetailPage() {
                   )}
                   items={[
                     {
-                      label: L(isFa, "Broad money growth", "رشد نقدینگی"),
+                      label: L(isFa, "Broad money growth", faEconomic.m2Growth),
                       sourceName: moneySupplyWdiSource.name ?? "World Bank World Development Indicators",
                       sourceUrl: `https://data.worldbank.org/indicator/${moneySupplyIndicatorIds.broad_money_growth}`,
                       sourceDetail: moneySupplyWdiSource.publisher ?? "World Bank",
@@ -9433,7 +10149,7 @@ export default function StudyDetailPage() {
                       ),
                     },
                     {
-                      label: L(isFa, "CPI inflation (Iran)", "تورم CPI (ایران)"),
+                      label: L(isFa, "CPI inflation (Iran)", `${faEconomic.cpiInflation} (ایران)`),
                       sourceName: moneySupplyWdiSource.name ?? "World Bank World Development Indicators",
                       sourceUrl: `https://data.worldbank.org/indicator/${moneySupplyIndicatorIds.cpi_inflation_yoy_iran}`,
                       sourceDetail: moneySupplyWdiSource.publisher ?? "World Bank",
@@ -9615,6 +10331,745 @@ export default function StudyDetailPage() {
                 )}
               </InSimpleTerms>
             </>
+          ) : isIranEconomyReconstruction1368 ? (
+            <>
+              <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 max-w-3xl mb-6 text-sm leading-relaxed text-foreground">
+                <p className="font-medium mb-1 text-foreground">{L(isFa, "Historical context", "زمینهٔ تاریخی")}</p>
+                <p>
+                  {L(
+                    isFa,
+                    "This study focuses on Iran’s post-war reconstruction period under President Akbar Hashemi Rafsanjani. It is intended as an exploratory economic history view, not a causal model.",
+                    "«این مطالعه بر دوره بازسازی پس از جنگ در دوران ریاست‌جمهوری اکبر هاشمی رفسنجانی تمرکز دارد. هدف آن ارائه یک نمای اکتشافی از تاریخ اقتصادی است، نه مدل‌سازی علّی.»"
+                  )}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 mb-5">
+                <span className="inline-flex items-center rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground">
+                  {L(isFa, "Range: 1368–1376 SH (≈1989–1997 CE)", "بازه: ۱۳۶۸–۱۳۷۶ ش (حدود ۱۹۸۹–۱۹۹۷ میلادی)")}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl mb-4">
+                {L(isFa, enEconomic.annualWdiVsMarketNoteEn, faEconomic.annualWdiVsMarketNoteFa)}
+              </p>
+              {recoLoading && !recoLoadFailed ? (
+                <p className="text-sm text-muted-foreground mb-4">
+                  {L(isFa, "Loading macro series…", "در حال بارگذاری سری‌های کلان…")}
+                </p>
+              ) : null}
+              {recoLoadFailed ? (
+                <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 mb-4 max-w-3xl space-y-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {L(isFa, "This study could not load right now.", "این مطالعه اکنون بارگذاری نشد.")}
+                  </p>
+                  {recoLoadDetail ? (
+                    <p className="text-xs text-muted-foreground font-mono break-words">{recoLoadDetail}</p>
+                  ) : null}
+                </div>
+              ) : null}
+              {!recoLoadFailed ? (
+                <div className="grid gap-4 md:grid-cols-2 max-w-6xl">
+                  <Card className="chart-card border-border">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-semibold">
+                        {L(isFa, "1. CPI inflation (% YoY)", `۱. ${faEconomic.cpiInflation} (${faEconomic.yoyAnnual})`)}
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground">
+                        {L(isFa, "WDI FP.CPI.TOTL.ZG — Iran.", "WDI FP.CPI.TOTL.ZG — ایران.")}
+                      </p>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      {recoInflationIranPoints.length > 0 ? (
+                        <TimelineChart
+                          chartLocale={chartLocaleForCharts}
+                          exportPresentationStudyHeading={displayStudy.title}
+                          exportPresentationTitle={L(
+                            isFa,
+                            `${displayStudy.title} — Inflation`,
+                            `${displayStudy.title} — ${faEconomic.inflation}`
+                          )}
+                          exportSourceFooter={studyChartExportSource(isFa, [
+                            recoInflationSource?.name ?? "World Bank WDI",
+                            "FP.CPI.TOTL.ZG",
+                          ])}
+                          data={recoInflationIranPoints}
+                          valueKey="value"
+                          label={L(isFa, "CPI inflation", faEconomic.cpiInflation)}
+                          unit="%"
+                          events={reconstructionChartEvents}
+                          timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartRangeGranularity="year"
+                          xAxisYearLabel={chartYearAxisLabel}
+                          exportFileStem="iran-reco-inflation"
+                          showChartControls
+                          chartHeight="h-56 md:h-64"
+                          mutedEventLines
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground py-6">
+                          {L(isFa, "Data unavailable for this window.", "داده در این بازه در دسترس نیست.")}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Card className="chart-card border-border">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-semibold">
+                        {L(isFa, "2. Real GDP growth (annual %)", `۲. ${faEconomic.realGdpGrowth} (٪ سالانه)`)}
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground">
+                        {L(isFa, "WDI NY.GDP.MKTP.KD.ZG — Iran.", "WDI NY.GDP.MKTP.KD.ZG — ایران.")}
+                      </p>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      {recoGdpGrowthPoints.length > 0 ? (
+                        <TimelineChart
+                          chartLocale={chartLocaleForCharts}
+                          exportPresentationStudyHeading={displayStudy.title}
+                          exportPresentationTitle={L(
+                            isFa,
+                            `${displayStudy.title} — GDP growth`,
+                            `${displayStudy.title} — ${faEconomic.gdpGrowth}`
+                          )}
+                          exportSourceFooter={studyChartExportSource(isFa, [
+                            recoIsiSource?.name ?? "World Bank WDI",
+                            recoIsiIndicatorIds?.gdp_growth_pct ?? "NY.GDP.MKTP.KD.ZG",
+                          ])}
+                          data={recoGdpGrowthPoints}
+                          valueKey="value"
+                          label={L(isFa, "GDP growth", faEconomic.gdpGrowth)}
+                          unit="%"
+                          events={reconstructionChartEvents}
+                          timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartRangeGranularity="year"
+                          xAxisYearLabel={chartYearAxisLabel}
+                          exportFileStem="iran-reco-gdp-growth"
+                          showChartControls
+                          chartHeight="h-56 md:h-64"
+                          mutedEventLines
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground py-6">
+                          {L(isFa, "Data unavailable for this window.", "داده در این بازه در دسترس نیست.")}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Card className="chart-card border-border md:col-span-2">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-semibold">
+                        {L(isFa, "3. Oil rents (% of GDP)", `۳. ${faEconomic.oilRentsPctGdp}`)}
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground">WDI NY.GDP.PETR.RT.ZS — Iran.</p>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      {recoOilRentsPoints.length > 0 ? (
+                        <TimelineChart
+                          chartLocale={chartLocaleForCharts}
+                          exportPresentationStudyHeading={displayStudy.title}
+                          exportPresentationTitle={L(
+                            isFa,
+                            `${displayStudy.title} — Oil rents`,
+                            `${displayStudy.title} — ${faEconomic.oilRents}`
+                          )}
+                          exportSourceFooter={studyChartExportSource(isFa, [
+                            recoDutchSource?.name ?? "World Bank WDI",
+                            "NY.GDP.PETR.RT.ZS",
+                          ])}
+                          data={recoOilRentsPoints}
+                          valueKey="value"
+                          label={L(isFa, "Oil rents", faEconomic.oilRents)}
+                          unit="%"
+                          events={reconstructionChartEvents}
+                          timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartRangeGranularity="year"
+                          xAxisYearLabel={chartYearAxisLabel}
+                          exportFileStem="iran-reco-oil-rents"
+                          showChartControls
+                          chartHeight="h-56 md:h-64"
+                          mutedEventLines
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground py-6">
+                          {L(isFa, "Data unavailable for this window.", "داده در این بازه در دسترس نیست.")}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Card className="chart-card border-border md:col-span-2">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-semibold">
+                        {L(isFa, "4. Exchange rate: official vs open market (annual)", `۴. ${faEconomic.fxTitleOfficialVsOpenAnnual}`)}
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground max-w-3xl">
+                        {L(
+                          isFa,
+                          "Official: annual policy/WDI series; open: calendar-year mean of the merged open-market series.",
+                          "رسمی: سالانه WDI/FCRF؛ بازار: میانگین سری ادغام‌شده بازار آزاد در همان سال میلادی."
+                        )}
+                      </p>
+                    </CardHeader>
+                    <CardContent className="pt-0 space-y-4">
+                      {recoFxOfficialPoints.length > 0 || recoOpenAnnualMean.length > 0 ? (
+                        <TimelineChart
+                          chartLocale={chartLocaleForCharts}
+                          exportPresentationStudyHeading={displayStudy.title}
+                          exportPresentationTitle={L(
+                            isFa,
+                            `${displayStudy.title} — FX levels`,
+                            `${displayStudy.title} — ${faEconomic.exchangeRate}`
+                          )}
+                          exportSourceFooter={studyChartExportSource(isFa, [
+                            recoFxOfficialSource?.name,
+                            recoFxOpenSource?.name,
+                          ])}
+                          data={[]}
+                          valueKey="value"
+                          label={L(isFa, "Toman per USD", faEconomic.tomanPerUsd)}
+                          events={reconstructionChartEvents}
+                          multiSeries={[
+                            {
+                              key: "official",
+                              label: L(isFa, "Official exchange rate (annual)", faEconomic.officialRateAnnual),
+                              yAxisIndex: 0,
+                              unit: L(isFa, "toman/USD", "تومان/دلار"),
+                              points: recoFxOfficialPoints,
+                              color: SIGNAL_CONCEPT.fx_official,
+                              symbol: "circle",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE,
+                            },
+                            {
+                              key: "open_mean",
+                              label: L(isFa, "Open-market exchange rate (annual mean)", faEconomic.openMarketAnnualMean),
+                              yAxisIndex: 0,
+                              unit: L(isFa, "toman/USD", "تومان/دلار"),
+                              points: recoOpenAnnualMean,
+                              color: SIGNAL_CONCEPT.fx_open,
+                              symbol: "diamond",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE,
+                            },
+                          ]}
+                          timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartRangeGranularity="year"
+                          xAxisYearLabel={chartYearAxisLabel}
+                          exportFileStem="iran-reco-fx-levels"
+                          showChartControls
+                          chartHeight="h-56 md:h-64"
+                          mutedEventLines
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground py-6">
+                          {L(isFa, "FX data unavailable for this window.", "داده نرخ در این بازه در دسترس نیست.")}
+                        </p>
+                      )}
+                      {recoFxSpreadPctPoints.length > 0 ? (
+                        <TimelineChart
+                          chartLocale={chartLocaleForCharts}
+                          exportPresentationStudyHeading={displayStudy.title}
+                          exportPresentationTitle={L(
+                            isFa,
+                            `${displayStudy.title} — FX spread`,
+                            `${displayStudy.title} — ${faEconomic.fxSpread}`
+                          )}
+                          exportSourceFooter={studyChartExportSource(isFa, [
+                            recoFxOfficialSource?.name,
+                            recoFxOpenSource?.name,
+                            "Derived: (annual mean open / official − 1) × 100",
+                          ])}
+                          data={recoFxSpreadPctPoints}
+                          valueKey="value"
+                          label={L(isFa, "FX spread (%)", faEconomic.fxSpreadPct)}
+                          unit="%"
+                          events={reconstructionChartEvents}
+                          timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartRangeGranularity="year"
+                          xAxisYearLabel={chartYearAxisLabel}
+                          exportFileStem="iran-reco-fx-spread"
+                          showChartControls
+                          chartHeight="h-48 md:h-56"
+                          mutedEventLines
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          {L(
+                            isFa,
+                            "Percent spread is shown only for years with both an official rate and an annual mean open-market rate.",
+                            "شکاف درصدی وقتی نمایش داده می‌شود که برای یک سال هم نرخ رسمی و هم میانگین بازار موجود باشد."
+                          )}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Card className="chart-card border-border md:col-span-2">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-semibold">
+                        {L(isFa, "5. Broad money (M2) growth vs CPI inflation (annual %)", `۵. ${faEconomic.liquidityAndCpiTitle}`)}
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground max-w-3xl">
+                        {L(
+                          isFa,
+                          "Broad money (M2) growth and CPI inflation (same definitions as the M2 study).",
+                          `${faEconomic.m2Growth} و ${faEconomic.cpiInflation}؛ همان تعاریف مطالعهٔ نقدینگی.`
+                        )}
+                      </p>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      {recoM2Points.length > 0 || recoM2CpiPoints.length > 0 ? (
+                        <TimelineChart
+                          chartLocale={chartLocaleForCharts}
+                          exportPresentationStudyHeading={displayStudy.title}
+                          exportPresentationTitle={L(
+                            isFa,
+                            `${displayStudy.title} — M2 and CPI`,
+                            `${displayStudy.title} — ${faEconomic.m2Growth} و ${faEconomic.cpiInflation}`
+                          )}
+                          exportSourceFooter={studyChartExportSource(isFa, [
+                            recoMoneyCitation ? (isFa ? recoMoneyCitation.fa : recoMoneyCitation.en) : null,
+                          ])}
+                          data={[]}
+                          valueKey="value"
+                          label={L(isFa, "Broad money growth & inflation", faEconomic.growthLiquidityAndInflationAxis)}
+                          events={reconstructionChartEvents}
+                          multiSeries={[
+                            {
+                              key: "m2",
+                              label: L(isFa, "M2 growth", faEconomic.m2Growth),
+                              yAxisIndex: 0,
+                              unit: L(isFa, "% YoY", "٪ سالانه"),
+                              points: recoM2Points,
+                              color: SIGNAL_CONCEPT.broad_money_m2,
+                              symbol: "circle",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE_MINI,
+                            },
+                            {
+                              key: "cpi",
+                              label: L(isFa, "CPI inflation", faEconomic.cpiInflation),
+                              yAxisIndex: 0,
+                              unit: L(isFa, "% YoY", "٪ سالانه"),
+                              points: recoM2CpiPoints,
+                              color: SIGNAL_CONCEPT.inflation,
+                              symbol: "diamond",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE_MINI,
+                            },
+                          ]}
+                          timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartRangeGranularity="year"
+                          xAxisYearLabel={chartYearAxisLabel}
+                          exportFileStem="iran-reco-m2-cpi"
+                          showChartControls
+                          chartHeight="h-56 md:h-64"
+                          mutedEventLines
+                          multiSeriesYAxisNameOverrides={{
+                            0: L(isFa, "Percent per year", "درصد در سال"),
+                          }}
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground py-6">
+                          {L(isFa, "Data unavailable for this window.", "داده در این بازه در دسترس نیست.")}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Card className="chart-card border-border md:col-span-2">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-semibold">
+                        {L(isFa, "6. Imports & exports (% of GDP)", `۶. ${faEconomic.importsExportsPctGdp}`)}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      {recoImportsPoints.length > 0 || recoExportsPoints.length > 0 ? (
+                        <TimelineChart
+                          chartLocale={chartLocaleForCharts}
+                          exportPresentationStudyHeading={displayStudy.title}
+                          exportPresentationTitle={L(isFa, `${displayStudy.title} — Trade`, `${displayStudy.title} — تجارت`)}
+                          exportSourceFooter={studyChartExportSource(isFa, [
+                            recoIsiSource?.name ?? "World Bank WDI",
+                            recoIsiIndicatorIds?.imports_pct_gdp,
+                            recoIsiIndicatorIds?.exports_pct_gdp,
+                          ])}
+                          data={[]}
+                          valueKey="value"
+                          label={L(isFa, "% of GDP", faEconomic.pctOfGdp)}
+                          events={reconstructionChartEvents}
+                          multiSeries={[
+                            {
+                              key: "imp",
+                              label: L(isFa, "Imports", faEconomic.imports),
+                              yAxisIndex: 0,
+                              unit: "%",
+                              points: recoImportsPoints,
+                              color: SIGNAL_CONCEPT.isi_imports,
+                              symbol: "circle",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE_MINI,
+                            },
+                            {
+                              key: "exp",
+                              label: L(isFa, "Exports", faEconomic.exports),
+                              yAxisIndex: 0,
+                              unit: "%",
+                              points: recoExportsPoints,
+                              color: SIGNAL_CONCEPT.isi_exports,
+                              symbol: "diamond",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE_MINI,
+                            },
+                          ]}
+                          timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartRangeGranularity="year"
+                          xAxisYearLabel={chartYearAxisLabel}
+                          exportFileStem="iran-reco-trade"
+                          showChartControls
+                          chartHeight="h-56 md:h-64"
+                          mutedEventLines
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground py-6">
+                          {L(isFa, "Data unavailable for this window.", "داده در این بازه در دسترس نیست.")}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Card className="chart-card border-border md:col-span-2">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-semibold">
+                        {L(isFa, "7. Manufacturing & industry (% of GDP)", `۷. ${faEconomic.manufacturingIndustryPanelTitle}`)}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      {recoManufacturingPoints.length > 0 || recoIndustryPoints.length > 0 ? (
+                        <TimelineChart
+                          chartLocale={chartLocaleForCharts}
+                          exportPresentationStudyHeading={displayStudy.title}
+                          exportPresentationTitle={L(isFa, `${displayStudy.title} — Industry`, `${displayStudy.title} — صنعت`)}
+                          exportSourceFooter={studyChartExportSource(isFa, [
+                            recoIsiSource?.name ?? "World Bank WDI",
+                            recoIsiIndicatorIds?.manufacturing_pct_gdp,
+                            recoIsiIndicatorIds?.industry_pct_gdp,
+                          ])}
+                          data={[]}
+                          valueKey="value"
+                          label={L(isFa, "% of GDP", faEconomic.pctOfGdp)}
+                          events={reconstructionChartEvents}
+                          multiSeries={[
+                            {
+                              key: "mfg",
+                              label: L(isFa, "Manufacturing value added", faEconomic.manufacturingValueAdded),
+                              yAxisIndex: 0,
+                              unit: "%",
+                              points: recoManufacturingPoints,
+                              color: SIGNAL_CONCEPT.isi_manufacturing,
+                              symbol: "circle",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE_MINI,
+                            },
+                            {
+                              key: "ind",
+                              label: L(isFa, "Industry value added", faEconomic.industryValueAdded),
+                              yAxisIndex: 0,
+                              unit: "%",
+                              points: recoIndustryPoints,
+                              color: SIGNAL_CONCEPT.isi_industry,
+                              symbol: "diamond",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE_MINI,
+                            },
+                          ]}
+                          timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartRangeGranularity="year"
+                          xAxisYearLabel={chartYearAxisLabel}
+                          exportFileStem="iran-reco-industry"
+                          showChartControls
+                          chartHeight="h-56 md:h-64"
+                          mutedEventLines
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground py-6">
+                          {L(isFa, "Data unavailable for this window.", "داده در این بازه در دسترس نیست.")}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Card className="chart-card border-border md:col-span-2">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-semibold">
+                        {L(isFa, "8. Real wages / purchasing power", `۸. دستمزد واقعی / ${faEconomic.purchasingPower}`)}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <p className="text-sm text-muted-foreground leading-relaxed max-w-3xl">
+                        {L(
+                          isFa,
+                          "Minimum wage and related household series in SignalMap begin around 2010 in the current dataset; no separate wage chart is shown for 1368–1376.",
+                          "حداقل دستمزد و سری‌های مرتبط در این محصول از سال حدود ۲۰۱۰ در دادهٔ فعلی شروع می‌شوند؛ برای ۱۳۶۸–۱۳۷۶ نمودار جداگانه‌ای اینجا نمایش داده نمی‌شود."
+                        )}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : null}
+              {displayStudy.observations?.length ? (
+                <DataObservations locale={isFa ? "fa" : "en"} observations={displayStudy.observations ?? []} />
+              ) : null}
+              {study.concepts?.length ? <ConceptsUsed locale={isFa ? "fa" : "en"} conceptKeys={study.concepts} /> : null}
+              <SourceInfo
+                note={L(
+                  isFa,
+                  "WDI/IMF may omit some years; charts only plot years with valid values.",
+                  "IMF/WDI در برخی سال‌ها ممکن است خالی باشد؛ نمودارها فقط سال‌هایی را که مقدار معتبر دارند نشان می‌دهند."
+                )}
+                items={[
+                  {
+                    label: L(isFa, "CPI inflation", faEconomic.cpiInflation),
+                    sourceName: recoInflationSource?.name ?? "World Bank WDI",
+                    sourceUrl: recoInflationSource?.url ?? "https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG",
+                    sourceDetail: recoInflationSource?.publisher ?? "World Bank",
+                    unitLabel: L(isFa, "Annual %", "٪ سالانه"),
+                  },
+                  {
+                    label: L(isFa, "Growth & shares", "رشد و سهم‌ها"),
+                    sourceName: recoIsiSource?.name ?? "World Bank WDI",
+                    sourceUrl: recoIsiSource?.url ?? "https://data.worldbank.org/country/iran",
+                    sourceDetail: recoIsiSource?.publisher ?? "World Bank",
+                    unitLabel: L(
+                      isFa,
+                      "% of GDP or % growth",
+                      `${faEconomic.pctOfGdp} یا ٪ رشد`
+                    ),
+                  },
+                  {
+                    label: L(isFa, "Oil rents", faEconomic.oilRents),
+                    sourceName: recoDutchSource?.name ?? "World Bank WDI",
+                    sourceUrl: "https://data.worldbank.org/indicator/NY.GDP.PETR.RT.ZS",
+                    sourceDetail: recoDutchSource?.publisher ?? "World Bank",
+                    unitLabel: L(isFa, "% of GDP", faEconomic.pctOfGdp),
+                  },
+                  {
+                    label: L(isFa, "Money supply", faEconomic.broadMoney),
+                    sourceName: recoMoneyWdiSource?.name ?? "World Bank WDI",
+                    sourceUrl: recoMoneyIndicatorIds
+                      ? `https://data.worldbank.org/indicator/${recoMoneyIndicatorIds.broad_money_growth}`
+                      : "https://data.worldbank.org/indicator/FM.LBL.BMNY.ZG",
+                    sourceDetail: recoMoneyWdiSource?.publisher ?? "World Bank",
+                    unitLabel: L(isFa, "Annual %", "٪ سالانه"),
+                  },
+                  {
+                    label: L(isFa, "Exchange rates", faEconomic.exchangeRate),
+                    sourceName: recoFxOpenSource?.name ?? "—",
+                    sourceUrl: recoFxOpenSource?.url,
+                    sourceDetail: recoFxOpenSource?.publisher ?? "",
+                    unitLabel: L(isFa, "toman/USD", "تومان/دلار"),
+                  },
+                ]}
+              />
+              <InSimpleTerms locale={isFa ? "fa" : "en"}>
+                {isFa && faRich?.simpleTermsParagraphs?.length ? (
+                  faRich.simpleTermsParagraphs.map((p, i) => <p key={i}>{p}</p>)
+                ) : (
+                  <>
+                    <p>
+                      Each small chart uses the same fixed calendar window (about 1989–1997) aligned to Persian years
+                      1368–1376 on the axis when you choose Solar Hijri. Indicators are descriptive; co-movement is not a
+                      causal proof.
+                    </p>
+                    <p>
+                      IMF/WDI coverage can leave gaps; where a series has no value, the chart shows a short “data
+                      unavailable” note instead of fabricating points.
+                    </p>
+                  </>
+                )}
+              </InSimpleTerms>
+            </>
+          ) : isIranEconomyPeriodComparison ? (
+            <>
+              <div className="flex flex-wrap gap-1.5 mb-3 max-w-6xl">
+                {IPC_PRESET_UI_ORDER.map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => applyIpcPreset(id)}
+                    className={`rounded-md border px-2 py-1 text-xs font-medium transition-colors ${
+                      ipcPresetId === id
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border bg-muted/40 text-muted-foreground hover:bg-muted/60"
+                    }`}
+                  >
+                    {L(isFa, IPC_PRESET_CHIP[id].en, IPC_PRESET_CHIP[id].fa)}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 text-xs max-w-3xl">
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground">{L(isFa, "Outer start (year)", "شروع بازه بیرونی (سال)")}</span>
+                  <input
+                    type="number"
+                    min={1960}
+                    max={ipcCurrentGregorianYear()}
+                    value={ipcOuterStartYear}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (!Number.isFinite(v)) return;
+                      setIpcOuterStartYear(v);
+                    }}
+                    className="rounded border border-border bg-background px-2 py-1 w-full"
+                  />
+                </label>
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground">{L(isFa, "Outer end (year)", "پایان بازه بیرونی (سال)")}</span>
+                  <input
+                    type="number"
+                    min={1960}
+                    max={ipcCurrentGregorianYear()}
+                    value={ipcOuterEndYear}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (!Number.isFinite(v)) return;
+                      setIpcOuterEndYear(v);
+                    }}
+                    className="rounded border border-border bg-background px-2 py-1 w-full"
+                  />
+                </label>
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground">{L(isFa, "Focus start (year)", "شروع دوره تمرکز (سال)")}</span>
+                  <input
+                    type="number"
+                    min={1960}
+                    max={ipcCurrentGregorianYear()}
+                    value={ipcFocusStartYear}
+                    onChange={(e) => {
+                      markIpcCustomFocusLabel();
+                      const v = parseInt(e.target.value, 10);
+                      if (!Number.isFinite(v)) return;
+                      setIpcFocusStartYear(v);
+                    }}
+                    className="rounded border border-border bg-background px-2 py-1 w-full"
+                  />
+                </label>
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground">{L(isFa, "Focus end (year)", "پایان دوره تمرکز (سال)")}</span>
+                  <input
+                    type="number"
+                    min={1960}
+                    max={ipcCurrentGregorianYear()}
+                    value={ipcFocusEndYear}
+                    onChange={(e) => {
+                      markIpcCustomFocusLabel();
+                      const v = parseInt(e.target.value, 10);
+                      if (!Number.isFinite(v)) return;
+                      setIpcFocusEndYear(v);
+                    }}
+                    className="rounded border border-border bg-background px-2 py-1 w-full"
+                  />
+                </label>
+              </div>
+              {ipcTimeRange && ipcRegimeAreaWithLabel ? (
+                <IranEconomyPeriodComparisonPanels
+                  isFa={isFa}
+                  L={L}
+                  studyTitle={displayStudy.title}
+                  chartLocaleForCharts={chartLocaleForCharts}
+                  chartYearAxisLabel={chartYearAxisLabel}
+                  timeRange={ipcTimeRange}
+                  regimeArea={ipcRegimeAreaWithLabel}
+                  focusGregorianYearRange={{
+                    startYear: ipcFocusResolved.start,
+                    endYear: ipcFocusResolved.end,
+                  }}
+                  focusHoverHint={{
+                    en: "Inside focus period",
+                    fa: "داخل دورهٔ تمرکز",
+                  }}
+                  events={ipcChartEvents}
+                  exportStudyHeading={displayStudy.title}
+                  studyChartExportSource={studyChartExportSource}
+                  recoInflationIranPoints={recoInflationIranPoints}
+                  recoInflationSource={recoInflationSource}
+                  recoGdpGrowthPoints={recoGdpGrowthPoints}
+                  recoImportsPoints={recoImportsPoints}
+                  recoExportsPoints={recoExportsPoints}
+                  recoManufacturingPoints={recoManufacturingPoints}
+                  recoIndustryPoints={recoIndustryPoints}
+                  recoIsiSource={recoIsiSource}
+                  recoIsiIndicatorIds={recoIsiIndicatorIds}
+                  recoOilRentsPoints={recoOilRentsPoints}
+                  recoDutchSource={recoDutchSource}
+                  recoM2Points={recoM2Points}
+                  recoM2CpiPoints={recoM2CpiPoints}
+                  recoMoneyCitation={recoMoneyCitation}
+                  recoMoneyWdiSource={recoMoneyWdiSource}
+                  recoMoneyIndicatorIds={recoMoneyIndicatorIds}
+                  recoFxOfficialPoints={recoFxOfficialPoints}
+                  recoOpenAnnualMean={recoOpenAnnualMean}
+                  recoFxSpreadPctPoints={recoFxSpreadPctPoints}
+                  recoFxOfficialSource={recoFxOfficialSource}
+                  recoFxOpenSource={recoFxOpenSource}
+                  ipcWageRealKTomans={ipcWageRealKTomans}
+                  ipcWageSource={ipcWageSource}
+                  ipcWageLoadFailed={ipcWageLoadFailed}
+                  recoLoading={recoLoading}
+                  recoLoadFailed={recoLoadFailed}
+                  recoLoadDetail={recoLoadDetail}
+                />
+              ) : null}
+              {displayStudy.observations?.length ? (
+                <DataObservations locale={isFa ? "fa" : "en"} observations={displayStudy.observations ?? []} />
+              ) : null}
+              {study.concepts?.length ? <ConceptsUsed locale={isFa ? "fa" : "en"} conceptKeys={study.concepts} /> : null}
+              <SourceInfo
+                note={L(
+                  isFa,
+                  "WDI/IMF may omit some years; charts only plot years with valid values.",
+                  "IMF/WDI در برخی سال‌ها ممکن است خالی باشد؛ نمودارها فقط سال‌هایی را که مقدار معتبر دارند نشان می‌دهند."
+                )}
+                items={[
+                  {
+                    label: L(isFa, "CPI inflation", faEconomic.cpiInflation),
+                    sourceName: recoInflationSource?.name ?? "World Bank WDI",
+                    sourceUrl: recoInflationSource?.url ?? "https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG",
+                    sourceDetail: recoInflationSource?.publisher ?? "World Bank",
+                    unitLabel: L(isFa, "Annual %", "٪ سالانه"),
+                  },
+                  {
+                    label: L(isFa, "Growth & shares", "رشد و سهم‌ها"),
+                    sourceName: recoIsiSource?.name ?? "World Bank WDI",
+                    sourceUrl: recoIsiSource?.url ?? "https://data.worldbank.org/country/iran",
+                    sourceDetail: recoIsiSource?.publisher ?? "World Bank",
+                    unitLabel: L(isFa, "% of GDP or % growth", `${faEconomic.pctOfGdp} یا ٪ رشد`),
+                  },
+                  {
+                    label: L(isFa, "Oil rents", faEconomic.oilRents),
+                    sourceName: recoDutchSource?.name ?? "World Bank WDI",
+                    sourceUrl: "https://data.worldbank.org/indicator/NY.GDP.PETR.RT.ZS",
+                    sourceDetail: recoDutchSource?.publisher ?? "World Bank",
+                    unitLabel: L(isFa, "% of GDP", faEconomic.pctOfGdp),
+                  },
+                  {
+                    label: L(isFa, "Money supply", faEconomic.broadMoney),
+                    sourceName: recoMoneyWdiSource?.name ?? "World Bank WDI",
+                    sourceUrl: recoMoneyIndicatorIds
+                      ? `https://data.worldbank.org/indicator/${recoMoneyIndicatorIds.broad_money_growth}`
+                      : "https://data.worldbank.org/indicator/FM.LBL.BMNY.ZG",
+                    sourceDetail: recoMoneyWdiSource?.publisher ?? "World Bank",
+                    unitLabel: L(isFa, "Annual %", "٪ سالانه"),
+                  },
+                  {
+                    label: L(isFa, "Exchange rates", faEconomic.exchangeRate),
+                    sourceName: recoFxOpenSource?.name ?? "—",
+                    sourceUrl: recoFxOpenSource?.url,
+                    sourceDetail: recoFxOpenSource?.publisher ?? "",
+                    unitLabel: L(isFa, "toman/USD", "تومان/دلار"),
+                  },
+                ]}
+              />
+              <InSimpleTerms locale={isFa ? "fa" : "en"}>
+                {isFa && faRich?.simpleTermsParagraphs?.length ? (
+                  faRich.simpleTermsParagraphs.map((p, i) => <p key={i}>{p}</p>)
+                ) : (
+                  <p>
+                    {L(
+                      isFa,
+                      "This view keeps the long-run series visible while highlighting a selected historical window. The shaded band is a visual aid for comparison; it does not imply causality.",
+                      "«در این نما کل روند بلندمدت دیده می‌شود و یک دوره تاریخی انتخابی با سایه مشخص می‌شود. این سایه فقط برای مقایسه بصری است و به معنی رابطه علّی نیست.»"
+                    )}
+                  </p>
+                )}
+              </InSimpleTerms>
+            </>
           ) : isDutchDiseaseDiagnostics ? (
             <>
               {dutchWdiLoadFailed ? (
@@ -9660,7 +11115,7 @@ export default function StudyDetailPage() {
                     {L(
                       isFa,
                       `Each series is indexed to 100 in ${dutchOverviewIndexed.baseYear} (or the earliest calendar year where every line shown here has a valid value, if ${dutchOverviewIndexed.baseYear} is unavailable). Units differ (% of GDP vs toman/USD); this view is for visual pattern comparison only, not direct level comparison.`,
-                      `هر سری به شاخص ۱۰۰ در سال ${localizeChartNumericDisplayString(String(dutchOverviewIndexed.baseYear), "fa")} نرمال شده است (اگر آن سال داده نباشد، نزدیک‌ترین سالی که همهٔ خطوط مقدار معتبر دارند). واحدها متفاوت‌اند (٪ از GDP در برابر تومان/دلار)؛ این نما فقط برای مقایسهٔ الگوی بصری است، نه سطح مطلق.`
+                      `هر سری به شاخص ۱۰۰ در سال ${localizeChartNumericDisplayString(String(dutchOverviewIndexed.baseYear), "fa")} نرمال شده است (اگر آن سال داده نباشد، نزدیک‌ترین سالی که همهٔ خطوط مقدار معتبر دارند). واحدها متفاوت‌اند (${faEconomic.gdpPctUnit} در برابر تومان/دلار)؛ این نما فقط برای مقایسهٔ الگوی بصری است، نه سطح مطلق.`
                     )}
                   </p>
                   <TimelineChart
@@ -9699,7 +11154,7 @@ export default function StudyDetailPage() {
               <div className="space-y-8">
                 <div className="space-y-2">
                   <h3 className="text-sm font-semibold text-foreground">
-                    {L(isFa, "1. Oil rents (% of GDP)", "۱. اجاره نفت (٪ از GDP)")}
+                    {L(isFa, "1. Oil rents (% of GDP)", `۱. ${faEconomic.oilRentsPctGdp}`)}
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     {L(
@@ -9714,7 +11169,7 @@ export default function StudyDetailPage() {
                     exportPresentationTitle={L(
                       isFa,
                       `${displayStudy.title} — ${"Oil rents (% of GDP)"}`,
-                      `${displayStudy.title} — ${"اجاره نفت (٪ از GDP)"}`
+                      `${displayStudy.title} — ${faEconomic.oilRentsPctGdp}`
                     )}
                     exportSourceFooter={studyChartExportSource(isFa, [
                       dutchWdiSource?.name ?? "World Bank WDI",
@@ -9722,7 +11177,7 @@ export default function StudyDetailPage() {
                     ])}
                     data={dutchOilRentsPoints}
                     valueKey="value"
-                    label={L(isFa, "Oil rents (% of GDP)", "اجاره نفت (٪ از GDP)")}
+                    label={L(isFa, "Oil rents (% of GDP)", faEconomic.oilRentsPctGdp)}
                     unit="%"
                     events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, dutchFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
@@ -9735,7 +11190,7 @@ export default function StudyDetailPage() {
                 </div>
                 <div className="space-y-2 border-t border-border pt-6">
                   <h3 className="text-sm font-semibold text-foreground">
-                    {L(isFa, "2. Manufacturing value added (% of GDP)", "۲. ارزش افزوده تولیدات کارخانه‌ای (٪ از GDP)")}
+                    {L(isFa, "2. Manufacturing value added (% of GDP)", `۲. ${faEconomic.manufacturingPctGdp}`)}
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     {L(
@@ -9750,7 +11205,7 @@ export default function StudyDetailPage() {
                     exportPresentationTitle={L(
                       isFa,
                       `${displayStudy.title} — ${"Manufacturing (% of GDP)"}`,
-                      `${displayStudy.title} — ${"تولیدات کارخانه‌ای (٪ از GDP)"}`
+                      `${displayStudy.title} — ${faEconomic.manufacturingPctGdp}`
                     )}
                     exportSourceFooter={studyChartExportSource(isFa, [
                       dutchWdiSource?.name ?? "World Bank WDI",
@@ -9758,7 +11213,7 @@ export default function StudyDetailPage() {
                     ])}
                     data={dutchManufacturingPoints}
                     valueKey="value"
-                    label={L(isFa, "Manufacturing (% of GDP)", "تولیدات کارخانه‌ای (٪ از GDP)")}
+                    label={L(isFa, "Manufacturing (% of GDP)", faEconomic.manufacturingPctGdp)}
                     unit="%"
                     events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, dutchFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
@@ -9771,7 +11226,11 @@ export default function StudyDetailPage() {
                 </div>
                 <div className="space-y-2 border-t border-border pt-6">
                   <h3 className="text-sm font-semibold text-foreground">
-                    {L(isFa, "3. Imports of goods and services (% of GDP)", "۳. واردات کالا و خدمات (٪ از GDP)")}
+                    {L(
+                      isFa,
+                      "3. Imports of goods and services (% of GDP)",
+                      `۳. واردات کالا و خدمات — ${faEconomic.gdpPctUnit}`
+                    )}
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     {L(
@@ -9786,7 +11245,7 @@ export default function StudyDetailPage() {
                     exportPresentationTitle={L(
                       isFa,
                       `${displayStudy.title} — ${"Imports (% of GDP)"}`,
-                      `${displayStudy.title} — ${"واردات (٪ از GDP)"}`
+                      `${displayStudy.title} — ${faEconomic.imports} — ${faEconomic.gdpPctUnit}`
                     )}
                     exportSourceFooter={studyChartExportSource(isFa, [
                       dutchWdiSource?.name ?? "World Bank WDI",
@@ -9794,7 +11253,7 @@ export default function StudyDetailPage() {
                     ])}
                     data={dutchImportsPoints}
                     valueKey="value"
-                    label={L(isFa, "Imports (% of GDP)", "واردات (٪ از GDP)")}
+                    label={L(isFa, "Imports (% of GDP)", `${faEconomic.imports} — ${faEconomic.gdpPctUnit}`)}
                     unit="%"
                     events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, dutchFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
@@ -9807,7 +11266,7 @@ export default function StudyDetailPage() {
                 </div>
                 <div className="space-y-2 border-t border-border pt-6">
                   <h3 className="text-sm font-semibold text-foreground">
-                    {L(isFa, "4. Open-market USD→toman (context)", "۴. دلار به تومان بازار آزاد (زمینه)")}
+                    {L(isFa, "4. Open-market USD→toman (context)", `۴. ${faEconomic.openMarketExchangeRate} (زمینه)`)}
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     {L(
@@ -9822,12 +11281,12 @@ export default function StudyDetailPage() {
                     exportPresentationTitle={L(
                       isFa,
                       `${displayStudy.title} — ${"Open-market USD→toman"}`,
-                      `${displayStudy.title} — ${"دلار به تومان بازار آزاد"}`
+                      `${displayStudy.title} — ${faEconomic.exchangeRate}`
                     )}
                     exportSourceFooter={studyChartExportSource(isFa, [dutchFxSource?.name, dutchFxSource?.publisher])}
                     data={dutchFxPoints}
                     valueKey="value"
-                    label={L(isFa, "Open-market toman per USD", "تومان بازار آزاد به ازای هر دلار")}
+                    label={L(isFa, "Open-market toman per USD", faEconomic.tomanPerUsd)}
                     unit={L(isFa, "toman/USD", "تومان/دلار")}
                     events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, dutchFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
@@ -9860,7 +11319,11 @@ export default function StudyDetailPage() {
                     sourceName: dutchWdiSource?.name ?? "World Bank World Development Indicators",
                     sourceUrl: dutchWdiSource?.url ?? "https://data.worldbank.org/country/iran",
                     sourceDetail: dutchWdiSource?.publisher ?? "World Bank",
-                    unitLabel: L(isFa, "Annual % of GDP (three indicators)", "٪ سالانه از GDP (سه شاخص)"),
+                    unitLabel: L(
+                      isFa,
+                      "Annual % of GDP (three indicators)",
+                      `${faEconomic.gdpPctUnit} (سه شاخص، سالانه)`
+                    ),
                     unitNote: L(
                       isFa,
                       "NY.GDP.PETR.RT.ZS; NV.IND.MANF.ZS; NE.IMP.GNFS.ZS.",
@@ -9868,11 +11331,11 @@ export default function StudyDetailPage() {
                     ),
                   },
                   {
-                    label: L(isFa, "Open-market FX", "نرخ بازار آزاد"),
+                    label: L(isFa, "Open-market FX", faEconomic.openMarketExchangeRate),
                     sourceName: dutchFxSource?.name ?? "—",
                     sourceUrl: dutchFxSource?.url,
                     sourceDetail: dutchFxSource?.publisher ?? "",
-                    unitLabel: L(isFa, "toman per USD", "تومان به ازای دلار"),
+                    unitLabel: L(isFa, "toman per USD", faEconomic.tomanPerUsd),
                   },
                 ]}
                 note={L(
@@ -9905,42 +11368,35 @@ export default function StudyDetailPage() {
               <Card className="chart-card border-border">
                 <CardHeader>
                   <CardTitle className="text-lg font-semibold tracking-tight text-foreground">
-                    Real minimum wage (CPI-adjusted)
+                    {monetarySeriesMode === "nominal"
+                      ? L(isFa, "Nominal minimum wage", "حداقل دستمزد اسمی")
+                      : L(isFa, "Real minimum wage (inflation-adjusted)", "حداقل دستمزد واقعی (تعدیل‌شده با تورم)")}
                   </CardTitle>
                   <p className="text-sm text-muted-foreground">
                     {displayStudy.subtitle ?? displayStudy.description}
                   </p>
                   <div className="flex flex-wrap items-center gap-3 pt-2">
-                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={showWageIndex}
-                        onChange={(e) => setShowWageIndex(e.target.checked)}
-                        className="rounded border-border"
-                      />
-                      Real wage index (base = 100)
-                    </label>
+                    <NominalRealToggle mode={monetarySeriesMode} onChange={setMonetarySeriesMode} isFa={isFa} />
+                    {monetarySeriesMode === "real" ? (
+                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showWageIndex}
+                          onChange={(e) => setShowWageIndex(e.target.checked)}
+                          className="rounded border-border"
+                        />
+                        {L(isFa, "Real wage index (base = 100)", "شاخص دستمزد واقعی (پایه = ۱۰۰)")}
+                      </label>
+                    ) : null}
                   </div>
                 </CardHeader>
                 <CardContent>
                   <MultiSeriesStats
-                    series={[
-                      { label: "Nominal minimum wage", unit: "k tomans/month", points: wageNominalKTomans },
-                      {
-                        label: "Real minimum wage",
-                        unit: `k tomans/month (${wageBaseYear ?? ""} prices)`,
-                        points: wageRealKTomans,
-                      },
-                      ...(showWageIndex
-                        ? [
-                            {
-                              label: "Real wage index",
-                              unit: "Index (base=100)",
-                              points: wageIndexPoints,
-                            },
-                          ]
-                        : []),
-                    ]}
+                    series={wageChartMultiSeries.map((s) => ({
+                      label: s.label,
+                      unit: s.unit ?? "",
+                      points: s.points,
+                    }))}
                     timeRange={wageTimeRange ?? undefined}
                   />
                   <TimelineChart
@@ -9951,48 +11407,17 @@ export default function StudyDetailPage() {
                       wageSource?.nominal,
                       wageSource?.cpi,
                       "Derived (nominal × CPI adjustment)",
+                      monetarySeriesMode === "real"
+                        ? L(isFa, "Chart: Real (Iran CPI-adjusted)", "نمودار: واقعی (تعدیل با CPI ایران)")
+                        : L(isFa, "Chart: Nominal", "نمودار: اسمی"),
                     ])}
+                    tooltipValueBasisNote={wageTooltipBasisNote || undefined}
                     data={[]}
                     valueKey="value"
-                    label="Nominal"
+                    label={monetarySeriesMode === "nominal" ? "Nominal" : "Real (inflation-adjusted)"}
                     events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                     anchorEventId={anchorEventId || undefined}
-                    multiSeries={[
-                      {
-                        key: "nominal",
-                        label: "Nominal minimum wage",
-                        yAxisIndex: 0,
-                        unit: "k tomans/month",
-                        points: wageNominalKTomans,
-                        color: SIGNAL_CONCEPT.wage_nominal,
-                        symbol: "circle",
-                        symbolSize: CHART_LINE_SYMBOL_SIZE,
-                      },
-                      {
-                        key: "real",
-                        label: "Real minimum wage",
-                        yAxisIndex: 0,
-                        unit: `k tomans/month (${wageBaseYear ?? ""} prices)`,
-                        points: wageRealKTomans,
-                        color: SIGNAL_CONCEPT.wage_real,
-                        symbol: "diamond",
-                        symbolSize: CHART_LINE_SYMBOL_SIZE,
-                      },
-                      ...(showWageIndex
-                        ? [
-                            {
-                              key: "index",
-                              label: "Real wage index",
-                              yAxisIndex: 1,
-                              unit: "Index (base=100)",
-                              points: wageIndexPoints,
-                              color: SIGNAL_CONCEPT.wage_index,
-                              symbol: "triangle",
-                              symbolSize: CHART_LINE_SYMBOL_SIZE,
-                            } as ChartSeries,
-                          ]
-                        : []),
-                    ]}
+                    multiSeries={wageChartMultiSeries}
                     timeRange={wageTimeRange ?? study.timeRange}
                     mutedBands={false}
                     chartRangeGranularity="year"
@@ -10170,6 +11595,9 @@ export default function StudyDetailPage() {
             </>
           ) : isGoldAndOil ? (
             <>
+              <div className="mb-2 flex flex-wrap items-center gap-3">
+                <NominalRealToggle mode={monetarySeriesMode} onChange={setMonetarySeriesMode} isFa={isFa} />
+              </div>
               {oilShockDates.length > 0 && (
                 <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer mb-2">
                   <input
@@ -10182,7 +11610,7 @@ export default function StudyDetailPage() {
               )}
               <MultiSeriesStats
                 series={[
-                  { label: "Gold price", unit: "USD/oz", points: goldPoints },
+                  { label: "Gold price", unit: "USD/oz", points: goldPointsUsdDisplay },
                   { label: "Oil price", unit: "USD/bbl", points: oilPointsWithVolatility },
                 ]}
                 timeRange={oilTimeRange ?? undefined}
@@ -10191,7 +11619,12 @@ export default function StudyDetailPage() {
                 chartLocale={chartLocaleForCharts}
                 exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
-                exportSourceFooter={studyChartExportSource(isFa, [goldSource?.name, oilSource?.name])}
+                exportSourceFooter={studyChartExportSource(isFa, [
+                  goldSource?.name,
+                  oilSource?.name,
+                  cpiDeflationExtraExport,
+                ])}
+                tooltipValueBasisNote={usdTooltipBasisNote}
                 data={[]}
                 valueKey="value"
                 label="Gold"
@@ -10202,7 +11635,7 @@ export default function StudyDetailPage() {
                     label: "Gold price",
                     yAxisIndex: 0,
                     unit: "USD/oz",
-                    points: goldPoints,
+                    points: goldPointsUsdDisplay,
                     color: SIGNAL_CONCEPT.gold_spot,
                     symbol: "circle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
@@ -10311,6 +11744,9 @@ export default function StudyDetailPage() {
           ) : isOilBrent || isOilGlobalLong ? (
             <>
               <div className="chart-container">
+                <div className="mb-2 flex flex-wrap items-center gap-3">
+                  <NominalRealToggle mode={monetarySeriesMode} onChange={setMonetarySeriesMode} isFa={isFa} />
+                </div>
                 <div className="mb-2 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
                   {oilShockDates.length > 0 ? (
                     <label className="flex cursor-pointer items-center gap-2">
@@ -10348,7 +11784,8 @@ export default function StudyDetailPage() {
                 chartLocale={chartLocaleForCharts}
                 exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
-                exportSourceFooter={studyChartExportSource(isFa, [oilSource?.name])}
+                exportSourceFooter={studyChartExportSource(isFa, [oilSource?.name, cpiDeflationExtraExport])}
+                tooltipValueBasisNote={usdTooltipBasisNote}
                   data={[]}
                   valueKey="value"
                   label={isOilGlobalLong ? "Oil price" : "Brent oil"}
@@ -10467,6 +11904,9 @@ export default function StudyDetailPage() {
             </>
           ) : isOilAndFx ? (
             <>
+              <div className="mb-2 flex flex-wrap items-center gap-3">
+                <NominalRealToggle mode={monetarySeriesMode} onChange={setMonetarySeriesMode} isFa={isFa} />
+              </div>
               {oilShockDates.length > 0 && (
                 <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer mb-2">
                   <input
@@ -10483,7 +11923,7 @@ export default function StudyDetailPage() {
                     series={[
                       { label: "Brent oil", unit: "USD/barrel", points: oilPointsWithVolatility },
                       { label: "USD→Toman", unit: "toman/USD", points: fxPoints },
-                      { label: "Gold price", unit: "USD/oz", points: goldPoints },
+                      { label: "Gold price", unit: "USD/oz", points: goldPointsUsdDisplay },
                     ]}
                     timeRange={dualTimeRange ?? undefined}
                   />
@@ -10495,7 +11935,9 @@ export default function StudyDetailPage() {
                       oilSource?.name,
                       fxSource?.name,
                       goldSource?.name,
+                      cpiDeflationExtraExport,
                     ])}
+                    tooltipValueBasisNote={usdTooltipBasisNote}
                     data={[]}
                     valueKey="value"
                     label="Brent oil"
@@ -10527,7 +11969,7 @@ export default function StudyDetailPage() {
                         label: "Gold price",
                         yAxisIndex: 2,
                         unit: "USD/oz",
-                        points: goldPoints,
+                        points: goldPointsUsdDisplay,
                         color: SIGNAL_CONCEPT.gold_spot,
                         symbol: "circle",
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
@@ -10552,7 +11994,12 @@ export default function StudyDetailPage() {
                 chartLocale={chartLocaleForCharts}
                 exportPresentationStudyHeading={displayStudy.title}
                 xAxisYearLabel={chartYearAxisLabel}
-                    exportSourceFooter={studyChartExportSource(isFa, [oilSource?.name, fxSource?.name])}
+                    exportSourceFooter={studyChartExportSource(isFa, [
+                      oilSource?.name,
+                      fxSource?.name,
+                      cpiDeflationExtraExport,
+                    ])}
+                    tooltipValueBasisNote={usdTooltipBasisNote}
                     data={oilPointsWithVolatility}
                   valueKey="value"
                   label="Brent oil"

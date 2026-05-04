@@ -23,6 +23,8 @@ export const IRAN_FA_STUDY_IDS = new Set<string>([
   "dutch-disease-diagnostics",
   "oil-economy-overview",
   "iran-money-supply-growth",
+  "iran-economy-1368-1376",
+  "iran-economy-period-comparison",
   "timeline-global-events",
   "timeline-bands",
   "iran-dynasties-timeline",

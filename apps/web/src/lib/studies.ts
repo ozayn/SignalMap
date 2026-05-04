@@ -29,7 +29,9 @@ export type PrimarySignal =
   | { kind: "poverty_headcount_iran" }
   | { kind: "dutch_disease_diagnostics_iran" }
   | { kind: "iran_money_supply_m2" }
-  | { kind: "oil_economy_overview" };
+  | { kind: "oil_economy_overview" }
+  | { kind: "iran_economy_reconstruction_1368_1376" }
+  | { kind: "iran_economy_period_comparison" };
 
 import type { StudyConceptId } from "./signalmap-concepts";
 
@@ -790,6 +792,71 @@ export const STUDIES: StudyMeta[] = [
       "M2: WDI FM.LBL.BMNY.ZG / IFS through 2016; 2017+ = SignalMap-derived YoY on CBI-style year-end broad liquidity (static file). Definitions may differ; treat 2017+ as continuity, not a strict redefinition of WDI M2.",
       "CPI: WDI FP.CPI.TOTL.ZG (Iran) on the same calendar year; may extend past WDI M2; compare only overlapping years for strict timing claims.",
       "Rapid liquidity growth can add to inflation and FX pressure, but the mapping is not mechanical or instant; WDI vs CBI-liquidity YoY can differ by a few points in overlap years (calendar vs year-end).",
+    ],
+  },
+  {
+    id: "iran-economy-1368-1376",
+    number: 37,
+    title: "Iran economy during reconstruction (1368–1376 SH)",
+    subtitle: "Persian years 1368–1376 (≈1989–1997 CE): inflation, growth, oil rents, FX, liquidity, trade, and industry shares",
+    timeRange: ["1989-01-01", "1997-12-31"],
+    description:
+      "Dashboard-style annual and FX context for Iran’s post-war reconstruction period (Rafsanjani presidencies): WDI macro panels plus official vs open-market exchange rates. Exploratory economic history, not a causal model.",
+    status: "active",
+    groupPlacements: [{ group: "iran", order: 9 }],
+    primarySignal: { kind: "iran_economy_reconstruction_1368_1376" },
+    eventLayers: ["iran_core", "world_core", "sanctions"],
+    countries: ["iran"],
+    themes: ["macro", "fx", "oil"],
+    tags: ["Iran", "1368", "1376", "Rafsanjani", "reconstruction", "WDI"],
+    keywords: ["سازندگی", "رفسنجانی", "تورم", "reconstruction", "NY.GDP.MKTP.KD.ZG", "FP.CPI.TOTL.ZG"],
+    concepts: [
+      "inflation",
+      "spread",
+      "nominal_vs_real",
+      "dutch_disease_pattern",
+      "gdp",
+      "export_dependencies",
+      "structural_break",
+      "fx",
+      "liquidity_m2",
+      "event_overlay",
+    ],
+    observations: [
+      "Annual WDI panels are shown at Gregorian year keys; use the year-axis toggle for Persian (Solar Hijri) labels where supported.",
+      "Open-market FX is merged daily/annual series; official rate is annual policy/WDI—compare broad timing, not day-by-day alignment with WDI shares.",
+      "Minimum wage / household purchasing-power panels used elsewhere on SignalMap do not cover this window in the current dataset (see note on the page).",
+    ],
+  },
+  {
+    id: "iran-economy-period-comparison",
+    number: 38,
+    title: "Iran economy — full history with focus period",
+    subtitle: "Long-run WDI-style panels and annual-mean FX; shade a chosen window (e.g. a presidency) for visual comparison",
+    timeRange: ["1979-01-01", "today"],
+    description:
+      "Iran macro indicators from 1979 onward on one axis, with an adjustable shaded focus band (presidency presets or custom years). Annual WDI series and annual-mean open-market FX; exploratory comparison only, not causal inference.",
+    status: "active",
+    groupPlacements: [{ group: "iran", order: 10 }],
+    primarySignal: { kind: "iran_economy_period_comparison" },
+    eventLayers: ["iran_core", "world_core", "sanctions"],
+    countries: ["iran"],
+    themes: ["macro", "fx", "oil"],
+    tags: ["Iran", "WDI", "history", "presidency", "focus", "comparison", "FX", "inflation"],
+    keywords: ["1979", "Islamic Republic", "Rafsanjani", "Khatami", "Ahmadinejad", "Rouhani", "Raisi", "Pezeshkian", "سازندگی", "تورم"],
+    concepts: [
+      "inflation",
+      "spread",
+      "gdp",
+      "fx",
+      "liquidity_m2",
+      "event_overlay",
+      "structural_break",
+    ],
+    observations: [
+      "The shaded band marks your selected focus years on the same Gregorian keys as the series; axis labels can show Solar Hijri via the page toggle without changing the underlying dates.",
+      "Open-market FX is shown as a calendar-year mean of the merged series; official FX is annual—use the view for era-level timing, not day-by-day alignment with WDI.",
+      "Minimum-wage / real-wage series may start later than 1979; the wage panel only plots overlapping years returned by the wage API.",
     ],
   },
 ];

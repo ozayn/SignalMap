@@ -457,6 +457,24 @@ def get_real_oil_signal(
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
+@app.get("/api/signals/fred/us-cpi-monthly")
+def get_us_cpi_monthly_signal(
+    start: str = Query(..., description="Start date YYYY-MM-DD"),
+    end: str = Query(..., description="End date YYYY-MM-DD"),
+):
+    """US CPIAUCSL monthly (1982-84=100), trimmed for client-side USD deflation."""
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    try:
+        from signalmap.services.signals import get_us_cpi_monthly_series
+        return get_us_cpi_monthly_series(start, end)
+    except Exception as e:
+        log.exception("signal fetch failed")
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
+
+
 @app.get("/api/signals/oil/ppp-iran")
 def get_oil_ppp_iran_signal(
     start: str = Query(..., description="Start date YYYY-MM-DD"),

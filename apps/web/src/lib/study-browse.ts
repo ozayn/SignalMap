@@ -215,6 +215,23 @@ function subjectSearchAliasBits(study: StudyMeta): string[] {
     b.push("imports", "exports", "تجارت");
   }
 
+  if (k === "iran_economy_reconstruction_1368_1376") {
+    b.push("سازندگی", "رفسنجانی", "۱۳۶۸", "۱۳۷۶", "reconstruction", "Rafsanjani", "1368", "1376");
+  }
+
+  if (k === "iran_economy_period_comparison") {
+    b.push(
+      "1979",
+      "Islamic Republic",
+      "presidency",
+      "focus period",
+      "full history",
+      "مقایسه",
+      "تاریخ",
+      "macro dashboard"
+    );
+  }
+
   if (k === "wage_cpi_real") {
     b.push("تورم", "CPI", "wage", "دستمزد", "دست‌مزد");
   }
@@ -592,6 +609,47 @@ function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
           "wdi",
           "inflation",
           "fp.cpi.totl.zg",
+        ],
+      };
+    case "iran_economy_reconstruction_1368_1376":
+      return {
+        countries: ["iran"],
+        themes: ["macro", "fx", "oil"],
+        tags: [],
+        keywords: [
+          "1368",
+          "1376",
+          "solar hijri",
+          "شمسی",
+          "رفسنجانی",
+          "rafsanjani",
+          "reconstruction",
+          "سازندگی",
+          "post-war",
+          "1989",
+          "1997",
+          "wdi",
+        ],
+      };
+    case "iran_economy_period_comparison":
+      return {
+        countries: ["iran"],
+        themes: ["macro", "fx", "oil"],
+        tags: [],
+        keywords: [
+          "1979",
+          "president",
+          "presidency",
+          "focus",
+          "shaded",
+          "wdi",
+          "long run",
+          "comparison",
+          "khatami",
+          "ahmadinejad",
+          "rouhani",
+          "raisi",
+          "pezeshkian",
         ],
       };
     default:
