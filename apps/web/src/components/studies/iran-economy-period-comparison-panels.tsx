@@ -1,11 +1,16 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TimelineChart, type TimelineEvent } from "@/components/timeline-chart";
 import { CHART_LINE_SYMBOL_SIZE, CHART_LINE_SYMBOL_SIZE_MINI } from "@/lib/chart-series-markers";
 import { SIGNAL_CONCEPT } from "@/lib/signalmap-chart-colors";
 import { enEconomic, faEconomic } from "@/lib/signalmap-i18n/economic-terms";
 import type { ChartAxisYearMode } from "@/lib/chart-axis-year";
+import {
+  iranFxLevelsHasNonPositiveValuesInRange,
+  iranFxLevelsSuggestLogDefaultInRange,
+} from "@/lib/iran-fx-chart-log-default";
 
 type Point = { date: string; value: number };
 
@@ -92,6 +97,37 @@ export function IranEconomyPeriodComparisonPanels({
   recoLoadFailed,
   recoLoadDetail,
 }: IranEconomyPeriodComparisonPanelsProps) {
+  const [fxLevelsLogScale, setFxLevelsLogScale] = useState(false);
+  const fxLogDefaultAppliedRef = useRef(false);
+  const fxDataKeyRef = useRef("");
+
+  const fxDataKey = `${timeRange[0]}\u0000${timeRange[1]}\u0000${recoFxOfficialPoints.length}\u0000${recoOpenAnnualMean.length}`;
+  useEffect(() => {
+    if (fxDataKeyRef.current !== fxDataKey) {
+      fxDataKeyRef.current = fxDataKey;
+      fxLogDefaultAppliedRef.current = false;
+    }
+  }, [fxDataKey]);
+
+  useEffect(() => {
+    if (fxLogDefaultAppliedRef.current) return;
+    if (recoFxOfficialPoints.length === 0 && recoOpenAnnualMean.length === 0) return;
+    setFxLevelsLogScale(
+      iranFxLevelsSuggestLogDefaultInRange(recoFxOfficialPoints, recoOpenAnnualMean, timeRange, "long_run")
+    );
+    fxLogDefaultAppliedRef.current = true;
+  }, [recoFxOfficialPoints, recoOpenAnnualMean, fxDataKey]);
+
+  const fxLevelsLogNote =
+    fxLevelsLogScale &&
+    iranFxLevelsHasNonPositiveValuesInRange(recoFxOfficialPoints, recoOpenAnnualMean, timeRange)
+      ? L(
+          isFa,
+          "Log scale: years with zero or negative rates are omitted from the plot.",
+          "مقیاس لگاریتمی: سال‌هایی با نرخ صفر یا منفی از نمودار حذف شده‌اند."
+        )
+      : undefined;
+
   return (
     <>
       <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl mb-4">
@@ -248,48 +284,66 @@ export function IranEconomyPeriodComparisonPanels({
             </CardHeader>
             <CardContent className="pt-0 space-y-4">
               {recoFxOfficialPoints.length > 0 || recoOpenAnnualMean.length > 0 ? (
-                <TimelineChart
-                  chartLocale={chartLocaleForCharts}
-                  exportPresentationStudyHeading={exportStudyHeading}
-                  exportPresentationTitle={L(isFa, `${studyTitle} — FX levels`, `${studyTitle} — ${faEconomic.exchangeRate}`)}
-                  exportSourceFooter={studyChartExportSource(isFa, [recoFxOfficialSource?.name, recoFxOpenSource?.name])}
-                  data={[]}
-                  valueKey="value"
-                  label={L(isFa, "Toman per USD", faEconomic.tomanPerUsd)}
-                  events={events}
-                  multiSeries={[
-                    {
-                      key: "official",
-                      label: L(isFa, "Official exchange rate (annual)", faEconomic.officialRateAnnual),
-                      yAxisIndex: 0,
-                      unit: L(isFa, "toman/USD", "تومان/دلار"),
-                      points: recoFxOfficialPoints,
-                      color: SIGNAL_CONCEPT.fx_official,
-                      symbol: "circle",
-                      symbolSize: CHART_LINE_SYMBOL_SIZE,
-                    },
-                    {
-                      key: "open_mean",
-                      label: L(isFa, "Open-market exchange rate (annual mean)", faEconomic.openMarketAnnualMean),
-                      yAxisIndex: 0,
-                      unit: L(isFa, "toman/USD", "تومان/دلار"),
-                      points: recoOpenAnnualMean,
-                      color: SIGNAL_CONCEPT.fx_open,
-                      symbol: "diamond",
-                      symbolSize: CHART_LINE_SYMBOL_SIZE,
-                    },
-                  ]}
-                  timeRange={timeRange}
-                  chartRangeGranularity="year"
-                  xAxisYearLabel={chartYearAxisLabel}
-                  exportFileStem="iran-ipc-fx-levels"
-                  showChartControls
-                  chartHeight="h-56 md:h-64"
-                  mutedEventLines
-                  regimeArea={regimeArea}
-                  focusGregorianYearRange={focusGregorianYearRange}
-                  focusHoverHint={focusHoverHint}
-                />
+                <>
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={fxLevelsLogScale}
+                      onChange={(e) => setFxLevelsLogScale(e.target.checked)}
+                      className="rounded border-border"
+                    />
+                    {L(isFa, "Log scale", "مقیاس لگاریتمی")}
+                  </label>
+                  <TimelineChart
+                    chartLocale={chartLocaleForCharts}
+                    exportPresentationStudyHeading={exportStudyHeading}
+                    exportPresentationTitle={L(isFa, `${studyTitle} — FX levels`, `${studyTitle} — ${faEconomic.exchangeRate}`)}
+                    exportSourceFooter={studyChartExportSource(isFa, [recoFxOfficialSource?.name, recoFxOpenSource?.name])}
+                    data={[]}
+                    valueKey="value"
+                    label={L(isFa, "Toman per USD", faEconomic.tomanPerUsd)}
+                    events={events}
+                    multiSeries={[
+                      {
+                        key: "official",
+                        label: L(isFa, "Official exchange rate (annual)", faEconomic.officialRateAnnual),
+                        yAxisIndex: 0,
+                        unit: L(isFa, "toman/USD", "تومان/دلار"),
+                        points: recoFxOfficialPoints,
+                        color: SIGNAL_CONCEPT.fx_official,
+                        symbol: "circle",
+                        symbolSize: CHART_LINE_SYMBOL_SIZE,
+                      },
+                      {
+                        key: "open_mean",
+                        label: L(isFa, "Open-market exchange rate (annual mean)", faEconomic.openMarketAnnualMean),
+                        yAxisIndex: 0,
+                        unit: L(isFa, "toman/USD", "تومان/دلار"),
+                        points: recoOpenAnnualMean,
+                        color: SIGNAL_CONCEPT.fx_open,
+                        symbol: "diamond",
+                        symbolSize: CHART_LINE_SYMBOL_SIZE,
+                      },
+                    ]}
+                    timeRange={timeRange}
+                    chartRangeGranularity="year"
+                    xAxisYearLabel={chartYearAxisLabel}
+                    exportFileStem="iran-ipc-fx-levels"
+                    showChartControls
+                    chartHeight="h-56 md:h-64"
+                    mutedEventLines
+                    regimeArea={regimeArea}
+                    focusGregorianYearRange={focusGregorianYearRange}
+                    focusHoverHint={focusHoverHint}
+                    yAxisLog={fxLevelsLogScale}
+                    multiSeriesYAxisNameOverrides={{
+                      0: fxLevelsLogScale
+                        ? L(isFa, "toman/USD (log scale)", "تومان به ازای دلار (مقیاس لگاریتمی)")
+                        : L(isFa, "toman/USD", "تومان به ازای دلار"),
+                    }}
+                    yAxisDetailNote={fxLevelsLogNote}
+                  />
+                </>
               ) : (
                 <p className="text-xs text-muted-foreground py-6">{L(isFa, "FX data unavailable for this window.", "داده نرخ در این بازه در دسترس نیست.")}</p>
               )}

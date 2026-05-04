@@ -17,6 +17,10 @@ import {
   IPC_PRESIDENT_PRESETS,
   type IpcPresidentPreset,
 } from "@/lib/iran-economy-period-comparison-presets";
+import {
+  iranFxLevelsHasNonPositiveValuesInRange,
+  iranFxLevelsSuggestLogDefaultInRange,
+} from "@/lib/iran-fx-chart-log-default";
 import { useHydrationSafeGregorianYear } from "@/lib/use-hydration-safe-gregorian-year";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -31,6 +35,7 @@ import { OilPppIranDescription } from "@/components/oil-ppp-iran-description";
 import { LearningNote } from "@/components/learning-note";
 import { DataObservations } from "@/components/data-observations";
 import { ConceptsUsed } from "@/components/concepts-used";
+import { ClientOnlyAfterMount } from "@/components/client-only-after-mount";
 import { CurrentSnapshot } from "@/components/current-snapshot";
 import { IranMoneySupplyMethodology } from "@/components/studies/iran-money-supply-methodology";
 import { InSimpleTerms } from "@/components/in-simple-terms";
@@ -665,6 +670,10 @@ export default function StudyDetailPage() {
   const [recoFxOpenPoints, setRecoFxOpenPoints] = useState<{ date: string; value: number }[]>([]);
   const [recoFxOfficialSource, setRecoFxOfficialSource] = useState<FxUsdTomanSource | null>(null);
   const [recoFxOpenSource, setRecoFxOpenSource] = useState<FxUsdTomanSource | null>(null);
+  /** Iran economy macro dashboards: log y-axis for official vs open FX levels chart only. */
+  const [iranEconomyFxLevelsLogScale, setIranEconomyFxLevelsLogScale] = useState(false);
+  const iranFxLogDefaultAppliedRef = useRef(false);
+  const iranFxLogDataKeyRef = useRef("");
   const [recoLoading, setRecoLoading] = useState(false);
   const [recoLoadFailed, setRecoLoadFailed] = useState(false);
   const [recoLoadDetail, setRecoLoadDetail] = useState<string | null>(null);
@@ -1510,6 +1519,64 @@ export default function StudyDetailPage() {
     }
     return out;
   }, [recoFxOfficialPoints, recoOpenAnnualMean]);
+
+  const reconstructionFxClipRange = useMemo((): [string, string] | undefined => {
+    if (!isIranEconomyReconstruction1368 || !study) return undefined;
+    if (reconstructionTimeRange) return reconstructionTimeRange;
+    const [start, end] = study.timeRange;
+    const resolvedEnd = end === "today" ? new Date().toISOString().slice(0, 10) : end;
+    return [start, resolvedEnd];
+  }, [isIranEconomyReconstruction1368, study, reconstructionTimeRange]);
+
+  const iranRecoFxLogDataKey = useMemo(() => {
+    const tr = reconstructionFxClipRange;
+    return `${tr?.[0] ?? ""}\u0000${tr?.[1] ?? ""}\u0000${recoFxOfficialPoints.length}\u0000${recoOpenAnnualMean.length}`;
+  }, [reconstructionFxClipRange, recoFxOfficialPoints.length, recoOpenAnnualMean.length]);
+
+  useEffect(() => {
+    iranFxLogDataKeyRef.current = "";
+    iranFxLogDefaultAppliedRef.current = false;
+    setIranEconomyFxLevelsLogScale(false);
+  }, [studyId]);
+
+  useEffect(() => {
+    if (iranFxLogDataKeyRef.current !== iranRecoFxLogDataKey) {
+      iranFxLogDataKeyRef.current = iranRecoFxLogDataKey;
+      iranFxLogDefaultAppliedRef.current = false;
+    }
+  }, [iranRecoFxLogDataKey]);
+
+  useEffect(() => {
+    if (!isIranEconomyReconstruction1368) return;
+    if (iranFxLogDefaultAppliedRef.current) return;
+    if (recoFxOfficialPoints.length === 0 && recoOpenAnnualMean.length === 0) return;
+    setIranEconomyFxLevelsLogScale(
+      iranFxLevelsSuggestLogDefaultInRange(
+        recoFxOfficialPoints,
+        recoOpenAnnualMean,
+        reconstructionFxClipRange,
+        "short_reconstruction"
+      )
+    );
+    iranFxLogDefaultAppliedRef.current = true;
+  }, [
+    isIranEconomyReconstruction1368,
+    recoFxOfficialPoints,
+    recoOpenAnnualMean,
+    iranRecoFxLogDataKey,
+    reconstructionFxClipRange,
+  ]);
+
+  const iranRecoFxLevelsLogNote =
+    iranEconomyFxLevelsLogScale &&
+    reconstructionFxClipRange &&
+    iranFxLevelsHasNonPositiveValuesInRange(recoFxOfficialPoints, recoOpenAnnualMean, reconstructionFxClipRange)
+      ? L(
+          isFa,
+          "Log scale: years with zero or negative rates are omitted from the plot.",
+          "مقیاس لگاریتمی: سال‌هایی با نرخ صفر یا منفی از نمودار حذف شده‌اند."
+        )
+      : undefined;
 
   /** Indexed overlay (100 = value in base year): WDI shares + optional annual-mean open-market FX. */
   const dutchOverviewIndexed = useMemo(() => {
@@ -10512,52 +10579,70 @@ export default function StudyDetailPage() {
                     </CardHeader>
                     <CardContent className="pt-0 space-y-4">
                       {recoFxOfficialPoints.length > 0 || recoOpenAnnualMean.length > 0 ? (
-                        <TimelineChart
-                          chartLocale={chartLocaleForCharts}
-                          exportPresentationStudyHeading={displayStudy.title}
-                          exportPresentationTitle={L(
-                            isFa,
-                            `${displayStudy.title} — FX levels`,
-                            `${displayStudy.title} — ${faEconomic.exchangeRate}`
-                          )}
-                          exportSourceFooter={studyChartExportSource(isFa, [
-                            recoFxOfficialSource?.name,
-                            recoFxOpenSource?.name,
-                          ])}
-                          data={[]}
-                          valueKey="value"
-                          label={L(isFa, "Toman per USD", faEconomic.tomanPerUsd)}
-                          events={reconstructionChartEvents}
-                          multiSeries={[
-                            {
-                              key: "official",
-                              label: L(isFa, "Official exchange rate (annual)", faEconomic.officialRateAnnual),
-                              yAxisIndex: 0,
-                              unit: L(isFa, "toman/USD", "تومان/دلار"),
-                              points: recoFxOfficialPoints,
-                              color: SIGNAL_CONCEPT.fx_official,
-                              symbol: "circle",
-                              symbolSize: CHART_LINE_SYMBOL_SIZE,
-                            },
-                            {
-                              key: "open_mean",
-                              label: L(isFa, "Open-market exchange rate (annual mean)", faEconomic.openMarketAnnualMean),
-                              yAxisIndex: 0,
-                              unit: L(isFa, "toman/USD", "تومان/دلار"),
-                              points: recoOpenAnnualMean,
-                              color: SIGNAL_CONCEPT.fx_open,
-                              symbol: "diamond",
-                              symbolSize: CHART_LINE_SYMBOL_SIZE,
-                            },
-                          ]}
-                          timeRange={reconstructionTimeRange ?? study.timeRange}
-                          chartRangeGranularity="year"
-                          xAxisYearLabel={chartYearAxisLabel}
-                          exportFileStem="iran-reco-fx-levels"
-                          showChartControls
-                          chartHeight="h-56 md:h-64"
-                          mutedEventLines
-                        />
+                        <>
+                          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={iranEconomyFxLevelsLogScale}
+                              onChange={(e) => setIranEconomyFxLevelsLogScale(e.target.checked)}
+                              className="rounded border-border"
+                            />
+                            {L(isFa, "Log scale", "مقیاس لگاریتمی")}
+                          </label>
+                          <TimelineChart
+                            chartLocale={chartLocaleForCharts}
+                            exportPresentationStudyHeading={displayStudy.title}
+                            exportPresentationTitle={L(
+                              isFa,
+                              `${displayStudy.title} — FX levels`,
+                              `${displayStudy.title} — ${faEconomic.exchangeRate}`
+                            )}
+                            exportSourceFooter={studyChartExportSource(isFa, [
+                              recoFxOfficialSource?.name,
+                              recoFxOpenSource?.name,
+                            ])}
+                            data={[]}
+                            valueKey="value"
+                            label={L(isFa, "Toman per USD", faEconomic.tomanPerUsd)}
+                            events={reconstructionChartEvents}
+                            multiSeries={[
+                              {
+                                key: "official",
+                                label: L(isFa, "Official exchange rate (annual)", faEconomic.officialRateAnnual),
+                                yAxisIndex: 0,
+                                unit: L(isFa, "toman/USD", "تومان/دلار"),
+                                points: recoFxOfficialPoints,
+                                color: SIGNAL_CONCEPT.fx_official,
+                                symbol: "circle",
+                                symbolSize: CHART_LINE_SYMBOL_SIZE,
+                              },
+                              {
+                                key: "open_mean",
+                                label: L(isFa, "Open-market exchange rate (annual mean)", faEconomic.openMarketAnnualMean),
+                                yAxisIndex: 0,
+                                unit: L(isFa, "toman/USD", "تومان/دلار"),
+                                points: recoOpenAnnualMean,
+                                color: SIGNAL_CONCEPT.fx_open,
+                                symbol: "diamond",
+                                symbolSize: CHART_LINE_SYMBOL_SIZE,
+                              },
+                            ]}
+                            timeRange={reconstructionTimeRange ?? study.timeRange}
+                            chartRangeGranularity="year"
+                            xAxisYearLabel={chartYearAxisLabel}
+                            exportFileStem="iran-reco-fx-levels"
+                            showChartControls
+                            chartHeight="h-56 md:h-64"
+                            mutedEventLines
+                            yAxisLog={iranEconomyFxLevelsLogScale}
+                            multiSeriesYAxisNameOverrides={{
+                              0: iranEconomyFxLevelsLogScale
+                                ? L(isFa, "toman/USD (log scale)", "تومان به ازای دلار (مقیاس لگاریتمی)")
+                                : L(isFa, "toman/USD", "تومان به ازای دلار"),
+                            }}
+                            yAxisDetailNote={iranRecoFxLevelsLogNote}
+                          />
+                        </>
                       ) : (
                         <p className="text-xs text-muted-foreground py-6">
                           {L(isFa, "FX data unavailable for this window.", "داده نرخ در این بازه در دسترس نیست.")}
@@ -10879,86 +10964,95 @@ export default function StudyDetailPage() {
             </>
           ) : isIranEconomyPeriodComparison ? (
             <>
-              <div className="flex flex-wrap gap-1.5 mb-3 max-w-6xl">
-                {IPC_PRESET_UI_ORDER.map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => applyIpcPreset(id)}
-                    className={`rounded-md border px-2 py-1 text-xs font-medium transition-colors ${
-                      ipcPresetId === id
-                        ? "border-primary bg-primary/10 text-foreground"
-                        : "border-border bg-muted/40 text-muted-foreground hover:bg-muted/60"
-                    }`}
-                  >
-                    {L(isFa, IPC_PRESET_CHIP[id].en, IPC_PRESET_CHIP[id].fa)}
-                  </button>
-                ))}
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 text-xs max-w-3xl">
-                <label className="flex flex-col gap-0.5">
-                  <span className="text-muted-foreground">{L(isFa, "Outer start (year)", "شروع بازه بیرونی (سال)")}</span>
-                  <input
-                    type="number"
-                    min={1960}
-                    max={ipcGregorianYear}
-                    value={ipcOuterStartYear}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value, 10);
-                      if (!Number.isFinite(v)) return;
-                      setIpcOuterStartYear(v);
-                    }}
-                    className="rounded border border-border bg-background px-2 py-1 w-full"
-                  />
-                </label>
-                <label className="flex flex-col gap-0.5">
-                  <span className="text-muted-foreground">{L(isFa, "Outer end (year)", "پایان بازه بیرونی (سال)")}</span>
-                  <input
-                    type="number"
-                    min={1960}
-                    max={ipcGregorianYear}
-                    value={ipcOuterEndYear}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value, 10);
-                      if (!Number.isFinite(v)) return;
-                      setIpcOuterEndYear(v);
-                    }}
-                    className="rounded border border-border bg-background px-2 py-1 w-full"
-                  />
-                </label>
-                <label className="flex flex-col gap-0.5">
-                  <span className="text-muted-foreground">{L(isFa, "Focus start (year)", "شروع دوره تمرکز (سال)")}</span>
-                  <input
-                    type="number"
-                    min={1960}
-                    max={ipcGregorianYear}
-                    value={ipcFocusStartYear}
-                    onChange={(e) => {
-                      markIpcCustomFocusLabel();
-                      const v = parseInt(e.target.value, 10);
-                      if (!Number.isFinite(v)) return;
-                      setIpcFocusStartYear(v);
-                    }}
-                    className="rounded border border-border bg-background px-2 py-1 w-full"
-                  />
-                </label>
-                <label className="flex flex-col gap-0.5">
-                  <span className="text-muted-foreground">{L(isFa, "Focus end (year)", "پایان دوره تمرکز (سال)")}</span>
-                  <input
-                    type="number"
-                    min={1960}
-                    max={ipcGregorianYear}
-                    value={ipcFocusEndYear}
-                    onChange={(e) => {
-                      markIpcCustomFocusLabel();
-                      const v = parseInt(e.target.value, 10);
-                      if (!Number.isFinite(v)) return;
-                      setIpcFocusEndYear(v);
-                    }}
-                    className="rounded border border-border bg-background px-2 py-1 w-full"
-                  />
-                </label>
-              </div>
+              <ClientOnlyAfterMount
+                fallback={
+                  <div className="mb-5 max-w-6xl space-y-3" aria-hidden>
+                    <div className="flex min-h-[30px] flex-wrap gap-1.5 rounded-md border border-transparent bg-muted/5" />
+                    <div className="grid min-h-[56px] max-w-3xl grid-cols-2 gap-3 sm:grid-cols-4 rounded-md border border-transparent bg-muted/5" />
+                  </div>
+                }
+              >
+                <div className="flex flex-wrap gap-1.5 mb-3 max-w-6xl">
+                  {IPC_PRESET_UI_ORDER.map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => applyIpcPreset(id)}
+                      className={`rounded-md border px-2 py-1 text-xs font-medium transition-colors ${
+                        ipcPresetId === id
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border bg-muted/40 text-muted-foreground hover:bg-muted/60"
+                      }`}
+                    >
+                      {L(isFa, IPC_PRESET_CHIP[id].en, IPC_PRESET_CHIP[id].fa)}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 text-xs max-w-3xl">
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-muted-foreground">{L(isFa, "Outer start (year)", "شروع بازه بیرونی (سال)")}</span>
+                    <input
+                      type="number"
+                      min={1960}
+                      max={ipcGregorianYear}
+                      value={ipcOuterStartYear}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        if (!Number.isFinite(v)) return;
+                        setIpcOuterStartYear(v);
+                      }}
+                      className="rounded border border-border bg-background px-2 py-1 w-full"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-muted-foreground">{L(isFa, "Outer end (year)", "پایان بازه بیرونی (سال)")}</span>
+                    <input
+                      type="number"
+                      min={1960}
+                      max={ipcGregorianYear}
+                      value={ipcOuterEndYear}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        if (!Number.isFinite(v)) return;
+                        setIpcOuterEndYear(v);
+                      }}
+                      className="rounded border border-border bg-background px-2 py-1 w-full"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-muted-foreground">{L(isFa, "Focus start (year)", "شروع دوره تمرکز (سال)")}</span>
+                    <input
+                      type="number"
+                      min={1960}
+                      max={ipcGregorianYear}
+                      value={ipcFocusStartYear}
+                      onChange={(e) => {
+                        markIpcCustomFocusLabel();
+                        const v = parseInt(e.target.value, 10);
+                        if (!Number.isFinite(v)) return;
+                        setIpcFocusStartYear(v);
+                      }}
+                      className="rounded border border-border bg-background px-2 py-1 w-full"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-muted-foreground">{L(isFa, "Focus end (year)", "پایان دوره تمرکز (سال)")}</span>
+                    <input
+                      type="number"
+                      min={1960}
+                      max={ipcGregorianYear}
+                      value={ipcFocusEndYear}
+                      onChange={(e) => {
+                        markIpcCustomFocusLabel();
+                        const v = parseInt(e.target.value, 10);
+                        if (!Number.isFinite(v)) return;
+                        setIpcFocusEndYear(v);
+                      }}
+                      className="rounded border border-border bg-background px-2 py-1 w-full"
+                    />
+                  </label>
+                </div>
+              </ClientOnlyAfterMount>
               {ipcTimeRange && ipcRegimeAreaWithLabel ? (
                 <IranEconomyPeriodComparisonPanels
                   isFa={isFa}

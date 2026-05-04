@@ -81,6 +81,7 @@ export function ConceptsUsed({ conceptKeys, locale = "en" }: ConceptsUsedProps) 
         onClick={() => setSectionOpen((o) => !o)}
         className="flex w-full items-center justify-between gap-2 rounded-lg px-[0.55rem] py-[0.55rem] text-left text-[0.8125rem] font-medium text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
         aria-expanded={sectionOpen}
+        suppressHydrationWarning
       >
         <span>{isFa ? "مفاهیم به‌کاررفته در این مطالعه" : "Concepts used in this study"}</span>
         <span
