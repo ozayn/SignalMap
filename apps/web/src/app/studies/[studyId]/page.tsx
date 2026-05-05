@@ -11759,6 +11759,14 @@ export default function StudyDetailPage() {
                           chartHeight="h-56 md:h-64"
                           mutedEventLines
                           regimeArea={recoWelfareRegimeArea}
+                          focusGregorianYearRange={{
+                            startYear: reconstructionGregorianYearBounds.start,
+                            endYear: reconstructionGregorianYearBounds.end,
+                          }}
+                          focusHoverHint={{
+                            en: "Inside focus period",
+                            fa: "داخل دورهٔ تمرکز",
+                          }}
                           dataCoverageGapMarkArea={recoGiniCoverageExtras?.gapMarkArea}
                           dataCoverageLastMarkLine={
                             recoGiniCoverageExtras?.lastMarkLineX

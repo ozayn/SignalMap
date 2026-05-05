@@ -100,6 +100,9 @@ const REGIME_FOCUS_BAND_LABEL_MIN_BAND_WIDTH_PX = 36;
 /** Gap above grid top for the focus-period label (`graphic`); aligns with grid top − offset. */
 const REGIME_FOCUS_BAND_LABEL_TOP_GAP_PX = 8;
 
+/** Focus-period `markArea` fill — visible above grid but under line/area (single-series uses a null carrier series). */
+const REGIME_FOCUS_MARK_AREA_FILL = "rgba(107, 114, 128, 0.08)";
+
 /**
  * `convertToPixel` on a category x-axis needs a category value; markArea still draws for off-bucket dates
  * (e.g. regime `1989-07-01` vs WDI `1989-01-01`).
@@ -1570,13 +1573,44 @@ export function TimelineChart({
             );
           })()
         : [];
+    /** Sparse single-series annual panels (e.g. WDI Gini): category axis = every year in ``timeRange``, not only observation dates. */
+    const wantYearlySingleSeriesCategoryAxis =
+      hasData &&
+      !hasMultiSeries &&
+      chartRangeGranularityProp === "year" &&
+      Boolean(rangeLo && rangeHi);
+    const singleSeriesYearlyDates =
+      wantYearlySingleSeriesCategoryAxis && rangeLo && rangeHi
+        ? (() => {
+            const y0 = parseInt(rangeLo.slice(0, 4), 10);
+            const y1 = parseInt(rangeHi.slice(0, 4), 10);
+            if (!Number.isFinite(y0) || !Number.isFinite(y1)) return [];
+            const lo = Math.min(y0, y1);
+            const hi = Math.max(y0, y1);
+            const allJanuary =
+              dataResolved.length > 0 &&
+              dataResolved.every((d) => {
+                const ds = d.date.slice(0, 10);
+                return ds.length >= 10 && ds.slice(5, 10) === "01-01";
+              });
+            const out: string[] = [];
+            for (let y = lo; y <= hi; y++) {
+              out.push(forceTimeAxis ? `${y}-01-01` : allJanuary ? `${y}-01-01` : `${y}-07-01`);
+            }
+            return out;
+          })()
+        : [];
+    const useYearlyCategoryAxisForSparseSingleSeries =
+      wantYearlySingleSeriesCategoryAxis && singleSeriesYearlyDates.length > 0;
     const useForceTimeRangeDates = forceTimeRangeAxis && hasMultiSeries && timeRange && timeRange[0] && timeRange[1];
     const rangeStart = timeRange && timeRange[0].length === 4 ? `${timeRange[0]}-01-01` : timeRange?.[0] ?? "";
     const rangeEnd = timeRange && timeRange[1].length === 4 ? `${timeRange[1]}-12-31` : timeRange?.[1] ?? "";
     let dates = useForceTimeRangeDates
       ? sparseDatesFromRange(rangeStart, rangeEnd, 12)
       : hasData
-      ? dataResolved.map((d) => d.date)
+      ? useYearlyCategoryAxisForSparseSingleSeries
+        ? singleSeriesYearlyDates
+        : dataResolved.map((d) => d.date)
       : useYearlyMultiSeries
         ? yearlyDates
         : useYearlyAxisForMultiSeries
@@ -1600,7 +1634,15 @@ export function TimelineChart({
       const lastYear = dates[dates.length - 1]!.slice(0, 4);
       if (lastYear < rangeEnd.slice(0, 4)) dates = [...dates.filter((d) => d < rangeEnd), rangeEnd].sort();
     }
-    const values = hasData ? dataResolved.map((d) => d[valueKey] as number) : [];
+    const primaryPointsForYearMatch = dataResolved.map((pt) => ({
+      date: pt.date.slice(0, 10),
+      value: pt[valueKey] as number,
+    }));
+    const values = hasData
+      ? useYearlyCategoryAxisForSparseSingleSeries
+        ? singleSeriesYearlyDates.map((d) => valueAtDateSameCalendarYear(primaryPointsForYearMatch, d))
+        : dataResolved.map((d) => d[valueKey] as number)
+      : [];
     const nonNullSingleSeriesCount =
       hasData && !hasMultiSeries ? values.filter((v) => typeof v === "number" && Number.isFinite(v)).length : 0;
     const useComfortableSingleSeriesSymbols =
@@ -1711,7 +1753,9 @@ export function TimelineChart({
     };
     /** Year-only axes keep "Year:" / سال labels; day-level / FX / mixed-frequency use full calendar dates in tooltips. */
     const tooltipDateResolution: ChartTooltipDateResolution =
-      useYearlyMultiSeries || useYearlyAxisForMultiSeries ? "year_bucket" : "calendar";
+      useYearlyMultiSeries || useYearlyAxisForMultiSeries || useYearlyCategoryAxisForSparseSingleSeries
+        ? "year_bucket"
+        : "calendar";
     const formatCategoryAxisYearTick = (value: string) => {
       if (axisYearMode !== "both")
         return formatChartCategoryAxisYearLabel(value, axisYearMode, chartNumeralLocale);
@@ -1982,6 +2026,43 @@ export function TimelineChart({
     }
     const regularBandData = rangeBandData.filter((r) => !isPresidentialEvent(r.event));
     const PresidentialBandOpacity = 0.04;
+
+    /** Single-series charts stack `areaStyle` on the line, which paints over `markArea` on the same series. Use a null carrier line for bands (same pattern as multi-series “events”). */
+    const singleSeriesMarkAreaPayload =
+      hasData && !hasMultiSeries && (rangeBandData.length > 0 || regimeArea || dataCoverageGapMarkAreaRegions.length > 0)
+        ? {
+            silent: true,
+            z: 0,
+            itemStyle: {
+              color: withAlphaHsl(muted, RangeBandOpacity),
+              borderColor: withAlphaHsl(muted, regimeArea ? 0.12 : 0.2),
+              borderWidth: 1,
+            },
+            data: [
+              ...regularBandData.map((r) =>
+                [{ xAxis: r.xStart }, { xAxis: r.xEnd }] as [{ xAxis: string }, { xAxis: string }]
+              ),
+              ...presidentialBandData.map((r) =>
+                [
+                  { xAxis: r.xStart, itemStyle: { color: withAlphaHsl(muted, PresidentialBandOpacity), borderColor: "transparent" } },
+                  { xAxis: r.xEnd },
+                ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }]
+              ),
+              ...(regimeArea
+                ? [
+                    [
+                      {
+                        xAxis: regimeArea.xStart,
+                        itemStyle: { color: REGIME_FOCUS_MARK_AREA_FILL, borderColor: "transparent" },
+                      },
+                      { xAxis: regimeArea.xEnd },
+                    ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }],
+                  ]
+                : []),
+              ...dataCoverageGapMarkAreaRegions,
+            ],
+          }
+        : null;
 
     const oilColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
     const comparatorColor = "hsl(195, 55%, 42%)";
@@ -2888,7 +2969,7 @@ export function TimelineChart({
                                 [
                                   {
                                     xAxis: regimeArea.xStart,
-                                    itemStyle: { color: withAlphaHsl(muted, 0.04), borderColor: "transparent" },
+                                    itemStyle: { color: REGIME_FOCUS_MARK_AREA_FILL, borderColor: "transparent" },
                                   },
                                   { xAxis: regimeArea.xEnd },
                                 ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }],
@@ -2974,9 +3055,29 @@ export function TimelineChart({
             ]
           : hasData
           ? [
+              ...(singleSeriesMarkAreaPayload
+                ? [
+                    {
+                      name: "__focus_bands",
+                      type: "line" as const,
+                      yAxisIndex: 0,
+                      data: useTimeAxis ? toTimeData(dates.map(() => null)) : dates.map(() => null),
+                      symbol: "none",
+                      showSymbol: false,
+                      silent: true,
+                      legendHoverLink: false,
+                      animation: false,
+                      lineStyle: { width: 0, opacity: 0 },
+                      tooltip: { show: false },
+                      markArea: singleSeriesMarkAreaPayload,
+                      z: 1,
+                    },
+                  ]
+                : []),
               {
                 name: label,
                 type: "line" as const,
+                z: 2,
                 data: useTimeAxis ? toTimeData(values) : values,
                 smooth: true,
                 symbol: "circle",
@@ -3047,41 +3148,6 @@ export function TimelineChart({
                         data: shockMarkPointData.map((d) => ({ name: "shock", coord: d.coord })),
                       }
                     : undefined,
-                markArea:
-                  rangeBandData.length > 0 || regimeArea || dataCoverageGapMarkAreaRegions.length > 0
-                    ? {
-                        silent: true,
-                        z: 0,
-                        itemStyle: {
-                          color: withAlphaHsl(muted, RangeBandOpacity),
-                          borderColor: withAlphaHsl(muted, 0.2),
-                          borderWidth: 1,
-                        },
-                        data: [
-                          ...regularBandData.map((r) =>
-                            [{ xAxis: r.xStart }, { xAxis: r.xEnd }] as [{ xAxis: string }, { xAxis: string }]
-                          ),
-                          ...presidentialBandData.map((r) =>
-                            [
-                              { xAxis: r.xStart, itemStyle: { color: withAlphaHsl(muted, PresidentialBandOpacity), borderColor: "transparent" } },
-                              { xAxis: r.xEnd },
-                            ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }]
-                          ),
-                          ...(regimeArea
-                            ? [
-                                [
-                                  {
-                                    xAxis: regimeArea.xStart,
-                                    itemStyle: { color: withAlphaHsl(muted, 0.04), borderColor: "transparent" },
-                                  },
-                                  { xAxis: regimeArea.xEnd },
-                                ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }],
-                              ]
-                            : []),
-                          ...dataCoverageGapMarkAreaRegions,
-                        ],
-                      }
-                    : undefined,
               },
             ]
           : [
@@ -3131,7 +3197,7 @@ export function TimelineChart({
                                 [
                                   {
                                     xAxis: regimeArea.xStart,
-                                    itemStyle: { color: withAlphaHsl(muted, 0.04), borderColor: "transparent" },
+                                    itemStyle: { color: REGIME_FOCUS_MARK_AREA_FILL, borderColor: "transparent" },
                                   },
                                   { xAxis: regimeArea.xEnd },
                                 ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }],
