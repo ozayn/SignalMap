@@ -96,6 +96,40 @@ export type StudyMeta = {
   groupPlacements?: StudyGroupPlacement[];
 };
 
+/**
+ * Iran macro dashboard studies share the same panels (WDI, dual FX, M2+CPI, demand aggregates,
+ * trade and industry shares, oil rents, real wage, Gini, poverty). Keep one list so “Concepts used”
+ * stays aligned across the reconstruction window and full-history views.
+ */
+const IRAN_ECONOMY_MACRO_DASHBOARD_CONCEPTS: readonly StudyConceptId[] = [
+  "fx",
+  "cpi",
+  "inflation",
+  "nominal_vs_real",
+  "sanctions",
+  "spread",
+  "exchange_rate_regime",
+  "liquidity_m2",
+  "gdp",
+  "dutch_disease_pattern",
+  "export_dependencies",
+  "final_consumption_share",
+  "gross_capital_formation",
+  "multiple_exchange_rates",
+  "official_exchange_rate",
+  "fx_rate",
+  "capital_controls",
+  "fx_spread",
+  "derived_series",
+  "log_scale",
+  "real_wage",
+  "purchasing_power",
+  "nominal_minimum_wage",
+  "measurement_vs_reality",
+  "event_overlay",
+  "structural_break",
+];
+
 export const STUDIES: StudyMeta[] = [
   {
     id: "1",
@@ -810,18 +844,7 @@ export const STUDIES: StudyMeta[] = [
     themes: ["macro", "fx", "oil"],
     tags: ["Iran", "1368", "1376", "Rafsanjani", "reconstruction", "WDI"],
     keywords: ["سازندگی", "رفسنجانی", "تورم", "reconstruction", "NY.GDP.MKTP.KD.ZG", "FP.CPI.TOTL.ZG"],
-    concepts: [
-      "inflation",
-      "spread",
-      "nominal_vs_real",
-      "dutch_disease_pattern",
-      "gdp",
-      "export_dependencies",
-      "structural_break",
-      "fx",
-      "liquidity_m2",
-      "event_overlay",
-    ],
+    concepts: IRAN_ECONOMY_MACRO_DASHBOARD_CONCEPTS,
     observations: [
       "Annual WDI panels are shown at Gregorian year keys; use the year-axis toggle for Persian (Solar Hijri) labels where supported.",
       "Open-market FX is merged daily/annual series; official rate is annual policy/WDI—compare broad timing, not day-by-day alignment with WDI shares.",
@@ -844,15 +867,7 @@ export const STUDIES: StudyMeta[] = [
     themes: ["macro", "fx", "oil"],
     tags: ["Iran", "WDI", "history", "presidency", "focus", "comparison", "FX", "inflation"],
     keywords: ["1979", "Islamic Republic", "Rafsanjani", "Khatami", "Ahmadinejad", "Rouhani", "Raisi", "Pezeshkian", "سازندگی", "تورم"],
-    concepts: [
-      "inflation",
-      "spread",
-      "gdp",
-      "fx",
-      "liquidity_m2",
-      "event_overlay",
-      "structural_break",
-    ],
+    concepts: IRAN_ECONOMY_MACRO_DASHBOARD_CONCEPTS,
     observations: [
       "The shaded band marks your selected focus years on the same Gregorian keys as the series; axis labels can show Solar Hijri via the page toggle without changing the underlying dates.",
       "Open-market FX is shown as a calendar-year mean of the merged series; official FX is annual—use the view for era-level timing, not day-by-day alignment with WDI.",

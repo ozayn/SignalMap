@@ -35,6 +35,10 @@ import { OilPppIranDescription } from "@/components/oil-ppp-iran-description";
 import { LearningNote } from "@/components/learning-note";
 import { DataObservations } from "@/components/data-observations";
 import { ConceptsUsed } from "@/components/concepts-used";
+import {
+  PovertyHeadcountPppInfoTrigger,
+  PovertyHeadcountPppMutedNote,
+} from "@/components/poverty-chart-ppp-note";
 import { ClientOnlyAfterMount } from "@/components/client-only-after-mount";
 import { CurrentSnapshot } from "@/components/current-snapshot";
 import { IranMoneySupplyMethodology } from "@/components/studies/iran-money-supply-methodology";
@@ -6485,8 +6489,12 @@ export default function StudyDetailPage() {
                         "Broad money growth (M2) and CPI (Iran, annual %)",
                         `${faEconomic.m2Growth} و ${faEconomic.cpiInflation} (ایران، ٪ سالانه)`
                       )
-                  : isPovertyHeadcountIran
-                    ? "Poverty headcount ratio (Iran)"
+                  : isPovertyHeadcountIran ? (
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <span className="min-w-0">Poverty headcount ratio (Iran)</span>
+                      <PovertyHeadcountPppInfoTrigger isFa={isFa} />
+                    </span>
+                  )
                     : isGiniInequality
                   ? "Gini coefficient (income inequality)"
                   : isGdpIranAccountsDual
@@ -6558,6 +6566,7 @@ export default function StudyDetailPage() {
               />
             ))}
           </div>
+          {isPovertyHeadcountIran ? <PovertyHeadcountPppMutedNote isFa={isFa} className="mb-2" /> : null}
           <p className="mb-1 text-sm text-muted-foreground md:mb-3">
             {isOilTradeNetwork
               ? "Oil trade flows between major exporters and importers. Nodes are countries/regions; edge width reflects trade volume (thousand barrels/day). Drag nodes, zoom, pan."
@@ -11350,10 +11359,14 @@ export default function StudyDetailPage() {
                     </CardContent>
                   </Card>
                   <Card className="chart-card border-border md:col-span-2">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base font-semibold">
-                        {L(isFa, "Poverty headcount", "نرخ فقر")}
-                      </CardTitle>
+                    <CardHeader className="pb-2 space-y-1.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <CardTitle className="text-base font-semibold flex-1 min-w-0 mb-0">
+                          {L(isFa, "Poverty headcount", "نرخ فقر")}
+                        </CardTitle>
+                        <PovertyHeadcountPppInfoTrigger isFa={isFa} />
+                      </div>
+                      <PovertyHeadcountPppMutedNote isFa={isFa} />
                       <p className="text-xs text-muted-foreground max-w-3xl">
                         {L(
                           isFa,

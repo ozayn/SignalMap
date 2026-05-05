@@ -11,6 +11,10 @@ import {
   iranFxLevelsHasNonPositiveValuesInRange,
   iranFxLevelsSuggestLogDefaultInRange,
 } from "@/lib/iran-fx-chart-log-default";
+import {
+  PovertyHeadcountPppInfoTrigger,
+  PovertyHeadcountPppMutedNote,
+} from "@/components/poverty-chart-ppp-note";
 
 type Point = { date: string; value: number };
 
@@ -929,8 +933,14 @@ export function IranEconomyPeriodComparisonPanels({
             </CardContent>
           </Card>
           <Card className="chart-card border-border md:col-span-2">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base font-semibold">{L(isFa, "Poverty headcount", "نرخ فقر")}</CardTitle>
+            <CardHeader className="pb-2 space-y-1.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <CardTitle className="text-base font-semibold flex-1 min-w-0 mb-0">
+                  {L(isFa, "Poverty headcount", "نرخ فقر")}
+                </CardTitle>
+                <PovertyHeadcountPppInfoTrigger isFa={isFa} />
+              </div>
+              <PovertyHeadcountPppMutedNote isFa={isFa} />
               <p className="text-xs text-muted-foreground max-w-3xl">
                 {L(
                   isFa,
