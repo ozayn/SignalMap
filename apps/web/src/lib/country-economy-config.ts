@@ -75,11 +75,48 @@ export const COUNTRY_ECONOMY_CONFIGS: CountryEconomyConfig[] = [
     ],
     overlayBands: [
       {
+        id: "usa-recession-1973-1975",
+        startYear: 1973,
+        endYear: 1975,
+        fill: "rgba(148, 163, 184, 0.10)",
+        markAreaLabel: "U.S. recession",
+      },
+      {
+        id: "usa-recession-1980",
+        startYear: 1980,
+        endYear: 1980,
+        fill: "rgba(148, 163, 184, 0.10)",
+      },
+      {
+        id: "usa-recession-1981-1982",
+        startYear: 1981,
+        endYear: 1982,
+        fill: "rgba(148, 163, 184, 0.10)",
+      },
+      {
+        id: "usa-recession-1990-1991",
+        startYear: 1990,
+        endYear: 1991,
+        fill: "rgba(148, 163, 184, 0.10)",
+      },
+      {
+        id: "usa-recession-2001",
+        startYear: 2001,
+        endYear: 2001,
+        fill: "rgba(148, 163, 184, 0.10)",
+      },
+      {
         id: "usa-gfc-2008",
         startYear: 2008,
         endYear: 2009,
         fill: "rgba(148, 163, 184, 0.12)",
         markAreaLabel: "2008 Financial Crisis",
+      },
+      {
+        id: "usa-recession-2020",
+        startYear: 2020,
+        endYear: 2020,
+        fill: "rgba(148, 163, 184, 0.10)",
       },
     ],
   },

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TimelineChart, type TimelineEvent } from "@/components/timeline-chart";
+import { TimelineChart, type ChartSeries, type TimelineEvent } from "@/components/timeline-chart";
 import type { ChartPeriodOverlayBandInput } from "@/lib/iran-iraq-war-chart-overlay";
 import { resolvePresetEndYear, type CountryFocusPreset, type CountryRangePreset } from "@/lib/country-economy-config";
 import { DataObservations } from "@/components/data-observations";
@@ -64,6 +64,7 @@ export function CountryEconomyStudy({
   hasFX,
   defaultFxLog,
 }: Props) {
+  const isUsa = countryCode.toUpperCase() === "USA";
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<CountryEconomyBundle | null>(null);
@@ -74,18 +75,35 @@ export function CountryEconomyStudy({
   const [gdpMode, setGdpMode] = useState<GdpMode>("nominal");
   const [fxLog, setFxLog] = useState(defaultFxLog);
 
-  const selectedRange = useMemo(
-    () => rangePresets.find((r) => r.id === rangePresetId) ?? rangePresets[0],
-    [rangePresetId, rangePresets]
+  const selectedRange = useMemo(() => rangePresets.find((r) => r.id === rangePresetId) ?? rangePresets[0], [rangePresetId, rangePresets]);
+  const rangeStartYear = selectedRange?.startYear ?? 1960;
+  const rangeEndYear = resolvePresetEndYear(selectedRange?.endYear ?? null);
+  const availableFocusPresets = useMemo(
+    () =>
+      focusPresets.filter((f) => {
+        const fy0 = f.startYear;
+        const fy1 = resolvePresetEndYear(f.endYear);
+        return fy0 <= rangeEndYear && fy1 >= rangeStartYear;
+      }),
+    [focusPresets, rangeStartYear, rangeEndYear]
   );
   const selectedFocus = useMemo(
-    () => focusPresets.find((f) => f.id === focusPresetId) ?? focusPresets[0],
-    [focusPresetId, focusPresets]
+    () => focusPresets.find((f) => f.id === focusPresetId) ?? availableFocusPresets[0] ?? focusPresets[0],
+    [focusPresetId, focusPresets, availableFocusPresets]
   );
   const rangeStart = `${selectedRange?.startYear ?? 1960}-01-01`;
   const rangeEnd = `${resolvePresetEndYear(selectedRange?.endYear ?? null)}-12-31`;
   const focusStart = `${selectedFocus?.startYear ?? 1960}-01-01`;
   const focusEnd = `${resolvePresetEndYear(selectedFocus?.endYear ?? null)}-12-31`;
+
+  useEffect(() => {
+    if (!selectedFocus) return;
+    const fy0 = selectedFocus.startYear;
+    const fy1 = resolvePresetEndYear(selectedFocus.endYear);
+    if (fy0 <= rangeEndYear && fy1 >= rangeStartYear) return;
+    const fallback = availableFocusPresets[0] ?? focusPresets[0];
+    if (fallback && fallback.id !== focusPresetId) setFocusPresetId(fallback.id);
+  }, [selectedFocus, rangeStartYear, rangeEndYear, availableFocusPresets, focusPresets, focusPresetId]);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -139,6 +157,34 @@ export function CountryEconomyStudy({
   const povertyExtreme = series.poverty_extreme ?? [];
   const povertyLmic = series.poverty_lmic ?? [];
   const fx = series.fx_official_lcu_per_usd ?? [];
+  const unemployment = (series.us_unemployment_rate_pct?.length ? series.us_unemployment_rate_pct : series.unemployment_rate_pct) ?? [];
+  const governmentDebtPctGdp =
+    (series.us_federal_debt_pct_gdp?.length ? series.us_federal_debt_pct_gdp : series.government_debt_pct_gdp) ?? [];
+  const federalFundsRate = series.us_federal_funds_rate_pct ?? [];
+  const realMedianIncome = series.us_real_median_household_income_usd ?? [];
+  const hasUsNativeMacro =
+    unemployment.length > 0 || governmentDebtPctGdp.length > 0 || federalFundsRate.length > 0 || realMedianIncome.length > 0;
+  const usMacroSeries = useMemo<ChartSeries[]>(
+    () =>
+      [
+        { key: "unemployment", label: "Unemployment rate", unit: "%", yAxisIndex: 0 as const, points: unemployment },
+        {
+          key: "federal_debt",
+          label: "Federal debt (% GDP)",
+          unit: "% of GDP",
+          yAxisIndex: 0 as const,
+          points: governmentDebtPctGdp,
+        },
+        {
+          key: "fed_funds",
+          label: "Federal funds rate",
+          unit: "%",
+          yAxisIndex: 0 as const,
+          points: federalFundsRate,
+        },
+      ].filter((s) => s.points.length > 0),
+    [unemployment, governmentDebtPctGdp, federalFundsRate]
+  );
 
   const gdpSplitNominal = useMemo(() => deriveGdpOilSplit(gdpNominal, oilRents), [gdpNominal, oilRents]);
   const gdpSplitReal = useMemo(() => deriveGdpOilSplit(gdpReal, oilRents), [gdpReal, oilRents]);
@@ -203,7 +249,9 @@ export function CountryEconomyStudy({
     const rows: string[] = [
       `The charts use an outer window of ${selectedRange?.label ?? "the selected range"} and a shaded focus period of ${selectedFocus?.label ?? "the selected preset"}.`,
       "CPI inflation (red), GDP growth (blue), and resource-rent shares are plotted as annual WDI observations; gaps are left as gaps.",
-      "Nominal/real demand and GDP decomposition toggles keep the same x-axis window so period comparisons stay aligned.",
+      isUsa
+        ? "Nominal/real demand aggregates are the main GDP-level view for the United States; focus shading always remains inside the visible range."
+        : "Nominal/real demand and GDP decomposition toggles keep the same x-axis window so period comparisons stay aligned.",
     ];
     if (missingSparse.length > 0) {
       rows.push(
@@ -214,6 +262,7 @@ export function CountryEconomyStudy({
   }, [
     selectedRange?.label,
     selectedFocus?.label,
+    isUsa,
     gini.length,
     povertyExtreme.length,
     povertyLmic.length,
@@ -320,8 +369,38 @@ export function CountryEconomyStudy({
         unitLabel: "LCU per US$",
       });
     }
+    if (isUsa) {
+      items.push({
+        label: "U.S. labor market",
+        sourceName: source?.name ?? "FRED / World Bank",
+        sourceUrl: "https://fred.stlouisfed.org/series/UNRATE",
+        sourceDetail: "UNRATE (annual mean in this page) or WDI SL.UEM.TOTL.ZS",
+        unitLabel: "%",
+      });
+      items.push({
+        label: "U.S. public debt",
+        sourceName: source?.name ?? "FRED / World Bank",
+        sourceUrl: "https://fred.stlouisfed.org/series/GFDEGDQ188S",
+        sourceDetail: "GFDEGDQ188S (annual mean in this page) or WDI GC.DOD.TOTL.GD.ZS",
+        unitLabel: "% of GDP",
+      });
+      items.push({
+        label: "Federal funds rate",
+        sourceName: source?.name ?? "FRED",
+        sourceUrl: "https://fred.stlouisfed.org/series/FEDFUNDS",
+        sourceDetail: "FEDFUNDS (annual mean in this page)",
+        unitLabel: "%",
+      });
+      items.push({
+        label: "Real median household income",
+        sourceName: source?.name ?? "FRED",
+        sourceUrl: "https://fred.stlouisfed.org/series/MEHOINUSA672N",
+        sourceDetail: "MEHOINUSA672N (annual)",
+        unitLabel: "US$ (real)",
+      });
+    }
     return items;
-  }, [source, countryName, countryCode, indicatorIds, oilRents.length, gasRents.length, hasFX]);
+  }, [source, countryName, countryCode, indicatorIds, oilRents.length, gasRents.length, hasFX, isUsa]);
 
   const aiParagraphs = useMemo(() => {
     const focusRange = `${selectedFocus?.label ?? "selected focus period"}`;
@@ -329,14 +408,16 @@ export function CountryEconomyStudy({
     if (gini.length === 0) sparseNotes.push("Gini coverage is missing in the current window");
     if (povertyExtreme.length === 0 && povertyLmic.length === 0) sparseNotes.push("poverty headcount is sparse or unavailable");
     if (hasFX && fx.length === 0) sparseNotes.push("FX data is unavailable");
+    if (isUsa && !hasUsNativeMacro) sparseNotes.push("U.S.-native macro add-ons are unavailable for this range");
     return [
       `Within ${focusRange}, compare inflation, growth, demand composition, and distribution indicators as descriptive co-movements rather than causal effects.`,
+      `The selected focus period is clipped to the active range (${selectedRange?.label ?? "selected range"}) so shaded years always match the visible window.`,
       "Interpret nominal and real toggles as two lenses on the same period: nominal reflects current-price levels, while real controls for price-level drift.",
       sparseNotes.length
         ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
         : "Data caveat: this view uses annual published observations; apparent jumps can reflect sparse publication frequency, not necessarily sudden structural breaks.",
     ];
-  }, [selectedFocus?.label, gini.length, povertyExtreme.length, povertyLmic.length, hasFX, fx.length]);
+  }, [selectedFocus?.label, selectedRange?.label, gini.length, povertyExtreme.length, povertyLmic.length, hasFX, fx.length, isUsa, hasUsNativeMacro]);
 
   const commonProps = {
     timeRange: [rangeStart, rangeEnd] as [string, string],
@@ -387,7 +468,11 @@ export function CountryEconomyStudy({
                 onChange={(e) => setFocusPresetId(e.target.value)}
               >
                 {focusPresets.map((f) => (
-                  <option key={f.id} value={f.id}>
+                  <option
+                    key={f.id}
+                    value={f.id}
+                    disabled={!availableFocusPresets.some((af) => af.id === f.id)}
+                  >
                     {f.label}
                   </option>
                 ))}
@@ -404,6 +489,9 @@ export function CountryEconomyStudy({
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             Overlays are contextual markers only and do not imply causality.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Focus presets outside the selected range are disabled to keep shaded periods consistent with visible years.
           </p>
         </CardContent>
       </Card>
@@ -450,6 +538,7 @@ export function CountryEconomyStudy({
             </CardContent>
           </Card>
 
+          {!isUsa ? (
           <Card className="border-border md:col-span-2">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">3. GDP decomposition (oil vs non-oil)</CardTitle>
@@ -500,10 +589,13 @@ export function CountryEconomyStudy({
               )}
             </CardContent>
           </Card>
+          ) : null}
 
           <Card className="border-border md:col-span-2">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">4. Consumption, investment, and GDP</CardTitle>
+              <CardTitle className="text-base">
+                {isUsa ? "3. GDP composition / demand aggregates" : "4. Consumption, investment, and GDP"}
+              </CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
               <div className="mb-3 inline-flex rounded-md border border-border bg-background p-0.5">
@@ -537,6 +629,50 @@ export function CountryEconomyStudy({
             </CardContent>
           </Card>
 
+          {isUsa && hasUsNativeMacro ? (
+            <>
+              <Card className="border-border md:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">4. U.S. macro conditions (native indicators)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {unemployment.length > 0 || governmentDebtPctGdp.length > 0 || federalFundsRate.length > 0 ? (
+                    <TimelineChart
+                      data={[]}
+                      valueKey="value"
+                      label="U.S. macro conditions"
+                      multiSeries={usMacroSeries}
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                  )}
+                </CardContent>
+              </Card>
+              <Card className="border-border md:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">5. Real median household income</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {realMedianIncome.length > 0 ? (
+                    <TimelineChart
+                      data={realMedianIncome}
+                      valueKey="value"
+                      label="Real median household income"
+                      unit="US$ (real)"
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          ) : null}
+
+          {!isUsa ? (
           <Card className="border-border">
             <CardHeader className="pb-2"><CardTitle className="text-base">5. Oil rents (% of GDP)</CardTitle></CardHeader>
             <CardContent className="pt-0">
@@ -555,7 +691,9 @@ export function CountryEconomyStudy({
               )}
             </CardContent>
           </Card>
+          ) : null}
 
+          {!isUsa ? (
           <Card className="border-border">
             <CardHeader className="pb-2"><CardTitle className="text-base">6. Natural gas rents (% of GDP)</CardTitle></CardHeader>
             <CardContent className="pt-0">
@@ -573,6 +711,7 @@ export function CountryEconomyStudy({
               )}
             </CardContent>
           </Card>
+          ) : null}
 
           {hasFX ? (
             <Card className="border-border md:col-span-2">
@@ -710,6 +849,77 @@ export function CountryEconomyStudy({
               )}
             </CardContent>
           </Card>
+          {isUsa ? (
+            <Card className="border-border md:col-span-2">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Optional: Energy/resource rents and oil-linked decomposition</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <details className="study-interpretation">
+                  <summary>
+                    <span>Energy/resource rents (context-only)</span>
+                    <span className="study-interpretation-chevron" aria-hidden>
+                      ▾
+                    </span>
+                  </summary>
+                  <div className="study-interpretation-body space-y-4">
+                    {oilRents.length > 0 ? (
+                      <TimelineChart
+                        data={oilRents}
+                        valueKey="value"
+                        label="Oil rents"
+                        unit="% of GDP"
+                        seriesColor="#f97316"
+                        forceTimeAxis
+                        {...commonProps}
+                      />
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Oil rents unavailable for this range.</p>
+                    )}
+                    {gasRents.length > 0 ? (
+                      <TimelineChart
+                        data={gasRents}
+                        valueKey="value"
+                        label="Natural gas rents"
+                        unit="% of GDP"
+                        forceTimeAxis
+                        {...commonProps}
+                      />
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Natural gas rents unavailable for this range.</p>
+                    )}
+                    {gdpSplit.oil.length > 0 && gdpSplit.nonOil.length > 0 ? (
+                      <TimelineChart
+                        data={[]}
+                        valueKey="value"
+                        label="GDP decomposition (optional context)"
+                        multiSeries={[
+                          {
+                            key: "oil",
+                            label: "Oil GDP proxy",
+                            unit: gdpMode === "real" ? "constant 2015 US$" : "current US$",
+                            yAxisIndex: 0,
+                            points: gdpSplit.oil,
+                          },
+                          {
+                            key: "non_oil",
+                            label: "Non-oil GDP proxy",
+                            unit: gdpMode === "real" ? "constant 2015 US$" : "current US$",
+                            yAxisIndex: 0,
+                            points: gdpSplit.nonOil,
+                          },
+                        ]}
+                        multiSeriesValueFormat="gdp_absolute"
+                        {...commonProps}
+                      />
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Oil-linked decomposition unavailable for this range.</p>
+                    )}
+                  </div>
+                </details>
+              </CardContent>
+            </Card>
+          ) : null}
           </div>
           <DataObservations observations={observations} />
           <LearningNote title="How to read these charts" sections={learningSections} />

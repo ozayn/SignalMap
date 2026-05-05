@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import csv
 import logging
+from io import StringIO
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
+
+import httpx
 
 from signalmap.sources.world_bank_national_accounts import fetch_wdi_annual_indicator
 
@@ -29,8 +33,18 @@ INDICATORS: dict[str, str] = {
     "gini": "SI.POV.GINI",
     "poverty_extreme": "SI.POV.DDAY",
     "poverty_lmic": "SI.POV.LMIC",
+    "unemployment_rate_pct": "SL.UEM.TOTL.ZS",
+    "government_debt_pct_gdp": "GC.DOD.TOTL.GD.ZS",
     # Official exchange rate (LCU per US$, period average)
     "fx_official_lcu_per_usd": "PA.NUS.FCRF",
+}
+
+FRED_GRAPH_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv"
+FRED_SERIES_US = {
+    "us_unemployment_rate_pct": ("UNRATE", "monthly_mean"),
+    "us_federal_funds_rate_pct": ("FEDFUNDS", "monthly_mean"),
+    "us_federal_debt_pct_gdp": ("GFDEGDQ188S", "quarterly_mean"),
+    "us_real_median_household_income_usd": ("MEHOINUSA672N", "annual_level"),
 }
 
 
@@ -52,6 +66,52 @@ def _rows_to_points(rows: list[dict[str, Any]], start_year: int, end_year: int, 
     return out
 
 
+def _fetch_fred_graph_csv_rows(series_id: str) -> list[tuple[int, float]]:
+    try:
+        with httpx.Client(timeout=20.0) as client:
+            r = client.get(FRED_GRAPH_CSV, params={"id": series_id})
+            r.raise_for_status()
+    except Exception as e:
+        raise ValueError(f"FRED {series_id} fetch failed: {e}") from e
+
+    rows: list[tuple[int, float]] = []
+    reader = csv.DictReader(StringIO(r.text))
+    value_col = series_id
+    for rec in reader:
+        ds = (rec.get("DATE") or rec.get("date") or "").strip()
+        vs = (rec.get(value_col) or rec.get("VALUE") or "").strip()
+        if not ds or vs in ("", ".", "NaN"):
+            continue
+        try:
+            year = int(ds[:4])
+            val = float(vs)
+        except Exception:
+            continue
+        rows.append((year, val))
+    return rows
+
+
+def _fred_rows_to_points(
+    rows: list[tuple[int, float]], start_year: int, end_year: int, mode: str
+) -> list[dict[str, float | str]]:
+    by_year: dict[int, list[float]] = {}
+    for y, v in rows:
+        if y < start_year or y > end_year:
+            continue
+        by_year.setdefault(y, []).append(v)
+    out: list[dict[str, float | str]] = []
+    for y in sorted(by_year):
+        vals = by_year[y]
+        if not vals:
+            continue
+        if mode in ("monthly_mean", "quarterly_mean"):
+            value = round(sum(vals) / len(vals), 3)
+        else:
+            value = round(vals[-1], 2)
+        out.append({"date": f"{y}-01-01", "value": value})
+    return out
+
+
 def fetch_country_economy_bundle(country_iso3: str, start_year: int, end_year: int) -> dict[str, Any]:
     iso3 = country_iso3.strip().upper()
     series: dict[str, list[dict[str, float | str]]] = {}
@@ -69,6 +129,15 @@ def fetch_country_economy_bundle(country_iso3: str, start_year: int, end_year: i
             series[key] = _rows_to_points(rows, start_year, end_year, decimals=decimals)
             if err:
                 series_warnings[key] = err
+
+    if iso3 == "USA":
+        for key, (series_id, mode) in FRED_SERIES_US.items():
+            try:
+                fred_rows = _fetch_fred_graph_csv_rows(series_id)
+                series[key] = _fred_rows_to_points(fred_rows, start_year, end_year, mode)
+            except Exception as e:
+                series[key] = []
+                series_warnings[key] = str(e)
 
     out: dict[str, Any] = {
         "series": series,
