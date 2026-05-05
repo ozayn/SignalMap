@@ -100,6 +100,25 @@ function isTomanFxUnit(unit: string | undefined): boolean {
   return unit.includes("تومان");
 }
 
+/** Avoid ``Label (%)`` + unit ``%`` → ``(%) (%)`` in axis titles and compact captions. */
+function axisLabelAlreadyCarriesUnitParen(label: string, unit: string | undefined): boolean {
+  if (!unit?.trim()) return true;
+  const u = unit.trim();
+  if (label.includes(`(${u})`)) return true;
+  if (!/%|٪/.test(u)) return false;
+  if (/\([^)]*%[^)]*\)/.test(label)) return true;
+  if (/\([^)]*٪[^)]*\)/.test(label)) return true;
+  return false;
+}
+
+function appendDisplayUnitIfAbsent(label: string, unit: string | undefined): string {
+  const t = label.trim();
+  if (!unit?.trim()) return t;
+  const u = unit.trim();
+  if (axisLabelAlreadyCarriesUnitParen(t, u)) return t;
+  return `${t} (${u})`;
+}
+
 /** One-line y-axis headline for a stacked ECharts y-axis group (kept in sync with in-chart naming). */
 function multiSeriesGroupYHeadline(
   seriesOnAxis: ChartSeries[],
@@ -135,7 +154,7 @@ function multiSeriesGroupYHeadline(
           : "Gold (USD/oz)"
         : allSameUnit && first.unit
           ? first.unit
-          : first.unit && first.label.includes(`(${first.unit})`)
+          : first.unit && axisLabelAlreadyCarriesUnitParen(first.label, first.unit)
             ? first.label
             : first.unit
               ? `${first.label} (${first.unit})`
@@ -299,6 +318,13 @@ type TimelineChartProps = {
   referenceLine?: { value: number; label?: string };
   /** Lightly shaded band for a descriptive period (e.g. approximate structural break). */
   regimeArea?: { xStart: string; xEnd: string; label?: string };
+  /**
+   * Muted x-band after the last published observation (e.g. WDI poverty ends before ``timeRange``).
+   * Visual only — values are not interpolated.
+   */
+  dataCoverageGapMarkArea?: { xStart: string; xEnd: string };
+  /** Vertical dashed rule at the last year with data; label should already match chart locale. */
+  dataCoverageLastMarkLine?: { xAxis: string; label: string };
   /** Inclusive Gregorian years; tooltip adds `focusHoverHint` when the hovered point falls in this range. */
   focusGregorianYearRange?: { startYear: number; endYear: number };
   focusHoverHint?: { en: string; fa: string };
@@ -834,6 +860,8 @@ export function TimelineChart({
   chartLineRole = "primary",
   referenceLine,
   regimeArea,
+  dataCoverageGapMarkArea,
+  dataCoverageLastMarkLine,
   focusGregorianYearRange,
   focusHoverHint,
   useTimeRangeForDateAxis = false,
@@ -1363,8 +1391,8 @@ export function TimelineChart({
     /** Extra grid space when many series may wrap to several legend rows (plain + width legend). */
     const multiSeriesLegendBottomPctRaw = hasMultiSeries
       ? useGroupedMultiSeriesLegend
-        ? "11%"
-        : `${Math.min(28, Math.round(12 + Math.ceil(multiSeriesCount / 3) * 3.5))}%`
+        ? "13%"
+        : `${Math.min(32, Math.round(14 + Math.ceil(multiSeriesCount / 3) * 3.5))}%`
       : "11%";
     const tightenPct = (pct: string, sub: number) => {
       const m = pct.match(/^([\d.]+)%$/);
@@ -1479,12 +1507,20 @@ export function TimelineChart({
               : timeRange
                 ? sparseDatesFromRange(timeRange[0], timeRange[1])
                 : [];
+
     if (hasMultiSeries && timeRange && dates.length > 0) {
       const [, rangeEnd] = timeRange;
       const lastYear = dates[dates.length - 1]!.slice(0, 4);
       if (lastYear < rangeEnd.slice(0, 4)) dates = [...dates.filter((d) => d < rangeEnd), rangeEnd].sort();
     }
     const values = hasData ? dataResolved.map((d) => d[valueKey] as number) : [];
+    const nonNullSingleSeriesCount =
+      hasData && !hasMultiSeries ? values.filter((v) => typeof v === "number" && Number.isFinite(v)).length : 0;
+    const useComfortableSingleSeriesSymbols =
+      hasData &&
+      !hasMultiSeries &&
+      nonNullSingleSeriesCount > 0 &&
+      nonNullSingleSeriesCount < Math.max(5, Math.floor(dates.length * 0.35));
 
     const oilByDate = new Map(oilPointsResolved.map((p) => [p.date, p.value]));
     const oilDates = [...oilByDate.keys()].sort();
@@ -1796,6 +1832,40 @@ export function TimelineChart({
     };
 
     const markLineSeriesItems = markLineDataForRender.map((d) => verticalMarkLineItem(d));
+
+    const dataCoverageGapMarkAreaRegions: Array<[{ xAxis: string; itemStyle?: object }, { xAxis: string }]> =
+      dataCoverageGapMarkArea &&
+      dataCoverageGapMarkArea.xStart &&
+      dataCoverageGapMarkArea.xEnd &&
+      dataCoverageGapMarkArea.xStart < dataCoverageGapMarkArea.xEnd
+        ? [
+            [
+              {
+                xAxis: dataCoverageGapMarkArea.xStart,
+                itemStyle: { color: withAlphaHsl(muted, 0.075), borderColor: "transparent" },
+              },
+              { xAxis: dataCoverageGapMarkArea.xEnd },
+            ],
+          ]
+        : [];
+
+    const dataCoverageMarkLineExtras = dataCoverageLastMarkLine
+      ? [
+          {
+            xAxis: dataCoverageLastMarkLine.xAxis,
+            label: {
+              show: true,
+              formatter: localizeChartNumericDisplayString(dataCoverageLastMarkLine.label, chartNumeralLocale),
+              color: mutedFg,
+              fontSize: 9,
+              position: "end" as const,
+              rotate: 90,
+              distance: 6,
+            },
+            lineStyle: { color: withAlphaHsl(mutedFg, 0.5), width: 1, type: "dashed" as const },
+          },
+        ]
+      : [];
 
     const rangeBandData: { xStart: string; xEnd: string; event: TimelineEvent }[] = [];
     const presidentialBandData: { xStart: string; xEnd: string; event: TimelineEvent }[] = [];
@@ -2393,41 +2463,11 @@ export function TimelineChart({
               const isRight = yAxisIndex >= 1;
               const useLog = yAxisLog && isLeft;
               const rightOffset = hasMultipleRight && yAxisIndex === 2 ? 90 : 0;
-              const allSameUnit = seriesOnAxis.length > 1 && seriesOnAxis.every((s) => s.unit === first.unit);
-              const unitFx = first.unit?.trim() ?? "";
-              /** Long FX legend text often puts sources inside `(…)`; keep the y-axis to headline + unit only. */
-              const compactTomanAxisHeadline = (): string | null => {
-                if (!isTomanFxUnit(unitFx) || seriesOnAxis.length !== 1) return null;
-                const lab = first.label.trim();
-                const m = /^(.+?)\s*\(([\s\S]+)\)\s*$/.exec(lab);
-                if (!m) return null;
-                const inner = m[2]!.trim();
-                if (
-                  inner.length > 26 ||
-                  /[;؛]/.test(inner) ||
-                  /bonbast|rial-archive|fred|آرشیو|بان‌بست|میانگین|annual\s+pre-/i.test(inner)
-                ) {
-                  return `${m[1]!.trim()} (${unitFx})`;
-                }
-                return null;
-              };
-              const shortName =
-                first.unit?.includes("toman")
-                  ? seriesOnAxis.length > 1
-                    ? "Toman/USD"
-                    : compactTomanAxisHeadline() ?? `${first.label} (${unitFx || "toman/USD"})`
-                  : first.unit === "USD/oz"
-                    ? useLog
-                      ? "Gold (USD/oz, log scale)"
-                      : "Gold (USD/oz)"
-                    : allSameUnit && first.unit
-                      ? first.unit
-                      : first.unit && first.label.includes(`(${first.unit})`)
-                        ? first.label
-                        : first.unit
-                          ? `${first.label} (${first.unit})`
-                          : first.label;
-              const nameWithSuffix = yAxisNameSuffix ? `${shortName} ${yAxisNameSuffix}` : shortName;
+              const nameWithSuffix = multiSeriesGroupYHeadline(seriesOnAxis, {
+                yAxisLog,
+                yAxisNameSuffix,
+                yAxisIndex,
+              });
               const axisTitle =
                 multiSeriesYAxisNameOverrides?.[yAxisIndex] != null && multiSeriesYAxisNameOverrides[yAxisIndex] !== ""
                   ? multiSeriesYAxisNameOverrides[yAxisIndex]!
@@ -2702,12 +2742,13 @@ export function TimelineChart({
                 symbol: "none",
                 emphasis: { focus: "none" as const },
                 markLine:
-                  markLineDataForRender.length > 0 || referenceLine
+                  markLineDataForRender.length > 0 || referenceLine || dataCoverageMarkLineExtras.length > 0
                     ? {
                         symbol: "none",
                         silent: false,
                         data: [
                           ...markLineSeriesItems,
+                          ...dataCoverageMarkLineExtras,
                           ...(referenceLine
                             ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: localizeChartNumericDisplayString(referenceLine.label ?? "", chartNumeralLocale) }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
                             : []),
@@ -2715,7 +2756,7 @@ export function TimelineChart({
                       }
                     : undefined,
                 markArea:
-                  rangeBandData.length > 0 || sanctionsPeriods.length > 0 || regimeArea
+                  rangeBandData.length > 0 || sanctionsPeriods.length > 0 || regimeArea || dataCoverageGapMarkAreaRegions.length > 0
                     ? {
                         silent: false,
                         z: 0,
@@ -2772,6 +2813,7 @@ export function TimelineChart({
                                 ] as [{ xAxis: string; itemStyle?: object; label?: object }, { xAxis: string }],
                               ]
                             : []),
+                          ...dataCoverageGapMarkAreaRegions,
                         ],
                       }
                     : undefined,
@@ -2849,7 +2891,12 @@ export function TimelineChart({
                 data: useTimeAxis ? toTimeData(values) : values,
                 smooth: true,
                 symbol: "circle",
-                symbolSize: chartLineRole === "secondary" ? CHART_LINE_SYMBOL_SIZE_MINI : CHART_LINE_SYMBOL_SIZE_COMPACT,
+                symbolSize:
+                  chartLineRole === "secondary"
+                    ? CHART_LINE_SYMBOL_SIZE_MINI
+                    : useComfortableSingleSeriesSymbols
+                      ? CHART_LINE_SYMBOL_SIZE
+                      : CHART_LINE_SYMBOL_SIZE_COMPACT,
                 lineStyle:
                   chartLineRole === "secondary"
                     ? {
@@ -2875,6 +2922,7 @@ export function TimelineChart({
                     }),
                 emphasis: {
                   focus: "none" as const,
+                  scale: useComfortableSingleSeriesSymbols,
                   itemStyle: { opacity: 1 },
                   ...(chartLineRole === "secondary"
                     ? {}
@@ -2889,11 +2937,12 @@ export function TimelineChart({
                       }),
                 },
                 markLine:
-                  markLineDataForRender.length > 0 || referenceLine
+                  markLineDataForRender.length > 0 || referenceLine || dataCoverageMarkLineExtras.length > 0
                     ? {
                         symbol: "none",
                         data: [
                           ...markLineSeriesItems,
+                          ...dataCoverageMarkLineExtras,
                           ...(referenceLine
                             ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: localizeChartNumericDisplayString(referenceLine.label ?? "", chartNumeralLocale) }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
                             : []),
@@ -2910,7 +2959,7 @@ export function TimelineChart({
                       }
                     : undefined,
                 markArea:
-                  rangeBandData.length > 0 || regimeArea
+                  rangeBandData.length > 0 || regimeArea || dataCoverageGapMarkAreaRegions.length > 0
                     ? {
                         silent: true,
                         z: 0,
@@ -2930,6 +2979,7 @@ export function TimelineChart({
                             ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }]
                           ),
                           ...(regimeArea ? [[{ xAxis: regimeArea.xStart }, { xAxis: regimeArea.xEnd }] as [{ xAxis: string }, { xAxis: string }]] : []),
+                          ...dataCoverageGapMarkAreaRegions,
                         ],
                       }
                     : undefined,
@@ -2944,11 +2994,13 @@ export function TimelineChart({
                 symbol: "none",
                 emphasis: { focus: "none" as const },
                 markLine:
-                  !hasOil && (markLineDataForRender.length > 0 || referenceLine)
+                  !hasOil &&
+                  (markLineDataForRender.length > 0 || referenceLine || dataCoverageMarkLineExtras.length > 0)
                     ? {
                         symbol: "none",
                         data: [
                           ...markLineSeriesItems,
+                          ...dataCoverageMarkLineExtras,
                           ...(referenceLine
                             ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: localizeChartNumericDisplayString(referenceLine.label ?? "", chartNumeralLocale) }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
                             : []),
@@ -2956,7 +3008,7 @@ export function TimelineChart({
                       }
                     : undefined,
                 markArea:
-                  rangeBandData.length > 0 || regimeArea
+                  rangeBandData.length > 0 || regimeArea || dataCoverageGapMarkAreaRegions.length > 0
                     ? {
                         silent: true,
                         z: 0,
@@ -2995,6 +3047,7 @@ export function TimelineChart({
                                 ] as [{ xAxis: string; itemStyle?: object; label?: object }, { xAxis: string }],
                               ]
                             : []),
+                          ...dataCoverageGapMarkAreaRegions,
                         ],
                       }
                     : undefined,
@@ -3155,6 +3208,8 @@ export function TimelineChart({
     chartLineRole,
     referenceLine,
     regimeArea,
+    dataCoverageGapMarkArea,
+    dataCoverageLastMarkLine,
     focusGregorianYearRange,
     focusHoverHint,
     useTimeRangeForDateAxis,
@@ -3235,8 +3290,7 @@ export function TimelineChart({
     }
     if (secondSeries) {
       const hasPrimaryData = data.length > 0;
-      const leftBase =
-        (hasPrimaryData ? label : secondSeries.label) + (unit ? ` (${unit})` : "");
+      const leftBase = appendDisplayUnitIfAbsent(hasPrimaryData ? label : secondSeries.label, unit);
       const rightBase = indexComparator
         ? "Index (100)"
         : `${secondSeries.label ?? ""}${
@@ -3246,7 +3300,7 @@ export function TimelineChart({
       return localizeChartNumericDisplayString(`${leftBase} · ${rightBase}${suffix}`, numLoc);
     }
     const single =
-      label.trim() + (unit ? ` (${unit})` : "") + (yAxisNameSuffix ? ` ${yAxisNameSuffix}` : "");
+      appendDisplayUnitIfAbsent(label.trim(), unit) + (yAxisNameSuffix ? ` ${yAxisNameSuffix}` : "");
     return single.trim() ? localizeChartNumericDisplayString(single, numLoc) : "";
   }, [
     isCompact,

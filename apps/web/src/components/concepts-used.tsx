@@ -3,11 +3,16 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { StudyConceptId } from "@/lib/signalmap-concepts";
-import { resolveStudyConcepts, type ResolvedStudyConcept } from "@/lib/signalmap-concepts";
+import { resolveStudyConcepts, SIGNALMAP_CORE_CONCEPT_ORDER, type ResolvedStudyConcept } from "@/lib/signalmap-concepts";
 
 type ConceptsUsedProps = {
   conceptKeys: readonly StudyConceptId[];
   locale?: "en" | "fa";
+  /**
+   * When many concepts are listed, show core SignalMap ideas first (registry order), then the rest,
+   * so long study lists scan as categories instead of one flat row.
+   */
+  groupConceptsCoreFirst?: boolean;
 };
 
 function ConceptDetail({ c, isFa }: { c: ResolvedStudyConcept; isFa: boolean }) {
@@ -59,7 +64,11 @@ function ConceptDetail({ c, isFa }: { c: ResolvedStudyConcept; isFa: boolean }) 
   );
 }
 
-export function ConceptsUsed({ conceptKeys, locale = "en" }: ConceptsUsedProps) {
+export function ConceptsUsed({
+  conceptKeys,
+  locale = "en",
+  groupConceptsCoreFirst = false,
+}: ConceptsUsedProps) {
   const isFa = locale === "fa";
   const [sectionOpen, setSectionOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -70,6 +79,26 @@ export function ConceptsUsed({ conceptKeys, locale = "en" }: ConceptsUsedProps) 
   if (concepts.length === 0) return null;
 
   const expanded = expandedId ? concepts.find((c) => c.id === expandedId) ?? null : null;
+
+  const idSet = new Set(concepts.map((c) => c.id));
+  const coreConcepts = groupConceptsCoreFirst
+    ? SIGNALMAP_CORE_CONCEPT_ORDER.filter((id) => idSet.has(id as StudyConceptId)).map(
+        (id) => concepts.find((c) => c.id === id)!
+      )
+    : [];
+  const coreIds = new Set(coreConcepts.map((c) => c.id));
+  const moreConcepts = groupConceptsCoreFirst ? concepts.filter((c) => !coreIds.has(c.id)) : concepts;
+
+  type ChipRow = { key: string; heading: string | null; items: ResolvedStudyConcept[] };
+  const chipRows: ChipRow[] = (() => {
+    if (!groupConceptsCoreFirst) return [{ key: "all", heading: null, items: concepts }];
+    if (coreConcepts.length === 0) return [{ key: "all", heading: null, items: concepts }];
+    if (moreConcepts.length === 0) return [{ key: "all", heading: null, items: coreConcepts }];
+    return [
+      { key: "core", heading: isFa ? "مفاهیم پایه" : "Core ideas", items: coreConcepts },
+      { key: "more", heading: isFa ? "سایر مفاهیم" : "Also used here", items: moreConcepts },
+    ];
+  })();
 
   return (
     <div
@@ -96,29 +125,40 @@ export function ConceptsUsed({ conceptKeys, locale = "en" }: ConceptsUsedProps) 
       </button>
       {sectionOpen && (
         <div className="space-y-3 border-t border-border/45 px-[0.75rem] pb-3 pt-2.5 sm:px-3.5">
-          <div className="flex flex-wrap gap-1.5" role="tablist" aria-label={isFa ? "مفاهیم" : "Concepts"}>
-            {concepts.map((c) => {
-              const active = expandedId === c.id;
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => {
-                    setExpandedId((x) => (x === c.id ? null : c.id));
-                  }}
-                  className={cn(
-                    "max-w-full rounded-full border px-2.5 py-1 text-left text-[0.75rem] font-medium leading-snug transition-colors",
-                    active
-                      ? "border-foreground/25 bg-muted/50 text-foreground"
-                      : "border-border/60 bg-background/30 text-muted-foreground hover:border-border hover:bg-muted/30 hover:text-foreground"
-                  )}
-                >
-                  {c.title}
-                </button>
-              );
-            })}
+          <div className="space-y-2.5" role="tablist" aria-label={isFa ? "مفاهیم" : "Concepts"}>
+            {chipRows.map((row) => (
+              <div key={row.key} className="space-y-1.5">
+                {row.heading ? (
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground/90">
+                    {row.heading}
+                  </p>
+                ) : null}
+                <div className="flex flex-wrap gap-1.5">
+                  {row.items.map((c) => {
+                    const active = expandedId === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => {
+                          setExpandedId((x) => (x === c.id ? null : c.id));
+                        }}
+                        className={cn(
+                          "max-w-full rounded-full border px-2.5 py-1 text-left text-[0.75rem] font-medium leading-snug transition-colors",
+                          active
+                            ? "border-foreground/25 bg-muted/50 text-foreground"
+                            : "border-border/60 bg-background/30 text-muted-foreground hover:border-border hover:bg-muted/30 hover:text-foreground"
+                        )}
+                      >
+                        {c.title}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
           {expanded ? (
             <div

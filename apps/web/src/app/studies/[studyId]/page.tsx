@@ -43,6 +43,7 @@ import { ClientOnlyAfterMount } from "@/components/client-only-after-mount";
 import { CurrentSnapshot } from "@/components/current-snapshot";
 import { IranMoneySupplyMethodology } from "@/components/studies/iran-money-supply-methodology";
 import { InSimpleTerms } from "@/components/in-simple-terms";
+import { StudyAiInterpretation } from "@/components/study-ai-interpretation";
 import { IranEconomyPeriodComparisonPanels } from "@/components/studies/iran-economy-period-comparison-panels";
 import { EventsTimeline, type TimelineEvent } from "@/components/events-timeline";
 import { SignalMapBandTimeline } from "@/components/signalmap-band-timeline";
@@ -77,6 +78,11 @@ import {
   moneySupplyM2LearningSections,
   povertyLearningSections,
 } from "@/lib/wdi-macro-studies-learning";
+import { buildIranMacroDashboardInterpretation } from "@/lib/iran-macro-ai-interpretation";
+import {
+  buildPovertyHeadcountCoverageExtras,
+  buildSparseWdiLineCoverageExtras,
+} from "@/lib/poverty-chart-data-coverage";
 import {
   ISI_COUNTRY_KEYS,
   type IsiCountryKey,
@@ -1527,6 +1533,89 @@ export default function StudyDetailPage() {
       label: L(isFa, "Rafsanjani", "رفسنجانی"),
     };
   }, [isIranEconomyReconstruction1368, reconstructionTimeRange, isFa]);
+
+  const reconstructionGregorianYearBounds = useMemo(() => {
+    if (!reconstructionTimeRange) return { start: 1989, end: 1997 };
+    const a = parseInt(reconstructionTimeRange[0].slice(0, 4), 10);
+    const b = parseInt(reconstructionTimeRange[1].slice(0, 4), 10);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return { start: 1989, end: 1997 };
+    return { start: Math.min(a, b), end: Math.max(a, b) };
+  }, [reconstructionTimeRange]);
+
+  const recoPovertyCoverageExtras = useMemo(() => {
+    if (!isIranEconomyReconstruction1368) return null;
+    if (!reconstructionTimeRange?.[0] || !reconstructionTimeRange?.[1]) return null;
+    return buildPovertyHeadcountCoverageExtras(
+      recoWelfarePovertyDdayPoints,
+      recoWelfarePovertyLmicPoints,
+      reconstructionTimeRange,
+      reconstructionGregorianYearBounds.end
+    );
+  }, [
+    isIranEconomyReconstruction1368,
+    reconstructionTimeRange,
+    recoWelfarePovertyDdayPoints,
+    recoWelfarePovertyLmicPoints,
+    reconstructionGregorianYearBounds.end,
+  ]);
+
+  const recoGiniCoverageExtras = useMemo(() => {
+    if (!isIranEconomyReconstruction1368) return null;
+    if (!reconstructionTimeRange?.[0] || !reconstructionTimeRange?.[1]) return null;
+    return buildSparseWdiLineCoverageExtras(
+      recoWelfareGiniIranPoints,
+      reconstructionTimeRange,
+      reconstructionGregorianYearBounds.end
+    );
+  }, [
+    isIranEconomyReconstruction1368,
+    reconstructionTimeRange,
+    recoWelfareGiniIranPoints,
+    reconstructionGregorianYearBounds.end,
+  ]);
+
+  const iranMacroAiInterpretationParagraphs = useMemo(() => {
+    if (!isIranEconomyMacroDashboard) return null;
+    if (
+      recoLoading &&
+      !recoLoadFailed &&
+      recoInflationIranPoints.length === 0 &&
+      recoGdpGrowthPoints.length === 0
+    ) {
+      return null;
+    }
+    const outer = isIranEconomyPeriodComparison ? ipcOuterResolved : reconstructionGregorianYearBounds;
+    const focus = isIranEconomyPeriodComparison ? ipcFocusResolved : reconstructionGregorianYearBounds;
+    const focusLabel = isIranEconomyReconstruction1368
+      ? L(isFa, "Rafsanjani", "رفسنجانی")
+      : L(isFa, ipcBandLabelEn, ipcBandLabelFa);
+    return buildIranMacroDashboardInterpretation({
+      locale: isFa ? "fa" : "en",
+      loadFailed: recoLoadFailed,
+      outer,
+      focus,
+      focusLabel,
+      inflation: recoInflationIranPoints,
+      gdp: recoGdpGrowthPoints,
+    });
+  }, [
+    isIranEconomyMacroDashboard,
+    isIranEconomyPeriodComparison,
+    isIranEconomyReconstruction1368,
+    isFa,
+    recoLoading,
+    recoLoadFailed,
+    ipcOuterResolved.start,
+    ipcOuterResolved.end,
+    ipcFocusResolved.start,
+    ipcFocusResolved.end,
+    ipcBandLabelEn,
+    ipcBandLabelFa,
+    reconstructionGregorianYearBounds.start,
+    reconstructionGregorianYearBounds.end,
+    recoInflationIranPoints,
+    recoGdpGrowthPoints,
+  ]);
 
   const applyIpcPreset = useCallback((id: IpcPresidentPreset) => {
     const cfg = IPC_PRESIDENT_PRESETS[id];
@@ -4583,6 +4672,14 @@ export default function StudyDetailPage() {
     () => povertyDdayPoints.length > 0 || povertyLmicPoints.length > 0,
     [povertyDdayPoints, povertyLmicPoints]
   );
+
+  const povertyPageCoverageExtras = useMemo(() => {
+    if (!isPovertyHeadcountIran || !povertyTimeRange) return null;
+    const [a, b] = povertyTimeRange;
+    if (!a || !b) return null;
+    const focusEnd = parseInt(b.slice(0, 4), 10);
+    return buildPovertyHeadcountCoverageExtras(povertyDdayPoints, povertyLmicPoints, [a, b], focusEnd);
+  }, [isPovertyHeadcountIran, povertyTimeRange, povertyDdayPoints, povertyLmicPoints]);
 
   const moneySupplyDataReady = useMemo(
     () => moneySupplyM2Points.length > 0 || moneySupplyCpiPoints.length > 0,
@@ -10542,7 +10639,25 @@ export default function StudyDetailPage() {
                 multiSeriesYAxisNameOverrides={{
                   0: L(isFa, "Poverty rate (% of population)", "نرخ فقر (٪ از جمعیت)"),
                 }}
+                dataCoverageGapMarkArea={povertyPageCoverageExtras?.gapMarkArea}
+                dataCoverageLastMarkLine={
+                  povertyPageCoverageExtras?.lastMarkLineX
+                    ? {
+                        xAxis: povertyPageCoverageExtras.lastMarkLineX,
+                        label: L(isFa, "Last available data", "آخرین داده موجود"),
+                      }
+                    : undefined
+                }
               />
+              {povertyPageCoverageExtras?.lines.length ? (
+                <div className="mt-2 space-y-0.5 max-w-3xl">
+                  {povertyPageCoverageExtras.lines.map((ln, i) => (
+                    <p key={i} className="text-xs text-muted-foreground leading-relaxed">
+                      {L(isFa, ln.en, ln.fa)}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
               </>
               ) : null}
               <LearningNote locale={isFa ? "fa" : "en"} sections={povertyLearningSections(isFa)} />
@@ -11346,6 +11461,15 @@ export default function StudyDetailPage() {
                           chartHeight="h-56 md:h-64"
                           mutedEventLines
                           regimeArea={recoWelfareRegimeArea}
+                          dataCoverageGapMarkArea={recoGiniCoverageExtras?.gapMarkArea}
+                          dataCoverageLastMarkLine={
+                            recoGiniCoverageExtras?.lastMarkLineX
+                              ? {
+                                  xAxis: recoGiniCoverageExtras.lastMarkLineX,
+                                  label: L(isFa, "Last available data", "آخرین داده موجود"),
+                                }
+                              : undefined
+                          }
                         />
                       ) : (
                         <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
@@ -11356,6 +11480,15 @@ export default function StudyDetailPage() {
                           )}
                         </p>
                       )}
+                      {recoGiniCoverageExtras?.lines.length ? (
+                        <div className="mt-2 space-y-0.5 max-w-3xl">
+                          {recoGiniCoverageExtras.lines.map((ln, i) => (
+                            <p key={i} className="text-xs text-muted-foreground leading-relaxed">
+                              {L(isFa, ln.en, ln.fa)}
+                            </p>
+                          ))}
+                        </div>
+                      ) : null}
                     </CardContent>
                   </Card>
                   <Card className="chart-card border-border md:col-span-2">
@@ -11434,6 +11567,15 @@ export default function StudyDetailPage() {
                           multiSeriesYAxisNameOverrides={{
                             0: L(isFa, "Poverty headcount (% of population)", "نرخ فقر (٪ از جمعیت)"),
                           }}
+                          dataCoverageGapMarkArea={recoPovertyCoverageExtras?.gapMarkArea}
+                          dataCoverageLastMarkLine={
+                            recoPovertyCoverageExtras?.lastMarkLineX
+                              ? {
+                                  xAxis: recoPovertyCoverageExtras.lastMarkLineX,
+                                  label: L(isFa, "Last available data", "آخرین داده موجود"),
+                                }
+                              : undefined
+                          }
                         />
                       ) : (
                         <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
@@ -11444,6 +11586,15 @@ export default function StudyDetailPage() {
                           )}
                         </p>
                       )}
+                      {recoPovertyCoverageExtras?.lines.length ? (
+                        <div className="mt-2 space-y-0.5 max-w-3xl">
+                          {recoPovertyCoverageExtras.lines.map((ln, i) => (
+                            <p key={i} className="text-xs text-muted-foreground leading-relaxed">
+                              {L(isFa, ln.en, ln.fa)}
+                            </p>
+                          ))}
+                        </div>
+                      ) : null}
                     </CardContent>
                   </Card>
                 </div>
@@ -11564,6 +11715,13 @@ export default function StudyDetailPage() {
                   </>
                 )}
               </InSimpleTerms>
+              {iranMacroAiInterpretationParagraphs ? (
+                <StudyAiInterpretation locale={isFa ? "fa" : "en"}>
+                  {iranMacroAiInterpretationParagraphs.map((para, i) => (
+                    <p key={i}>{para}</p>
+                  ))}
+                </StudyAiInterpretation>
+              ) : null}
             </>
           ) : isIranEconomyPeriodComparison ? (
             <>
@@ -11738,7 +11896,9 @@ export default function StudyDetailPage() {
               {displayStudy.observations?.length ? (
                 <DataObservations locale={isFa ? "fa" : "en"} observations={displayStudy.observations ?? []} />
               ) : null}
-              {study.concepts?.length ? <ConceptsUsed locale={isFa ? "fa" : "en"} conceptKeys={study.concepts} /> : null}
+              {study.concepts?.length ? (
+                <ConceptsUsed locale={isFa ? "fa" : "en"} conceptKeys={study.concepts} groupConceptsCoreFirst />
+              ) : null}
               <SourceInfo
                 note={L(
                   isFa,
@@ -11843,6 +12003,34 @@ export default function StudyDetailPage() {
                   </p>
                 )}
               </InSimpleTerms>
+              {iranMacroAiInterpretationParagraphs ? (
+                <StudyAiInterpretation locale={isFa ? "fa" : "en"}>
+                  {iranMacroAiInterpretationParagraphs.map((para, i) => (
+                    <p key={i}>{para}</p>
+                  ))}
+                </StudyAiInterpretation>
+              ) : null}
+              <div className="mt-4 max-w-3xl space-y-2 rounded-lg border border-border/50 bg-muted/10 px-4 py-3 text-sm leading-relaxed text-foreground/90">
+                <p className="font-medium text-foreground">
+                  {L(isFa, "Quick takeaways", "جمع‌بندی کوتاه")}
+                </p>
+                <ul className="list-disc space-y-1.5 pl-5 text-muted-foreground">
+                  <li>
+                    {L(
+                      isFa,
+                      "Pick one shaded focus window and read the small charts as parallel timelines: similar slopes can reflect common shocks or policy phases, not proof that one series caused another.",
+                      "یک بازهٔ تمرکز را انتخاب کنید و نمودارهای کوچک را موازی بخوانید: هم‌جهتی ممکن است شوک مشترک یا فاز سیاست را منعکس کند، نه اثبات علّی مستقیم."
+                    )}
+                  </li>
+                  <li>
+                    {L(
+                      isFa,
+                      "Annual WDI gaps are real: when a year is missing, the chart leaves space rather than inventing a bridge—especially for survey-based welfare indicators.",
+                      "خالی‌بودن سال‌ها در WDI واقعی است؛ برای شاخص‌های رفاهی مبتنی بر پژوهش، نمودار سال بدون داده را پر نمی‌کند."
+                    )}
+                  </li>
+                </ul>
+              </div>
             </>
           ) : isDutchDiseaseDiagnostics ? (
             <>

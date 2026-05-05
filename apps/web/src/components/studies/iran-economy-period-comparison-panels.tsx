@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TimelineChart, type TimelineEvent } from "@/components/timeline-chart";
-import { CHART_LINE_SYMBOL_SIZE, CHART_LINE_SYMBOL_SIZE_MINI } from "@/lib/chart-series-markers";
+import { CHART_LINE_SYMBOL_SIZE } from "@/lib/chart-series-markers";
 import { SIGNAL_CONCEPT } from "@/lib/signalmap-chart-colors";
 import { enEconomic, faEconomic } from "@/lib/signalmap-i18n/economic-terms";
 import type { ChartAxisYearMode } from "@/lib/chart-axis-year";
@@ -15,6 +15,14 @@ import {
   PovertyHeadcountPppInfoTrigger,
   PovertyHeadcountPppMutedNote,
 } from "@/components/poverty-chart-ppp-note";
+import {
+  buildPovertyHeadcountCoverageExtras,
+  buildSparseWdiLineCoverageExtras,
+} from "@/lib/poverty-chart-data-coverage";
+
+/** Taller plot area than default study charts; tuned for long-run Iran macro panels. */
+const IPC_COMPARISON_CHART_HEIGHT =
+  "h-[min(52dvh,400px)] max-md:landscape:h-[min(40dvh,300px)] md:h-[26rem] lg:h-96";
 
 type Point = { date: string; value: number };
 
@@ -141,6 +149,27 @@ export function IranEconomyPeriodComparisonPanels({
   recoWelfarePovertyDdayId,
   recoWelfarePovertyLmicId,
 }: IranEconomyPeriodComparisonPanelsProps) {
+  const welfarePovertyCoverage = useMemo(
+    () =>
+      buildPovertyHeadcountCoverageExtras(
+        recoWelfarePovertyDdayPoints,
+        recoWelfarePovertyLmicPoints,
+        timeRange,
+        focusGregorianYearRange.endYear
+      ),
+    [recoWelfarePovertyDdayPoints, recoWelfarePovertyLmicPoints, timeRange, focusGregorianYearRange.endYear]
+  );
+
+  const welfareGiniCoverage = useMemo(
+    () =>
+      buildSparseWdiLineCoverageExtras(
+        recoWelfareGiniIranPoints,
+        timeRange,
+        focusGregorianYearRange.endYear
+      ),
+    [recoWelfareGiniIranPoints, timeRange, focusGregorianYearRange.endYear]
+  );
+
   const [fxLevelsLogScale, setFxLevelsLogScale] = useState(false);
   const fxLogDefaultAppliedRef = useRef(false);
   const fxDataKeyRef = useRef("");
@@ -196,15 +225,15 @@ export function IranEconomyPeriodComparisonPanels({
       {!recoLoadFailed ? (
         <div className="grid gap-4 md:grid-cols-2 max-w-6xl">
           <Card className="chart-card border-border">
-            <CardHeader className="pb-2">
+            <CardHeader className="space-y-1 px-4 py-2.5">
               <CardTitle className="text-base font-semibold">
-                {L(isFa, "1. CPI inflation (% YoY)", `۱. ${faEconomic.cpiInflation} (${faEconomic.yoyAnnual})`)}
+                {L(isFa, "1. CPI inflation", `۱. ${faEconomic.cpiInflation} (${faEconomic.yoyAnnual})`)}
               </CardTitle>
               <p className="text-xs text-muted-foreground">
                 {L(isFa, "WDI FP.CPI.TOTL.ZG — Iran.", "WDI FP.CPI.TOTL.ZG — ایران.")}
               </p>
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="px-4 pb-3 pt-0">
               {recoInflationIranPoints.length > 0 ? (
                 <TimelineChart
                   chartLocale={chartLocaleForCharts}
@@ -221,7 +250,7 @@ export function IranEconomyPeriodComparisonPanels({
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-inflation"
                   showChartControls
-                  chartHeight="h-56 md:h-64"
+                  chartHeight={IPC_COMPARISON_CHART_HEIGHT}
                   mutedEventLines
                   seriesColor="hsl(0, 84%, 59%)"
                   gridLeft={80}
@@ -235,15 +264,15 @@ export function IranEconomyPeriodComparisonPanels({
             </CardContent>
           </Card>
           <Card className="chart-card border-border">
-            <CardHeader className="pb-2">
+            <CardHeader className="space-y-1 px-4 py-2.5">
               <CardTitle className="text-base font-semibold">
-                {L(isFa, "2. Real GDP growth (annual %)", `۲. ${faEconomic.realGdpGrowth} (٪ سالانه)`)}
+                {L(isFa, "2. Real GDP growth", `۲. ${faEconomic.realGdpGrowth} (٪ سالانه)`)}
               </CardTitle>
               <p className="text-xs text-muted-foreground">
                 {L(isFa, "WDI NY.GDP.MKTP.KD.ZG — Iran.", "WDI NY.GDP.MKTP.KD.ZG — ایران.")}
               </p>
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="px-4 pb-3 pt-0">
               {recoGdpGrowthPoints.length > 0 ? (
                 <TimelineChart
                   chartLocale={chartLocaleForCharts}
@@ -267,7 +296,7 @@ export function IranEconomyPeriodComparisonPanels({
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-gdp-growth"
                   showChartControls
-                  chartHeight="h-56 md:h-64"
+                  chartHeight={IPC_COMPARISON_CHART_HEIGHT}
                   mutedEventLines
                   seriesColor="hsl(217, 91%, 59%)"
                   gridLeft={80}
@@ -281,7 +310,7 @@ export function IranEconomyPeriodComparisonPanels({
             </CardContent>
           </Card>
           <Card className="chart-card border-border md:col-span-2">
-            <CardHeader className="pb-2">
+            <CardHeader className="space-y-1 px-4 py-2.5">
               <CardTitle className="text-base font-semibold">
                 {L(
                   isFa,
@@ -297,7 +326,7 @@ export function IranEconomyPeriodComparisonPanels({
                 )}
               </p>
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="px-4 pb-3 pt-0">
               {recoDemandConsumptionPoints.length > 0 ||
               recoDemandInvestmentPoints.length > 0 ||
               recoDemandGdpPoints.length > 0 ? (
@@ -359,7 +388,7 @@ export function IranEconomyPeriodComparisonPanels({
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-demand-nominal"
                   showChartControls
-                  chartHeight="h-56 md:h-64"
+                  chartHeight={IPC_COMPARISON_CHART_HEIGHT}
                   mutedEventLines
                   regimeArea={regimeArea}
                   focusGregorianYearRange={focusGregorianYearRange}
@@ -380,7 +409,7 @@ export function IranEconomyPeriodComparisonPanels({
             </CardContent>
           </Card>
           <Card className="chart-card border-border md:col-span-2">
-            <CardHeader className="pb-2">
+            <CardHeader className="space-y-1 px-4 py-2.5">
               <CardTitle className="text-base font-semibold">
                 {L(
                   isFa,
@@ -396,7 +425,7 @@ export function IranEconomyPeriodComparisonPanels({
                 )}
               </p>
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="px-4 pb-3 pt-0">
               {recoDemandRealConsumptionPoints.length > 0 ||
               recoDemandRealInvestmentPoints.length > 0 ||
               recoDemandRealGdpPoints.length > 0 ? (
@@ -458,7 +487,7 @@ export function IranEconomyPeriodComparisonPanels({
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-demand-real"
                   showChartControls
-                  chartHeight="h-56 md:h-64"
+                  chartHeight={IPC_COMPARISON_CHART_HEIGHT}
                   mutedEventLines
                   regimeArea={regimeArea}
                   focusGregorianYearRange={focusGregorianYearRange}
@@ -489,11 +518,11 @@ export function IranEconomyPeriodComparisonPanels({
             </CardContent>
           </Card>
           <Card className="chart-card border-border md:col-span-2">
-            <CardHeader className="pb-2">
+            <CardHeader className="space-y-1 px-4 py-2.5">
               <CardTitle className="text-base font-semibold">{L(isFa, "5. Oil rents (% of GDP)", `۵. ${faEconomic.oilRentsPctGdp}`)}</CardTitle>
               <p className="text-xs text-muted-foreground">WDI NY.GDP.PETR.RT.ZS — Iran.</p>
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="px-4 pb-3 pt-0">
               {recoOilRentsPoints.length > 0 ? (
                 <TimelineChart
                   chartLocale={chartLocaleForCharts}
@@ -514,7 +543,7 @@ export function IranEconomyPeriodComparisonPanels({
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-oil-rents"
                   showChartControls
-                  chartHeight="h-56 md:h-64"
+                  chartHeight={IPC_COMPARISON_CHART_HEIGHT}
                   mutedEventLines
                   regimeArea={regimeArea}
                   focusGregorianYearRange={focusGregorianYearRange}
@@ -526,7 +555,7 @@ export function IranEconomyPeriodComparisonPanels({
             </CardContent>
           </Card>
           <Card className="chart-card border-border md:col-span-2">
-            <CardHeader className="pb-2">
+            <CardHeader className="space-y-1 px-4 py-2.5">
               <CardTitle className="text-base font-semibold">
                 {L(isFa, "6. Exchange rate: official vs open market (annual)", `۶. ${faEconomic.fxTitleOfficialVsOpenAnnual}`)}
               </CardTitle>
@@ -538,7 +567,7 @@ export function IranEconomyPeriodComparisonPanels({
                 )}
               </p>
             </CardHeader>
-            <CardContent className="pt-0 space-y-4">
+            <CardContent className="space-y-4 px-4 pb-3 pt-0">
               {recoFxOfficialPoints.length > 0 || recoOpenAnnualMean.length > 0 ? (
                 <>
                   <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
@@ -586,7 +615,7 @@ export function IranEconomyPeriodComparisonPanels({
                     xAxisYearLabel={chartYearAxisLabel}
                     exportFileStem="iran-ipc-fx-levels"
                     showChartControls
-                    chartHeight="h-56 md:h-64"
+                    chartHeight={IPC_COMPARISON_CHART_HEIGHT}
                     mutedEventLines
                     regimeArea={regimeArea}
                     focusGregorianYearRange={focusGregorianYearRange}
@@ -623,7 +652,7 @@ export function IranEconomyPeriodComparisonPanels({
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-fx-spread"
                   showChartControls
-                  chartHeight="h-48 md:h-56"
+                    chartHeight={IPC_COMPARISON_CHART_HEIGHT}
                   mutedEventLines
                   regimeArea={regimeArea}
                   focusGregorianYearRange={focusGregorianYearRange}
@@ -641,9 +670,9 @@ export function IranEconomyPeriodComparisonPanels({
             </CardContent>
           </Card>
           <Card className="chart-card border-border md:col-span-2">
-            <CardHeader className="pb-2">
+            <CardHeader className="space-y-1 px-4 py-2.5">
               <CardTitle className="text-base font-semibold">
-                {L(isFa, "7. Broad money (M2) growth vs CPI inflation (annual %)", `۷. ${faEconomic.liquidityAndCpiTitle}`)}
+                {L(isFa, "7. Broad money (M2) growth vs CPI inflation", `۷. ${faEconomic.liquidityAndCpiTitle}`)}
               </CardTitle>
               <p className="text-xs text-muted-foreground max-w-3xl">
                 {L(
@@ -653,7 +682,7 @@ export function IranEconomyPeriodComparisonPanels({
                 )}
               </p>
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="px-4 pb-3 pt-0">
               {recoM2Points.length > 0 || recoM2CpiPoints.length > 0 ? (
                 <TimelineChart
                   chartLocale={chartLocaleForCharts}
@@ -679,7 +708,7 @@ export function IranEconomyPeriodComparisonPanels({
                       points: recoM2Points,
                       color: SIGNAL_CONCEPT.broad_money_m2,
                       symbol: "circle",
-                      symbolSize: CHART_LINE_SYMBOL_SIZE_MINI,
+                      symbolSize: CHART_LINE_SYMBOL_SIZE,
                     },
                     {
                       key: "cpi",
@@ -689,7 +718,7 @@ export function IranEconomyPeriodComparisonPanels({
                       points: recoM2CpiPoints,
                       color: SIGNAL_CONCEPT.inflation,
                       symbol: "diamond",
-                      symbolSize: CHART_LINE_SYMBOL_SIZE_MINI,
+                      symbolSize: CHART_LINE_SYMBOL_SIZE,
                     },
                   ]}
                   timeRange={timeRange}
@@ -697,7 +726,7 @@ export function IranEconomyPeriodComparisonPanels({
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-m2-cpi"
                   showChartControls
-                  chartHeight="h-56 md:h-64"
+                  chartHeight={IPC_COMPARISON_CHART_HEIGHT}
                   mutedEventLines
                   multiSeriesYAxisNameOverrides={{
                     0: L(isFa, "Percent per year", "درصد در سال"),
@@ -712,12 +741,12 @@ export function IranEconomyPeriodComparisonPanels({
             </CardContent>
           </Card>
           <Card className="chart-card border-border md:col-span-2">
-            <CardHeader className="pb-2">
+            <CardHeader className="space-y-1 px-4 py-2.5">
               <CardTitle className="text-base font-semibold">
                 {L(isFa, "8. Imports & exports (% of GDP)", `۸. ${faEconomic.importsExportsPctGdp}`)}
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="px-4 pb-3 pt-0">
               {recoImportsPoints.length > 0 || recoExportsPoints.length > 0 ? (
                 <TimelineChart
                   chartLocale={chartLocaleForCharts}
@@ -745,7 +774,7 @@ export function IranEconomyPeriodComparisonPanels({
                       points: recoImportsPoints,
                       color: SIGNAL_CONCEPT.isi_imports,
                       symbol: "circle",
-                      symbolSize: CHART_LINE_SYMBOL_SIZE_MINI,
+                      symbolSize: CHART_LINE_SYMBOL_SIZE,
                     },
                     {
                       key: "exp",
@@ -755,7 +784,7 @@ export function IranEconomyPeriodComparisonPanels({
                       points: recoExportsPoints,
                       color: SIGNAL_CONCEPT.isi_exports,
                       symbol: "diamond",
-                      symbolSize: CHART_LINE_SYMBOL_SIZE_MINI,
+                      symbolSize: CHART_LINE_SYMBOL_SIZE,
                     },
                   ]}
                   timeRange={timeRange}
@@ -763,7 +792,7 @@ export function IranEconomyPeriodComparisonPanels({
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-trade"
                   showChartControls
-                  chartHeight="h-56 md:h-64"
+                  chartHeight={IPC_COMPARISON_CHART_HEIGHT}
                   mutedEventLines
                   regimeArea={regimeArea}
                   focusGregorianYearRange={focusGregorianYearRange}
@@ -775,12 +804,12 @@ export function IranEconomyPeriodComparisonPanels({
             </CardContent>
           </Card>
           <Card className="chart-card border-border md:col-span-2">
-            <CardHeader className="pb-2">
+            <CardHeader className="space-y-1 px-4 py-2.5">
               <CardTitle className="text-base font-semibold">
                 {L(isFa, "9. Manufacturing & industry (% of GDP)", `۹. ${faEconomic.manufacturingIndustryPanelTitle}`)}
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="px-4 pb-3 pt-0">
               {recoManufacturingPoints.length > 0 || recoIndustryPoints.length > 0 ? (
                 <TimelineChart
                   chartLocale={chartLocaleForCharts}
@@ -808,7 +837,7 @@ export function IranEconomyPeriodComparisonPanels({
                       points: recoManufacturingPoints,
                       color: SIGNAL_CONCEPT.isi_manufacturing,
                       symbol: "circle",
-                      symbolSize: CHART_LINE_SYMBOL_SIZE_MINI,
+                      symbolSize: CHART_LINE_SYMBOL_SIZE,
                     },
                     {
                       key: "ind",
@@ -818,7 +847,7 @@ export function IranEconomyPeriodComparisonPanels({
                       points: recoIndustryPoints,
                       color: SIGNAL_CONCEPT.isi_industry,
                       symbol: "diamond",
-                      symbolSize: CHART_LINE_SYMBOL_SIZE_MINI,
+                      symbolSize: CHART_LINE_SYMBOL_SIZE,
                     },
                   ]}
                   timeRange={timeRange}
@@ -826,7 +855,7 @@ export function IranEconomyPeriodComparisonPanels({
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-industry"
                   showChartControls
-                  chartHeight="h-56 md:h-64"
+                  chartHeight={IPC_COMPARISON_CHART_HEIGHT}
                   mutedEventLines
                   regimeArea={regimeArea}
                   focusGregorianYearRange={focusGregorianYearRange}
@@ -838,12 +867,12 @@ export function IranEconomyPeriodComparisonPanels({
             </CardContent>
           </Card>
           <Card className="chart-card border-border md:col-span-2">
-            <CardHeader className="pb-2">
+            <CardHeader className="space-y-1 px-4 py-2.5">
               <CardTitle className="text-base font-semibold">
                 {L(isFa, "10. Real minimum wage (purchasing power)", `۱۰. حداقل دستمزد واقعی (${faEconomic.purchasingPower})`)}
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="px-4 pb-3 pt-0">
               {ipcWageLoadFailed ? (
                 <p className="text-xs text-muted-foreground py-4">{L(isFa, "Wage series could not be loaded.", "سری دستمزد بارگذاری نشد.")}</p>
               ) : ipcWageRealKTomans.length > 0 ? (
@@ -862,7 +891,7 @@ export function IranEconomyPeriodComparisonPanels({
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-real-wage"
                   showChartControls
-                  chartHeight="h-56 md:h-64"
+                  chartHeight={IPC_COMPARISON_CHART_HEIGHT}
                   mutedEventLines
                   regimeArea={regimeArea}
                   focusGregorianYearRange={focusGregorianYearRange}
@@ -885,7 +914,7 @@ export function IranEconomyPeriodComparisonPanels({
             </h3>
           </div>
           <Card className="chart-card border-border md:col-span-2">
-            <CardHeader className="pb-2">
+            <CardHeader className="space-y-1 px-4 py-2.5">
               <CardTitle className="text-base font-semibold">{L(isFa, "Gini index", "ضریب جینی")}</CardTitle>
               <p className="text-xs text-muted-foreground max-w-3xl">
                 {L(
@@ -895,7 +924,7 @@ export function IranEconomyPeriodComparisonPanels({
                 )}
               </p>
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="px-4 pb-3 pt-0">
               {recoWelfareGiniIranPoints.length > 0 ? (
                 <TimelineChart
                   chartLocale={chartLocaleForCharts}
@@ -915,11 +944,20 @@ export function IranEconomyPeriodComparisonPanels({
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-welfare-gini"
                   showChartControls
-                  chartHeight="h-56 md:h-64"
+                  chartHeight={IPC_COMPARISON_CHART_HEIGHT}
                   mutedEventLines
                   regimeArea={regimeArea}
                   focusGregorianYearRange={focusGregorianYearRange}
                   focusHoverHint={focusHoverHint}
+                  dataCoverageGapMarkArea={welfareGiniCoverage.gapMarkArea}
+                  dataCoverageLastMarkLine={
+                    welfareGiniCoverage.lastMarkLineX
+                      ? {
+                          xAxis: welfareGiniCoverage.lastMarkLineX,
+                          label: L(isFa, "Last available data", "آخرین داده موجود"),
+                        }
+                      : undefined
+                  }
                 />
               ) : (
                 <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
@@ -930,10 +968,19 @@ export function IranEconomyPeriodComparisonPanels({
                   )}
                 </p>
               )}
+              {welfareGiniCoverage.lines.length > 0 ? (
+                <div className="mt-2 space-y-0.5 max-w-3xl">
+                  {welfareGiniCoverage.lines.map((ln, i) => (
+                    <p key={i} className="text-xs text-muted-foreground leading-relaxed">
+                      {L(isFa, ln.en, ln.fa)}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
             </CardContent>
           </Card>
           <Card className="chart-card border-border md:col-span-2">
-            <CardHeader className="pb-2 space-y-1.5">
+            <CardHeader className="space-y-1.5 px-4 py-2.5">
               <div className="flex items-center gap-1.5 min-w-0">
                 <CardTitle className="text-base font-semibold flex-1 min-w-0 mb-0">
                   {L(isFa, "Poverty headcount", "نرخ فقر")}
@@ -955,7 +1002,7 @@ export function IranEconomyPeriodComparisonPanels({
                 </ul>
               ) : null}
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="px-4 pb-3 pt-0">
               {recoWelfarePovertyDdayPoints.length > 0 || recoWelfarePovertyLmicPoints.length > 0 ? (
                 <TimelineChart
                   chartLocale={chartLocaleForCharts}
@@ -1001,7 +1048,7 @@ export function IranEconomyPeriodComparisonPanels({
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-welfare-poverty"
                   showChartControls
-                  chartHeight="h-56 md:h-64"
+                  chartHeight={IPC_COMPARISON_CHART_HEIGHT}
                   mutedEventLines
                   forceTimeAxis
                   regimeArea={regimeArea}
@@ -1010,6 +1057,15 @@ export function IranEconomyPeriodComparisonPanels({
                   multiSeriesYAxisNameOverrides={{
                     0: L(isFa, "Poverty headcount (% of population)", "نرخ فقر (٪ از جمعیت)"),
                   }}
+                  dataCoverageGapMarkArea={welfarePovertyCoverage.gapMarkArea}
+                  dataCoverageLastMarkLine={
+                    welfarePovertyCoverage.lastMarkLineX
+                      ? {
+                          xAxis: welfarePovertyCoverage.lastMarkLineX,
+                          label: L(isFa, "Last available data", "آخرین داده موجود"),
+                        }
+                      : undefined
+                  }
                 />
               ) : (
                 <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
@@ -1020,6 +1076,15 @@ export function IranEconomyPeriodComparisonPanels({
                   )}
                 </p>
               )}
+              {welfarePovertyCoverage.lines.length > 0 ? (
+                <div className="mt-2 space-y-0.5 max-w-3xl">
+                  {welfarePovertyCoverage.lines.map((ln, i) => (
+                    <p key={i} className="text-xs text-muted-foreground leading-relaxed">
+                      {L(isFa, ln.en, ln.fa)}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         </div>

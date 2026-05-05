@@ -112,7 +112,7 @@ export const PRESENTATION_COMPOSITE = {
   titleFontMin: 30,
   titleFontMax: 42,
   titleToChartGap: 6,
-  chartToFooterGap: 10,
+  chartToFooterGap: 14,
   footerBottomPad: 6,
   sourceFontMin: 11,
   sourceFontMax: 13,

@@ -56,32 +56,32 @@ export const IPC_PRESIDENT_PRESETS: Record<IpcPresidentPreset, IpcPresidentPrese
   khatami: {
     focusStart: 1997,
     focusEnd: 2005,
-    labelEn: "Khatami presidency",
-    labelFa: "ریاست‌جمهوری خاتمی",
+    labelEn: "Khatami",
+    labelFa: "خاتمی",
   },
   ahmadinejad: {
     focusStart: 2005,
     focusEnd: 2013,
-    labelEn: "Ahmadinejad presidency",
-    labelFa: "ریاست‌جمهوری احمدی‌نژاد",
+    labelEn: "Ahmadinejad",
+    labelFa: "احمدی‌نژاد",
   },
   rouhani: {
     focusStart: 2013,
     focusEnd: 2021,
-    labelEn: "Rouhani presidency",
-    labelFa: "ریاست‌جمهوری روحانی",
+    labelEn: "Rouhani",
+    labelFa: "روحانی",
   },
   raisi: {
     focusStart: 2021,
     focusEnd: 2024,
-    labelEn: "Raisi presidency",
-    labelFa: "ریاست‌جمهوری رئیسی",
+    labelEn: "Raisi",
+    labelFa: "رئیسی",
   },
   pezeshkian: {
     focusStart: 2024,
     focusUseCurrentEnd: true,
-    labelEn: "Pezeshkian presidency (to date)",
-    labelFa: "ریاست‌جمهوری پزشکیان (تا کنون)",
+    labelEn: "Pezeshkian",
+    labelFa: "پزشکیان",
   },
 };
 
