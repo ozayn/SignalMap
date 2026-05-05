@@ -18,6 +18,11 @@ export const signalProxyPolicy = {
   /** WDI annual, macro composition, static annuals (gold, minimum wage, multi-country WDI). */
   wdiAnnual: { revalidate: 1800, cacheControl: "public, s-maxage=1800, stale-while-revalidate=300" as const },
   /**
+   * Faster annual WDI refresh for endpoints that are more prone to transient upstream gaps/timeouts.
+   * Kept on the same typed cache-policy rails as other proxies.
+   */
+  wdiFast: { revalidate: 120, cacheControl: "public, s-maxage=120, stale-while-revalidate=60" as const },
+  /**
    * Oil study bundles: PPP, long stitched series, production/exporters, export capacity, economy overview.
    */
   oilEconomy: { revalidate: 600, cacheControl: "public, s-maxage=600, stale-while-revalidate=120" as const },
