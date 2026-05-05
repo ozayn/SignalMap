@@ -35,6 +35,11 @@ INDICATORS: dict[str, str] = {
     "poverty_lmic": "SI.POV.LMIC",
     "unemployment_rate_pct": "SL.UEM.TOTL.ZS",
     "government_debt_pct_gdp": "GC.DOD.TOTL.GD.ZS",
+    "fiscal_balance_pct_gdp": "GC.NLD.TOTL.GD.ZS",
+    "fiscal_balance_cash_pct_gdp": "GC.BAL.CASH.GD.ZS",
+    "policy_interest_rate_pct": "FR.INR.LEND",
+    "current_account_pct_gdp": "BN.CAB.XOKA.GD.ZS",
+    "external_debt_stocks_usd": "DT.DOD.DECT.CD",
     # Official exchange rate (LCU per US$, period average)
     "fx_official_lcu_per_usd": "PA.NUS.FCRF",
 }
@@ -45,6 +50,7 @@ FRED_SERIES_US = {
     "us_federal_funds_rate_pct": ("FEDFUNDS", "monthly_mean"),
     "us_federal_debt_pct_gdp": ("GFDEGDQ188S", "quarterly_mean"),
     "us_real_median_household_income_usd": ("MEHOINUSA672N", "annual_level"),
+    "us_federal_debt_usd": ("GFDEBTN", "quarterly_mean"),
 }
 
 
@@ -112,6 +118,21 @@ def _fred_rows_to_points(
     return out
 
 
+def _derive_external_debt_pct_gdp(
+    debt_rows: list[dict[str, float | str]], gdp_rows: list[dict[str, float | str]]
+) -> list[dict[str, float | str]]:
+    gdp_by_year = {int(str(p["date"])[:4]): float(p["value"]) for p in gdp_rows if float(p["value"]) > 0}
+    out: list[dict[str, float | str]] = []
+    for p in debt_rows:
+        y = int(str(p["date"])[:4])
+        gdp = gdp_by_year.get(y)
+        if not gdp:
+            continue
+        debt = float(p["value"])
+        out.append({"date": f"{y}-01-01", "value": round((debt / gdp) * 100.0, 3)})
+    return out
+
+
 def fetch_country_economy_bundle(country_iso3: str, start_year: int, end_year: int) -> dict[str, Any]:
     iso3 = country_iso3.strip().upper()
     series: dict[str, list[dict[str, float | str]]] = {}
@@ -138,6 +159,11 @@ def fetch_country_economy_bundle(country_iso3: str, start_year: int, end_year: i
             except Exception as e:
                 series[key] = []
                 series_warnings[key] = str(e)
+
+    if series.get("external_debt_stocks_usd") and series.get("gdp_current_usd"):
+        series["external_debt_pct_gdp"] = _derive_external_debt_pct_gdp(
+            series["external_debt_stocks_usd"], series["gdp_current_usd"]
+        )
 
     out: dict[str, Any] = {
         "series": series,

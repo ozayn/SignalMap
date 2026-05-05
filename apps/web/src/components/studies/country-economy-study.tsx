@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TimelineChart, type ChartSeries, type TimelineEvent } from "@/components/timeline-chart";
+import { TimelineChart, type TimelineEvent } from "@/components/timeline-chart";
 import type { ChartPeriodOverlayBandInput } from "@/lib/iran-iraq-war-chart-overlay";
 import { resolvePresetEndYear, type CountryFocusPreset, type CountryRangePreset } from "@/lib/country-economy-config";
 import { DataObservations } from "@/components/data-observations";
@@ -12,6 +12,8 @@ import { SourceInfo, type SourceInfoItem } from "@/components/source-info";
 import { InSimpleTerms } from "@/components/in-simple-terms";
 import { StudyAiInterpretation } from "@/components/study-ai-interpretation";
 import type { StudyConceptId } from "@/lib/signalmap-concepts";
+import { StudyYearDisplayToggle } from "@/components/study-year-display-toggle";
+import type { ChartAxisYearMode } from "@/lib/chart-axis-year";
 
 type Point = { date: string; value: number };
 type DemandMode = "nominal" | "real";
@@ -65,6 +67,7 @@ export function CountryEconomyStudy({
   defaultFxLog,
 }: Props) {
   const isUsa = countryCode.toUpperCase() === "USA";
+  const isTurkey = countryCode.toUpperCase() === "TUR";
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<CountryEconomyBundle | null>(null);
@@ -74,6 +77,7 @@ export function CountryEconomyStudy({
   const [demandMode, setDemandMode] = useState<DemandMode>("nominal");
   const [gdpMode, setGdpMode] = useState<GdpMode>("nominal");
   const [fxLog, setFxLog] = useState(defaultFxLog);
+  const [yearAxisMode, setYearAxisMode] = useState<ChartAxisYearMode>("gregorian");
 
   const selectedRange = useMemo(() => rangePresets.find((r) => r.id === rangePresetId) ?? rangePresets[0], [rangePresetId, rangePresets]);
   const rangeStartYear = selectedRange?.startYear ?? 1960;
@@ -157,34 +161,17 @@ export function CountryEconomyStudy({
   const povertyExtreme = series.poverty_extreme ?? [];
   const povertyLmic = series.poverty_lmic ?? [];
   const fx = series.fx_official_lcu_per_usd ?? [];
-  const unemployment = (series.us_unemployment_rate_pct?.length ? series.us_unemployment_rate_pct : series.unemployment_rate_pct) ?? [];
   const governmentDebtPctGdp =
     (series.us_federal_debt_pct_gdp?.length ? series.us_federal_debt_pct_gdp : series.government_debt_pct_gdp) ?? [];
+  const fiscalBalancePctGdp = series.fiscal_balance_pct_gdp?.length
+    ? series.fiscal_balance_pct_gdp
+    : series.fiscal_balance_cash_pct_gdp ?? [];
   const federalFundsRate = series.us_federal_funds_rate_pct ?? [];
-  const realMedianIncome = series.us_real_median_household_income_usd ?? [];
-  const hasUsNativeMacro =
-    unemployment.length > 0 || governmentDebtPctGdp.length > 0 || federalFundsRate.length > 0 || realMedianIncome.length > 0;
-  const usMacroSeries = useMemo<ChartSeries[]>(
-    () =>
-      [
-        { key: "unemployment", label: "Unemployment rate", unit: "%", yAxisIndex: 0 as const, points: unemployment },
-        {
-          key: "federal_debt",
-          label: "Federal debt (% GDP)",
-          unit: "% of GDP",
-          yAxisIndex: 0 as const,
-          points: governmentDebtPctGdp,
-        },
-        {
-          key: "fed_funds",
-          label: "Federal funds rate",
-          unit: "%",
-          yAxisIndex: 0 as const,
-          points: federalFundsRate,
-        },
-      ].filter((s) => s.points.length > 0),
-    [unemployment, governmentDebtPctGdp, federalFundsRate]
-  );
+  const federalDebtUsd = series.us_federal_debt_usd ?? [];
+  const policyRate = series.policy_interest_rate_pct ?? [];
+  const currentAccountPctGdp = series.current_account_pct_gdp ?? [];
+  const externalDebtPctGdp = series.external_debt_pct_gdp ?? [];
+  const hasUsFiscalMacro = governmentDebtPctGdp.length > 0 || fiscalBalancePctGdp.length > 0 || federalFundsRate.length > 0;
 
   const gdpSplitNominal = useMemo(() => deriveGdpOilSplit(gdpNominal, oilRents), [gdpNominal, oilRents]);
   const gdpSplitReal = useMemo(() => deriveGdpOilSplit(gdpReal, oilRents), [gdpReal, oilRents]);
@@ -251,7 +238,9 @@ export function CountryEconomyStudy({
       "CPI inflation (red), GDP growth (blue), and resource-rent shares are plotted as annual WDI observations; gaps are left as gaps.",
       isUsa
         ? "Nominal/real demand aggregates are the main GDP-level view for the United States; focus shading always remains inside the visible range."
-        : "Nominal/real demand and GDP decomposition toggles keep the same x-axis window so period comparisons stay aligned.",
+        : isTurkey
+          ? "Turkey view emphasizes inflation volatility, exchange-rate instability, and policy regime shifts across focus periods."
+          : "Nominal/real demand and GDP decomposition toggles keep the same x-axis window so period comparisons stay aligned.",
     ];
     if (missingSparse.length > 0) {
       rows.push(
@@ -263,6 +252,7 @@ export function CountryEconomyStudy({
     selectedRange?.label,
     selectedFocus?.label,
     isUsa,
+    isTurkey,
     gini.length,
     povertyExtreme.length,
     povertyLmic.length,
@@ -288,10 +278,13 @@ export function CountryEconomyStudy({
           hasFX
             ? "FX is official annual LCU per US$; log scale can help compare proportional moves across decades."
             : "FX is intentionally hidden for this country template.",
+          isTurkey
+            ? "Turkey charts keep dual year display (Gregorian + Persian year) while all labels remain English."
+            : "Year labels follow the study default axis style.",
         ],
       },
     ],
-    [hasFX]
+    [hasFX, isTurkey]
   );
 
   const sourceItems = useMemo<SourceInfoItem[]>(() => {
@@ -371,17 +364,17 @@ export function CountryEconomyStudy({
     }
     if (isUsa) {
       items.push({
-        label: "U.S. labor market",
-        sourceName: source?.name ?? "FRED / World Bank",
-        sourceUrl: "https://fred.stlouisfed.org/series/UNRATE",
-        sourceDetail: "UNRATE (annual mean in this page) or WDI SL.UEM.TOTL.ZS",
-        unitLabel: "%",
-      });
-      items.push({
-        label: "U.S. public debt",
+        label: "Federal debt (% of GDP)",
         sourceName: source?.name ?? "FRED / World Bank",
         sourceUrl: "https://fred.stlouisfed.org/series/GFDEGDQ188S",
         sourceDetail: "GFDEGDQ188S (annual mean in this page) or WDI GC.DOD.TOTL.GD.ZS",
+        unitLabel: "% of GDP",
+      });
+      items.push({
+        label: "Budget deficit / surplus (% of GDP)",
+        sourceName: source?.name ?? "FRED / World Bank",
+        sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.fiscal_balance_pct_gdp ?? "GC.NLD.TOTL.GD.ZS"}`,
+        sourceDetail: "WDI GC.NLD.TOTL.GD.ZS (fallback GC.BAL.CASH.GD.ZS)",
         unitLabel: "% of GDP",
       });
       items.push({
@@ -391,16 +384,48 @@ export function CountryEconomyStudy({
         sourceDetail: "FEDFUNDS (annual mean in this page)",
         unitLabel: "%",
       });
+      if (federalDebtUsd.length > 0) {
+        items.push({
+          label: "Federal debt (USD)",
+          sourceName: source?.name ?? "FRED",
+          sourceUrl: "https://fred.stlouisfed.org/series/GFDEBTN",
+          sourceDetail: "GFDEBTN (annualized from quarterly levels in this page)",
+          unitLabel: "US$",
+        });
+      }
+    }
+    if (isTurkey) {
       items.push({
-        label: "Real median household income",
-        sourceName: source?.name ?? "FRED",
-        sourceUrl: "https://fred.stlouisfed.org/series/MEHOINUSA672N",
-        sourceDetail: "MEHOINUSA672N (annual)",
-        unitLabel: "US$ (real)",
+        label: "Exchange rate (USD → TRY)",
+        sourceName: baseName,
+        sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.fx_official_lcu_per_usd ?? "PA.NUS.FCRF"}`,
+        sourceDetail: baseCountryDetail,
+        unitLabel: "TRY per USD (official annual average)",
+      });
+      items.push({
+        label: "Policy interest rate",
+        sourceName: baseName,
+        sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.policy_interest_rate_pct ?? "FR.INR.LEND"}`,
+        sourceDetail: `${baseCountryDetail}; proxy from WDI lending rate`,
+        unitLabel: "%",
+      });
+      items.push({
+        label: "Current account balance",
+        sourceName: baseName,
+        sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.current_account_pct_gdp ?? "BN.CAB.XOKA.GD.ZS"}`,
+        sourceDetail: baseCountryDetail,
+        unitLabel: "% of GDP",
+      });
+      items.push({
+        label: "External debt",
+        sourceName: baseName,
+        sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.external_debt_stocks_usd ?? "DT.DOD.DECT.CD"}`,
+        sourceDetail: `${baseCountryDetail}; %GDP derived from DT.DOD.DECT.CD / NY.GDP.MKTP.CD`,
+        unitLabel: "% of GDP (derived)",
       });
     }
     return items;
-  }, [source, countryName, countryCode, indicatorIds, oilRents.length, gasRents.length, hasFX, isUsa]);
+  }, [source, countryName, countryCode, indicatorIds, oilRents.length, gasRents.length, hasFX, isUsa, isTurkey, federalDebtUsd.length]);
 
   const aiParagraphs = useMemo(() => {
     const focusRange = `${selectedFocus?.label ?? "selected focus period"}`;
@@ -408,7 +433,8 @@ export function CountryEconomyStudy({
     if (gini.length === 0) sparseNotes.push("Gini coverage is missing in the current window");
     if (povertyExtreme.length === 0 && povertyLmic.length === 0) sparseNotes.push("poverty headcount is sparse or unavailable");
     if (hasFX && fx.length === 0) sparseNotes.push("FX data is unavailable");
-    if (isUsa && !hasUsNativeMacro) sparseNotes.push("U.S.-native macro add-ons are unavailable for this range");
+    if (isUsa && !hasUsFiscalMacro) sparseNotes.push("U.S. fiscal macro series are unavailable for this range");
+    if (isTurkey && policyRate.length === 0) sparseNotes.push("policy-rate proxy is unavailable in this window");
     return [
       `Within ${focusRange}, compare inflation, growth, demand composition, and distribution indicators as descriptive co-movements rather than causal effects.`,
       `The selected focus period is clipped to the active range (${selectedRange?.label ?? "selected range"}) so shaded years always match the visible window.`,
@@ -417,7 +443,7 @@ export function CountryEconomyStudy({
         ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
         : "Data caveat: this view uses annual published observations; apparent jumps can reflect sparse publication frequency, not necessarily sudden structural breaks.",
     ];
-  }, [selectedFocus?.label, selectedRange?.label, gini.length, povertyExtreme.length, povertyLmic.length, hasFX, fx.length, isUsa, hasUsNativeMacro]);
+  }, [selectedFocus?.label, selectedRange?.label, gini.length, povertyExtreme.length, povertyLmic.length, hasFX, fx.length, isUsa, hasUsFiscalMacro, isTurkey, policyRate.length]);
 
   const commonProps = {
     timeRange: [rangeStart, rangeEnd] as [string, string],
@@ -435,6 +461,7 @@ export function CountryEconomyStudy({
       startYear: selectedFocus?.startYear ?? 1960,
       endYear: resolvePresetEndYear(selectedFocus?.endYear ?? null),
     },
+    xAxisYearLabel: isUsa ? yearAxisMode : isTurkey ? ("both" as const) : ("gregorian" as const),
     forceTimeRangeAxis: true as const,
   };
 
@@ -478,6 +505,17 @@ export function CountryEconomyStudy({
                 ))}
               </select>
             </label>
+            {isUsa ? (
+              <label className="inline-flex items-center gap-2">
+                <span className="text-muted-foreground">Year axis</span>
+                <StudyYearDisplayToggle
+                  size="compact"
+                  isFa={false}
+                  value={yearAxisMode}
+                  onChange={setYearAxisMode}
+                />
+              </label>
+            ) : null}
             <label className="inline-flex items-center gap-2">
               <input
                 type="checkbox"
@@ -520,8 +558,49 @@ export function CountryEconomyStudy({
             </CardContent>
           </Card>
 
+          {isTurkey ? (
+            <Card className="border-border">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">2. Exchange rate (USD → TRY)</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <label className="mb-2 inline-flex items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" checked={fxLog} onChange={(e) => setFxLog(e.target.checked)} />
+                  Log scale
+                </label>
+                {fx.length > 0 ? (
+                  <TimelineChart
+                    data={[]}
+                    valueKey="value"
+                    label="USD → TRY"
+                    multiSeries={[
+                      {
+                        key: "usd_try",
+                        label: "USD → TRY",
+                        unit: "TRY per USD",
+                        yAxisIndex: 0,
+                        points: fx,
+                        color: "#16a34a",
+                        smooth: false,
+                      },
+                    ]}
+                    yAxisLog={fxLog}
+                    forceTimeAxis
+                    {...commonProps}
+                  />
+                ) : (
+                  <p className="text-xs text-muted-foreground py-6">
+                    Data unavailable for this window (PA.NUS.FCRF / USD→TRY annual series).
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
+
           <Card className="border-border">
-            <CardHeader className="pb-2"><CardTitle className="text-base">2. GDP growth (YoY)</CardTitle></CardHeader>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">{isTurkey ? "3. GDP growth (YoY)" : "2. GDP growth (YoY)"}</CardTitle>
+            </CardHeader>
             <CardContent className="pt-0">
               {gdpGrowth.length > 0 ? (
                 <TimelineChart
@@ -538,7 +617,7 @@ export function CountryEconomyStudy({
             </CardContent>
           </Card>
 
-          {!isUsa ? (
+          {!isUsa && !isTurkey ? (
           <Card className="border-border md:col-span-2">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">3. GDP decomposition (oil vs non-oil)</CardTitle>
@@ -629,19 +708,28 @@ export function CountryEconomyStudy({
             </CardContent>
           </Card>
 
-          {isUsa && hasUsNativeMacro ? (
+          {isUsa && hasUsFiscalMacro ? (
             <>
               <Card className="border-border md:col-span-2">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base">4. U.S. macro conditions (native indicators)</CardTitle>
+                  <CardTitle className="text-base">4. Federal debt (% of GDP)</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  {unemployment.length > 0 || governmentDebtPctGdp.length > 0 || federalFundsRate.length > 0 ? (
+                  {governmentDebtPctGdp.length > 0 ? (
                     <TimelineChart
                       data={[]}
                       valueKey="value"
-                      label="U.S. macro conditions"
-                      multiSeries={usMacroSeries}
+                      label="Federal debt (% GDP)"
+                      multiSeries={[
+                        {
+                          key: "federal_debt_pct",
+                          label: "Federal debt (% GDP)",
+                          unit: "% of GDP",
+                          yAxisIndex: 0,
+                          points: governmentDebtPctGdp,
+                          smooth: false,
+                        },
+                      ]}
                       forceTimeAxis
                       {...commonProps}
                     />
@@ -650,17 +738,26 @@ export function CountryEconomyStudy({
                   )}
                 </CardContent>
               </Card>
-              <Card className="border-border md:col-span-2">
+              <Card className="border-border">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base">5. Real median household income</CardTitle>
+                  <CardTitle className="text-base">5. Budget deficit / surplus (% of GDP)</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  {realMedianIncome.length > 0 ? (
+                  {fiscalBalancePctGdp.length > 0 ? (
                     <TimelineChart
-                      data={realMedianIncome}
+                      data={[]}
                       valueKey="value"
-                      label="Real median household income"
-                      unit="US$ (real)"
+                      label="Fiscal balance (% GDP)"
+                      multiSeries={[
+                        {
+                          key: "fiscal_balance",
+                          label: "Budget deficit / surplus (% of GDP)",
+                          unit: "% of GDP",
+                          yAxisIndex: 0,
+                          points: fiscalBalancePctGdp,
+                          smooth: false,
+                        },
+                      ]}
                       forceTimeAxis
                       {...commonProps}
                     />
@@ -669,10 +766,65 @@ export function CountryEconomyStudy({
                   )}
                 </CardContent>
               </Card>
+              <Card className="border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">6. Federal funds rate (%)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {federalFundsRate.length > 0 ? (
+                    <TimelineChart
+                      data={[]}
+                      valueKey="value"
+                      label="Federal funds rate (%)"
+                      multiSeries={[
+                        {
+                          key: "fed_funds",
+                          label: "Federal funds rate (%)",
+                          unit: "%",
+                          yAxisIndex: 0,
+                          points: federalFundsRate,
+                          smooth: false,
+                        },
+                      ]}
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                  )}
+                </CardContent>
+              </Card>
+              {federalDebtUsd.length > 0 ? (
+                <Card className="border-border md:col-span-2">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Optional: Federal debt (USD)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <TimelineChart
+                      data={[]}
+                      valueKey="value"
+                      label="Federal debt (USD)"
+                      multiSeries={[
+                        {
+                          key: "federal_debt_usd",
+                          label: "Federal debt (USD)",
+                          unit: "US$",
+                          yAxisIndex: 0,
+                          points: federalDebtUsd,
+                          smooth: false,
+                        },
+                      ]}
+                      multiSeriesValueFormat="gdp_absolute"
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  </CardContent>
+                </Card>
+              ) : null}
             </>
           ) : null}
 
-          {!isUsa ? (
+          {!isUsa && !isTurkey ? (
           <Card className="border-border">
             <CardHeader className="pb-2"><CardTitle className="text-base">5. Oil rents (% of GDP)</CardTitle></CardHeader>
             <CardContent className="pt-0">
@@ -693,7 +845,7 @@ export function CountryEconomyStudy({
           </Card>
           ) : null}
 
-          {!isUsa ? (
+          {!isUsa && !isTurkey ? (
           <Card className="border-border">
             <CardHeader className="pb-2"><CardTitle className="text-base">6. Natural gas rents (% of GDP)</CardTitle></CardHeader>
             <CardContent className="pt-0">
@@ -713,9 +865,13 @@ export function CountryEconomyStudy({
           </Card>
           ) : null}
 
-          {hasFX ? (
+          {hasFX && !isTurkey ? (
             <Card className="border-border md:col-span-2">
-              <CardHeader className="pb-2"><CardTitle className="text-base">7. FX (official LCU per US$)</CardTitle></CardHeader>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">
+                  {isTurkey ? "Exchange rate (USD → TRY)" : "7. FX (official LCU per US$)"}
+                </CardTitle>
+              </CardHeader>
               <CardContent className="pt-0">
                 <label className="mb-2 inline-flex items-center gap-2 text-xs text-muted-foreground">
                   <input type="checkbox" checked={fxLog} onChange={(e) => setFxLog(e.target.checked)} />
@@ -725,8 +881,9 @@ export function CountryEconomyStudy({
                   <TimelineChart
                     data={fx}
                     valueKey="value"
-                    label="Official FX"
-                    unit="LCU per US$"
+                    label={isTurkey ? "USD → TRY" : "Official FX"}
+                    unit={isTurkey ? "TRY per USD" : "LCU per US$"}
+                    seriesColor={isTurkey ? "#16a34a" : undefined}
                     yAxisLog={fxLog}
                     {...commonProps}
                   />
@@ -735,6 +892,67 @@ export function CountryEconomyStudy({
                 )}
               </CardContent>
             </Card>
+          ) : null}
+          {isTurkey ? (
+            <>
+              <Card className="border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Policy interest rate (%)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {policyRate.length > 0 ? (
+                    <TimelineChart
+                      data={policyRate}
+                      valueKey="value"
+                      label="Policy interest rate"
+                      unit="%"
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                  )}
+                </CardContent>
+              </Card>
+              <Card className="border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Current account (% GDP)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {currentAccountPctGdp.length > 0 ? (
+                    <TimelineChart
+                      data={currentAccountPctGdp}
+                      valueKey="value"
+                      label="Current account balance"
+                      unit="% of GDP"
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                  )}
+                </CardContent>
+              </Card>
+              <Card className="border-border md:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">External debt (% GDP)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {externalDebtPctGdp.length > 0 ? (
+                    <TimelineChart
+                      data={externalDebtPctGdp}
+                      valueKey="value"
+                      label="External debt"
+                      unit="% of GDP"
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                  )}
+                </CardContent>
+              </Card>
+            </>
           ) : null}
 
           <Card className="border-border">
@@ -849,10 +1067,12 @@ export function CountryEconomyStudy({
               )}
             </CardContent>
           </Card>
-          {isUsa ? (
+          {isUsa || isTurkey ? (
             <Card className="border-border md:col-span-2">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Optional: Energy/resource rents and oil-linked decomposition</CardTitle>
+                <CardTitle className="text-base">
+                  {isTurkey ? "Optional: Resource rents" : "Optional: Energy/resource rents and oil-linked decomposition"}
+                </CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
                 <details className="study-interpretation">
@@ -888,7 +1108,7 @@ export function CountryEconomyStudy({
                     ) : (
                       <p className="text-xs text-muted-foreground">Natural gas rents unavailable for this range.</p>
                     )}
-                    {gdpSplit.oil.length > 0 && gdpSplit.nonOil.length > 0 ? (
+                    {!isTurkey && gdpSplit.oil.length > 0 && gdpSplit.nonOil.length > 0 ? (
                       <TimelineChart
                         data={[]}
                         valueKey="value"
@@ -912,9 +1132,9 @@ export function CountryEconomyStudy({
                         multiSeriesValueFormat="gdp_absolute"
                         {...commonProps}
                       />
-                    ) : (
+                    ) : !isTurkey ? (
                       <p className="text-xs text-muted-foreground">Oil-linked decomposition unavailable for this range.</p>
-                    )}
+                    ) : null}
                   </div>
                 </details>
               </CardContent>
@@ -929,12 +1149,25 @@ export function CountryEconomyStudy({
             note="Series are annual WDI observations. Missing years remain missing; no interpolation is applied."
           />
           <InSimpleTerms>
-            <p>
-              This page is a descriptive macro snapshot for {countryName}. It lets you compare long-run context (range) with a specific leadership period (focus) on the same charts.
-            </p>
-            <p>
-              If a line disappears in some years, it usually means the source did not publish those years for this indicator. The chart leaves those gaps visible instead of filling them in.
-            </p>
+            {isTurkey ? (
+              <>
+                <p>
+                  This Turkey page highlights three linked context dimensions: inflation volatility, exchange-rate instability (USD → TRY), and policy regime shifts across focus windows.
+                </p>
+                <p>
+                  Use the shaded focus period to compare eras, but treat overlaps as descriptive context rather than proof of one variable causing another.
+                </p>
+              </>
+            ) : (
+              <>
+                <p>
+                  This page is a descriptive macro snapshot for {countryName}. It lets you compare long-run context (range) with a specific leadership period (focus) on the same charts.
+                </p>
+                <p>
+                  If a line disappears in some years, it usually means the source did not publish those years for this indicator. The chart leaves those gaps visible instead of filling them in.
+                </p>
+              </>
+            )}
           </InSimpleTerms>
           {aiParagraphs.length ? (
             <StudyAiInterpretation>

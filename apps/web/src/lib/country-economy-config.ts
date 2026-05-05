@@ -150,9 +150,10 @@ export const COUNTRY_ECONOMY_CONFIGS: CountryEconomyConfig[] = [
     hasFX: true,
     defaultFxLog: true,
     focusPresets: [
-      { id: "erdogan-all", label: "Erdogan (2003-)", startYear: 2003, endYear: null },
-      { id: "erdogan-pre-2013", label: "Erdogan (pre-2013)", startYear: 2003, endYear: 2013 },
-      { id: "erdogan-post-2018", label: "Erdogan (post-2018 crisis)", startYear: 2018, endYear: null },
+      { id: "pre-2003", label: "Pre-2003", shortLabel: "Pre-2003", startYear: 1960, endYear: 2002 },
+      { id: "erdogan-1", label: "Erdogan I (2003-2013)", shortLabel: "Erdogan I", startYear: 2003, endYear: 2013 },
+      { id: "erdogan-2", label: "Erdogan II (2013-2018)", shortLabel: "Erdogan II", startYear: 2013, endYear: 2018 },
+      { id: "erdogan-3", label: "Erdogan III (2018-present)", shortLabel: "Erdogan III", startYear: 2018, endYear: null },
     ],
     rangePresets: [
       { id: "full", label: "Full history", startYear: 1960, endYear: null },
@@ -173,8 +174,49 @@ export const COUNTRY_ECONOMY_CONFIGS: CountryEconomyConfig[] = [
         title: "2018 currency crisis",
         title_fa: "بحران ارزی ۲۰۱۸",
       },
+      {
+        id: "tur-2021-fx-shock",
+        layer: "world_core",
+        date: "2021-12-01",
+        title: "2021 FX shock",
+        title_fa: "شوک ارزی ۲۰۲۱",
+      },
+      {
+        id: "tur-covid-2020",
+        layer: "world_core",
+        date: "2020-03-01",
+        title: "COVID shock",
+        title_fa: "شوک کووید",
+      },
     ],
-    overlayBands: [],
+    overlayBands: [
+      {
+        id: "tur-crisis-2001-band",
+        startYear: 2001,
+        endYear: 2002,
+        fill: "rgba(148, 163, 184, 0.12)",
+        markAreaLabel: "2001 crisis",
+      },
+      {
+        id: "tur-crisis-2018-band",
+        startYear: 2018,
+        endYear: 2019,
+        fill: "rgba(148, 163, 184, 0.12)",
+        markAreaLabel: "2018 currency crisis",
+      },
+      {
+        id: "tur-fx-shock-2021-band",
+        startYear: 2021,
+        endYear: 2021,
+        fill: "rgba(148, 163, 184, 0.10)",
+      },
+      {
+        id: "tur-covid-2020-band",
+        startYear: 2020,
+        endYear: 2020,
+        fill: "rgba(148, 163, 184, 0.10)",
+      },
+    ],
   },
 ];
 
