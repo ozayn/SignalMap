@@ -1786,6 +1786,11 @@ export function TimelineChart({
     const multiSeriesValues = hasMultiSeries && multiSeriesEffective
       ? multiSeriesEffective.map((s) => dates.map((d) => valueFn(s.points, d)))
       : null;
+    /** Gaps for sparse yearly lines (Gini, poverty); keep ``connectNulls`` on stacked GDP areas. */
+    const yearlyMultiSparseDisconnectNulls =
+      useYearlyMultiSeries &&
+      !!multiSeriesEffective &&
+      !multiSeriesEffective.some((s) => Boolean(s.stackedArea));
 
     if (dates.length === 0) return;
 
@@ -3020,7 +3025,8 @@ export function TimelineChart({
                   yAxisIndex: s.yAxisIndex,
                   data: useTimeAxis ? toTimeData(valuesForEcharts) : valuesForEcharts,
                   smooth: s.smooth ?? false,
-                  connectNulls: true,
+                  /** Yearly sparse WDI-style grids: do not draw fake continuity across missing years. */
+                  connectNulls: yearlyMultiSparseDisconnectNulls ? false : true,
                   step: (isGold ? "start" : false) as "start" | false,
                   symbol: seriesShape,
                   showSymbol,
@@ -3079,10 +3085,10 @@ export function TimelineChart({
                 type: "line" as const,
                 z: 2,
                 data: useTimeAxis ? toTimeData(values) : values,
-                /** Full-year category grid leaves nulls between WDI observations; connect across them and avoid spline artifacts. */
                 smooth: useYearlyCategoryAxisForSparseSingleSeries ? false : true,
-                connectNulls: useYearlyCategoryAxisForSparseSingleSeries,
+                connectNulls: false,
                 symbol: "circle",
+                showSymbol: true,
                 symbolSize:
                   chartLineRole === "secondary"
                     ? CHART_LINE_SYMBOL_SIZE_MINI
@@ -3104,29 +3110,33 @@ export function TimelineChart({
                 },
                 ...(chartLineRole === "secondary"
                   ? {}
-                  : {
-                      areaStyle: {
-                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                          { offset: 0, color: withAlphaHsl(color, 0.25) },
-                          { offset: 1, color: withAlphaHsl(color, 0.03) },
-                        ]),
-                      },
-                    }),
-                emphasis: {
-                  focus: "none" as const,
-                  scale: useComfortableSingleSeriesSymbols,
-                  itemStyle: { opacity: 1 },
-                  ...(chartLineRole === "secondary"
+                  : useYearlyCategoryAxisForSparseSingleSeries
                     ? {}
                     : {
                         areaStyle: {
-                          opacity: 1,
                           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
                             { offset: 0, color: withAlphaHsl(color, 0.25) },
                             { offset: 1, color: withAlphaHsl(color, 0.03) },
                           ]),
                         },
                       }),
+                emphasis: {
+                  focus: "none" as const,
+                  scale: useComfortableSingleSeriesSymbols,
+                  itemStyle: { opacity: 1 },
+                  ...(chartLineRole === "secondary"
+                    ? {}
+                    : useYearlyCategoryAxisForSparseSingleSeries
+                      ? {}
+                      : {
+                          areaStyle: {
+                            opacity: 1,
+                            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                              { offset: 0, color: withAlphaHsl(color, 0.25) },
+                              { offset: 1, color: withAlphaHsl(color, 0.03) },
+                            ]),
+                          },
+                        }),
                 },
                 markLine:
                   markLineDataForRender.length > 0 || referenceLine || dataCoverageMarkLineExtras.length > 0

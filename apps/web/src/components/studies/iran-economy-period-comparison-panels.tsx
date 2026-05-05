@@ -1124,6 +1124,11 @@ export function IranEconomyPeriodComparisonPanels({
                         }
                       : undefined
                   }
+                  yAxisDetailNote={L(
+                    isFa,
+                    "This indicator is based on survey data and is only available for selected years.",
+                    "«این شاخص مبتنی بر داده‌های پیمایشی است و فقط برای برخی سال‌ها در دسترس است.»"
+                  )}
                 />
               ) : (
                 <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
