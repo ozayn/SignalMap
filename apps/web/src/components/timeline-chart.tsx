@@ -1597,6 +1597,24 @@ export function TimelineChart({
 
     const axisYearMode: ChartAxisYearMode = xAxisYearLabel ?? "gregorian";
     const chartNumeralLocale = chartLocale ?? "en";
+    const regimeFocusMarkAreaLabelText = regimeArea?.label?.trim()
+      ? localizeChartNumericDisplayString(regimeArea.label.trim(), chartNumeralLocale)
+      : undefined;
+    /** Short president-style name on the shaded focus band (markArea first corner). */
+    const regimeFocusMarkAreaLabel =
+      regimeFocusMarkAreaLabelText != null
+        ? {
+            show: true as const,
+            formatter: regimeFocusMarkAreaLabelText,
+            color: "#6b7280",
+            fontSize: 12,
+            opacity: 0.75,
+            rotate: 90,
+            position: "inside" as const,
+            align: "center" as const,
+            verticalAlign: "middle" as const,
+          }
+        : undefined;
     const axisYearGregColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
     const axisYearJalaliColor = mutedFg;
     const axisLabelBothRich = {
@@ -2799,15 +2817,7 @@ export function TimelineChart({
                                   {
                                     xAxis: regimeArea.xStart,
                                     itemStyle: { color: withAlphaHsl(muted, 0.04), borderColor: "transparent" },
-                                    label: regimeArea.label
-                                      ? {
-                                          show: true,
-                                          formatter: localizeChartNumericDisplayString(regimeArea.label, chartNumeralLocale),
-                                          color: mutedFg,
-                                          fontSize: 9,
-                                          position: "insideTop" as const,
-                                        }
-                                      : undefined,
+                                    ...(regimeFocusMarkAreaLabel ? { label: regimeFocusMarkAreaLabel } : {}),
                                   },
                                   { xAxis: regimeArea.xEnd },
                                 ] as [{ xAxis: string; itemStyle?: object; label?: object }, { xAxis: string }],
@@ -2961,7 +2971,7 @@ export function TimelineChart({
                 markArea:
                   rangeBandData.length > 0 || regimeArea || dataCoverageGapMarkAreaRegions.length > 0
                     ? {
-                        silent: true,
+                        silent: !regimeFocusMarkAreaLabelText,
                         z: 0,
                         itemStyle: {
                           color: withAlphaHsl(muted, RangeBandOpacity),
@@ -2978,7 +2988,18 @@ export function TimelineChart({
                               { xAxis: r.xEnd },
                             ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }]
                           ),
-                          ...(regimeArea ? [[{ xAxis: regimeArea.xStart }, { xAxis: regimeArea.xEnd }] as [{ xAxis: string }, { xAxis: string }]] : []),
+                          ...(regimeArea
+                            ? [
+                                [
+                                  {
+                                    xAxis: regimeArea.xStart,
+                                    itemStyle: { color: withAlphaHsl(muted, 0.04), borderColor: "transparent" },
+                                    ...(regimeFocusMarkAreaLabel ? { label: regimeFocusMarkAreaLabel } : {}),
+                                  },
+                                  { xAxis: regimeArea.xEnd },
+                                ] as [{ xAxis: string; itemStyle?: object; label?: object }, { xAxis: string }],
+                              ]
+                            : []),
                           ...dataCoverageGapMarkAreaRegions,
                         ],
                       }
@@ -3010,7 +3031,7 @@ export function TimelineChart({
                 markArea:
                   rangeBandData.length > 0 || regimeArea || dataCoverageGapMarkAreaRegions.length > 0
                     ? {
-                        silent: true,
+                        silent: !regimeFocusMarkAreaLabelText,
                         z: 0,
                         itemStyle: {
                           color: withAlphaHsl(muted, RangeBandOpacity),
@@ -3033,15 +3054,7 @@ export function TimelineChart({
                                   {
                                     xAxis: regimeArea.xStart,
                                     itemStyle: { color: withAlphaHsl(muted, 0.04), borderColor: "transparent" },
-                                    label: regimeArea.label
-                                      ? {
-                                          show: true,
-                                          formatter: localizeChartNumericDisplayString(regimeArea.label, chartNumeralLocale),
-                                          color: mutedFg,
-                                          fontSize: 9,
-                                          position: "insideTop" as const,
-                                        }
-                                      : undefined,
+                                    ...(regimeFocusMarkAreaLabel ? { label: regimeFocusMarkAreaLabel } : {}),
                                   },
                                   { xAxis: regimeArea.xEnd },
                                 ] as [{ xAxis: string; itemStyle?: object; label?: object }, { xAxis: string }],
