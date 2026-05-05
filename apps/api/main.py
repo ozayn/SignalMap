@@ -685,7 +685,7 @@ def get_wdi_dutch_disease_diagnostics_iran_signal(
     start: str | None = Query(None, description="Start date YYYY-MM-DD"),
     end: str | None = Query(None, description="End date YYYY-MM-DD"),
 ):
-    """Return annual WDI bundle (oil rents, manufacturing VA, imports as % of GDP) for Iran — diagnostic context only."""
+    """Return annual WDI bundle (oil/gas/total rents, manufacturing VA, imports as % of GDP) for Iran — diagnostic context only."""
     if start is None:
         start = "1970-01-01"
     if end is None:

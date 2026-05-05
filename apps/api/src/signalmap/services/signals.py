@@ -1343,6 +1343,8 @@ def get_dutch_disease_diagnostics_iran(start: str, end: str) -> dict:
     Iran-only annual WDI bundle for exploratory structural diagnostics (not a composite “Dutch disease index”):
 
     - NY.GDP.PETR.RT.ZS — oil rents (% of GDP)
+    - NY.GDP.NGAS.RT.ZS — natural gas rents (% of GDP)
+    - NY.GDP.TOTL.RT.ZS — total natural resources rents (% of GDP)
     - NV.IND.MANF.ZS — manufacturing value added (% of GDP)
     - NE.IMP.GNFS.ZS — imports of goods and services (% of GDP)
     """
@@ -1350,7 +1352,7 @@ def get_dutch_disease_diagnostics_iran(start: str, end: str) -> dict:
 
     start_year = int(start[:4])
     end_year = int(end[:4])
-    ck = f"signal:dutch_disease_diagnostics_iran:v2:{start_year}:{end_year}"
+    ck = f"signal:dutch_disease_diagnostics_iran:v3:{start_year}:{end_year}"
     t0 = time.perf_counter()
     cached = cache_get(ck)
     if cached is not None:
