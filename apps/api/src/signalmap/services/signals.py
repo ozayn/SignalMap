@@ -1464,6 +1464,34 @@ WB_GDP_COMPOSITION_SOURCE = {
     "url": "https://data.worldbank.org/",
 }
 
+COUNTRY_ECONOMY_SOURCE = {
+    "name": "World Bank World Development Indicators",
+    "publisher": "World Bank",
+    "url": "https://data.worldbank.org",
+}
+
+
+def get_country_economy_bundle(iso3: str, start: str, end: str) -> dict:
+    """Generic annual country economy bundle from WDI for study templates."""
+    from signalmap.sources.world_bank_country_economy import fetch_country_economy_bundle
+
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    iso = iso3.strip().upper()
+    ck = f"signal:country_economy_bundle:v1:{iso}:{start_year}:{end_year}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    bundle = fetch_country_economy_bundle(iso, start_year, end_year)
+    result = {
+        **bundle,
+        "source": COUNTRY_ECONOMY_SOURCE,
+        "resolution": "annual",
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
+
 
 def _filter_indicator_points_by_year(
     points: list[dict], year_start: int, year_end: int

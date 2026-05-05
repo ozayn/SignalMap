@@ -890,6 +890,51 @@ export const STUDIES: StudyMeta[] = [
       "A slim indigo band marks calendar year 1979 (Islamic Revolution context); it is not a presidency preset.",
     ],
   },
+  {
+    id: "us-economy",
+    number: 39,
+    title: "US economy — full history with focus period",
+    subtitle: "Template-based WDI macro panels with presidential focus presets and contextual overlays",
+    timeRange: ["1960-01-01", "today"],
+    description:
+      "Country-template macro dashboard for the United States using annual WDI indicators with independent range and focus presets.",
+    status: "active",
+    groupPlacements: [{ group: "global", order: 7 }],
+    primarySignal: { kind: "iran_economy_period_comparison" },
+    countries: ["us", "global"],
+    themes: ["macro"],
+    tags: ["USA", "WDI", "focus presets", "macro dashboard"],
+  },
+  {
+    id: "russia-economy",
+    number: 40,
+    title: "Russia economy — full history with focus period",
+    subtitle: "Template-based WDI macro panels with leadership focus presets and contextual overlays",
+    timeRange: ["1960-01-01", "today"],
+    description:
+      "Country-template macro dashboard for Russia using annual WDI indicators with independent range and focus presets.",
+    status: "active",
+    groupPlacements: [{ group: "global", order: 8 }],
+    primarySignal: { kind: "iran_economy_period_comparison" },
+    countries: ["global"],
+    themes: ["macro", "fx"],
+    tags: ["Russia", "WDI", "focus presets", "macro dashboard"],
+  },
+  {
+    id: "turkey-economy",
+    number: 41,
+    title: "Turkey economy — full history with focus period",
+    subtitle: "Template-based WDI macro panels with Erdogan-era focus presets and contextual overlays",
+    timeRange: ["1960-01-01", "today"],
+    description:
+      "Country-template macro dashboard for Turkey using annual WDI indicators with independent range and focus presets.",
+    status: "active",
+    groupPlacements: [{ group: "global", order: 9 }],
+    primarySignal: { kind: "iran_economy_period_comparison" },
+    countries: ["global"],
+    themes: ["macro", "fx"],
+    tags: ["Turkey", "WDI", "focus presets", "macro dashboard"],
+  },
 ];
 
 /** Fixed section order for `/studies` grouped view. */

@@ -730,6 +730,33 @@ def get_wdi_dutch_disease_diagnostics_iran_signal(
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
+@app.get("/api/signals/wdi/country-economy-bundle")
+def get_wdi_country_economy_bundle_signal(
+    iso3: str = Query(..., description="ISO3 country code (e.g. USA, RUS, TUR)"),
+    start: str | None = Query(None, description="Start date YYYY-MM-DD"),
+    end: str | None = Query(None, description="End date YYYY-MM-DD"),
+):
+    """Return annual WDI country economy bundle for template-driven study pages."""
+    if start is None:
+        start = "1960-01-01"
+    if end is None:
+        end = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    iso = (iso3 or "").strip().upper()
+    if len(iso) != 3 or not iso.isalpha():
+        raise HTTPException(status_code=400, detail="iso3 must be a 3-letter country code")
+    try:
+        from signalmap.services.signals import get_country_economy_bundle
+
+        return get_country_economy_bundle(iso, start, end)
+    except Exception as e:
+        log.exception("country_economy_bundle failed iso3=%s start=%s end=%s", iso, start, end)
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
+
+
 @app.get("/api/signals/oil/production-exporters")
 def get_oil_production_exporters_signal(
     start: str | None = Query(None, description="Start date YYYY-MM-DD"),
