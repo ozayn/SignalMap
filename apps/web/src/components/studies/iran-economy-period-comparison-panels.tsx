@@ -20,6 +20,7 @@ import {
   buildPovertyHeadcountCoverageExtras,
   buildSparseWdiLineCoverageExtras,
 } from "@/lib/poverty-chart-data-coverage";
+import type { GdpDecompositionCoverage } from "@/lib/gdp-decomposition-coverage";
 
 /** Taller plot area than default study charts; tuned for long-run Iran macro panels. */
 const IPC_COMPARISON_CHART_HEIGHT =
@@ -48,6 +49,7 @@ export type IranEconomyPeriodComparisonPanelsProps = {
   recoDemandGdpPoints: Point[];
   recoGdpDecompNonOilPoints: Point[];
   recoGdpDecompOilPoints: Point[];
+  recoGdpDecompCoverage: GdpDecompositionCoverage | null;
   recoDemandRealConsumptionPoints: Point[];
   recoDemandRealInvestmentPoints: Point[];
   recoDemandRealGdpPoints: Point[];
@@ -112,6 +114,7 @@ export function IranEconomyPeriodComparisonPanels({
   recoDemandGdpPoints,
   recoGdpDecompNonOilPoints,
   recoGdpDecompOilPoints,
+  recoGdpDecompCoverage,
   recoDemandRealConsumptionPoints,
   recoDemandRealInvestmentPoints,
   recoDemandRealGdpPoints,
@@ -219,6 +222,20 @@ export function IranEconomyPeriodComparisonPanels({
       },
     ];
   }, [recoGdpDecompNonOilPoints, recoGdpDecompOilPoints, recoDemandGdpPoints, isFa]);
+
+  const ipcGdpDecompPartialNote = useMemo(() => {
+    if (!recoGdpDecompCoverage || recoLoading || recoLoadFailed) return null;
+    const g = recoGdpDecompCoverage.gdp_usd.years_in_window;
+    const o = recoGdpDecompCoverage.overlap_years_count;
+    if (o > 0 && o < g) {
+      return L(
+        isFa,
+        "Only years with both GDP (current US$, NY.GDP.MKTP.CD) and oil rents (% of GDP, NY.GDP.PETR.RT.ZS) are included in the stacked view. Years are joined on Gregorian calendar years, independent of the axis label mode.",
+        "فقط سال‌هایی که هم GDP (دلار جاری، NY.GDP.MKTP.CD) و هم رانت نفتی٪ GDP (NY.GDP.PETR.RT.ZS) موجود است در نمای ستونی آمده‌اند. تطبیق بر اساس سال میلادی است و به حالت نمایش محور (شمسی/میلادی) وابسته نیست."
+      );
+    }
+    return null;
+  }, [recoGdpDecompCoverage, recoLoading, recoLoadFailed, isFa]);
 
   const [fxLevelsLogScale, setFxLevelsLogScale] = useState(false);
   const fxLogDefaultAppliedRef = useRef(false);
@@ -397,42 +414,55 @@ export function IranEconomyPeriodComparisonPanels({
                     )}
                 </p>
               ) : ipcGdpDecompositionMultiSeries ? (
-                <TimelineChart
-                  chartLocale={chartLocaleForCharts}
-                  exportPresentationStudyHeading={exportStudyHeading}
-                  exportPresentationTitle={L(
+                <div className="space-y-0">
+                  <TimelineChart
+                    chartLocale={chartLocaleForCharts}
+                    exportPresentationStudyHeading={exportStudyHeading}
+                    exportPresentationTitle={L(
+                      isFa,
+                      `${studyTitle} — GDP decomposition (nominal)`,
+                      `${studyTitle} — تفکیک GDP (اسمی)`
+                    )}
+                    exportSourceFooter={studyChartExportSource(isFa, [
+                      recoDemandNominalSource?.name ?? "World Bank WDI",
+                      recoDemandIndicatorIds?.gdp_usd ?? "NY.GDP.MKTP.CD",
+                      recoDemandIndicatorIds?.oil_rents_pct_gdp ?? "NY.GDP.PETR.RT.ZS",
+                      recoDemandIndicatorIds?.gdp_non_oil_proxy_usd ?? undefined,
+                      recoDemandIndicatorIds?.gdp_oil_proxy_usd ?? undefined,
+                    ])}
+                    data={[]}
+                    valueKey="value"
+                    label={L(isFa, "GDP decomposition (nominal)", "تفکیک GDP (اسمی)")}
+                    events={events}
+                    multiSeries={ipcGdpDecompositionMultiSeries}
+                    timeRange={timeRange}
+                    chartRangeGranularity="year"
+                    xAxisYearLabel={chartYearAxisLabel}
+                    exportFileStem="iran-ipc-gdp-decomposition-nominal"
+                    showChartControls
+                    chartHeight={IPC_COMPARISON_CHART_HEIGHT}
+                    mutedEventLines
+                    multiSeriesValueFormat="gdp_absolute"
+                    multiSeriesYAxisNameOverrides={{
+                      0: L(isFa, "GDP (current US$)", "تولید ناخالص داخلی (دلار جاری آمریکا)"),
+                    }}
+                    regimeArea={regimeArea}
+                    focusGregorianYearRange={focusGregorianYearRange}
+                    focusHoverHint={focusHoverHint}
+                    gridLeft={80}
+                  />
+                  {ipcGdpDecompPartialNote ? (
+                    <p className="text-xs text-muted-foreground mt-2 max-w-3xl leading-relaxed">{ipcGdpDecompPartialNote}</p>
+                  ) : null}
+                </div>
+              ) : recoDemandGdpPoints.length > 0 ? (
+                <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
+                  {L(
                     isFa,
-                    `${studyTitle} — GDP decomposition (nominal)`,
-                    `${studyTitle} — تفکیک GDP (اسمی)`
+                    "No overlapping GDP and oil-rents data for this window (join uses Gregorian calendar years).",
+                    "برای این بازه دادهٔ هم‌پوشان GDP و رانت نفتی (با کلید سال میلادی) وجود ندارد."
                   )}
-                  exportSourceFooter={studyChartExportSource(isFa, [
-                    recoDemandNominalSource?.name ?? "World Bank WDI",
-                    recoDemandIndicatorIds?.gdp_usd ?? "NY.GDP.MKTP.CD",
-                    recoDemandIndicatorIds?.oil_rents_pct_gdp ?? "NY.GDP.PETR.RT.ZS",
-                    recoDemandIndicatorIds?.gdp_non_oil_proxy_usd ?? undefined,
-                    recoDemandIndicatorIds?.gdp_oil_proxy_usd ?? undefined,
-                  ])}
-                  data={[]}
-                  valueKey="value"
-                  label={L(isFa, "GDP decomposition (nominal)", "تفکیک GDP (اسمی)")}
-                  events={events}
-                  multiSeries={ipcGdpDecompositionMultiSeries}
-                  timeRange={timeRange}
-                  chartRangeGranularity="year"
-                  xAxisYearLabel={chartYearAxisLabel}
-                  exportFileStem="iran-ipc-gdp-decomposition-nominal"
-                  showChartControls
-                  chartHeight={IPC_COMPARISON_CHART_HEIGHT}
-                  mutedEventLines
-                  multiSeriesValueFormat="gdp_absolute"
-                  multiSeriesYAxisNameOverrides={{
-                    0: L(isFa, "GDP (current US$)", "تولید ناخالص داخلی (دلار جاری آمریکا)"),
-                  }}
-                  regimeArea={regimeArea}
-                  focusGregorianYearRange={focusGregorianYearRange}
-                  focusHoverHint={focusHoverHint}
-                  gridLeft={80}
-                />
+                </p>
               ) : (
                 <p className="text-xs text-muted-foreground py-6">
                   {L(isFa, "Data unavailable for this window.", "داده در این بازه در دسترس نیست.")}
@@ -701,8 +731,13 @@ export function IranEconomyPeriodComparisonPanels({
             <CardContent className="space-y-4 px-4 pb-3 pt-0">
               {recoFxOfficialPoints.length > 0 || recoOpenAnnualMean.length > 0 ? (
                 <>
-                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <label
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer"
+                    htmlFor="ipc-fx-levels-log-scale"
+                  >
                     <input
+                      id="ipc-fx-levels-log-scale"
+                      name="ipc_fx_levels_log_scale"
                       type="checkbox"
                       checked={fxLevelsLogScale}
                       onChange={(e) => setFxLevelsLogScale(e.target.checked)}

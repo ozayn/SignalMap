@@ -97,25 +97,31 @@ const REGIME_FOCUS_BAND_LABEL_GRAPHIC_ID = "regime-focus-band-label";
 const REGIME_FOCUS_BAND_LABEL_MIN_GRID_WIDTH_PX = 200;
 const REGIME_FOCUS_BAND_LABEL_MIN_GRID_HEIGHT_PX = 120;
 const REGIME_FOCUS_BAND_LABEL_MIN_BAND_WIDTH_PX = 36;
-const REGIME_FOCUS_BAND_LABEL_TOP_GAP_PX = 6;
+/** Gap above grid top for the focus-period label (`graphic`); aligns with grid top − offset. */
+const REGIME_FOCUS_BAND_LABEL_TOP_GAP_PX = 8;
 
 /**
  * `convertToPixel` on a category x-axis needs a category value; markArea still draws for off-bucket dates
  * (e.g. regime `1989-07-01` vs WDI `1989-01-01`).
  */
-/** Gregorian midpoint between focus years (or regime date years); used for label x, not pixel band center. */
-function regimeFocusMidpointTimestampMs(
+/** Gregorian midpoint year range → timestamp for `convertToPixel` on a time x-axis. */
+function gregorianYearBoundsMidpointTimestampMs(startYear: number, endYear: number): number | null {
+  if (!Number.isFinite(startYear) || !Number.isFinite(endYear)) return null;
+  const midpointYear = (startYear + endYear) / 2;
+  const y0 = Math.floor(midpointYear);
+  const frac = midpointYear - y0;
+  return Date.UTC(y0, 0, 1, 12, 0, 0) + frac * 365.25 * 86400000;
+}
+
+function regimeFocusGregorianYearBounds(
   regimeArea: { xStart: string; xEnd: string },
   focusGregorianYearRange: { startYear: number; endYear: number } | undefined
-): number | null {
+): { startYear: number; endYear: number } | null {
   const startY =
     focusGregorianYearRange?.startYear ?? parseInt(regimeArea.xStart.trim().slice(0, 4), 10);
   const endY = focusGregorianYearRange?.endYear ?? parseInt(regimeArea.xEnd.trim().slice(0, 4), 10);
   if (!Number.isFinite(startY) || !Number.isFinite(endY)) return null;
-  const midpointYear = (startY + endY) / 2;
-  const y0 = Math.floor(midpointYear);
-  const frac = midpointYear - y0;
-  return Date.UTC(y0, 0, 1, 12, 0, 0) + frac * 365.25 * 86400000;
+  return { startYear: startY, endYear: endY };
 }
 
 function nearestAxisCategoryForRegimeDate(regimeDateStr: string, categories: string[]): string {
@@ -1553,8 +1559,15 @@ export function TimelineChart({
       useYearlyMultiSeries && timeRange
         ? (() => {
             const years = [...new Set(allMultiSeriesDates.map((d) => d.slice(0, 4)))].sort();
-            // Mid-year anchor for category axes; calendar-year start when using a time axis (true year distance).
-            return years.map((y) => (forceTimeAxis ? `${y}-01-01` : `${y}-07-01`));
+            // Category axes: mid-year anchor by default (tick readability). When every series point is
+            // calendar-year January (typical WDI annual), use Jan 1 so the axis matches point dates
+            // (stacked GDP decomposition, etc.); FA/Jalali axis labels do not change these keys.
+            const allJanuary =
+              allMultiSeriesDates.length > 0 &&
+              allMultiSeriesDates.every((d) => d.length >= 10 && d.slice(5, 10) === "01-01");
+            return years.map((y) =>
+              forceTimeAxis ? `${y}-01-01` : allJanuary ? `${y}-01-01` : `${y}-07-01`
+            );
           })()
         : [];
     const useForceTimeRangeDates = forceTimeRangeAxis && hasMultiSeries && timeRange && timeRange[0] && timeRange[1];
@@ -3302,7 +3315,27 @@ export function TimelineChart({
       if (regimeAxisIsLog && !(yProbe > 0 && Number.isFinite(yProbe))) yProbe = 1;
       if (!regimeAxisIsLog && !Number.isFinite(yProbe)) yProbe = 0;
 
-      const midTs = regimeFocusMidpointTimestampMs(regimeArea, focusGregorianYearRange);
+      const focusYears = regimeFocusGregorianYearBounds(regimeArea, focusGregorianYearRange);
+      if (!focusYears) {
+        applyMergedGraphic(null);
+        return;
+      }
+
+      const chartStartY = parseInt((minDate ?? "").slice(0, 4), 10);
+      const chartEndY = parseInt((maxDate ?? "").slice(0, 4), 10);
+      if (!Number.isFinite(chartStartY) || !Number.isFinite(chartEndY)) {
+        applyMergedGraphic(null);
+        return;
+      }
+
+      const visibleStart = Math.max(focusYears.startYear, chartStartY);
+      const visibleEnd = Math.min(focusYears.endYear, chartEndY);
+      if (visibleEnd < visibleStart) {
+        applyMergedGraphic(null);
+        return;
+      }
+
+      const midTs = gregorianYearBoundsMidpointTimestampMs(visibleStart, visibleEnd);
       if (midTs == null || !Number.isFinite(midTs)) {
         applyMergedGraphic(null);
         return;
@@ -3328,22 +3361,22 @@ export function TimelineChart({
         return;
       }
 
-      const xStartCoord = useTimeAxis
-        ? Date.parse(`${regimeArea.xStart.trim().slice(0, 10)}T12:00:00`)
-        : nearestAxisCategoryForRegimeDate(regimeArea.xStart, dates);
-      const xEndCoord = useTimeAxis
-        ? Date.parse(`${regimeArea.xEnd.trim().slice(0, 10)}T12:00:00`)
-        : nearestAxisCategoryForRegimeDate(regimeArea.xEnd, dates);
+      const xVisStartCoord = useTimeAxis
+        ? Date.parse(`${visibleStart}-01-01T12:00:00`)
+        : nearestAxisCategoryForRegimeDate(`${visibleStart}-01-01`, dates);
+      const xVisEndCoord = useTimeAxis
+        ? Date.parse(`${visibleEnd}-12-31T12:00:00`)
+        : nearestAxisCategoryForRegimeDate(`${visibleEnd}-12-31`, dates);
 
       let bandPxW = 0;
       try {
         const a = inst.convertToPixel(
           { gridIndex: 0, xAxisIndex: 0, yAxisIndex: regimeBandConvertYAxisIndex } as never,
-          [xStartCoord, yProbe] as never
+          [xVisStartCoord, yProbe] as never
         );
         const b = inst.convertToPixel(
           { gridIndex: 0, xAxisIndex: 0, yAxisIndex: regimeBandConvertYAxisIndex } as never,
-          [xEndCoord, yProbe] as never
+          [xVisEndCoord, yProbe] as never
         );
         if (Array.isArray(a) && Array.isArray(b)) {
           const xPix0 = a[0] as number;
@@ -3352,6 +3385,11 @@ export function TimelineChart({
         }
       } catch {
         bandPxW = 0;
+      }
+
+      // Single-year (or single category) overlap can yield 0px span after snapping; still show a centered label.
+      if (bandPxW < 1 && visibleEnd >= visibleStart) {
+        bandPxW = REGIME_FOCUS_BAND_LABEL_MIN_BAND_WIDTH_PX;
       }
 
       if (!Number.isFinite(bandPxW) || bandPxW < 1) {

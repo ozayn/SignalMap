@@ -142,6 +142,7 @@ export function ExportChartModal({
             </label>
             <input
               id="export-chart-title-input"
+              name="export_chart_title"
               type="text"
               value={titleText}
               onChange={(e) => setTitleText(e.target.value)}
@@ -195,6 +196,7 @@ export function ExportChartModal({
                 </label>
                 <input
                   id="export-font-title"
+                  name="export_font_title"
                   type="number"
                   inputMode="numeric"
                   min={FONT_MIN}
@@ -210,6 +212,7 @@ export function ExportChartModal({
                 </label>
                 <input
                   id="export-font-source"
+                  name="export_font_source"
                   type="number"
                   inputMode="numeric"
                   min={FONT_MIN}
@@ -231,6 +234,7 @@ export function ExportChartModal({
                 </label>
                 <input
                   id="export-font-axis-name"
+                  name="export_font_axis_name"
                   type="number"
                   inputMode="numeric"
                   min={FONT_MIN}
@@ -246,6 +250,7 @@ export function ExportChartModal({
                 </label>
                 <input
                   id="export-font-axis-tick"
+                  name="export_font_axis_tick"
                   type="number"
                   inputMode="numeric"
                   min={FONT_MIN}
@@ -266,6 +271,7 @@ export function ExportChartModal({
               </label>
               <input
                 id="export-font-legend"
+                name="export_font_legend"
                 type="number"
                 inputMode="numeric"
                 min={FONT_MIN}

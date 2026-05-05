@@ -17,7 +17,7 @@ WDI_GDP_CD = "NY.GDP.MKTP.CD"
 # Oil rents as % of GDP (World Bank definition) — used only with nominal GDP for a levels proxy split.
 WDI_OIL_RENTS_PCT_GDP = "NY.GDP.PETR.RT.ZS"
 # Both series use ``fetch_wdi_annual_indicator`` → in-process ``wdi_rows:IRN:<indicator>`` cache (6h TTL),
-# shared with other WDI bundles. Full nominal bundle also cached at ``signal:iran_demand_nominal_usd:v4:…``.
+# shared with other WDI bundles. Full nominal bundle also cached at ``signal:iran_demand_nominal_usd:v5:…``.
 
 # Real (constant 2015 US$)
 WDI_FINAL_CONSUMPTION_KD = "NE.CON.TOTL.KD"
@@ -60,20 +60,26 @@ def _rows_to_points(rows: list[dict[str, Any]], start_year: int, end_year: int) 
 def _build_gdp_oil_decomposition_usd_points(
     gdp_points: list[dict[str, float | str]],
     oil_pct_rows: list[dict[str, Any]],
-) -> tuple[list[dict[str, float | str]], list[dict[str, float | str]]]:
+    start_year: int,
+    end_year: int,
+) -> tuple[list[dict[str, float | str]], list[dict[str, float | str]], dict[str, Any]]:
     """
     Proxy levels (current US$): oil_value = GDP × (oil rents % / 100), non_oil = GDP − oil_value.
-    Years missing oil-rent % are omitted from the decomposition lists (GDP total line may still exist).
+
+    Join keys are **Gregorian integer years** only (WDI ``year`` / ``YYYY`` from point dates), never Solar Hijri
+    display years. Years missing oil-rent % are omitted from the decomposition lists (GDP total line may still exist).
     """
     pct_by_year: dict[int, float] = {}
     for r in oil_pct_rows:
         try:
             y = int(r["year"])
+            if y < start_year or y > end_year:
+                continue
             pct_by_year[y] = float(r["value"])
         except (TypeError, ValueError, KeyError):
             continue
-    non_oil_out: list[dict[str, float | str]] = []
-    oil_out: list[dict[str, float | str]] = []
+
+    gdp_by_year: dict[int, tuple[str, float]] = {}
     for p in gdp_points:
         ds = str(p["date"])
         try:
@@ -81,9 +87,16 @@ def _build_gdp_oil_decomposition_usd_points(
             g = float(p["value"])
         except (TypeError, ValueError):
             continue
-        pct = pct_by_year.get(y)
-        if pct is None:
+        if y < start_year or y > end_year:
             continue
+        gdp_by_year[y] = (ds, g)
+
+    overlap_years = sorted(set(gdp_by_year) & set(pct_by_year))
+    non_oil_out: list[dict[str, float | str]] = []
+    oil_out: list[dict[str, float | str]] = []
+    for y in overlap_years:
+        ds, g = gdp_by_year[y]
+        pct = pct_by_year[y]
         pct_clamped = min(100.0, max(0.0, pct))
         oil_v = g * pct_clamped / 100.0
         if oil_v > g:
@@ -91,7 +104,36 @@ def _build_gdp_oil_decomposition_usd_points(
         non_v = g - oil_v
         non_oil_out.append({"date": ds, "value": round(non_v, 0)})
         oil_out.append({"date": ds, "value": round(oil_v, 0)})
-    return non_oil_out, oil_out
+
+    gdp_years = sorted(gdp_by_year)
+    oil_years = sorted(pct_by_year)
+    coverage: dict[str, Any] = {
+        "window": {"start_gregorian": start_year, "end_gregorian": end_year},
+        "gdp_usd": {
+            "first_year": gdp_years[0] if gdp_years else None,
+            "last_year": gdp_years[-1] if gdp_years else None,
+            "years_in_window": len(gdp_years),
+        },
+        "oil_rents_pct": {
+            "first_year": oil_years[0] if oil_years else None,
+            "last_year": oil_years[-1] if oil_years else None,
+            "years_in_window": len(oil_years),
+        },
+        "overlap_years_count": len(overlap_years),
+        "overlap_first_year": overlap_years[0] if overlap_years else None,
+        "overlap_last_year": overlap_years[-1] if overlap_years else None,
+    }
+    _logger.info(
+        "iran_demand_nominal gdp_oil_decomposition window=%s–%s gdp_years=%s oil_pct_years=%s overlap=%s (%s…%s)",
+        start_year,
+        end_year,
+        coverage["gdp_usd"]["years_in_window"],
+        coverage["oil_rents_pct"]["years_in_window"],
+        coverage["overlap_years_count"],
+        coverage["overlap_first_year"],
+        coverage["overlap_last_year"],
+    )
+    return non_oil_out, oil_out, coverage
 
 
 def fetch_iran_demand_nominal_usd_bundle(start_year: int, end_year: int) -> dict[str, Any]:
@@ -126,7 +168,9 @@ def fetch_iran_demand_nominal_usd_bundle(start_year: int, end_year: int) -> dict
             series_warnings[key] = err
 
     gdp_usd_pts = _rows_to_points(gdp_c, start_year, end_year)
-    gdp_non_oil_proxy_usd, gdp_oil_proxy_usd = _build_gdp_oil_decomposition_usd_points(gdp_usd_pts, petr_rows)
+    gdp_non_oil_proxy_usd, gdp_oil_proxy_usd, gdp_decomposition_coverage = _build_gdp_oil_decomposition_usd_points(
+        gdp_usd_pts, petr_rows, start_year, end_year
+    )
 
     out: dict[str, Any] = {
         "series": {
@@ -151,6 +195,7 @@ def fetch_iran_demand_nominal_usd_bundle(start_year: int, end_year: int) -> dict
             "gdp_kd": WDI_GDP_KD,
         },
         "indicator_labels": WDI_LABELS,
+        "gdp_decomposition_coverage": gdp_decomposition_coverage,
     }
     if series_warnings:
         out["series_warnings"] = series_warnings

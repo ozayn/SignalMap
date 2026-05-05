@@ -81,6 +81,7 @@ export function DynastiesYearRangeControls({
           </span>
           <input
             id={`dys-${uid}`}
+            name={`dys_start_${uid}`}
             type="text"
             inputMode="text"
             autoComplete="off"
@@ -107,6 +108,7 @@ export function DynastiesYearRangeControls({
           </span>
           <input
             id={`dye-${uid}`}
+            name={`dys_end_${uid}`}
             type="text"
             inputMode="text"
             autoComplete="off"

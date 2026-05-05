@@ -126,6 +126,7 @@ export default function StudiesPage() {
           </label>
           <input
             id="studies-search"
+            name="studies_search"
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}

@@ -64,24 +64,30 @@ export default function YouTubeSentimentPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={runSentiment} className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1 text-sm">
+            <label className="flex flex-col gap-1 text-sm" htmlFor="yt-sentiment-channel-id">
               Channel ID
               <input
+                id="yt-sentiment-channel-id"
+                name="yt_sentiment_channel_id"
                 type="text"
                 value={channelId}
                 onChange={(e) => setChannelId(e.target.value)}
                 placeholder="e.g. UChWB95_-n9rUc3H9srsn9bQ"
                 className="rounded border bg-background px-2 py-1.5 text-sm w-64"
+                autoComplete="off"
               />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className="flex flex-col gap-1 text-sm" htmlFor="yt-sentiment-video-id">
               Video ID (from URL: youtube.com/watch?v=<strong>VIDEO_ID</strong>)
               <input
+                id="yt-sentiment-video-id"
+                name="yt_sentiment_video_id"
                 type="text"
                 value={videoId}
                 onChange={(e) => setVideoId(e.target.value)}
                 placeholder="e.g. dQw4w9WgXcQ"
                 className="rounded border bg-background px-2 py-1.5 text-sm w-64"
+                autoComplete="off"
               />
             </label>
             <Button type="submit" disabled={loading}>

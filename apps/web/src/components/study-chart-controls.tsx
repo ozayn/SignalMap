@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { normalizeChartRangeBound, toYearInputMinMax, yearDraftFromBoundIso } from "@/lib/chart-study-range";
 
@@ -58,6 +58,12 @@ export function StudyChartControls({
   startYearLabel = "Start Year",
   endYearLabel = "End Year",
 }: StudyChartControlsProps) {
+  const uid = useId().replace(/:/g, "");
+  const startId = `study-chart-range-start-${uid}`;
+  const endId = `study-chart-range-end-${uid}`;
+  const startLabelId = `study-chart-range-start-${uid}-cap`;
+  const endLabelId = `study-chart-range-end-${uid}-cap`;
+
   const minD = minDate.slice(0, 10);
   const maxD = maxDate.slice(0, 10);
   const { min: yMin, max: yMax } = toYearInputMinMax(minD, maxD);
@@ -144,13 +150,18 @@ export function StudyChartControls({
   return (
     <div className={TOOLBAR_ROW}>
       <div className="flex min-w-0 shrink-0 items-end gap-2 md:contents">
-      <label className="flex w-[4.25rem] shrink-0 flex-col md:w-[5.5rem]" dir="ltr">
-        <span className={FIELD_LABEL}>{startYearLabel}</span>
+      <label className="flex w-[4.25rem] shrink-0 flex-col md:w-[5.5rem]" dir="ltr" htmlFor={startId}>
+        <span className={FIELD_LABEL} id={startLabelId}>
+          {startYearLabel}
+        </span>
         <input
+          id={startId}
+          name={startId}
           type="text"
           inputMode="numeric"
           autoComplete="off"
           spellCheck={false}
+          aria-labelledby={startLabelId}
           value={draftStart}
           onChange={(e) => setDraftStart(e.target.value)}
           onFocus={() => {
@@ -168,13 +179,18 @@ export function StudyChartControls({
           className={CONTROL_INPUT}
         />
       </label>
-      <label className="flex w-[4.25rem] shrink-0 flex-col md:w-[5.5rem]" dir="ltr">
-        <span className={FIELD_LABEL}>{endYearLabel}</span>
+      <label className="flex w-[4.25rem] shrink-0 flex-col md:w-[5.5rem]" dir="ltr" htmlFor={endId}>
+        <span className={FIELD_LABEL} id={endLabelId}>
+          {endYearLabel}
+        </span>
         <input
+          id={endId}
+          name={endId}
           type="text"
           inputMode="numeric"
           autoComplete="off"
           spellCheck={false}
+          aria-labelledby={endLabelId}
           value={draftEnd}
           onChange={(e) => setDraftEnd(e.target.value)}
           onFocus={() => {

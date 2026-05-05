@@ -46,6 +46,7 @@ import { InSimpleTerms } from "@/components/in-simple-terms";
 import { StudyAiInterpretation } from "@/components/study-ai-interpretation";
 import { IranEconomyPeriodComparisonPanels } from "@/components/studies/iran-economy-period-comparison-panels";
 import { GdpDecompositionChartSkeleton } from "@/components/studies/gdp-decomposition-chart-ui";
+import type { GdpDecompositionCoverage } from "@/lib/gdp-decomposition-coverage";
 import { EventsTimeline, type TimelineEvent } from "@/components/events-timeline";
 import { SignalMapBandTimeline } from "@/components/signalmap-band-timeline";
 import {
@@ -686,6 +687,7 @@ export default function StudyDetailPage() {
   const [recoDemandGdpPoints, setRecoDemandGdpPoints] = useState<{ date: string; value: number }[]>([]);
   const [recoGdpDecompNonOilPoints, setRecoGdpDecompNonOilPoints] = useState<{ date: string; value: number }[]>([]);
   const [recoGdpDecompOilPoints, setRecoGdpDecompOilPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoGdpDecompCoverage, setRecoGdpDecompCoverage] = useState<GdpDecompositionCoverage | null>(null);
   const [recoDemandNominalSource, setRecoDemandNominalSource] = useState<{
     name?: string;
     url?: string;
@@ -3989,10 +3991,24 @@ export default function StudyDetailPage() {
   }, [moneySupplyTimeRange, isIranMoneySupplyM2]);
 
   const iranEconomyMacroFetchRange = useMemo((): [string, string] | null => {
-    if (isIranEconomyReconstruction1368) return reconstructionTimeRange;
+    if (isIranEconomyReconstruction1368) {
+      if (reconstructionTimeRange) return reconstructionTimeRange;
+      if (study?.timeRange) {
+        const [a, b] = study.timeRange;
+        const resolvedEnd = b === "today" ? new Date().toISOString().slice(0, 10) : b;
+        return [a, resolvedEnd];
+      }
+      return null;
+    }
     if (isIranEconomyPeriodComparison) return ipcTimeRange;
     return null;
-  }, [isIranEconomyReconstruction1368, reconstructionTimeRange, isIranEconomyPeriodComparison, ipcTimeRange]);
+  }, [
+    isIranEconomyReconstruction1368,
+    reconstructionTimeRange,
+    study?.timeRange,
+    isIranEconomyPeriodComparison,
+    ipcTimeRange,
+  ]);
 
   useEffect(() => {
     if (!iranEconomyMacroFetchRange || !isIranEconomyMacroDashboard) {
@@ -4022,6 +4038,7 @@ export default function StudyDetailPage() {
         setRecoDemandGdpPoints([]);
         setRecoGdpDecompNonOilPoints([]);
         setRecoGdpDecompOilPoints([]);
+        setRecoGdpDecompCoverage(null);
         setRecoDemandNominalSource(null);
         setRecoDemandIndicatorIds(null);
         setRecoDemandRealConsumptionPoints([]);
@@ -4091,6 +4108,7 @@ export default function StudyDetailPage() {
         };
         source?: { name?: string; url?: string; publisher?: string };
         indicator_ids?: Record<string, string>;
+        gdp_decomposition_coverage?: GdpDecompositionCoverage;
       }>(
         `/api/signals/wdi/iran-demand-nominal-usd?start=${enc(start)}&end=${enc(end)}&_sm_bd=3`,
         ac.signal
@@ -4124,6 +4142,7 @@ export default function StudyDetailPage() {
         setRecoDemandGdpPoints(demand.series?.gdp_usd ?? []);
         setRecoGdpDecompNonOilPoints(demand.series?.gdp_non_oil_proxy_usd ?? []);
         setRecoGdpDecompOilPoints(demand.series?.gdp_oil_proxy_usd ?? []);
+        setRecoGdpDecompCoverage(demand.gdp_decomposition_coverage ?? null);
         setRecoDemandNominalSource(demand.source ?? null);
         setRecoDemandIndicatorIds(demand.indicator_ids ?? null);
         setRecoDemandRealConsumptionPoints(demand.series?.consumption_kd ?? []);
@@ -4180,6 +4199,7 @@ export default function StudyDetailPage() {
         setRecoDemandGdpPoints([]);
         setRecoGdpDecompNonOilPoints([]);
         setRecoGdpDecompOilPoints([]);
+        setRecoGdpDecompCoverage(null);
         setRecoDemandNominalSource(null);
         setRecoDemandIndicatorIds(null);
         setRecoDemandRealConsumptionPoints([]);
@@ -4253,6 +4273,20 @@ export default function StudyDetailPage() {
       },
     ];
   }, [recoGdpDecompNonOilPoints, recoGdpDecompOilPoints, recoDemandGdpPoints, isFa]);
+
+  const reconstructionGdpDecompPartialNote = useMemo(() => {
+    if (!recoGdpDecompCoverage || recoLoading || recoLoadFailed) return null;
+    const g = recoGdpDecompCoverage.gdp_usd.years_in_window;
+    const o = recoGdpDecompCoverage.overlap_years_count;
+    if (o > 0 && o < g) {
+      return L(
+        isFa,
+        "Only years with both GDP (current US$, NY.GDP.MKTP.CD) and oil rents (% of GDP, NY.GDP.PETR.RT.ZS) are included in the stacked view. Years are joined on Gregorian calendar years, independent of the axis label mode.",
+        "فقط سال‌هایی که هم GDP (دلار جاری، NY.GDP.MKTP.CD) و هم رانت نفتی٪ GDP (NY.GDP.PETR.RT.ZS) موجود است در نمای ستونی آمده‌اند. تطبیق بر اساس سال میلادی است و به حالت نمایش محور (شمسی/میلادی) وابسته نیست."
+      );
+    }
+    return null;
+  }, [recoGdpDecompCoverage, recoLoading, recoLoadFailed, isFa]);
 
   useEffect(() => {
     if (!iranEconomyMacroFetchRange || !isIranEconomyMacroDashboard) {
@@ -5335,6 +5369,7 @@ export default function StudyDetailPage() {
             <div className="mt-2 flex max-w-2xl items-start gap-2">
               <input
                 id="signalmap-dot-all-importance"
+                name="signalmap_dot_all_importance"
                 type="checkbox"
                 className="mt-0.5 h-3.5 w-3.5 rounded border border-border"
                 checked={showAllSignalMapImportance}
@@ -5394,6 +5429,7 @@ export default function StudyDetailPage() {
             <div className="mt-2 flex max-w-2xl items-start gap-2">
               <input
                 id="signalmap-comparative-band-all-importance"
+                name="signalmap_comparative_band_all_importance"
                 type="checkbox"
                 className="mt-0.5 h-3.5 w-3.5 rounded border border-border"
                 checked={showAllSignalMapImportance}
@@ -5459,6 +5495,7 @@ export default function StudyDetailPage() {
             <div className="mt-2 flex max-w-2xl items-start gap-2">
               <input
                 id="signalmap-band-all-importance"
+                name="signalmap_band_all_importance"
                 type="checkbox"
                 className="mt-0.5 h-3.5 w-3.5 rounded border border-border"
                 checked={showAllSignalMapImportance}
@@ -5517,8 +5554,12 @@ export default function StudyDetailPage() {
               Hover over events for details. Toggle categories to focus.
             </p>
             <div className="mt-3">
-              <label className="text-xs text-muted-foreground mr-2">Focus on event:</label>
+              <label className="text-xs text-muted-foreground mr-2" htmlFor="events-timeline-focus-event">
+                Focus on event:
+              </label>
               <select
+                id="events-timeline-focus-event"
+                name="events_timeline_focus_event"
                 value={anchorEventId}
                 onChange={(e) => setAnchorEventId(e.target.value)}
                 className="text-xs text-muted-foreground bg-transparent border border-border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-ring"
@@ -5915,9 +5956,11 @@ export default function StudyDetailPage() {
                 }}
                 className="mt-4 flex flex-wrap items-end gap-3"
               >
-                <label className="flex flex-col gap-1" suppressHydrationWarning>
+                <label className="flex flex-col gap-1" htmlFor="follower-growth-platform" suppressHydrationWarning>
                   <span className="text-xs text-muted-foreground">Platform</span>
                   <select
+                    id="follower-growth-platform"
+                    name="follower_growth_platform"
                     value={fgPlatform}
                     suppressHydrationWarning
                     onChange={(e) => setFgPlatform(e.target.value as "twitter" | "instagram" | "youtube")}
@@ -5928,9 +5971,11 @@ export default function StudyDetailPage() {
                     <option value="youtube">YouTube</option>
                   </select>
                 </label>
-                <label className="flex flex-col gap-1" suppressHydrationWarning>
+                <label className="flex flex-col gap-1" htmlFor="follower-growth-handle" suppressHydrationWarning>
                   <span className="text-xs text-muted-foreground">Handle</span>
                   <input
+                    id="follower-growth-handle"
+                    name="follower_growth_handle"
                     type="text"
                     suppressHydrationWarning
                     value={fgUsername}
@@ -5953,8 +5998,10 @@ export default function StudyDetailPage() {
               )}
               {fgData && (fgData.snapshots?.length ?? fgData.results?.length ?? 0) > 0 && (
                 <div className="mt-4 flex flex-wrap items-center gap-4">
-                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="follower-growth-show-linear">
                     <input
+                      id="follower-growth-show-linear"
+                      name="follower_growth_show_linear"
                       type="checkbox"
                       checked={fgShowLinear}
                       onChange={(e) => setFgShowLinear(e.target.checked)}
@@ -5962,8 +6009,10 @@ export default function StudyDetailPage() {
                     />
                     Linear model
                   </label>
-                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="follower-growth-show-exponential">
                     <input
+                      id="follower-growth-show-exponential"
+                      name="follower_growth_show_exponential"
                       type="checkbox"
                       checked={fgShowExponential}
                       onChange={(e) => setFgShowExponential(e.target.checked)}
@@ -5971,8 +6020,10 @@ export default function StudyDetailPage() {
                     />
                     Exponential model
                   </label>
-                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="follower-growth-show-logistic">
                     <input
+                      id="follower-growth-show-logistic"
+                      name="follower_growth_show_logistic"
                       type="checkbox"
                       checked={fgShowLogistic}
                       onChange={(e) => setFgShowLogistic(e.target.checked)}
@@ -6163,8 +6214,10 @@ export default function StudyDetailPage() {
             </Card>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-1.5 text-sm font-medium text-foreground/90 cursor-pointer">
+            <label className="flex items-center gap-1.5 text-sm font-medium text-foreground/90 cursor-pointer" htmlFor="geopolitical-event-overlay">
               <input
+                id="geopolitical-event-overlay"
+                name="geopolitical_event_overlay"
                 type="checkbox"
                 checked={showTimeSeriesEventOverlay}
                 onChange={(e) => setShowTimeSeriesEventOverlay(e.target.checked)}
@@ -6175,8 +6228,9 @@ export default function StudyDetailPage() {
             <span className="text-muted-foreground">|</span>
             <span className="text-sm text-muted-foreground">Chart window:</span>
             {GEOPOLITICAL_WINDOW_OPTIONS.map((opt) => (
-              <label key={opt.value} className="flex items-center gap-1.5 text-sm cursor-pointer">
+              <label key={opt.value} className="flex items-center gap-1.5 text-sm cursor-pointer" htmlFor={`geopolitical-window-${opt.value}`}>
                 <input
+                  id={`geopolitical-window-${opt.value}`}
                   type="radio"
                   name="geopolitical-window"
                   checked={geopoliticalWindowDays === opt.value}
@@ -6818,8 +6872,10 @@ export default function StudyDetailPage() {
                 </button>
               </div>
               {gdpGlobalDisplayMode === "absolute" ? (
-                <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer" htmlFor="gdp-global-absolute-log-scale">
                   <input
+                    id="gdp-global-absolute-log-scale"
+                    name="gdp_global_absolute_log_scale"
                     type="checkbox"
                     checked={gdpGlobalAbsoluteLog}
                     onChange={(e) => setGdpGlobalAbsoluteLog(e.target.checked)}
@@ -6853,9 +6909,12 @@ export default function StudyDetailPage() {
             {hasTimeSeriesEventOverlayControl && (
               <label
                 className="flex items-center gap-1.5 text-xs font-medium text-foreground/90 cursor-pointer"
+                htmlFor="study-hdr-event-overlay"
                 title={L(isFa, "Show vertical event markers on time-series charts", "نمایش علامت‌های رویداد روی نمودارهای سری زمانی")}
               >
                 <input
+                  id="study-hdr-event-overlay"
+                  name="study_hdr_event_overlay"
                   type="checkbox"
                   checked={showTimeSeriesEventOverlay}
                   onChange={(e) => setShowTimeSeriesEventOverlay(e.target.checked)}
@@ -6883,6 +6942,8 @@ export default function StudyDetailPage() {
               !isIranEconomyPeriodComparison && (
               <>
                 <select
+                  id="study-chart-anchor-event"
+                  name="study_chart_anchor_event"
                   value={anchorEventId}
                   onChange={(e) => setAnchorEventId(e.target.value)}
                   className="text-xs text-muted-foreground bg-transparent border border-border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-ring"
@@ -6898,6 +6959,8 @@ export default function StudyDetailPage() {
                   ))}
                 </select>
                 <select
+                  id="study-chart-anchor-window-years"
+                  name="study_chart_anchor_window_years"
                   value={effectiveWindowValue}
                   onChange={(e) => setWindowYears(Number(e.target.value))}
                   disabled={!anchorEventId}
@@ -6912,8 +6975,10 @@ export default function StudyDetailPage() {
               </>
             )}
             {isOverviewStub && (
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-show-oil">
                 <input
+                  id="study-hdr-show-oil"
+                  name="study_hdr_show_oil"
                   type="checkbox"
                   checked={showOil}
                   onChange={(e) => setShowOil(e.target.checked)}
@@ -6923,8 +6988,10 @@ export default function StudyDetailPage() {
               </label>
             )}
             {isOilAndFx && (
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-show-gold">
                 <input
+                  id="study-hdr-show-gold"
+                  name="study_hdr_show_gold"
                   type="checkbox"
                   checked={showGold}
                   onChange={(e) => setShowGold(e.target.checked)}
@@ -6934,8 +7001,10 @@ export default function StudyDetailPage() {
               </label>
             )}
             {(isGoldAndOil || isOilGlobalLong || isRealOil || (isOilPppIran && hasTurkeyComparator)) && (
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-show-global-macro-oil-a">
                 <input
+                  id="study-hdr-show-global-macro-oil-a"
+                  name="study_hdr_show_global_macro_oil"
                   type="checkbox"
                   checked={showGlobalMacroOil}
                   onChange={(e) => setShowGlobalMacroOil(e.target.checked)}
@@ -6945,8 +7014,10 @@ export default function StudyDetailPage() {
               </label>
             )}
             {isOilPppIran && (
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-ppp-y-log">
                 <input
+                  id="study-hdr-ppp-y-log"
+                  name="study_hdr_ppp_y_log"
                   type="checkbox"
                   checked={pppYAxisLog}
                   onChange={(e) => setPppYAxisLog(e.target.checked)}
@@ -6956,8 +7027,10 @@ export default function StudyDetailPage() {
               </label>
             )}
             {isOilExportCapacity && (
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-show-sanctions-periods">
                 <input
+                  id="study-hdr-show-sanctions-periods"
+                  name="study_hdr_show_sanctions_periods"
                   type="checkbox"
                   checked={showSanctionsPeriods}
                   onChange={(e) => setShowSanctionsPeriods(e.target.checked)}
@@ -6976,8 +7049,10 @@ export default function StudyDetailPage() {
               isIranEconomyReconstruction1368 ||
               isIranEconomyPeriodComparison) && (
               <>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-macro-panels-show-iran">
                   <input
+                    id="study-hdr-macro-panels-show-iran"
+                    name="study_hdr_macro_panels_show_iran_events"
                     type="checkbox"
                     checked={showIranEvents}
                     onChange={(e) => setShowIranEvents(e.target.checked)}
@@ -6985,8 +7060,10 @@ export default function StudyDetailPage() {
                   />
                   Show Iran events
                 </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-macro-panels-show-world">
                   <input
+                    id="study-hdr-macro-panels-show-world"
+                    name="study_hdr_macro_panels_show_world_events"
                     type="checkbox"
                     checked={showWorldEvents}
                     onChange={(e) => setShowWorldEvents(e.target.checked)}
@@ -6994,8 +7071,10 @@ export default function StudyDetailPage() {
                   />
                   Show world events
                 </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-macro-panels-show-sanctions">
                   <input
+                    id="study-hdr-macro-panels-show-sanctions"
+                    name="study_hdr_macro_panels_show_sanctions_events"
                     type="checkbox"
                     checked={showSanctionsEvents}
                     onChange={(e) => setShowSanctionsEvents(e.target.checked)}
@@ -7007,8 +7086,10 @@ export default function StudyDetailPage() {
             )}
             {isOilProductionMajorExporters && (
               <>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-oil-prod-show-iran">
                   <input
+                    id="study-hdr-oil-prod-show-iran"
+                    name="study_hdr_oil_prod_show_iran_events"
                     type="checkbox"
                     checked={showIranEvents}
                     onChange={(e) => setShowIranEvents(e.target.checked)}
@@ -7016,8 +7097,10 @@ export default function StudyDetailPage() {
                   />
                   Show Iran events
                 </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-oil-prod-show-sanctions">
                   <input
+                    id="study-hdr-oil-prod-show-sanctions"
+                    name="study_hdr_oil_prod_show_sanctions_events"
                     type="checkbox"
                     checked={showSanctionsEvents}
                     onChange={(e) => setShowSanctionsEvents(e.target.checked)}
@@ -7025,8 +7108,10 @@ export default function StudyDetailPage() {
                   />
                   Show sanctions
                 </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-oil-prod-show-opec">
                   <input
+                    id="study-hdr-oil-prod-show-opec"
+                    name="study_hdr_oil_prod_show_opec_events"
                     type="checkbox"
                     checked={showOpecEvents}
                     onChange={(e) => setShowOpecEvents(e.target.checked)}
@@ -7034,8 +7119,10 @@ export default function StudyDetailPage() {
                   />
                   Show OPEC decisions
                 </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-show-global-macro-oil-b">
                   <input
+                    id="study-hdr-show-global-macro-oil-b"
+                    name="study_hdr_oil_prod_show_global_macro_oil"
                     type="checkbox"
                     checked={showGlobalMacroOil}
                     onChange={(e) => setShowGlobalMacroOil(e.target.checked)}
@@ -7047,8 +7134,10 @@ export default function StudyDetailPage() {
             )}
             {(isGdpComposition || isGdpIranAccountsDual) && (
               <>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-gdp-show-macro-events">
                   <input
+                    id="study-hdr-gdp-show-macro-events"
+                    name="study_hdr_gdp_show_macro_events"
                     type="checkbox"
                     checked={showGdpMacroEvents}
                     onChange={(e) => setShowGdpMacroEvents(e.target.checked)}
@@ -7056,8 +7145,10 @@ export default function StudyDetailPage() {
                   />
                   Show events
                 </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-gdp-show-iran-layers">
                   <input
+                    id="study-hdr-gdp-show-iran-layers"
+                    name="study_hdr_gdp_show_iran_event_layers"
                     type="checkbox"
                     checked={showGdpIranEvents}
                     onChange={(e) => setShowGdpIranEvents(e.target.checked)}
@@ -7065,8 +7156,10 @@ export default function StudyDetailPage() {
                   />
                   Show Iran event layers
                 </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-gdp-show-global-macro-oil">
                   <input
+                    id="study-hdr-gdp-show-global-macro-oil"
+                    name="study_hdr_gdp_show_global_macro_oil"
                     type="checkbox"
                     checked={showGdpGlobalMacroOil}
                     onChange={(e) => setShowGdpGlobalMacroOil(e.target.checked)}
@@ -7078,8 +7171,10 @@ export default function StudyDetailPage() {
             )}
             {isOilGeopoliticalReaction && (
               <>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-geo-show-world-core">
                   <input
+                    id="study-hdr-geo-show-world-core"
+                    name="study_hdr_geo_show_world_core"
                     type="checkbox"
                     checked={showGeopoliticalWorldCore}
                     onChange={(e) => setShowGeopoliticalWorldCore(e.target.checked)}
@@ -7087,8 +7182,10 @@ export default function StudyDetailPage() {
                   />
                   World (core)
                 </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-geo-show-world-1900">
                   <input
+                    id="study-hdr-geo-show-world-1900"
+                    name="study_hdr_geo_show_world_1900"
                     type="checkbox"
                     checked={showGeopoliticalWorld1900}
                     onChange={(e) => setShowGeopoliticalWorld1900(e.target.checked)}
@@ -7096,8 +7193,10 @@ export default function StudyDetailPage() {
                   />
                   World (1900+)
                 </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-geo-show-sanctions">
                   <input
+                    id="study-hdr-geo-show-sanctions"
+                    name="study_hdr_geo_show_sanctions"
                     type="checkbox"
                     checked={showGeopoliticalSanctions}
                     onChange={(e) => setShowGeopoliticalSanctions(e.target.checked)}
@@ -7105,8 +7204,10 @@ export default function StudyDetailPage() {
                   />
                   Sanctions
                 </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-geo-show-opec">
                   <input
+                    id="study-hdr-geo-show-opec"
+                    name="study_hdr_geo_show_opec"
                     type="checkbox"
                     checked={showGeopoliticalOpec}
                     onChange={(e) => setShowGeopoliticalOpec(e.target.checked)}
@@ -7114,8 +7215,10 @@ export default function StudyDetailPage() {
                   />
                   OPEC decisions
                 </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-geo-show-global-macro-oil">
                   <input
+                    id="study-hdr-geo-show-global-macro-oil"
+                    name="study_hdr_geo_show_global_macro_oil"
                     type="checkbox"
                     checked={showGlobalMacroOil}
                     onChange={(e) => setShowGlobalMacroOil(e.target.checked)}
@@ -7271,13 +7374,15 @@ export default function StudyDetailPage() {
               {networkYears.length > 0 && (
                 <div className="mt-4 flex flex-col gap-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center py-2">
-                    <label className="text-sm font-medium text-foreground shrink-0">
+                    <label className="text-sm font-medium text-foreground shrink-0" htmlFor="oil-trade-network-year">
                       Year:
                     </label>
                     <span className="text-sm text-muted-foreground tabular-nums shrink-0">
                       {networkYears[0]} – {networkYears[networkYears.length - 1]}
                     </span>
                     <input
+                      id="oil-trade-network-year"
+                      name="oil_trade_network_year"
                       type="range"
                       min={networkYears[0]}
                       max={networkYears[networkYears.length - 1]}
@@ -8210,8 +8315,10 @@ export default function StudyDetailPage() {
             <>
           {(isOverviewStub || isOilBrent || isFxIranCurrencyRegime || isOilAndFx || (isOilPppIran && !hasTurkeyComparator)) && !isOilGlobalLong && !isGoldAndOil && !isRealOil && (
             <div className="mb-3 flex flex-shrink-0 flex-wrap items-center gap-3 border-b border-border pb-3">
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-body-chart-show-iran">
                 <input
+                  id="study-body-chart-show-iran"
+                  name="study_body_chart_show_iran_events"
                   type="checkbox"
                   checked={showIranEvents}
                   onChange={(e) => setShowIranEvents(e.target.checked)}
@@ -8219,8 +8326,10 @@ export default function StudyDetailPage() {
                 />
                 Show Iran events
               </label>
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-body-chart-show-world">
                 <input
+                  id="study-body-chart-show-world"
+                  name="study_body_chart_show_world_events"
                   type="checkbox"
                   checked={showWorldEvents}
                   onChange={(e) => setShowWorldEvents(e.target.checked)}
@@ -8228,8 +8337,10 @@ export default function StudyDetailPage() {
                 />
                 Show world events
               </label>
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-body-chart-show-sanctions">
                 <input
+                  id="study-body-chart-show-sanctions"
+                  name="study_body_chart_show_sanctions_events"
                   type="checkbox"
                   checked={showSanctionsEvents}
                   onChange={(e) => setShowSanctionsEvents(e.target.checked)}
@@ -8237,8 +8348,10 @@ export default function StudyDetailPage() {
                 />
                 Show sanctions
               </label>
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-body-chart-show-global-macro-oil">
                 <input
+                  id="study-body-chart-show-global-macro-oil"
+                  name="study_body_chart_show_global_macro_oil"
                   type="checkbox"
                   checked={showGlobalMacroOil}
                   onChange={(e) => setShowGlobalMacroOil(e.target.checked)}
@@ -8247,8 +8360,10 @@ export default function StudyDetailPage() {
                 Global oil/macro (curated)
               </label>
               {(isFxIranCurrencyRegime || isOilPppIran) && (
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-body-chart-show-presidential-terms">
                   <input
+                    id="study-body-chart-show-presidential-terms"
+                    name="study_body_chart_show_presidential_terms"
                     type="checkbox"
                     checked={showPresidentialTerms}
                     onChange={(e) => setShowPresidentialTerms(e.target.checked)}
@@ -8259,8 +8374,10 @@ export default function StudyDetailPage() {
               )}
               {isFxIranCurrencyRegime && (
                 <>
-                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-body-fx-show-official">
                     <input
+                      id="study-body-fx-show-official"
+                      name="study_body_fx_show_official"
                       type="checkbox"
                       checked={fxRegimeShowOfficial}
                       onChange={(e) => setFxRegimeShowOfficial(e.target.checked)}
@@ -8268,8 +8385,10 @@ export default function StudyDetailPage() {
                     />
                     {L(isFa, "Show official rate", "نمایش نرخ رسمی")}
                   </label>
-                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-body-fx-show-spread">
                     <input
+                      id="study-body-fx-show-spread"
+                      name="study_body_fx_show_spread"
                       type="checkbox"
                       checked={showFxSpread}
                       onChange={(e) => setShowFxSpread(e.target.checked)}
@@ -8277,8 +8396,10 @@ export default function StudyDetailPage() {
                     />
                     {L(isFa, "Show spread", "نمایش شکاف")}
                   </label>
-                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-body-fx-usd-toman-log">
                     <input
+                      id="study-body-fx-usd-toman-log"
+                      name="study_body_fx_usd_toman_log"
                       type="checkbox"
                       checked={fxUsdTomanYAxisLog}
                       onChange={(e) => {
@@ -8686,11 +8807,13 @@ export default function StudyDetailPage() {
                     "محدوده سال را برای هر سه نمودار و خروجی PNG ببندید؛ خالی = پنجره مطالعه."
                   )}
                 </span>
-                <label className="flex w-[5.5rem] shrink-0 flex-col" dir="ltr">
+                <label className="flex w-[5.5rem] shrink-0 flex-col" dir="ltr" htmlFor="oil-economy-view-start-year">
                   <span className="mb-0.5 block min-h-[0.875rem] text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                     {L(isFa, "Start year", "سال شروع")}
                   </span>
                   <input
+                    id="oil-economy-view-start-year"
+                    name="oil_economy_view_start_year"
                     type="text"
                     inputMode="numeric"
                     autoComplete="off"
@@ -8727,11 +8850,13 @@ export default function StudyDetailPage() {
                     className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-sm outline-none transition-[box-shadow,border-color] focus-visible:border-ring/60 focus-visible:ring-2 focus-visible:ring-ring/25"
                   />
                 </label>
-                <label className="flex w-[5.5rem] shrink-0 flex-col" dir="ltr">
+                <label className="flex w-[5.5rem] shrink-0 flex-col" dir="ltr" htmlFor="oil-economy-view-end-year">
                   <span className="mb-0.5 block min-h-[0.875rem] text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                     {L(isFa, "End year", "سال پایان")}
                   </span>
                   <input
+                    id="oil-economy-view-end-year"
+                    name="oil_economy_view_end_year"
                     type="text"
                     inputMode="numeric"
                     autoComplete="off"
@@ -10096,20 +10221,22 @@ export default function StudyDetailPage() {
               {isiDataReady ? (
               <>
               <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
-                <span className="text-muted-foreground shrink-0">
-                  {L(isFa, "Overview country", "کشور برای نمای کلی")}
-                </span>
-                <select
-                  value={isiFocusCountry}
-                  onChange={(e) => setIsiFocusCountry(e.target.value as IsiCountryKey)}
-                  className="text-xs text-muted-foreground bg-transparent border border-border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-ring"
-                >
-                  {ISI_COUNTRY_KEYS.map((c) => (
-                    <option key={c} value={c}>
-                      {isiCountryLabel(c, isFa)}
-                    </option>
-                  ))}
-                </select>
+                <label className="text-muted-foreground shrink-0 flex flex-wrap items-center gap-2" htmlFor="isi-overview-focus-country">
+                  <span>{L(isFa, "Overview country", "کشور برای نمای کلی")}</span>
+                  <select
+                    id="isi-overview-focus-country"
+                    name="isi_overview_focus_country"
+                    value={isiFocusCountry}
+                    onChange={(e) => setIsiFocusCountry(e.target.value as IsiCountryKey)}
+                    className="text-xs text-muted-foreground bg-transparent border border-border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    {ISI_COUNTRY_KEYS.map((c) => (
+                      <option key={c} value={c}>
+                        {isiCountryLabel(c, isFa)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
               {isiOverviewIndexed ? (
                 <div className="space-y-2 mb-8 pb-8 border-b border-border">
@@ -10950,48 +11077,63 @@ export default function StudyDetailPage() {
                             )}
                         </p>
                       ) : reconstructionGdpDecompositionMultiSeries ? (
-                        <TimelineChart
-                          chartLocale={chartLocaleForCharts}
-                          exportPresentationStudyHeading={displayStudy.title}
-                          exportPresentationTitle={L(
+                        <div className="space-y-0">
+                          <TimelineChart
+                            chartLocale={chartLocaleForCharts}
+                            exportPresentationStudyHeading={displayStudy.title}
+                            exportPresentationTitle={L(
+                              isFa,
+                              `${displayStudy.title} — GDP decomposition (nominal)`,
+                              `${displayStudy.title} — تفکیک GDP (اسمی)`
+                            )}
+                            exportSourceFooter={studyChartExportSource(isFa, [
+                              recoDemandNominalSource?.name ?? "World Bank WDI",
+                              recoDemandIndicatorIds?.gdp_usd ?? "NY.GDP.MKTP.CD",
+                              recoDemandIndicatorIds?.oil_rents_pct_gdp ?? "NY.GDP.PETR.RT.ZS",
+                              recoDemandIndicatorIds?.gdp_non_oil_proxy_usd ?? undefined,
+                              recoDemandIndicatorIds?.gdp_oil_proxy_usd ?? undefined,
+                            ])}
+                            data={[]}
+                            valueKey="value"
+                            label={L(isFa, "GDP decomposition (nominal)", "تفکیک GDP (اسمی)")}
+                            events={reconstructionChartEvents}
+                            multiSeries={reconstructionGdpDecompositionMultiSeries}
+                            timeRange={reconstructionTimeRange ?? study.timeRange}
+                            chartRangeGranularity="year"
+                            xAxisYearLabel={chartYearAxisLabel}
+                            exportFileStem="iran-reco-gdp-decomposition-nominal"
+                            showChartControls
+                            chartHeight="h-56 md:h-64"
+                            mutedEventLines
+                            multiSeriesValueFormat="gdp_absolute"
+                            multiSeriesYAxisNameOverrides={{
+                              0: L(isFa, "GDP (current US$)", "تولید ناخالص داخلی (دلار جاری آمریکا)"),
+                            }}
+                            regimeArea={recoWelfareRegimeArea}
+                            focusGregorianYearRange={{
+                              startYear: reconstructionGregorianYearBounds.start,
+                              endYear: reconstructionGregorianYearBounds.end,
+                            }}
+                            focusHoverHint={{
+                              en: "Inside focus period",
+                              fa: "داخل دورهٔ تمرکز",
+                            }}
+                            gridLeft={80}
+                          />
+                          {reconstructionGdpDecompPartialNote ? (
+                            <p className="text-xs text-muted-foreground mt-2 max-w-3xl leading-relaxed">
+                              {reconstructionGdpDecompPartialNote}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : recoDemandGdpPoints.length > 0 ? (
+                        <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
+                          {L(
                             isFa,
-                            `${displayStudy.title} — GDP decomposition (nominal)`,
-                            `${displayStudy.title} — تفکیک GDP (اسمی)`
+                            "No overlapping GDP and oil-rents data for this window (join uses Gregorian calendar years).",
+                            "برای این بازه دادهٔ هم‌پوشان GDP و رانت نفتی (با کلید سال میلادی) وجود ندارد."
                           )}
-                          exportSourceFooter={studyChartExportSource(isFa, [
-                            recoDemandNominalSource?.name ?? "World Bank WDI",
-                            recoDemandIndicatorIds?.gdp_usd ?? "NY.GDP.MKTP.CD",
-                            recoDemandIndicatorIds?.oil_rents_pct_gdp ?? "NY.GDP.PETR.RT.ZS",
-                            recoDemandIndicatorIds?.gdp_non_oil_proxy_usd ?? undefined,
-                            recoDemandIndicatorIds?.gdp_oil_proxy_usd ?? undefined,
-                          ])}
-                          data={[]}
-                          valueKey="value"
-                          label={L(isFa, "GDP decomposition (nominal)", "تفکیک GDP (اسمی)")}
-                          events={reconstructionChartEvents}
-                          multiSeries={reconstructionGdpDecompositionMultiSeries}
-                          timeRange={reconstructionTimeRange ?? study.timeRange}
-                          chartRangeGranularity="year"
-                          xAxisYearLabel={chartYearAxisLabel}
-                          exportFileStem="iran-reco-gdp-decomposition-nominal"
-                          showChartControls
-                          chartHeight="h-56 md:h-64"
-                          mutedEventLines
-                          multiSeriesValueFormat="gdp_absolute"
-                          multiSeriesYAxisNameOverrides={{
-                            0: L(isFa, "GDP (current US$)", "تولید ناخالص داخلی (دلار جاری آمریکا)"),
-                          }}
-                          regimeArea={recoWelfareRegimeArea}
-                          focusGregorianYearRange={{
-                            startYear: reconstructionGregorianYearBounds.start,
-                            endYear: reconstructionGregorianYearBounds.end,
-                          }}
-                          focusHoverHint={{
-                            en: "Inside focus period",
-                            fa: "داخل دورهٔ تمرکز",
-                          }}
-                          gridLeft={80}
-                        />
+                        </p>
                       ) : (
                         <p className="text-xs text-muted-foreground py-6">
                           {L(isFa, "Data unavailable for this window.", "داده در این بازه در دسترس نیست.")}
@@ -11262,8 +11404,10 @@ export default function StudyDetailPage() {
                     <CardContent className="pt-0 space-y-4">
                       {recoFxOfficialPoints.length > 0 || recoOpenAnnualMean.length > 0 ? (
                         <>
-                          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="reco-fx-levels-log-scale">
                             <input
+                              id="reco-fx-levels-log-scale"
+                              name="reco_fx_levels_log_scale"
                               type="checkbox"
                               checked={iranEconomyFxLevelsLogScale}
                               onChange={(e) => setIranEconomyFxLevelsLogScale(e.target.checked)}
@@ -11925,9 +12069,11 @@ export default function StudyDetailPage() {
                   </p>
                 ) : null}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 text-xs max-w-3xl">
-                  <label className="flex flex-col gap-0.5">
+                  <label className="flex flex-col gap-0.5" htmlFor="ipc-outer-start-year">
                     <span className="text-muted-foreground">{L(isFa, "Outer start (year)", "شروع بازه بیرونی (سال)")}</span>
                     <input
+                      id="ipc-outer-start-year"
+                      name="ipc_outer_start_year"
                       type="number"
                       min={1960}
                       max={ipcGregorianYear}
@@ -11940,9 +12086,11 @@ export default function StudyDetailPage() {
                       className="rounded border border-border bg-background px-2 py-1 w-full"
                     />
                   </label>
-                  <label className="flex flex-col gap-0.5">
+                  <label className="flex flex-col gap-0.5" htmlFor="ipc-outer-end-year">
                     <span className="text-muted-foreground">{L(isFa, "Outer end (year)", "پایان بازه بیرونی (سال)")}</span>
                     <input
+                      id="ipc-outer-end-year"
+                      name="ipc_outer_end_year"
                       type="number"
                       min={1960}
                       max={ipcGregorianYear}
@@ -11955,9 +12103,11 @@ export default function StudyDetailPage() {
                       className="rounded border border-border bg-background px-2 py-1 w-full"
                     />
                   </label>
-                  <label className="flex flex-col gap-0.5">
+                  <label className="flex flex-col gap-0.5" htmlFor="ipc-focus-start-year">
                     <span className="text-muted-foreground">{L(isFa, "Focus start (year)", "شروع دوره تمرکز (سال)")}</span>
                     <input
+                      id="ipc-focus-start-year"
+                      name="ipc_focus_start_year"
                       type="number"
                       min={1960}
                       max={ipcGregorianYear}
@@ -11971,9 +12121,11 @@ export default function StudyDetailPage() {
                       className="rounded border border-border bg-background px-2 py-1 w-full"
                     />
                   </label>
-                  <label className="flex flex-col gap-0.5">
+                  <label className="flex flex-col gap-0.5" htmlFor="ipc-focus-end-year">
                     <span className="text-muted-foreground">{L(isFa, "Focus end (year)", "پایان دوره تمرکز (سال)")}</span>
                     <input
+                      id="ipc-focus-end-year"
+                      name="ipc_focus_end_year"
                       type="number"
                       min={1960}
                       max={ipcGregorianYear}
@@ -12017,6 +12169,7 @@ export default function StudyDetailPage() {
                   recoDemandGdpPoints={recoDemandGdpPoints}
                   recoGdpDecompNonOilPoints={recoGdpDecompNonOilPoints}
                   recoGdpDecompOilPoints={recoGdpDecompOilPoints}
+                  recoGdpDecompCoverage={recoGdpDecompCoverage}
                   recoDemandRealConsumptionPoints={recoDemandRealConsumptionPoints}
                   recoDemandRealInvestmentPoints={recoDemandRealInvestmentPoints}
                   recoDemandRealGdpPoints={recoDemandRealGdpPoints}
@@ -12518,8 +12671,10 @@ export default function StudyDetailPage() {
                   <div className="flex flex-wrap items-center gap-3 pt-2">
                     <NominalRealToggle mode={monetarySeriesMode} onChange={setMonetarySeriesMode} isFa={isFa} />
                     {monetarySeriesMode === "real" ? (
-                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="wage-cpi-show-real-index">
                         <input
+                          id="wage-cpi-show-real-index"
+                          name="wage_cpi_show_real_index"
                           type="checkbox"
                           checked={showWageIndex}
                           onChange={(e) => setShowWageIndex(e.target.checked)}
@@ -12739,8 +12894,10 @@ export default function StudyDetailPage() {
                 <NominalRealToggle mode={monetarySeriesMode} onChange={setMonetarySeriesMode} isFa={isFa} />
               </div>
               {oilShockDates.length > 0 && (
-                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer mb-2">
+                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer mb-2" htmlFor="gold-oil-chart-show-shocks">
                   <input
+                    id="gold-oil-chart-show-shocks"
+                    name="gold_oil_chart_show_shocks"
                     type="checkbox"
                     checked={showShocks}
                     onChange={(e) => setShowShocks(e.target.checked)}
@@ -12889,8 +13046,10 @@ export default function StudyDetailPage() {
                 </div>
                 <div className="mb-2 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
                   {oilShockDates.length > 0 ? (
-                    <label className="flex cursor-pointer items-center gap-2">
+                    <label className="flex cursor-pointer items-center gap-2" htmlFor="oil-brent-chart-show-shocks">
                       <input
+                        id="oil-brent-chart-show-shocks"
+                        name="oil_brent_chart_show_shocks"
                         type="checkbox"
                         checked={showShocks}
                         onChange={(e) => setShowShocks(e.target.checked)}
@@ -12901,8 +13060,9 @@ export default function StudyDetailPage() {
                   <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
                     Events on chart
                   </span>
-                  <label className="flex cursor-pointer items-center gap-2">
+                  <label className="flex cursor-pointer items-center gap-2" htmlFor="oil-event-density-story">
                     <input
+                      id="oil-event-density-story"
                       type="radio"
                       name="oil-event-density"
                       checked={oilEventStoryMode}
@@ -12910,8 +13070,9 @@ export default function StudyDetailPage() {
                     />
                     Story (major markers)
                   </label>
-                  <label className="flex cursor-pointer items-center gap-2">
+                  <label className="flex cursor-pointer items-center gap-2" htmlFor="oil-event-density-data">
                     <input
+                      id="oil-event-density-data"
                       type="radio"
                       name="oil-event-density"
                       checked={!oilEventStoryMode}
@@ -13048,8 +13209,10 @@ export default function StudyDetailPage() {
                 <NominalRealToggle mode={monetarySeriesMode} onChange={setMonetarySeriesMode} isFa={isFa} />
               </div>
               {oilShockDates.length > 0 && (
-                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer mb-2">
+                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer mb-2" htmlFor="oil-fx-chart-show-shocks">
                   <input
+                    id="oil-fx-chart-show-shocks"
+                    name="oil_fx_chart_show_shocks"
                     type="checkbox"
                     checked={showShocks}
                     onChange={(e) => setShowShocks(e.target.checked)}

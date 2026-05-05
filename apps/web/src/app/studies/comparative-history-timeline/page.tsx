@@ -92,6 +92,7 @@ export default function ComparativeHistoryTimelinePage() {
       <div className="mb-2 flex max-w-2xl flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <input
           id="comparative-band-all-importance"
+          name="comparative_band_all_importance"
           type="checkbox"
           className="h-3.5 w-3.5 rounded border border-border"
           checked={showAllImportance}

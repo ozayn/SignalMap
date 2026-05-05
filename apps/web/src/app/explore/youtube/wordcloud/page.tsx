@@ -109,36 +109,47 @@ function YouTubeWordCloudContent() {
         </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={tryChannel} className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1 text-sm">
+            <label className="flex flex-col gap-1 text-sm" htmlFor="yt-wordcloud-channel-id">
               Channel ID or handle
               <input
+                id="yt-wordcloud-channel-id"
+                name="yt_wordcloud_channel_id"
                 type="text"
                 value={formChannelId}
                 onChange={(e) => setFormChannelId(e.target.value)}
                 placeholder="e.g. UC…, UC-test-wordcloud, or bpluspodcast"
                 className="rounded border bg-background px-2 py-1.5 text-sm w-56"
+                autoComplete="off"
               />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className="flex flex-col gap-1 text-sm" htmlFor="yt-wordcloud-window-start">
               Window start
               <input
+                id="yt-wordcloud-window-start"
+                name="yt_wordcloud_window_start"
                 type="date"
                 value={formWindowStart}
                 onChange={(e) => setFormWindowStart(e.target.value)}
                 className="rounded border bg-background px-2 py-1.5 text-sm"
+                autoComplete="off"
               />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className="flex flex-col gap-1 text-sm" htmlFor="yt-wordcloud-window-end">
               Window end
               <input
+                id="yt-wordcloud-window-end"
+                name="yt_wordcloud_window_end"
                 type="date"
                 value={formWindowEnd}
                 onChange={(e) => setFormWindowEnd(e.target.value)}
                 className="rounded border bg-background px-2 py-1.5 text-sm"
+                autoComplete="off"
               />
             </label>
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-2 text-sm" htmlFor="yt-wordcloud-show-counts">
               <input
+                id="yt-wordcloud-show-counts"
+                name="yt_wordcloud_show_counts"
                 type="checkbox"
                 checked={formShowCounts}
                 onChange={(e) => setFormShowCounts(e.target.checked)}

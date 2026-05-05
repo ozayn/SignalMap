@@ -644,6 +644,7 @@ function LearningPageInner() {
             <input
               ref={inputRef}
               id="learning-search"
+              name="learning_search"
               type="search"
               className="learning-search-input"
               placeholder="Search topics..."
