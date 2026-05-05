@@ -68,15 +68,6 @@ function cloneOptionBranch<T>(value: T): T {
  * `structuredClone` / JSON cannot copy functions, which breaks offscreen export vs the live chart
  * (FA numerals, dual-year axis, tooltips). Used only for presentation PNG export.
  */
-/** Must match `REGIME_FOCUS_BAND_LABEL_GRAPHIC_ID` in `timeline-chart.tsx` (layout-dependent graphic). */
-const REGIME_FOCUS_BAND_LABEL_GRAPHIC_ID_EXPORT = "regime-focus-band-label";
-
-function stripRegimeFocusBandLabelGraphicFromOption(opt: Record<string, unknown>): void {
-  const g = opt.graphic;
-  if (!Array.isArray(g)) return;
-  opt.graphic = g.filter((x) => (x as { id?: string })?.id !== REGIME_FOCUS_BAND_LABEL_GRAPHIC_ID_EXPORT);
-}
-
 function cloneEchartsOptionPreservingFunctions<T>(value: T, seen?: WeakMap<object, unknown>): T {
   const s = seen ?? new WeakMap<object, unknown>();
 
@@ -635,7 +626,6 @@ async function exportPresentationPngFromLiveChart(
     const exportSnapshot = cloneEchartsOptionPreservingFunctions(
       liveChart.getOption() as Record<string, unknown>
     ) as Record<string, unknown>;
-    stripRegimeFocusBandLabelGraphicFromOption(exportSnapshot);
     // Presentation title is export-only; dropping any `title` from the snapshot avoids inheriting or leaking title state.
     delete exportSnapshot.title;
 

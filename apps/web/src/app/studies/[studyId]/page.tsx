@@ -11,12 +11,21 @@ import {
 import { IRAN_STUDY_FA_DISPLAY } from "@/lib/iran-study-fa-copy";
 import { enEconomic, faEconomic } from "@/lib/signalmap-i18n/economic-terms";
 import {
-  IPC_DEFAULT_OUTER_START,
+  IPC_OUTER_CHART_YEAR_MIN,
+  IPC_PERIOD_COMPARISON_DEFAULT_OUTER_START,
   IPC_PRESET_CHIP,
   IPC_PRESET_UI_ORDER,
   IPC_PRESIDENT_PRESETS,
   type IpcPresidentPreset,
 } from "@/lib/iran-economy-period-comparison-presets";
+import {
+  IRAN_IRAQ_WAR_MARK_AREA_FILL,
+  IRAN_IRAQ_WAR_OVERLAY_ID,
+  IRAN_IRAQ_WAR_SHADE_END_YEAR,
+  IRAN_IRAQ_WAR_SHADE_START_YEAR,
+  ipcOuterWarOverlayDefaultOn,
+  type ChartPeriodOverlayBandInput,
+} from "@/lib/iran-iraq-war-chart-overlay";
 import {
   iranFxLevelsHasNonPositiveValuesInRange,
   iranFxLevelsSuggestLogDefaultInRange,
@@ -726,7 +735,7 @@ export default function StudyDetailPage() {
   const [recoLoadFailed, setRecoLoadFailed] = useState(false);
   const [recoLoadDetail, setRecoLoadDetail] = useState<string | null>(null);
   /** Iran economy period-comparison study: outer/focus Gregorian years + band labels (EN/FA for regimeArea). */
-  const [ipcOuterStartYear, setIpcOuterStartYear] = useState(IPC_DEFAULT_OUTER_START);
+  const [ipcOuterStartYear, setIpcOuterStartYear] = useState(IPC_PERIOD_COMPARISON_DEFAULT_OUTER_START);
   const [ipcOuterEndYear, setIpcOuterEndYear] = useState(ipcGregorianYear);
   const [ipcFocusStartYear, setIpcFocusStartYear] = useState(1989);
   const [ipcFocusEndYear, setIpcFocusEndYear] = useState(1997);
@@ -908,6 +917,32 @@ export default function StudyDetailPage() {
     study?.primarySignal.kind === "iran_economy_reconstruction_1368_1376";
   const isIranEconomyPeriodComparison = study?.primarySignal.kind === "iran_economy_period_comparison";
   const isIranEconomyMacroDashboard = isIranEconomyReconstruction1368 || isIranEconomyPeriodComparison;
+  const [showIranIraqWarOverlay, setShowIranIraqWarOverlay] = useState(false);
+  const [showIran1979RevolutionMarker, setShowIran1979RevolutionMarker] = useState(true);
+
+  const iranIraqWarChartPeriodOverlayBands = useMemo((): ChartPeriodOverlayBandInput[] | undefined => {
+    const bands: ChartPeriodOverlayBandInput[] = [];
+    if (isIranEconomyMacroDashboard && showIranIraqWarOverlay) {
+      bands.push({
+        id: IRAN_IRAQ_WAR_OVERLAY_ID,
+        startYear: IRAN_IRAQ_WAR_SHADE_START_YEAR,
+        endYear: IRAN_IRAQ_WAR_SHADE_END_YEAR,
+        fill: IRAN_IRAQ_WAR_MARK_AREA_FILL,
+        markAreaLabel: L(isFa, "Iran–Iraq War", "جنگ ایران و عراق"),
+      });
+    }
+    return bands.length > 0 ? bands : undefined;
+  }, [isIranEconomyMacroDashboard, showIranIraqWarOverlay, isFa]);
+
+  useEffect(() => {
+    if (studyId === "iran-economy-period-comparison") {
+      setShowIranIraqWarOverlay(ipcOuterWarOverlayDefaultOn(ipcOuterStartYear, ipcOuterEndYear));
+    } else {
+      setShowIranIraqWarOverlay(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- default when switching studies only; keep manual toggle while editing outer years
+  }, [studyId]);
+
   /** WDI national-accounts levels bundle (composition study or dual-axis reference study). */
   const isGdpMacroNationalAccounts = isGdpComposition || isGdpIranAccountsDual;
   const isGdpIranLocal = study?.gdpCompositionIranLocalOptions === true;
@@ -1301,7 +1336,7 @@ export default function StudyDetailPage() {
     const cy = ipcGregorianYear;
     let os = Math.min(ipcOuterStartYear, ipcOuterEndYear);
     let oe = Math.max(ipcOuterStartYear, ipcOuterEndYear);
-    os = Math.max(1960, Math.min(os, cy));
+    os = Math.max(IPC_OUTER_CHART_YEAR_MIN, Math.min(os, cy));
     oe = Math.max(os, Math.min(oe, cy));
     return { start: os, end: oe };
   }, [ipcOuterStartYear, ipcOuterEndYear, ipcGregorianYear]);
@@ -1314,6 +1349,53 @@ export default function StudyDetailPage() {
     fe = Math.max(fs, Math.min(fe, oe));
     return { start: fs, end: fe };
   }, [ipcFocusStartYear, ipcFocusEndYear, ipcOuterResolved]);
+
+  /** One line under preset chips: explains the gray focus band for every president (not only Rafsanjani). */
+  const ipcFocusBandContextParagraph = useMemo(() => {
+    if (!isIranEconomyPeriodComparison) return null;
+    if (ipcPresetId === "islamic_republic_outer") return null;
+    const start = ipcFocusResolved.start;
+    const end = ipcFocusResolved.end;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+    const enRange = `${start}–${end}`;
+    const faRange = `${localizeChartNumericDisplayString(String(start), "fa")}–${localizeChartNumericDisplayString(String(end), "fa")}`;
+    if (ipcPresetId === "custom") {
+      return L(
+        isFa,
+        `Shaded band: ${ipcBandLabelEn} (${enRange} CE).`,
+        `نوار سایه‌دار: ${ipcBandLabelFa} (${faRange} میلادی).`
+      );
+    }
+    const cfg = IPC_PRESIDENT_PRESETS[ipcPresetId];
+    if (cfg.outerOnly) return null;
+    if (ipcPresetId === "mohammad_reza_pahlavi") {
+      return L(
+        isFa,
+        `Shaded band: Mohammad Reza Pahlavi (${enRange} CE; 1320–1357 SH).`,
+        `نوار سایه‌دار: محمدرضا پهلوی (${faRange} میلادی؛ ۱۳۲۰–۱۳۵۷ ش).`
+      );
+    }
+    if (ipcPresetId === "rafsanjani") {
+      return L(
+        isFa,
+        `Shaded band: Rafsanjani presidencies (${enRange} CE).`,
+        `نوار سایه‌دار: دوره‌های ریاست‌جمهوری رفسنجانی (${faRange} میلادی).`
+      );
+    }
+    return L(
+      isFa,
+      `Shaded band: ${cfg.labelEn} (${enRange} CE).`,
+      `نوار سایه‌دار: ${cfg.labelFa} (${faRange} میلادی).`
+    );
+  }, [
+    isIranEconomyPeriodComparison,
+    ipcPresetId,
+    ipcFocusResolved.start,
+    ipcFocusResolved.end,
+    isFa,
+    ipcBandLabelEn,
+    ipcBandLabelFa,
+  ]);
 
   const ipcTimeRange = useMemo((): [string, string] | null => {
     if (!study || !isIranEconomyPeriodComparison) return null;
@@ -1525,9 +1607,10 @@ export default function StudyDetailPage() {
   }, [isIranEconomyPeriodComparison, ipcFocusResolved]);
 
   const ipcRegimeAreaWithLabel = useMemo(() => {
+    if (ipcPresetId === "islamic_republic_outer") return undefined;
     if (!ipcRegimeAreaBounds) return undefined;
     return { ...ipcRegimeAreaBounds, label: L(isFa, ipcBandLabelEn, ipcBandLabelFa) };
-  }, [ipcRegimeAreaBounds, isFa, ipcBandLabelEn, ipcBandLabelFa]);
+  }, [ipcPresetId, ipcRegimeAreaBounds, isFa, ipcBandLabelEn, ipcBandLabelFa]);
 
   /** Reconstruction study: shaded band matches the fixed 1368–1376 window (Rafsanjani era on charts/exports). */
   const recoWelfareRegimeArea = useMemo(() => {
@@ -1622,21 +1705,27 @@ export default function StudyDetailPage() {
     recoGdpGrowthPoints,
   ]);
 
-  const applyIpcPreset = useCallback((id: IpcPresidentPreset) => {
-    const cfg = IPC_PRESIDENT_PRESETS[id];
-    const cy = new Date().getFullYear();
-    setIpcPresetId(id);
-    if (cfg.outerOnly) {
-      if (cfg.outerStart != null) setIpcOuterStartYear(cfg.outerStart);
-      if (cfg.outerUseCurrentEnd) setIpcOuterEndYear(cy);
-      return;
-    }
-    if (cfg.focusStart != null) setIpcFocusStartYear(cfg.focusStart);
-    if (cfg.focusUseCurrentEnd) setIpcFocusEndYear(cy);
-    else if (cfg.focusEnd != null) setIpcFocusEndYear(cfg.focusEnd);
-    setIpcBandLabelEn(cfg.labelEn);
-    setIpcBandLabelFa(cfg.labelFa);
-  }, []);
+  const applyIpcPreset = useCallback(
+    (id: IpcPresidentPreset) => {
+      const cfg = IPC_PRESIDENT_PRESETS[id];
+      const cy = ipcGregorianYear;
+      setIpcPresetId(id);
+      if (cfg.outerOnly) {
+        if (cfg.outerStart != null) setIpcOuterStartYear(cfg.outerStart);
+        if (cfg.outerUseCurrentEnd) setIpcOuterEndYear(cy);
+        return;
+      }
+      if (cfg.focusStart != null) setIpcFocusStartYear(cfg.focusStart);
+      if (cfg.focusUseCurrentEnd) setIpcFocusEndYear(cy);
+      else if (cfg.focusEnd != null) setIpcFocusEndYear(cfg.focusEnd);
+      if (cfg.widenOuterStartToYear != null) {
+        setIpcOuterStartYear((prev) => Math.min(prev, cfg.widenOuterStartToYear!));
+      }
+      setIpcBandLabelEn(cfg.labelEn);
+      setIpcBandLabelFa(cfg.labelFa);
+    },
+    [ipcGregorianYear]
+  );
 
   const markIpcCustomFocusLabel = useCallback(() => {
     setIpcPresetId("custom");
@@ -4840,6 +4929,18 @@ export default function StudyDetailPage() {
     !isBandEventsTimeline &&
     !isComparativeHistoryTimeline;
 
+  /** Macro-style studies: master overlay plus Iran / world / sanctions layer toggles in the chart header. */
+  const macroPanelEventLayerToggles =
+    isGiniInequality ||
+    isInflationCpiYoy ||
+    isGdpGlobalComparison ||
+    isIsiDiagnostics ||
+    isPovertyHeadcountIran ||
+    isIranMoneySupplyM2 ||
+    isDutchDiseaseDiagnostics ||
+    isIranEconomyReconstruction1368 ||
+    isIranEconomyPeriodComparison;
+
   const singleSignalReady = isGlobalEventsTimeline || isBandEventsTimeline || isComparativeHistoryTimeline
     ? true
     : isGoldAndOil
@@ -6906,23 +7007,155 @@ export default function StudyDetailPage() {
             </p>
           ) : null}
           <StudyChartHeaderControlsShell>
-            {hasTimeSeriesEventOverlayControl && (
-              <label
-                className="flex items-center gap-1.5 text-xs font-medium text-foreground/90 cursor-pointer"
-                htmlFor="study-hdr-event-overlay"
-                title={L(isFa, "Show vertical event markers on time-series charts", "نمایش علامت‌های رویداد روی نمودارهای سری زمانی")}
-              >
-                <input
-                  id="study-hdr-event-overlay"
-                  name="study_hdr_event_overlay"
-                  type="checkbox"
-                  checked={showTimeSeriesEventOverlay}
-                  onChange={(e) => setShowTimeSeriesEventOverlay(e.target.checked)}
-                  className="rounded border-border"
-                />
-                {L(isFa, "Event overlay", "نمایش رویدادها")}
-              </label>
-            )}
+            {hasTimeSeriesEventOverlayControl && macroPanelEventLayerToggles ? (
+              <div className="flex w-full min-w-0 flex-col gap-1.5">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
+                  <span className="shrink-0 font-medium text-foreground/90">
+                    {L(isFa, "Overlays:", "پوشش‌ها:")}
+                  </span>
+                  <label
+                    className="inline-flex cursor-pointer items-center gap-1.5 font-medium text-foreground/90"
+                    htmlFor="study-hdr-all-events"
+                    title={L(
+                      isFa,
+                      "Show or hide all vertical event markers on time-series charts.",
+                      "نمایش یا پنهان کردن همهٔ علامت‌های رویداد روی نمودارهای سری زمانی."
+                    )}
+                  >
+                    <input
+                      id="study-hdr-all-events"
+                      name="study_hdr_event_overlay"
+                      type="checkbox"
+                      checked={showTimeSeriesEventOverlay}
+                      onChange={(e) => setShowTimeSeriesEventOverlay(e.target.checked)}
+                      className="rounded border-border"
+                    />
+                    {L(isFa, "All events", "رویدادها")}
+                  </label>
+                  <label
+                    className="inline-flex cursor-pointer items-center gap-1.5"
+                    htmlFor="study-hdr-macro-panels-show-iran"
+                  >
+                    <input
+                      id="study-hdr-macro-panels-show-iran"
+                      name="study_hdr_macro_panels_show_iran_events"
+                      type="checkbox"
+                      checked={showIranEvents}
+                      onChange={(e) => setShowIranEvents(e.target.checked)}
+                      className="rounded border-border"
+                    />
+                    {L(isFa, "Iran events", "رویدادهای ایران")}
+                  </label>
+                  <label
+                    className="inline-flex cursor-pointer items-center gap-1.5"
+                    htmlFor="study-hdr-macro-panels-show-world"
+                  >
+                    <input
+                      id="study-hdr-macro-panels-show-world"
+                      name="study_hdr_macro_panels_show_world_events"
+                      type="checkbox"
+                      checked={showWorldEvents}
+                      onChange={(e) => setShowWorldEvents(e.target.checked)}
+                      className="rounded border-border"
+                    />
+                    {L(isFa, "World events", "رویدادهای جهان")}
+                  </label>
+                  <label
+                    className="inline-flex cursor-pointer items-center gap-1.5"
+                    htmlFor="study-hdr-macro-panels-show-sanctions"
+                  >
+                    <input
+                      id="study-hdr-macro-panels-show-sanctions"
+                      name="study_hdr_macro_panels_show_sanctions_events"
+                      type="checkbox"
+                      checked={showSanctionsEvents}
+                      onChange={(e) => setShowSanctionsEvents(e.target.checked)}
+                      className="rounded border-border"
+                    />
+                    {L(isFa, "Sanctions", "تحریم‌ها")}
+                  </label>
+                  {isIranEconomyMacroDashboard ? (
+                    <label
+                      className="inline-flex cursor-pointer items-center gap-1.5"
+                      htmlFor="study-hdr-iran-iraq-war"
+                      title={L(
+                        isFa,
+                        "Shade calendar years 1980–1988 (Gregorian) on macro charts when enabled.",
+                        "در صورت فعال بودن، سال‌های ۱۹۸۰–۱۹۸۸ (میلادی) روی نمودارهای کلان سایه می‌شود."
+                      )}
+                    >
+                      <input
+                        id="study-hdr-iran-iraq-war"
+                        name="study_hdr_iran_iraq_war_overlay"
+                        type="checkbox"
+                        checked={showIranIraqWarOverlay}
+                        onChange={(e) => setShowIranIraqWarOverlay(e.target.checked)}
+                        className="rounded border-border"
+                      />
+                      {L(isFa, "Iran–Iraq War", "جنگ ایران و عراق")}
+                    </label>
+                  ) : null}
+                  {isIranEconomyPeriodComparison ? (
+                    <label
+                      className="inline-flex cursor-pointer items-center gap-1.5"
+                      htmlFor="study-hdr-iran-1979-revolution-marker"
+                      title={L(
+                        isFa,
+                        "Draw a vertical line at Gregorian 1979 when that year is within the chart window.",
+                        "در صورت فعال بودن، وقتی سال ۱۹۷۹ میلادی در پنجرهٔ نمودار باشد خط عمودی رسم می‌شود."
+                      )}
+                    >
+                      <input
+                        id="study-hdr-iran-1979-revolution-marker"
+                        name="study_hdr_iran_1979_revolution_marker"
+                        type="checkbox"
+                        checked={showIran1979RevolutionMarker}
+                        onChange={(e) => setShowIran1979RevolutionMarker(e.target.checked)}
+                        className="rounded border-border"
+                      />
+                      {L(isFa, "Show revolution marker", "نمایش نشانگر انقلاب")}
+                    </label>
+                  ) : null}
+                </div>
+                {isIranEconomyPeriodComparison ? (
+                  <p className="max-w-3xl text-[11px] leading-snug text-muted-foreground">
+                    {L(
+                      isFa,
+                      "Vertical line marks the 1979 Revolution (structural break).",
+                      "«خط عمودی نشان‌دهنده انقلاب ۱۳۵۷ (نقطه گسست ساختاری) است.»"
+                    )}
+                  </p>
+                ) : null}
+                <p className="max-w-3xl text-[11px] leading-snug text-muted-foreground">
+                  {L(
+                    isFa,
+                    "Overlays are historical context only; they do not imply causality.",
+                    "«پوشش‌ها صرفاً برای زمینهٔ تاریخی‌اند و به معنی رابطهٔ علّی نیستند.»"
+                  )}
+                </p>
+              </div>
+            ) : hasTimeSeriesEventOverlayControl ? (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
+                <span className="shrink-0 font-medium text-foreground/90">
+                  {L(isFa, "Overlays:", "پوشش‌ها:")}
+                </span>
+                <label
+                  className="inline-flex cursor-pointer items-center gap-1.5 font-medium text-foreground/90"
+                  htmlFor="study-hdr-event-overlay"
+                  title={L(isFa, "Show vertical event markers on time-series charts", "نمایش علامت‌های رویداد روی نمودارهای سری زمانی")}
+                >
+                  <input
+                    id="study-hdr-event-overlay"
+                    name="study_hdr_event_overlay"
+                    type="checkbox"
+                    checked={showTimeSeriesEventOverlay}
+                    onChange={(e) => setShowTimeSeriesEventOverlay(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  {L(isFa, "All events", "رویدادها")}
+                </label>
+              </div>
+            ) : null}
             {!hasTurkeyComparator &&
               !isOilExportCapacity &&
               !isOilEconomyOverview &&
@@ -7038,51 +7271,6 @@ export default function StudyDetailPage() {
                 />
                 Show sanctions periods
               </label>
-            )}
-            {(isGiniInequality ||
-              isInflationCpiYoy ||
-              isGdpGlobalComparison ||
-              isIsiDiagnostics ||
-              isPovertyHeadcountIran ||
-              isIranMoneySupplyM2 ||
-              isDutchDiseaseDiagnostics ||
-              isIranEconomyReconstruction1368 ||
-              isIranEconomyPeriodComparison) && (
-              <>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-macro-panels-show-iran">
-                  <input
-                    id="study-hdr-macro-panels-show-iran"
-                    name="study_hdr_macro_panels_show_iran_events"
-                    type="checkbox"
-                    checked={showIranEvents}
-                    onChange={(e) => setShowIranEvents(e.target.checked)}
-                    className="rounded border-border"
-                  />
-                  Show Iran events
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-macro-panels-show-world">
-                  <input
-                    id="study-hdr-macro-panels-show-world"
-                    name="study_hdr_macro_panels_show_world_events"
-                    type="checkbox"
-                    checked={showWorldEvents}
-                    onChange={(e) => setShowWorldEvents(e.target.checked)}
-                    className="rounded border-border"
-                  />
-                  Show world events
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" htmlFor="study-hdr-macro-panels-show-sanctions">
-                  <input
-                    id="study-hdr-macro-panels-show-sanctions"
-                    name="study_hdr_macro_panels_show_sanctions_events"
-                    type="checkbox"
-                    checked={showSanctionsEvents}
-                    onChange={(e) => setShowSanctionsEvents(e.target.checked)}
-                    className="rounded border-border"
-                  />
-                  Show sanctions
-                </label>
-              </>
             )}
             {isOilProductionMajorExporters && (
               <>
@@ -10974,6 +11162,7 @@ export default function StudyDetailPage() {
                           unit="%"
                           events={reconstructionChartEvents}
                           timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
                           chartRangeGranularity="year"
                           xAxisYearLabel={chartYearAxisLabel}
                           exportFileStem="iran-reco-inflation"
@@ -11019,6 +11208,7 @@ export default function StudyDetailPage() {
                           unit="%"
                           events={reconstructionChartEvents}
                           timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
                           chartRangeGranularity="year"
                           xAxisYearLabel={chartYearAxisLabel}
                           exportFileStem="iran-reco-gdp-growth"
@@ -11104,6 +11294,7 @@ export default function StudyDetailPage() {
                             events={reconstructionChartEvents}
                             multiSeries={reconstructionGdpDecompositionMultiSeries}
                             timeRange={reconstructionTimeRange ?? study.timeRange}
+                            chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
                             chartRangeGranularity="year"
                             xAxisYearLabel={chartYearAxisLabel}
                             exportFileStem="iran-reco-gdp-decomposition-nominal"
@@ -11221,6 +11412,7 @@ export default function StudyDetailPage() {
                             },
                           ]}
                           timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
                           chartRangeGranularity="year"
                           xAxisYearLabel={chartYearAxisLabel}
                           exportFileStem="iran-reco-demand-nominal"
@@ -11319,6 +11511,7 @@ export default function StudyDetailPage() {
                             },
                           ]}
                           timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
                           chartRangeGranularity="year"
                           xAxisYearLabel={chartYearAxisLabel}
                           exportFileStem="iran-reco-demand-real"
@@ -11379,6 +11572,7 @@ export default function StudyDetailPage() {
                           unit="%"
                           events={reconstructionChartEvents}
                           timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
                           chartRangeGranularity="year"
                           xAxisYearLabel={chartYearAxisLabel}
                           exportFileStem="iran-reco-oil-rents"
@@ -11459,6 +11653,7 @@ export default function StudyDetailPage() {
                               },
                             ]}
                             timeRange={reconstructionTimeRange ?? study.timeRange}
+                            chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
                             chartRangeGranularity="year"
                             xAxisYearLabel={chartYearAxisLabel}
                             exportFileStem="iran-reco-fx-levels"
@@ -11499,6 +11694,7 @@ export default function StudyDetailPage() {
                           unit="%"
                           events={reconstructionChartEvents}
                           timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
                           chartRangeGranularity="year"
                           xAxisYearLabel={chartYearAxisLabel}
                           exportFileStem="iran-reco-fx-spread"
@@ -11570,6 +11766,7 @@ export default function StudyDetailPage() {
                             },
                           ]}
                           timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
                           chartRangeGranularity="year"
                           xAxisYearLabel={chartYearAxisLabel}
                           exportFileStem="iran-reco-m2-cpi"
@@ -11631,6 +11828,7 @@ export default function StudyDetailPage() {
                             },
                           ]}
                           timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
                           chartRangeGranularity="year"
                           xAxisYearLabel={chartYearAxisLabel}
                           exportFileStem="iran-reco-trade"
@@ -11689,6 +11887,7 @@ export default function StudyDetailPage() {
                             },
                           ]}
                           timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
                           chartRangeGranularity="year"
                           xAxisYearLabel={chartYearAxisLabel}
                           exportFileStem="iran-reco-industry"
@@ -11757,6 +11956,7 @@ export default function StudyDetailPage() {
                           unit={L(isFa, "Gini (0–100)", "ضریب جینی (۰–۱۰۰)")}
                           events={reconstructionChartEvents}
                           timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
                           chartRangeGranularity="year"
                           xAxisYearLabel={chartYearAxisLabel}
                           exportFileStem="iran-reco-welfare-gini"
@@ -11872,6 +12072,7 @@ export default function StudyDetailPage() {
                             },
                           ]}
                           timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
                           chartRangeGranularity="year"
                           xAxisYearLabel={chartYearAxisLabel}
                           exportFileStem="iran-reco-welfare-poverty"
@@ -12076,14 +12277,9 @@ export default function StudyDetailPage() {
                     </button>
                   ))}
                 </div>
-                {ipcPresetId !== "custom" && IPC_PRESIDENT_PRESETS[ipcPresetId].bandContextEn ? (
+                {ipcFocusBandContextParagraph ? (
                   <p className="text-xs text-muted-foreground mb-3 max-w-3xl leading-relaxed">
-                    {L(
-                      isFa,
-                      IPC_PRESIDENT_PRESETS[ipcPresetId].bandContextEn!,
-                      IPC_PRESIDENT_PRESETS[ipcPresetId].bandContextFa ??
-                        IPC_PRESIDENT_PRESETS[ipcPresetId].bandContextEn!
-                    )}
+                    {ipcFocusBandContextParagraph}
                   </p>
                 ) : null}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 text-xs max-w-3xl">
@@ -12093,7 +12289,7 @@ export default function StudyDetailPage() {
                       id="ipc-outer-start-year"
                       name="ipc_outer_start_year"
                       type="number"
-                      min={1960}
+                      min={IPC_OUTER_CHART_YEAR_MIN}
                       max={ipcGregorianYear}
                       value={ipcOuterStartYear}
                       onChange={(e) => {
@@ -12110,7 +12306,7 @@ export default function StudyDetailPage() {
                       id="ipc-outer-end-year"
                       name="ipc_outer_end_year"
                       type="number"
-                      min={1960}
+                      min={IPC_OUTER_CHART_YEAR_MIN}
                       max={ipcGregorianYear}
                       value={ipcOuterEndYear}
                       onChange={(e) => {
@@ -12127,7 +12323,7 @@ export default function StudyDetailPage() {
                       id="ipc-focus-start-year"
                       name="ipc_focus_start_year"
                       type="number"
-                      min={1960}
+                      min={IPC_OUTER_CHART_YEAR_MIN}
                       max={ipcGregorianYear}
                       value={ipcFocusStartYear}
                       onChange={(e) => {
@@ -12145,7 +12341,7 @@ export default function StudyDetailPage() {
                       id="ipc-focus-end-year"
                       name="ipc_focus_end_year"
                       type="number"
-                      min={1960}
+                      min={IPC_OUTER_CHART_YEAR_MIN}
                       max={ipcGregorianYear}
                       value={ipcFocusEndYear}
                       onChange={(e) => {
@@ -12159,7 +12355,7 @@ export default function StudyDetailPage() {
                   </label>
                 </div>
               </ClientOnlyAfterMount>
-              {ipcTimeRange && ipcRegimeAreaWithLabel ? (
+              {ipcTimeRange ? (
                 <IranEconomyPeriodComparisonPanels
                   isFa={isFa}
                   L={L}
@@ -12229,6 +12425,8 @@ export default function StudyDetailPage() {
                   recoWelfarePovertySource={recoWelfarePovertySource}
                   recoWelfarePovertyDdayId={recoWelfarePovertyDdayId}
                   recoWelfarePovertyLmicId={recoWelfarePovertyLmicId}
+                  showRevolution1979Marker={showIran1979RevolutionMarker}
+                  chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
                 />
               ) : null}
               {displayStudy.observations?.length ? (
@@ -12346,8 +12544,8 @@ export default function StudyDetailPage() {
                   <p>
                     {L(
                       isFa,
-                      "This view keeps the long-run series visible while highlighting a selected historical window. The shaded band is a visual aid for comparison; it does not imply causality.",
-                      "«در این نما کل روند بلندمدت دیده می‌شود و یک دوره تاریخی انتخابی با سایه مشخص می‌شود. این سایه فقط برای مقایسه بصری است و به معنی رابطه علّی نیست.»"
+                      "This view can compare late Pahlavi and Islamic Republic economic periods where data is available. Long-run series stay visible while a selected window is highlighted. The shaded band is a visual aid for comparison; it does not imply causality.",
+                      "«این نما — جایی که داده هست — دورهٔ پایانی پهلوی و جمهوری اسلامی را کنار هم می‌تواند نشان دهد؛ روند بلندمدت دیده می‌شود و یک پنجرهٔ انتخابی با سایه برجسته می‌شود. سایه فقط برای مقایسه بصری است و به معنی رابطه علّی نیست.»"
                     )}
                   </p>
                 )}

@@ -21,6 +21,7 @@ import {
   buildSparseWdiLineCoverageExtras,
 } from "@/lib/poverty-chart-data-coverage";
 import type { GdpDecompositionCoverage } from "@/lib/gdp-decomposition-coverage";
+import type { ChartPeriodOverlayBandInput } from "@/lib/iran-iraq-war-chart-overlay";
 
 /** Taller plot area than default study charts; tuned for long-run Iran macro panels. */
 const IPC_COMPARISON_CHART_HEIGHT =
@@ -35,7 +36,8 @@ export type IranEconomyPeriodComparisonPanelsProps = {
   chartLocaleForCharts: "en" | "fa" | undefined;
   chartYearAxisLabel: ChartAxisYearMode | undefined;
   timeRange: [string, string];
-  regimeArea: { xStart: string; xEnd: string; label: string };
+  /** When omitted (e.g. IR 1979– outer-only preset), charts zoom to `timeRange` without a shaded focus band. */
+  regimeArea?: { xStart: string; xEnd: string; label: string };
   focusGregorianYearRange: { startYear: number; endYear: number };
   focusHoverHint: { en: string; fa: string };
   events: TimelineEvent[];
@@ -91,6 +93,10 @@ export type IranEconomyPeriodComparisonPanelsProps = {
   recoWelfarePovertySource: { name?: string; url?: string; publisher?: string } | null;
   recoWelfarePovertyDdayId: string;
   recoWelfarePovertyLmicId: string;
+  /** Optional contextual x-bands (e.g. Iran–Iraq War), same Gregorian keys as series. */
+  chartPeriodOverlayBands?: ChartPeriodOverlayBandInput[];
+  /** Vertical markLine at Gregorian 1979 when in range (default on in study header). */
+  showRevolution1979Marker?: boolean;
 };
 
 export function IranEconomyPeriodComparisonPanels({
@@ -156,7 +162,17 @@ export function IranEconomyPeriodComparisonPanels({
   recoWelfarePovertySource,
   recoWelfarePovertyDdayId,
   recoWelfarePovertyLmicId,
+  chartPeriodOverlayBands,
+  showRevolution1979Marker = false,
 }: IranEconomyPeriodComparisonPanelsProps) {
+  const revolution1979Marker = useMemo(
+    () =>
+      showRevolution1979Marker
+        ? { enabled: true as const, label: L(isFa, "1979 Revolution", "انقلاب ۱۳۵۷") }
+        : undefined,
+    [showRevolution1979Marker, isFa, L]
+  );
+
   const welfarePovertyCoverage = useMemo(
     () =>
       buildPovertyHeadcountCoverageExtras(
@@ -313,6 +329,8 @@ export function IranEconomyPeriodComparisonPanels({
                   unit="%"
                   events={events}
                   timeRange={timeRange}
+                  chartPeriodOverlayBands={chartPeriodOverlayBands}
+                  revolution1979Marker={revolution1979Marker}
                   chartRangeGranularity="year"
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-inflation"
@@ -359,6 +377,8 @@ export function IranEconomyPeriodComparisonPanels({
                   unit="%"
                   events={events}
                   timeRange={timeRange}
+                  chartPeriodOverlayBands={chartPeriodOverlayBands}
+                  revolution1979Marker={revolution1979Marker}
                   chartRangeGranularity="year"
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-gdp-growth"
@@ -436,6 +456,8 @@ export function IranEconomyPeriodComparisonPanels({
                     events={events}
                     multiSeries={ipcGdpDecompositionMultiSeries}
                     timeRange={timeRange}
+                    chartPeriodOverlayBands={chartPeriodOverlayBands}
+                    revolution1979Marker={revolution1979Marker}
                     chartRangeGranularity="year"
                     xAxisYearLabel={chartYearAxisLabel}
                     exportFileStem="iran-ipc-gdp-decomposition-nominal"
@@ -545,6 +567,8 @@ export function IranEconomyPeriodComparisonPanels({
                     },
                   ]}
                   timeRange={timeRange}
+                  chartPeriodOverlayBands={chartPeriodOverlayBands}
+                  revolution1979Marker={revolution1979Marker}
                   chartRangeGranularity="year"
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-demand-nominal"
@@ -644,6 +668,8 @@ export function IranEconomyPeriodComparisonPanels({
                     },
                   ]}
                   timeRange={timeRange}
+                  chartPeriodOverlayBands={chartPeriodOverlayBands}
+                  revolution1979Marker={revolution1979Marker}
                   chartRangeGranularity="year"
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-demand-real"
@@ -700,6 +726,8 @@ export function IranEconomyPeriodComparisonPanels({
                   unit="%"
                   events={events}
                   timeRange={timeRange}
+                  chartPeriodOverlayBands={chartPeriodOverlayBands}
+                  revolution1979Marker={revolution1979Marker}
                   chartRangeGranularity="year"
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-oil-rents"
@@ -777,6 +805,8 @@ export function IranEconomyPeriodComparisonPanels({
                       },
                     ]}
                     timeRange={timeRange}
+                    chartPeriodOverlayBands={chartPeriodOverlayBands}
+                    revolution1979Marker={revolution1979Marker}
                     chartRangeGranularity="year"
                     xAxisYearLabel={chartYearAxisLabel}
                     exportFileStem="iran-ipc-fx-levels"
@@ -814,6 +844,8 @@ export function IranEconomyPeriodComparisonPanels({
                   unit="%"
                   events={events}
                   timeRange={timeRange}
+                  chartPeriodOverlayBands={chartPeriodOverlayBands}
+                  revolution1979Marker={revolution1979Marker}
                   chartRangeGranularity="year"
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-fx-spread"
@@ -888,6 +920,8 @@ export function IranEconomyPeriodComparisonPanels({
                     },
                   ]}
                   timeRange={timeRange}
+                  chartPeriodOverlayBands={chartPeriodOverlayBands}
+                  revolution1979Marker={revolution1979Marker}
                   chartRangeGranularity="year"
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-m2-cpi"
@@ -954,6 +988,8 @@ export function IranEconomyPeriodComparisonPanels({
                     },
                   ]}
                   timeRange={timeRange}
+                  chartPeriodOverlayBands={chartPeriodOverlayBands}
+                  revolution1979Marker={revolution1979Marker}
                   chartRangeGranularity="year"
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-trade"
@@ -1017,6 +1053,8 @@ export function IranEconomyPeriodComparisonPanels({
                     },
                   ]}
                   timeRange={timeRange}
+                  chartPeriodOverlayBands={chartPeriodOverlayBands}
+                  revolution1979Marker={revolution1979Marker}
                   chartRangeGranularity="year"
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-industry"
@@ -1053,6 +1091,8 @@ export function IranEconomyPeriodComparisonPanels({
                   unit={L(isFa, "k tomans/month", "هزار تومان/ماه")}
                   events={events}
                   timeRange={timeRange}
+                  chartPeriodOverlayBands={chartPeriodOverlayBands}
+                  revolution1979Marker={revolution1979Marker}
                   chartRangeGranularity="year"
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-real-wage"
@@ -1106,6 +1146,8 @@ export function IranEconomyPeriodComparisonPanels({
                   unit={L(isFa, "Gini (0–100)", "ضریب جینی (۰–۱۰۰)")}
                   events={events}
                   timeRange={timeRange}
+                  chartPeriodOverlayBands={chartPeriodOverlayBands}
+                  revolution1979Marker={revolution1979Marker}
                   chartRangeGranularity="year"
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-welfare-gini"
@@ -1215,6 +1257,8 @@ export function IranEconomyPeriodComparisonPanels({
                     },
                   ]}
                   timeRange={timeRange}
+                  chartPeriodOverlayBands={chartPeriodOverlayBands}
+                  revolution1979Marker={revolution1979Marker}
                   chartRangeGranularity="year"
                   xAxisYearLabel={chartYearAxisLabel}
                   exportFileStem="iran-ipc-welfare-poverty"

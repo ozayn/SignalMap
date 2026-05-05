@@ -637,7 +637,10 @@ function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
         themes: ["macro", "fx", "oil"],
         tags: [],
         keywords: [
+          "1960",
           "1979",
+          "Pahlavi",
+          "Mohammad Reza Pahlavi",
           "president",
           "presidency",
           "focus",
