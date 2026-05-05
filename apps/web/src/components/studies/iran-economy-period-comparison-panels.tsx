@@ -209,7 +209,7 @@ export function IranEconomyPeriodComparisonPanels({
                   exportSourceFooter={studyChartExportSource(isFa, [recoInflationSource?.name ?? "World Bank WDI", "FP.CPI.TOTL.ZG"])}
                   data={recoInflationIranPoints}
                   valueKey="value"
-                  label={L(isFa, "CPI inflation", faEconomic.cpiInflation)}
+                  label={L(isFa, "CPI inflation", "تورم")}
                   unit="%"
                   events={events}
                   timeRange={timeRange}
@@ -219,6 +219,8 @@ export function IranEconomyPeriodComparisonPanels({
                   showChartControls
                   chartHeight="h-56 md:h-64"
                   mutedEventLines
+                  seriesColor="hsl(0, 84%, 59%)"
+                  gridLeft={80}
                   regimeArea={regimeArea}
                   focusGregorianYearRange={focusGregorianYearRange}
                   focusHoverHint={focusHoverHint}
@@ -253,7 +255,7 @@ export function IranEconomyPeriodComparisonPanels({
                   ])}
                   data={recoGdpGrowthPoints}
                   valueKey="value"
-                  label={L(isFa, enEconomic.realGdpGrowth, faEconomic.realGdpGrowth)}
+                  label={L(isFa, enEconomic.realGdpGrowth, "رشد GDP")}
                   unit="%"
                   events={events}
                   timeRange={timeRange}
@@ -263,6 +265,8 @@ export function IranEconomyPeriodComparisonPanels({
                   showChartControls
                   chartHeight="h-56 md:h-64"
                   mutedEventLines
+                  seriesColor="hsl(217, 91%, 59%)"
+                  gridLeft={80}
                   regimeArea={regimeArea}
                   focusGregorianYearRange={focusGregorianYearRange}
                   focusHoverHint={focusHoverHint}

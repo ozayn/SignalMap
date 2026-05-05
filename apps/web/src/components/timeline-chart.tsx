@@ -325,6 +325,11 @@ type TimelineChartProps = {
   gridRight?: string;
   /** Override grid.left (number = px, string = % or px). When omitted, FA charts use wider defaults so vertical y-axis titles are not clipped. */
   gridLeft?: number | string;
+  /**
+   * Single-series primary line + area fill color. Prefer ``hsl(...)`` so area gradients can vary opacity;
+   * falls back to theme primary when omitted.
+   */
+  seriesColor?: string;
   /** Dates that are synthetic extensions (e.g. current year when data ends earlier). */
   extendedDates?: string[];
   /** Last official data year for extension tooltip (e.g. "2025"). */
@@ -840,6 +845,7 @@ export function TimelineChart({
   chartHeight = TIMELINE_CHART_DEFAULT_HEIGHT_CLASS,
   gridRight: gridRightOverride,
   gridLeft: gridLeftOverride,
+  seriesColor: seriesColorProp,
   extendedDates = [],
   lastOfficialDateForExtension,
   highlightLatestPoint = false,
@@ -1231,7 +1237,7 @@ export function TimelineChart({
 
   useEffect(() => {
     const compact = isCompact;
-    const color = cssHsl("--chart-primary", "hsl(238, 84%, 67%)");
+    const color = seriesColorProp ?? cssHsl("--chart-primary", "hsl(238, 84%, 67%)");
     const muted = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
     const borderColor = cssHsl("--border", "hsl(240, 5.9%, 90%)");
     const mutedFg = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
@@ -3159,6 +3165,7 @@ export function TimelineChart({
     showOilShocks,
     gridRightOverride,
     gridLeftOverride,
+    seriesColorProp,
     xLabelRotate,
     extendedDates,
     lastOfficialDateForExtension,

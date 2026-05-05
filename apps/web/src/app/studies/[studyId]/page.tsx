@@ -10656,7 +10656,7 @@ export default function StudyDetailPage() {
                           ])}
                           data={recoInflationIranPoints}
                           valueKey="value"
-                          label={L(isFa, "CPI inflation", faEconomic.cpiInflation)}
+                          label={L(isFa, "CPI inflation", "تورم")}
                           unit="%"
                           events={reconstructionChartEvents}
                           timeRange={reconstructionTimeRange ?? study.timeRange}
@@ -10666,6 +10666,8 @@ export default function StudyDetailPage() {
                           showChartControls
                           chartHeight="h-56 md:h-64"
                           mutedEventLines
+                          seriesColor="hsl(0, 84%, 59%)"
+                          gridLeft={80}
                         />
                       ) : (
                         <p className="text-xs text-muted-foreground py-6">
@@ -10699,7 +10701,7 @@ export default function StudyDetailPage() {
                           ])}
                           data={recoGdpGrowthPoints}
                           valueKey="value"
-                          label={L(isFa, "Real GDP growth", faEconomic.realGdpGrowth)}
+                          label={L(isFa, "Real GDP growth", "رشد GDP")}
                           unit="%"
                           events={reconstructionChartEvents}
                           timeRange={reconstructionTimeRange ?? study.timeRange}
@@ -10709,6 +10711,8 @@ export default function StudyDetailPage() {
                           showChartControls
                           chartHeight="h-56 md:h-64"
                           mutedEventLines
+                          seriesColor="hsl(217, 91%, 59%)"
+                          gridLeft={80}
                         />
                       ) : (
                         <p className="text-xs text-muted-foreground py-6">
