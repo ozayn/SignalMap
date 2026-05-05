@@ -29,8 +29,12 @@ export type IpcPresidentPresetConfig = {
   focusStart?: number;
   focusEnd?: number;
   focusUseCurrentEnd?: boolean;
+  /** Short label for shaded band on charts (markArea). */
   labelEn: string;
   labelFa: string;
+  /** Optional longer note for study prose only (not shown on the chart band). */
+  bandContextEn?: string;
+  bandContextFa?: string;
 };
 
 export const IPC_PRESIDENT_PRESETS: Record<IpcPresidentPreset, IpcPresidentPresetConfig> = {
@@ -44,8 +48,10 @@ export const IPC_PRESIDENT_PRESETS: Record<IpcPresidentPreset, IpcPresidentPrese
   rafsanjani: {
     focusStart: 1989,
     focusEnd: 1997,
-    labelEn: "Rafsanjani presidencies",
-    labelFa: "دوره‌های ریاست‌جمهوری رفسنجانی",
+    labelEn: "Rafsanjani",
+    labelFa: "رفسنجانی",
+    bandContextEn: "Shaded band: Rafsanjani presidencies (1989–1997 CE).",
+    bandContextFa: "نوار سایه‌دار: دوره‌های ریاست‌جمهوری رفسنجانی (۱۹۸۹–۱۹۹۷ میلادی).",
   },
   khatami: {
     focusStart: 1997,

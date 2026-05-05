@@ -62,6 +62,18 @@ export type IranEconomyPeriodComparisonPanelsProps = {
   recoLoading: boolean;
   recoLoadFailed: boolean;
   recoLoadDetail: string | null;
+  recoWelfareGiniIranPoints: Point[];
+  recoWelfareGiniSource: { name?: string; url?: string; publisher?: string } | null;
+  recoWelfareGiniIndicatorId: string;
+  recoWelfarePovertyDdayPoints: Point[];
+  recoWelfarePovertyLmicPoints: Point[];
+  recoWelfarePovertyDdayShort: string;
+  recoWelfarePovertyLmicShort: string;
+  recoWelfarePovertyDdayTitle: string;
+  recoWelfarePovertyLmicTitle: string;
+  recoWelfarePovertySource: { name?: string; url?: string; publisher?: string } | null;
+  recoWelfarePovertyDdayId: string;
+  recoWelfarePovertyLmicId: string;
 };
 
 export function IranEconomyPeriodComparisonPanels({
@@ -112,6 +124,18 @@ export function IranEconomyPeriodComparisonPanels({
   recoLoading,
   recoLoadFailed,
   recoLoadDetail,
+  recoWelfareGiniIranPoints,
+  recoWelfareGiniSource,
+  recoWelfareGiniIndicatorId,
+  recoWelfarePovertyDdayPoints,
+  recoWelfarePovertyLmicPoints,
+  recoWelfarePovertyDdayShort,
+  recoWelfarePovertyLmicShort,
+  recoWelfarePovertyDdayTitle,
+  recoWelfarePovertyLmicTitle,
+  recoWelfarePovertySource,
+  recoWelfarePovertyDdayId,
+  recoWelfarePovertyLmicId,
 }: IranEconomyPeriodComparisonPanelsProps) {
   const [fxLevelsLogScale, setFxLevelsLogScale] = useState(false);
   const fxLogDefaultAppliedRef = useRef(false);
@@ -842,6 +866,143 @@ export function IranEconomyPeriodComparisonPanels({
                     isFa,
                     "No overlapping real-wage points in this window (series may start after the outer range begins).",
                     "نقطهٔ هم‌پوشان دستمزد واقعی در این بازه نیست (سری ممکن است دیرتر از آغاز بازه بیرونی شروع شود)."
+                  )}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+          <div className="md:col-span-2 mt-6 pt-4 border-t border-border">
+            <h3 className="text-sm font-semibold text-foreground mb-3">
+              {L(isFa, "Welfare and distribution", "رفاه و توزیع")}
+            </h3>
+          </div>
+          <Card className="chart-card border-border md:col-span-2">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-semibold">{L(isFa, "Gini index", "ضریب جینی")}</CardTitle>
+              <p className="text-xs text-muted-foreground max-w-3xl">
+                {L(
+                  isFa,
+                  "WDI SI.POV.GINI (income inequality, 0–100). Survey-based; many years have no published value.",
+                  "WDI SI.POV.GINI (نابرابری درآمد، ۰–۱۰۰). مبتنی بر نظرسنجی؛ بسیاری از سال‌ها بدون مقدار منتشرشده‌اند."
+                )}
+              </p>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {recoWelfareGiniIranPoints.length > 0 ? (
+                <TimelineChart
+                  chartLocale={chartLocaleForCharts}
+                  exportPresentationStudyHeading={exportStudyHeading}
+                  exportPresentationTitle={L(isFa, `${studyTitle} — Gini index`, `${studyTitle} — ضریب جینی`)}
+                  exportSourceFooter={studyChartExportSource(isFa, [
+                    recoWelfareGiniSource?.name ?? "World Bank WDI",
+                    recoWelfareGiniIndicatorId || "SI.POV.GINI",
+                  ])}
+                  data={recoWelfareGiniIranPoints}
+                  valueKey="value"
+                  label={L(isFa, "Gini index", "ضریب جینی")}
+                  unit={L(isFa, "Gini (0–100)", "ضریب جینی (۰–۱۰۰)")}
+                  events={events}
+                  timeRange={timeRange}
+                  chartRangeGranularity="year"
+                  xAxisYearLabel={chartYearAxisLabel}
+                  exportFileStem="iran-ipc-welfare-gini"
+                  showChartControls
+                  chartHeight="h-56 md:h-64"
+                  mutedEventLines
+                  regimeArea={regimeArea}
+                  focusGregorianYearRange={focusGregorianYearRange}
+                  focusHoverHint={focusHoverHint}
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
+                  {L(
+                    isFa,
+                    "No Gini estimate in this outer window (SI.POV.GINI is sparse for Iran in WDI).",
+                    "در این پنجرهٔ بیرونی برآورد جینی نیست (SI.POV.GINI برای ایران در WDI پراکنده است)."
+                  )}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+          <Card className="chart-card border-border md:col-span-2">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-semibold">{L(isFa, "Poverty headcount", "نرخ فقر")}</CardTitle>
+              <p className="text-xs text-muted-foreground max-w-3xl">
+                {L(
+                  isFa,
+                  "World Bank international poverty lines for Iran (share of population below each line). Threshold text follows WDI metadata (PPP revisions).",
+                  "خطوط فقر بین‌المللی بانک جهانی برای ایران (سهم جمعیت زیر هر خط). متن آستانه طبق فرادادهٔ WDI (بازنگری‌های PPP) است."
+                )}
+              </p>
+              {recoWelfarePovertyDdayTitle || recoWelfarePovertyLmicTitle ? (
+                <ul className="text-xs text-muted-foreground list-disc pl-4 mt-1 space-y-0.5 max-w-3xl">
+                  {recoWelfarePovertyDdayTitle ? <li>{recoWelfarePovertyDdayTitle}</li> : null}
+                  {recoWelfarePovertyLmicTitle ? <li>{recoWelfarePovertyLmicTitle}</li> : null}
+                </ul>
+              ) : null}
+            </CardHeader>
+            <CardContent className="pt-0">
+              {recoWelfarePovertyDdayPoints.length > 0 || recoWelfarePovertyLmicPoints.length > 0 ? (
+                <TimelineChart
+                  chartLocale={chartLocaleForCharts}
+                  exportPresentationStudyHeading={exportStudyHeading}
+                  exportPresentationTitle={L(
+                    isFa,
+                    `${studyTitle} — Poverty headcount`,
+                    `${studyTitle} — نرخ فقر`
+                  )}
+                  exportSourceFooter={studyChartExportSource(isFa, [
+                    recoWelfarePovertySource?.name ?? "World Bank WDI",
+                    recoWelfarePovertyDdayId || "SI.POV.DDAY",
+                    recoWelfarePovertyLmicId || "SI.POV.LMIC",
+                  ])}
+                  data={[]}
+                  valueKey="value"
+                  label={L(isFa, "Poverty headcount ratio", "نرخ شمارش فقر")}
+                  events={events}
+                  multiSeries={[
+                    {
+                      key: "pov_dday",
+                      label: recoWelfarePovertyDdayShort || "SI.POV.DDAY",
+                      yAxisIndex: 0,
+                      unit: L(isFa, "% of population", "٪ از جمعیت"),
+                      points: recoWelfarePovertyDdayPoints,
+                      color: SIGNAL_CONCEPT.gini,
+                      symbol: "circle",
+                      symbolSize: CHART_LINE_SYMBOL_SIZE,
+                    },
+                    {
+                      key: "pov_lmic",
+                      label: recoWelfarePovertyLmicShort || "SI.POV.LMIC",
+                      yAxisIndex: 0,
+                      unit: L(isFa, "% of population", "٪ از جمعیت"),
+                      points: recoWelfarePovertyLmicPoints,
+                      color: SIGNAL_CONCEPT.poverty,
+                      symbol: "diamond",
+                      symbolSize: CHART_LINE_SYMBOL_SIZE,
+                    },
+                  ]}
+                  timeRange={timeRange}
+                  chartRangeGranularity="year"
+                  xAxisYearLabel={chartYearAxisLabel}
+                  exportFileStem="iran-ipc-welfare-poverty"
+                  showChartControls
+                  chartHeight="h-56 md:h-64"
+                  mutedEventLines
+                  forceTimeAxis
+                  regimeArea={regimeArea}
+                  focusGregorianYearRange={focusGregorianYearRange}
+                  focusHoverHint={focusHoverHint}
+                  multiSeriesYAxisNameOverrides={{
+                    0: L(isFa, "Poverty headcount (% of population)", "نرخ فقر (٪ از جمعیت)"),
+                  }}
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
+                  {L(
+                    isFa,
+                    "No poverty headcount observations in this outer window (SI.POV.DDAY / SI.POV.LMIC are sparse in WDI).",
+                    "در این پنجرهٔ بیرونی دادهٔ شمارش فقر نیست (SI.POV.DDAY و SI.POV.LMIC در WDI پراکنده‌اند)."
                   )}
                 </p>
               )}

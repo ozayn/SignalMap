@@ -684,6 +684,25 @@ export default function StudyDetailPage() {
   );
   const [recoDemandRealInvestmentPoints, setRecoDemandRealInvestmentPoints] = useState<{ date: string; value: number }[]>([]);
   const [recoDemandRealGdpPoints, setRecoDemandRealGdpPoints] = useState<{ date: string; value: number }[]>([]);
+  /** Iran economy macro dashboards: welfare (Gini + poverty), same fetch window as other reco panels. */
+  const [recoWelfareGiniIranPoints, setRecoWelfareGiniIranPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoWelfareGiniSource, setRecoWelfareGiniSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(
+    null
+  );
+  const [recoWelfareGiniIndicatorId, setRecoWelfareGiniIndicatorId] = useState("");
+  const [recoWelfarePovertyDdayPoints, setRecoWelfarePovertyDdayPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoWelfarePovertyLmicPoints, setRecoWelfarePovertyLmicPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoWelfarePovertyDdayShort, setRecoWelfarePovertyDdayShort] = useState("");
+  const [recoWelfarePovertyLmicShort, setRecoWelfarePovertyLmicShort] = useState("");
+  const [recoWelfarePovertyDdayTitle, setRecoWelfarePovertyDdayTitle] = useState("");
+  const [recoWelfarePovertyLmicTitle, setRecoWelfarePovertyLmicTitle] = useState("");
+  const [recoWelfarePovertySource, setRecoWelfarePovertySource] = useState<{
+    name?: string;
+    url?: string;
+    publisher?: string;
+  } | null>(null);
+  const [recoWelfarePovertyDdayId, setRecoWelfarePovertyDdayId] = useState("");
+  const [recoWelfarePovertyLmicId, setRecoWelfarePovertyLmicId] = useState("");
   /** Iran economy macro dashboards: log y-axis for official vs open FX levels chart only. */
   const [iranEconomyFxLevelsLogScale, setIranEconomyFxLevelsLogScale] = useState(false);
   const iranFxLogDefaultAppliedRef = useRef(false);
@@ -1494,6 +1513,16 @@ export default function StudyDetailPage() {
     if (!ipcRegimeAreaBounds) return undefined;
     return { ...ipcRegimeAreaBounds, label: L(isFa, ipcBandLabelEn, ipcBandLabelFa) };
   }, [ipcRegimeAreaBounds, isFa, ipcBandLabelEn, ipcBandLabelFa]);
+
+  /** Reconstruction study: shaded band matches the fixed 1368–1376 window (Rafsanjani era on charts/exports). */
+  const recoWelfareRegimeArea = useMemo(() => {
+    if (!isIranEconomyReconstruction1368 || !reconstructionTimeRange) return undefined;
+    return {
+      xStart: "1989-07-01",
+      xEnd: "1997-07-01",
+      label: L(isFa, "Rafsanjani", "رفسنجانی"),
+    };
+  }, [isIranEconomyReconstruction1368, reconstructionTimeRange, isFa]);
 
   const applyIpcPreset = useCallback((id: IpcPresidentPreset) => {
     const cfg = IPC_PRESIDENT_PRESETS[id];
@@ -3900,6 +3929,18 @@ export default function StudyDetailPage() {
         setRecoDemandRealConsumptionPoints([]);
         setRecoDemandRealInvestmentPoints([]);
         setRecoDemandRealGdpPoints([]);
+        setRecoWelfareGiniIranPoints([]);
+        setRecoWelfareGiniSource(null);
+        setRecoWelfareGiniIndicatorId("");
+        setRecoWelfarePovertyDdayPoints([]);
+        setRecoWelfarePovertyLmicPoints([]);
+        setRecoWelfarePovertyDdayShort("");
+        setRecoWelfarePovertyLmicShort("");
+        setRecoWelfarePovertyDdayTitle("");
+        setRecoWelfarePovertyLmicTitle("");
+        setRecoWelfarePovertySource(null);
+        setRecoWelfarePovertyDdayId("");
+        setRecoWelfarePovertyLmicId("");
         setRecoLoadFailed(false);
         setRecoLoadDetail(null);
       }
@@ -4038,11 +4079,105 @@ export default function StudyDetailPage() {
         setRecoDemandRealConsumptionPoints([]);
         setRecoDemandRealInvestmentPoints([]);
         setRecoDemandRealGdpPoints([]);
+        setRecoWelfareGiniIranPoints([]);
+        setRecoWelfareGiniSource(null);
+        setRecoWelfareGiniIndicatorId("");
+        setRecoWelfarePovertyDdayPoints([]);
+        setRecoWelfarePovertyLmicPoints([]);
+        setRecoWelfarePovertyDdayShort("");
+        setRecoWelfarePovertyLmicShort("");
+        setRecoWelfarePovertyDdayTitle("");
+        setRecoWelfarePovertyLmicTitle("");
+        setRecoWelfarePovertySource(null);
+        setRecoWelfarePovertyDdayId("");
+        setRecoWelfarePovertyLmicId("");
         setRecoLoadFailed(true);
         setRecoLoadDetail(e instanceof Error ? e.message : "Reconstruction dashboard fetch failed");
       })
       .finally(() => {
         if (mounted) setRecoLoading(false);
+      });
+    return () => {
+      mounted = false;
+      ac.abort();
+    };
+  }, [iranEconomyMacroFetchRange, isIranEconomyMacroDashboard]);
+
+  useEffect(() => {
+    if (!iranEconomyMacroFetchRange || !isIranEconomyMacroDashboard) {
+      if (isIranEconomyMacroDashboard) {
+        setRecoWelfareGiniIranPoints([]);
+        setRecoWelfareGiniSource(null);
+        setRecoWelfareGiniIndicatorId("");
+        setRecoWelfarePovertyDdayPoints([]);
+        setRecoWelfarePovertyLmicPoints([]);
+        setRecoWelfarePovertyDdayShort("");
+        setRecoWelfarePovertyLmicShort("");
+        setRecoWelfarePovertyDdayTitle("");
+        setRecoWelfarePovertyLmicTitle("");
+        setRecoWelfarePovertySource(null);
+        setRecoWelfarePovertyDdayId("");
+        setRecoWelfarePovertyLmicId("");
+      }
+      return;
+    }
+    const [start, end] = iranEconomyMacroFetchRange;
+    const ac = new AbortController();
+    let mounted = true;
+    Promise.all([
+      fetchJson<{
+        series?: { iran?: { date: string; value: number }[] };
+        source?: { name?: string; url?: string; publisher?: string };
+        indicator_id?: string;
+      }>(
+        `/api/signals/wdi/gini-comparison?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+        ac.signal
+      ),
+      fetchJson<{
+        lines?: Array<{
+          key: string;
+          indicator_id?: string;
+          indicator_title?: string;
+          label_short?: string;
+          points?: { date: string; value: number }[];
+        }>;
+        source?: { name?: string; url?: string; publisher?: string };
+      }>(`/api/signals/wdi/poverty-headcount-iran?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`, ac.signal),
+    ])
+      .then(([gini, pov]) => {
+        if (!mounted) return;
+        setRecoWelfareGiniIranPoints(gini.series?.iran ?? []);
+        setRecoWelfareGiniSource(gini.source ?? null);
+        setRecoWelfareGiniIndicatorId(typeof gini.indicator_id === "string" ? gini.indicator_id : "SI.POV.GINI");
+        const lines = pov.lines ?? [];
+        const dday = lines.find((l) => l.key === "pov_dday");
+        const lmic = lines.find((l) => l.key === "pov_lmic");
+        setRecoWelfarePovertyDdayPoints(dday?.points ?? []);
+        setRecoWelfarePovertyLmicPoints(lmic?.points ?? []);
+        setRecoWelfarePovertyDdayShort(dday?.label_short ?? "SI.POV.DDAY");
+        setRecoWelfarePovertyLmicShort(lmic?.label_short ?? "SI.POV.LMIC");
+        setRecoWelfarePovertyDdayTitle(dday?.indicator_title ?? "");
+        setRecoWelfarePovertyLmicTitle(lmic?.indicator_title ?? "");
+        setRecoWelfarePovertySource(pov.source ?? null);
+        setRecoWelfarePovertyDdayId(dday?.indicator_id ?? "");
+        setRecoWelfarePovertyLmicId(lmic?.indicator_id ?? "");
+      })
+      .catch((e: unknown) => {
+        if (!mounted) return;
+        const aborted = e instanceof Error && (e.name === "AbortError" || e.message.includes("aborted"));
+        if (aborted) return;
+        setRecoWelfareGiniIranPoints([]);
+        setRecoWelfareGiniSource(null);
+        setRecoWelfareGiniIndicatorId("");
+        setRecoWelfarePovertyDdayPoints([]);
+        setRecoWelfarePovertyLmicPoints([]);
+        setRecoWelfarePovertyDdayShort("");
+        setRecoWelfarePovertyLmicShort("");
+        setRecoWelfarePovertyDdayTitle("");
+        setRecoWelfarePovertyLmicTitle("");
+        setRecoWelfarePovertySource(null);
+        setRecoWelfarePovertyDdayId("");
+        setRecoWelfarePovertyLmicId("");
       });
     return () => {
       mounted = false;
@@ -11153,6 +11288,147 @@ export default function StudyDetailPage() {
                       </p>
                     </CardContent>
                   </Card>
+                  <div className="md:col-span-2 mt-6 pt-4 border-t border-border">
+                    <h3 className="text-sm font-semibold text-foreground mb-3">
+                      {L(isFa, "Welfare and distribution", "رفاه و توزیع")}
+                    </h3>
+                  </div>
+                  <Card className="chart-card border-border md:col-span-2">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-semibold">
+                        {L(isFa, "Gini index", "ضریب جینی")}
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground max-w-3xl">
+                        {L(
+                          isFa,
+                          "WDI SI.POV.GINI (income inequality, 0–100). Survey-based; many years have no published value.",
+                          "WDI SI.POV.GINI (نابرابری درآمد، ۰–۱۰۰). مبتنی بر نظرسنجی؛ بسیاری از سال‌ها بدون مقدار منتشرشده‌اند."
+                        )}
+                      </p>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      {recoWelfareGiniIranPoints.length > 0 ? (
+                        <TimelineChart
+                          chartLocale={chartLocaleForCharts}
+                          exportPresentationStudyHeading={displayStudy.title}
+                          exportPresentationTitle={L(
+                            isFa,
+                            `${displayStudy.title} — Gini index`,
+                            `${displayStudy.title} — ضریب جینی`
+                          )}
+                          exportSourceFooter={studyChartExportSource(isFa, [
+                            recoWelfareGiniSource?.name ?? "World Bank WDI",
+                            recoWelfareGiniIndicatorId || "SI.POV.GINI",
+                          ])}
+                          data={recoWelfareGiniIranPoints}
+                          valueKey="value"
+                          label={L(isFa, "Gini index", "ضریب جینی")}
+                          unit={L(isFa, "Gini (0–100)", "ضریب جینی (۰–۱۰۰)")}
+                          events={reconstructionChartEvents}
+                          timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartRangeGranularity="year"
+                          xAxisYearLabel={chartYearAxisLabel}
+                          exportFileStem="iran-reco-welfare-gini"
+                          showChartControls
+                          chartHeight="h-56 md:h-64"
+                          mutedEventLines
+                          regimeArea={recoWelfareRegimeArea}
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
+                          {L(
+                            isFa,
+                            "No Gini estimate in this window (SI.POV.GINI is sparse; none may fall in 1989–1997).",
+                            "در این بازه برآورد جینی نیست (SI.POV.GINI پراکنده است؛ ممکن است برای ۱۹۸۹–۱۹۹۷ مقداری نباشد)."
+                          )}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Card className="chart-card border-border md:col-span-2">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-semibold">
+                        {L(isFa, "Poverty headcount", "نرخ فقر")}
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground max-w-3xl">
+                        {L(
+                          isFa,
+                          "World Bank international poverty lines for Iran (share of population below each line). Threshold text follows WDI metadata (PPP revisions).",
+                          "خطوط فقر بین‌المللی بانک جهانی برای ایران (سهم جمعیت زیر هر خط). متن آستانه طبق فرادادهٔ WDI (بازنگری‌های PPP) است."
+                        )}
+                      </p>
+                      {recoWelfarePovertyDdayTitle || recoWelfarePovertyLmicTitle ? (
+                        <ul className="text-xs text-muted-foreground list-disc pl-4 mt-1 space-y-0.5 max-w-3xl">
+                          {recoWelfarePovertyDdayTitle ? <li>{recoWelfarePovertyDdayTitle}</li> : null}
+                          {recoWelfarePovertyLmicTitle ? <li>{recoWelfarePovertyLmicTitle}</li> : null}
+                        </ul>
+                      ) : null}
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      {recoWelfarePovertyDdayPoints.length > 0 || recoWelfarePovertyLmicPoints.length > 0 ? (
+                        <TimelineChart
+                          chartLocale={chartLocaleForCharts}
+                          exportPresentationStudyHeading={displayStudy.title}
+                          exportPresentationTitle={L(
+                            isFa,
+                            `${displayStudy.title} — Poverty headcount`,
+                            `${displayStudy.title} — نرخ فقر`
+                          )}
+                          exportSourceFooter={studyChartExportSource(isFa, [
+                            recoWelfarePovertySource?.name ?? "World Bank WDI",
+                            recoWelfarePovertyDdayId || "SI.POV.DDAY",
+                            recoWelfarePovertyLmicId || "SI.POV.LMIC",
+                          ])}
+                          data={[]}
+                          valueKey="value"
+                          label={L(isFa, "Poverty headcount ratio", "نرخ شمارش فقر")}
+                          events={reconstructionChartEvents}
+                          multiSeries={[
+                            {
+                              key: "pov_dday",
+                              label: recoWelfarePovertyDdayShort || "SI.POV.DDAY",
+                              yAxisIndex: 0,
+                              unit: L(isFa, "% of population", "٪ از جمعیت"),
+                              points: recoWelfarePovertyDdayPoints,
+                              color: SIGNAL_CONCEPT.gini,
+                              symbol: "circle",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE,
+                            },
+                            {
+                              key: "pov_lmic",
+                              label: recoWelfarePovertyLmicShort || "SI.POV.LMIC",
+                              yAxisIndex: 0,
+                              unit: L(isFa, "% of population", "٪ از جمعیت"),
+                              points: recoWelfarePovertyLmicPoints,
+                              color: SIGNAL_CONCEPT.poverty,
+                              symbol: "diamond",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE,
+                            },
+                          ]}
+                          timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartRangeGranularity="year"
+                          xAxisYearLabel={chartYearAxisLabel}
+                          exportFileStem="iran-reco-welfare-poverty"
+                          showChartControls
+                          chartHeight="h-56 md:h-64"
+                          mutedEventLines
+                          forceTimeAxis
+                          regimeArea={recoWelfareRegimeArea}
+                          multiSeriesYAxisNameOverrides={{
+                            0: L(isFa, "Poverty headcount (% of population)", "نرخ فقر (٪ از جمعیت)"),
+                          }}
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
+                          {L(
+                            isFa,
+                            "No poverty headcount observations in this window (SI.POV.DDAY / SI.POV.LMIC are sparse and may not cover 1989–1997).",
+                            "در این بازه دادهٔ شمارش فقر نیست (SI.POV.DDAY و SI.POV.LMIC پراکنده‌اند و ممکن است ۱۹۸۹–۱۹۹۷ را پوشش ندهند)."
+                          )}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
               ) : null}
               {displayStudy.observations?.length ? (
@@ -11229,6 +11505,29 @@ export default function StudyDetailPage() {
                     sourceDetail: recoFxOpenSource?.publisher ?? "",
                     unitLabel: L(isFa, "toman/USD", "تومان/دلار"),
                   },
+                  {
+                    label: L(isFa, "Gini index", "ضریب جینی"),
+                    sourceName: recoWelfareGiniSource?.name ?? "World Bank WDI",
+                    sourceUrl:
+                      recoWelfareGiniIndicatorId !== ""
+                        ? `https://data.worldbank.org/indicator/${recoWelfareGiniIndicatorId}`
+                        : "https://data.worldbank.org/indicator/SI.POV.GINI",
+                    sourceDetail: recoWelfareGiniSource?.publisher ?? "World Bank",
+                    unitLabel: L(isFa, "Gini (0–100)", "ضریب جینی (۰–۱۰۰)"),
+                  },
+                  {
+                    label: L(isFa, "Poverty headcount", "نرخ فقر"),
+                    sourceName: recoWelfarePovertySource?.name ?? "World Bank WDI",
+                    sourceUrl: recoWelfarePovertyDdayId
+                      ? `https://data.worldbank.org/indicator/${recoWelfarePovertyDdayId}`
+                      : "https://data.worldbank.org/indicator/SI.POV.DDAY",
+                    sourceDetail: recoWelfarePovertySource?.publisher ?? "World Bank",
+                    unitLabel: L(
+                      isFa,
+                      "% of population (SI.POV.DDAY; SI.POV.LMIC in chart legend)",
+                      "٪ از جمعیت (SI.POV.DDAY؛ SI.POV.LMIC در راهنما)"
+                    ),
+                  },
                 ]}
               />
               <InSimpleTerms locale={isFa ? "fa" : "en"}>
@@ -11275,6 +11574,16 @@ export default function StudyDetailPage() {
                     </button>
                   ))}
                 </div>
+                {ipcPresetId !== "custom" && IPC_PRESIDENT_PRESETS[ipcPresetId].bandContextEn ? (
+                  <p className="text-xs text-muted-foreground mb-3 max-w-3xl leading-relaxed">
+                    {L(
+                      isFa,
+                      IPC_PRESIDENT_PRESETS[ipcPresetId].bandContextEn!,
+                      IPC_PRESIDENT_PRESETS[ipcPresetId].bandContextFa ??
+                        IPC_PRESIDENT_PRESETS[ipcPresetId].bandContextEn!
+                    )}
+                  </p>
+                ) : null}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 text-xs max-w-3xl">
                   <label className="flex flex-col gap-0.5">
                     <span className="text-muted-foreground">{L(isFa, "Outer start (year)", "شروع بازه بیرونی (سال)")}</span>
@@ -11395,6 +11704,18 @@ export default function StudyDetailPage() {
                   recoLoading={recoLoading}
                   recoLoadFailed={recoLoadFailed}
                   recoLoadDetail={recoLoadDetail}
+                  recoWelfareGiniIranPoints={recoWelfareGiniIranPoints}
+                  recoWelfareGiniSource={recoWelfareGiniSource}
+                  recoWelfareGiniIndicatorId={recoWelfareGiniIndicatorId}
+                  recoWelfarePovertyDdayPoints={recoWelfarePovertyDdayPoints}
+                  recoWelfarePovertyLmicPoints={recoWelfarePovertyLmicPoints}
+                  recoWelfarePovertyDdayShort={recoWelfarePovertyDdayShort}
+                  recoWelfarePovertyLmicShort={recoWelfarePovertyLmicShort}
+                  recoWelfarePovertyDdayTitle={recoWelfarePovertyDdayTitle}
+                  recoWelfarePovertyLmicTitle={recoWelfarePovertyLmicTitle}
+                  recoWelfarePovertySource={recoWelfarePovertySource}
+                  recoWelfarePovertyDdayId={recoWelfarePovertyDdayId}
+                  recoWelfarePovertyLmicId={recoWelfarePovertyLmicId}
                 />
               ) : null}
               {displayStudy.observations?.length ? (
@@ -11466,6 +11787,29 @@ export default function StudyDetailPage() {
                     sourceUrl: recoFxOpenSource?.url,
                     sourceDetail: recoFxOpenSource?.publisher ?? "",
                     unitLabel: L(isFa, "toman/USD", "تومان/دلار"),
+                  },
+                  {
+                    label: L(isFa, "Gini index", "ضریب جینی"),
+                    sourceName: recoWelfareGiniSource?.name ?? "World Bank WDI",
+                    sourceUrl:
+                      recoWelfareGiniIndicatorId !== ""
+                        ? `https://data.worldbank.org/indicator/${recoWelfareGiniIndicatorId}`
+                        : "https://data.worldbank.org/indicator/SI.POV.GINI",
+                    sourceDetail: recoWelfareGiniSource?.publisher ?? "World Bank",
+                    unitLabel: L(isFa, "Gini (0–100)", "ضریب جینی (۰–۱۰۰)"),
+                  },
+                  {
+                    label: L(isFa, "Poverty headcount", "نرخ فقر"),
+                    sourceName: recoWelfarePovertySource?.name ?? "World Bank WDI",
+                    sourceUrl: recoWelfarePovertyDdayId
+                      ? `https://data.worldbank.org/indicator/${recoWelfarePovertyDdayId}`
+                      : "https://data.worldbank.org/indicator/SI.POV.DDAY",
+                    sourceDetail: recoWelfarePovertySource?.publisher ?? "World Bank",
+                    unitLabel: L(
+                      isFa,
+                      "% of population (SI.POV.DDAY; SI.POV.LMIC in chart legend)",
+                      "٪ از جمعیت (SI.POV.DDAY؛ SI.POV.LMIC در راهنما)"
+                    ),
                   },
                 ]}
               />
