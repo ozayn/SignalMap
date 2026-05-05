@@ -679,6 +679,10 @@ export default function StudyDetailPage() {
   const [recoOilRentsPoints, setRecoOilRentsPoints] = useState<{ date: string; value: number }[]>([]);
   const [recoNaturalGasRentsPoints, setRecoNaturalGasRentsPoints] = useState<{ date: string; value: number }[]>([]);
   const [recoDutchSource, setRecoDutchSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(null);
+  const [recoExternalDebtPctGdpPoints, setRecoExternalDebtPctGdpPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoExternalDebtUsdPoints, setRecoExternalDebtUsdPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoExternalDebtSource, setRecoExternalDebtSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(null);
+  const [recoExternalDebtIndicatorIds, setRecoExternalDebtIndicatorIds] = useState<Record<string, string> | null>(null);
   const [recoM2Points, setRecoM2Points] = useState<{ date: string; value: number }[]>([]);
   const [recoM2CpiPoints, setRecoM2CpiPoints] = useState<{ date: string; value: number }[]>([]);
   const [recoMoneyWdiSource, setRecoMoneyWdiSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(
@@ -1593,6 +1597,26 @@ export default function StudyDetailPage() {
   const reconstructionChartEvents = useMemo((): Event[] => {
     return [...reconstructionPeriodMarkers, ...(showTimeSeriesEventOverlay ? reconstructionFilteredApiEvents : [])];
   }, [reconstructionPeriodMarkers, showTimeSeriesEventOverlay, reconstructionFilteredApiEvents]);
+
+  const reconstructionExternalDebtEvents = useMemo((): Event[] => {
+    return [
+      {
+        id: "reco-ext-debt-borrowing-surge-1991",
+        layer: "iran_core",
+        date: "1991-01-01",
+        title: "Foreign borrowing surge during reconstruction period",
+        title_fa: "افزایش استقراض خارجی در دوره بازسازی",
+      },
+      {
+        id: "reco-ext-debt-peak-1995",
+        layer: "iran_core",
+        date: "1995-01-01",
+        title: "Debt peak and rescheduling pressures",
+        title_fa: "اوج بدهی و فشار بازپرداخت",
+      },
+      ...reconstructionChartEvents,
+    ];
+  }, [reconstructionChartEvents]);
 
   const ipcFilteredApiEvents = useMemo(() => {
     if (!isIranEconomyPeriodComparison) return events;
@@ -4118,6 +4142,10 @@ export default function StudyDetailPage() {
         setRecoOilRentsPoints([]);
         setRecoNaturalGasRentsPoints([]);
         setRecoDutchSource(null);
+        setRecoExternalDebtPctGdpPoints([]);
+        setRecoExternalDebtUsdPoints([]);
+        setRecoExternalDebtSource(null);
+        setRecoExternalDebtIndicatorIds(null);
         setRecoM2Points([]);
         setRecoM2CpiPoints([]);
         setRecoMoneyWdiSource(null);
@@ -4176,10 +4204,12 @@ export default function StudyDetailPage() {
         series?: {
           oil_rents_pct_gdp?: { date: string; value: number }[];
           natural_gas_rents_pct_gdp?: { date: string; value: number }[];
+          natural_gas_rents?: { date: string; value: number }[];
+          gas_rents?: { date: string; value: number }[];
           total_natural_resource_rents_pct_gdp?: { date: string; value: number }[];
         };
         source?: { name?: string; url?: string; publisher?: string };
-      }>(`/api/signals/wdi/dutch-disease-diagnostics-iran?start=${enc(start)}&end=${enc(end)}`, ac.signal),
+      }>(`/api/signals/wdi/dutch-disease-diagnostics-iran?start=${enc(start)}&end=${enc(end)}&_sm_bd=2`, ac.signal),
       fetchJson<{
         series?: {
           broad_money_growth_pct?: { date: string; value: number }[];
@@ -4211,8 +4241,16 @@ export default function StudyDetailPage() {
         `/api/signals/wdi/iran-demand-nominal-usd?start=${enc(start)}&end=${enc(end)}&_sm_bd=3`,
         ac.signal
       ),
+      fetchJson<{
+        series?: {
+          external_debt_pct_gdp?: { date: string; value: number }[];
+          external_debt_usd?: { date: string; value: number }[];
+        };
+        source?: { name?: string; url?: string; publisher?: string };
+        indicator_ids?: Record<string, string>;
+      }>(`/api/signals/wdi/iran-external-debt?start=${enc(start)}&end=${enc(end)}`, ac.signal),
     ])
-      .then(([inf, isi, dutch, money, fx, demand]) => {
+      .then(([inf, isi, dutch, money, fx, demand, debt]) => {
         if (!mounted) return;
         setRecoInflationIranPoints(inf.series?.iran ?? []);
         setRecoInflationSource(inf.source ?? null);
@@ -4225,8 +4263,14 @@ export default function StudyDetailPage() {
         setRecoIsiSource(isi.source ?? null);
         setRecoIsiIndicatorIds(isi.indicator_ids ?? null);
         setRecoOilRentsPoints(dutch.series?.oil_rents_pct_gdp ?? []);
-        setRecoNaturalGasRentsPoints(dutch.series?.natural_gas_rents_pct_gdp ?? []);
+        setRecoNaturalGasRentsPoints(
+          dutch.series?.natural_gas_rents_pct_gdp ?? dutch.series?.natural_gas_rents ?? dutch.series?.gas_rents ?? []
+        );
         setRecoDutchSource(dutch.source ?? null);
+        setRecoExternalDebtPctGdpPoints(debt.series?.external_debt_pct_gdp ?? []);
+        setRecoExternalDebtUsdPoints(debt.series?.external_debt_usd ?? []);
+        setRecoExternalDebtSource(debt.source ?? null);
+        setRecoExternalDebtIndicatorIds(debt.indicator_ids ?? null);
         setRecoM2Points(money.series?.broad_money_growth_pct ?? []);
         setRecoM2CpiPoints(money.series?.cpi_inflation_yoy_iran_pct ?? []);
         setRecoMoneyWdiSource(money.source ?? null);
@@ -4251,7 +4295,12 @@ export default function StudyDetailPage() {
           (inf.series?.iran?.length ?? 0) +
           (s?.gdp_growth_pct?.iran?.length ?? 0) +
           (dutch.series?.oil_rents_pct_gdp?.length ?? 0) +
-          (dutch.series?.natural_gas_rents_pct_gdp?.length ?? 0) +
+          (dutch.series?.natural_gas_rents_pct_gdp?.length ??
+            dutch.series?.natural_gas_rents?.length ??
+            dutch.series?.gas_rents?.length ??
+            0) +
+          (debt.series?.external_debt_pct_gdp?.length ?? 0) +
+          (debt.series?.external_debt_usd?.length ?? 0) +
           (money.series?.broad_money_growth_pct?.length ?? 0) +
           (fx.open_market?.points?.length ?? 0) +
           (demand.series?.consumption_usd?.length ?? 0) +
@@ -4286,6 +4335,10 @@ export default function StudyDetailPage() {
         setRecoOilRentsPoints([]);
         setRecoNaturalGasRentsPoints([]);
         setRecoDutchSource(null);
+        setRecoExternalDebtPctGdpPoints([]);
+        setRecoExternalDebtUsdPoints([]);
+        setRecoExternalDebtSource(null);
+        setRecoExternalDebtIndicatorIds(null);
         setRecoM2Points([]);
         setRecoM2CpiPoints([]);
         setRecoMoneyWdiSource(null);
@@ -4721,6 +4774,8 @@ export default function StudyDetailPage() {
       series?: {
         oil_rents_pct_gdp?: { date: string; value: number }[];
         natural_gas_rents_pct_gdp?: { date: string; value: number }[];
+        natural_gas_rents?: { date: string; value: number }[];
+        gas_rents?: { date: string; value: number }[];
         manufacturing_pct_gdp?: { date: string; value: number }[];
         imports_pct_gdp?: { date: string; value: number }[];
       };
@@ -4728,13 +4783,13 @@ export default function StudyDetailPage() {
       partial?: boolean;
       source?: { name: string; url?: string; publisher?: string };
     }>(
-      `/api/signals/wdi/dutch-disease-diagnostics-iran?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+      `/api/signals/wdi/dutch-disease-diagnostics-iran?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&_sm_bd=2`,
       ac.signal
     )
       .then((res) => {
         if (!mounted) return;
         const oil = res.series?.oil_rents_pct_gdp ?? [];
-        const gas = res.series?.natural_gas_rents_pct_gdp ?? [];
+        const gas = res.series?.natural_gas_rents_pct_gdp ?? res.series?.natural_gas_rents ?? res.series?.gas_rents ?? [];
         const mfg = res.series?.manufacturing_pct_gdp ?? [];
         const imp = res.series?.imports_pct_gdp ?? [];
         setDutchOilRentsPoints(oil);
@@ -11435,6 +11490,122 @@ export default function StudyDetailPage() {
                     </CardContent>
                   </Card>
                   <Card className="chart-card border-border md:col-span-2">
+                    <CardHeader className="pb-2 space-y-1">
+                      <CardTitle className="text-base font-semibold">
+                        {L(
+                          isFa,
+                          recoExternalDebtPctGdpPoints.length > 0 ? "External debt (% of GDP)" : "External debt (USD)",
+                          recoExternalDebtPctGdpPoints.length > 0
+                            ? "بدهی خارجی (% از تولید ناخالص داخلی)"
+                            : "بدهی خارجی (دلار)"
+                        )}
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground max-w-3xl leading-relaxed">
+                        {L(
+                          isFa,
+                          "External debt measures obligations to non-resident creditors. It does not include domestic debt.",
+                          "«بدهی خارجی شامل بدهی به وام‌دهندگان خارجی است و بدهی داخلی را شامل نمی‌شود.»"
+                        )}
+                      </p>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      {recoExternalDebtPctGdpPoints.length > 0 || recoExternalDebtUsdPoints.length > 0 ? (
+                        <TimelineChart
+                          chartLocale={chartLocaleForCharts}
+                          exportPresentationStudyHeading={displayStudy.title}
+                          exportPresentationTitle={L(
+                            isFa,
+                            recoExternalDebtPctGdpPoints.length > 0
+                              ? `${displayStudy.title} — External debt (% of GDP)`
+                              : `${displayStudy.title} — External debt (USD)`,
+                            recoExternalDebtPctGdpPoints.length > 0
+                              ? `${displayStudy.title} — بدهی خارجی (% از GDP)`
+                              : `${displayStudy.title} — بدهی خارجی (دلار)`
+                          )}
+                          exportSourceFooter={studyChartExportSource(isFa, [
+                            recoExternalDebtSource?.name ?? "World Bank WDI",
+                            recoExternalDebtPctGdpPoints.length > 0
+                              ? recoExternalDebtIndicatorIds?.external_debt_pct_gdp ?? "derived:DT.DOD.DECT.CD/NY.GDP.MKTP.CD*100"
+                              : recoExternalDebtIndicatorIds?.external_debt_usd ?? "DT.DOD.DECT.CD",
+                          ])}
+                          data={[]}
+                          valueKey="value"
+                          label={L(
+                            isFa,
+                            recoExternalDebtPctGdpPoints.length > 0 ? "External debt (% of GDP)" : "External debt (USD)",
+                            recoExternalDebtPctGdpPoints.length > 0
+                              ? "بدهی خارجی (% از تولید ناخالص داخلی)"
+                              : "بدهی خارجی (دلار)"
+                          )}
+                          events={reconstructionExternalDebtEvents}
+                          multiSeries={[
+                            {
+                              key: recoExternalDebtPctGdpPoints.length > 0 ? "external_debt_pct_gdp" : "external_debt_usd",
+                              label: L(
+                                isFa,
+                                recoExternalDebtPctGdpPoints.length > 0 ? "External debt (% of GDP)" : "External debt (USD)",
+                                recoExternalDebtPctGdpPoints.length > 0
+                                  ? "بدهی خارجی (% از تولید ناخالص داخلی)"
+                                  : "بدهی خارجی (دلار)"
+                              ),
+                              yAxisIndex: 0,
+                              unit: recoExternalDebtPctGdpPoints.length > 0
+                                ? L(isFa, "% of GDP", "درصدی از تولید ناخالص داخلی")
+                                : L(isFa, "current US$", "دلار جاری آمریکا"),
+                              points: recoExternalDebtPctGdpPoints.length > 0
+                                ? recoExternalDebtPctGdpPoints
+                                : recoExternalDebtUsdPoints,
+                              color: SIGNAL_CONCEPT.gdp,
+                              symbol: "circle",
+                              symbolSize: CHART_LINE_SYMBOL_SIZE,
+                              smooth: false,
+                            },
+                          ]}
+                          timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
+                          revolution1979Marker={{
+                            enabled: true,
+                            label: L(isFa, "1979 Revolution", "انقلاب ۱۳۵۷"),
+                          }}
+                          chartRangeGranularity="year"
+                          forceTimeAxis
+                          xAxisYearLabel={chartYearAxisLabel}
+                          exportFileStem={
+                            recoExternalDebtPctGdpPoints.length > 0
+                              ? "iran-reco-external-debt-pct-gdp"
+                              : "iran-reco-external-debt-usd"
+                          }
+                          showChartControls
+                          chartHeight="h-56 md:h-64"
+                          mutedEventLines
+                          regimeArea={recoWelfareRegimeArea}
+                          focusGregorianYearRange={{
+                            startYear: reconstructionGregorianYearBounds.start,
+                            endYear: reconstructionGregorianYearBounds.end,
+                          }}
+                          focusHoverHint={{
+                            en: "Inside focus period",
+                            fa: "داخل دورهٔ تمرکز",
+                          }}
+                          multiSeriesYAxisNameOverrides={{
+                            0: recoExternalDebtPctGdpPoints.length > 0
+                              ? L(isFa, "% of GDP", "درصدی از تولید ناخالص داخلی")
+                              : L(isFa, "External debt (current US$)", "بدهی خارجی (دلار جاری)"),
+                          }}
+                          yAxisDetailNote={L(
+                            isFa,
+                            "Annual data; sparse years remain blank (no interpolation).",
+                            "داده‌ها سالانه‌اند و سال‌های پراکنده بدون درون‌یابی خالی می‌مانند."
+                          )}
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground py-6">
+                          {L(isFa, "No data available", "داده‌ای در دسترس نیست")}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Card className="chart-card border-border md:col-span-2">
                     <CardHeader className="pb-2 space-y-1.5">
                       <CardTitle className="text-base font-semibold">
                         {recoGdpDecompMode === "real"
@@ -11787,7 +11958,7 @@ export default function StudyDetailPage() {
                         {L(
                           isFa,
                           "Natural gas rents are estimated resource rents as a share of GDP. They are not the same as government gas revenue or export revenue.",
-                          "«رانت گاز طبیعی برآوردی از رانت منابع طبیعی به‌عنوان درصدی از GDP است و معادل درآمد دولت یا صادرات گاز نیست.»"
+                          "رانت گاز طبیعی برآوردی از رانت منابع طبیعی به‌عنوان درصدی از تولید ناخالص داخلی است و معادل درآمد دولت یا صادرات گاز نیست."
                         )}
                       </p>
                       <p className="text-xs text-muted-foreground">WDI NY.GDP.NGAS.RT.ZS — Iran.</p>
@@ -11806,7 +11977,7 @@ export default function StudyDetailPage() {
                           data={recoNaturalGasRentsPoints}
                           valueKey="value"
                           label={L(isFa, "Natural gas rents (% of GDP)", "رانت گاز طبیعی (% از تولید ناخالص داخلی)")}
-                          unit="%"
+                          unit={L(isFa, "% of GDP", "درصدی از تولید ناخالص داخلی")}
                           events={reconstructionChartEvents}
                           timeRange={reconstructionTimeRange ?? study.timeRange}
                           chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
@@ -11822,8 +11993,8 @@ export default function StudyDetailPage() {
                         <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
                           {L(
                             isFa,
-                            "No natural-gas-rents observations are available in this window (NY.GDP.NGAS.RT.ZS). Missing years are left blank rather than interpolated.",
-                            "در این بازه مشاهده‌ای از رانت گاز طبیعی (NY.GDP.NGAS.RT.ZS) وجود ندارد. سال‌های بدون داده به‌جای درون‌یابی خالی مانده‌اند."
+                            "No natural gas rents data available for this window.",
+                            "برای این بازه داده‌ای برای رانت گاز طبیعی در دسترس نیست."
                           )}
                         </p>
                       ) : (
@@ -12432,6 +12603,24 @@ export default function StudyDetailPage() {
                     unitLabel: L(isFa, "% of GDP", faEconomic.pctOfGdp),
                   },
                   {
+                    label: L(isFa, "Natural gas rents", "رانت گاز طبیعی"),
+                    sourceName: recoDutchSource?.name ?? "World Bank World Development Indicators",
+                    sourceUrl: "https://data.worldbank.org/indicator/NY.GDP.NGAS.RT.ZS",
+                    sourceDetail: recoDutchSource?.publisher ?? "World Bank",
+                    unitLabel: L(isFa, "% of GDP", "درصدی از تولید ناخالص داخلی"),
+                  },
+                  {
+                    label: L(isFa, "External debt", "بدهی خارجی"),
+                    sourceName: recoExternalDebtSource?.name ?? "World Bank World Development Indicators",
+                    sourceUrl: "https://data.worldbank.org/indicator/DT.DOD.DECT.CD",
+                    sourceDetail: recoExternalDebtSource?.publisher ?? "World Bank",
+                    unitLabel: L(
+                      isFa,
+                      "% of GDP (derived from DT.DOD.DECT.CD / NY.GDP.MKTP.CD); fallback current US$ (DT.DOD.DECT.CD)",
+                      "درصدی از GDP (مشتق از DT.DOD.DECT.CD / NY.GDP.MKTP.CD)؛ در صورت نبود، دلار جاری (DT.DOD.DECT.CD)"
+                    ),
+                  },
+                  {
                     label: L(isFa, "Money supply", faEconomic.broadMoney),
                     sourceName: recoMoneyWdiSource?.name ?? "World Bank WDI",
                     sourceUrl: recoMoneyIndicatorIds
@@ -12643,6 +12832,10 @@ export default function StudyDetailPage() {
                   recoIsiIndicatorIds={recoIsiIndicatorIds}
                   recoOilRentsPoints={recoOilRentsPoints}
                   recoNaturalGasRentsPoints={recoNaturalGasRentsPoints}
+                  recoExternalDebtPctGdpPoints={recoExternalDebtPctGdpPoints}
+                  recoExternalDebtUsdPoints={recoExternalDebtUsdPoints}
+                  recoExternalDebtSource={recoExternalDebtSource}
+                  recoExternalDebtIndicatorIds={recoExternalDebtIndicatorIds}
                   recoDutchSource={recoDutchSource}
                   recoM2Points={recoM2Points}
                   recoM2CpiPoints={recoM2CpiPoints}
@@ -12742,6 +12935,24 @@ export default function StudyDetailPage() {
                     sourceUrl: "https://data.worldbank.org/indicator/NY.GDP.PETR.RT.ZS",
                     sourceDetail: recoDutchSource?.publisher ?? "World Bank",
                     unitLabel: L(isFa, "% of GDP", faEconomic.pctOfGdp),
+                  },
+                  {
+                    label: L(isFa, "Natural gas rents", "رانت گاز طبیعی"),
+                    sourceName: recoDutchSource?.name ?? "World Bank World Development Indicators",
+                    sourceUrl: "https://data.worldbank.org/indicator/NY.GDP.NGAS.RT.ZS",
+                    sourceDetail: recoDutchSource?.publisher ?? "World Bank",
+                    unitLabel: L(isFa, "% of GDP", "درصدی از تولید ناخالص داخلی"),
+                  },
+                  {
+                    label: L(isFa, "External debt", "بدهی خارجی"),
+                    sourceName: recoExternalDebtSource?.name ?? "World Bank World Development Indicators",
+                    sourceUrl: "https://data.worldbank.org/indicator/DT.DOD.DECT.CD",
+                    sourceDetail: recoExternalDebtSource?.publisher ?? "World Bank",
+                    unitLabel: L(
+                      isFa,
+                      "% of GDP (derived from DT.DOD.DECT.CD / NY.GDP.MKTP.CD); fallback current US$ (DT.DOD.DECT.CD)",
+                      "درصدی از GDP (مشتق از DT.DOD.DECT.CD / NY.GDP.MKTP.CD)؛ در صورت نبود، دلار جاری (DT.DOD.DECT.CD)"
+                    ),
                   },
                   {
                     label: L(isFa, "Money supply", faEconomic.broadMoney),
@@ -12986,8 +13197,8 @@ export default function StudyDetailPage() {
                     <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
                       {L(
                         isFa,
-                        "No natural-gas-rents observations in this window (NY.GDP.NGAS.RT.ZS). Missing years are left blank rather than interpolated.",
-                        "در این بازه مشاهده‌ای از رانت گاز طبیعی (NY.GDP.NGAS.RT.ZS) وجود ندارد. سال‌های بدون داده به‌جای درون‌یابی خالی مانده‌اند."
+                        "No natural gas rents data available for this window.",
+                        "برای این بازه داده‌ای برای رانت گاز طبیعی در دسترس نیست."
                       )}
                     </p>
                   )}

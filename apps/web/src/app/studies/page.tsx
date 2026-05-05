@@ -96,7 +96,10 @@ export default function StudiesPage() {
         </p>
       </header>
 
-      <div className="mb-8 space-y-3 border-b border-[#f1f5f9] dark:border-[#1f2937] pb-5">
+      <div
+        className="mb-8 space-y-3 border-b border-[#f1f5f9] dark:border-[#1f2937] pb-5"
+        suppressHydrationWarning
+      >
         <div className="flex flex-wrap items-center gap-2">
           <div
             className="inline-flex rounded-lg border border-[#e5e7eb] dark:border-[#374151] p-0.5 bg-[#fafafa] dark:bg-[#0f172a]"
@@ -107,6 +110,7 @@ export default function StudiesPage() {
               <button
                 key={opt.id}
                 type="button"
+                suppressHydrationWarning
                 onClick={() => setViewMode(opt.id)}
                 className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                   viewMode === opt.id
@@ -128,6 +132,7 @@ export default function StudiesPage() {
             id="studies-search"
             name="studies_search"
             type="search"
+            suppressHydrationWarning
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search titles, topics, countries…"
@@ -147,6 +152,7 @@ export default function StudiesPage() {
                 <button
                   key={id}
                   type="button"
+                  suppressHydrationWarning
                   onClick={() => toggleCountry(id)}
                   className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
                     on
@@ -167,6 +173,7 @@ export default function StudiesPage() {
                 <button
                   key={id}
                   type="button"
+                  suppressHydrationWarning
                   onClick={() => toggleTheme(id)}
                   className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
                     on
@@ -182,6 +189,7 @@ export default function StudiesPage() {
           {hasActiveFilters ? (
             <button
               type="button"
+              suppressHydrationWarning
               onClick={clearFilters}
               className="text-xs text-[#6b7280] dark:text-[#9ca3af] underline underline-offset-2 hover:text-[#111827] dark:hover:text-[#e5e7eb]"
             >

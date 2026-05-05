@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from signalmap.sources.world_bank_national_accounts import fetch_wdi_annual_indicator
+import httpx
+
+from signalmap.sources.world_bank_national_accounts import WB_BASE, USER_AGENT, fetch_wdi_annual_indicator
 
 _logger = logging.getLogger(__name__)
 
@@ -32,11 +35,70 @@ WDI_LABELS: dict[str, str] = {
 
 def _fetch_indicator_safe(country_iso3: str, indicator_id: str) -> tuple[list[dict[str, Any]], str | None]:
     """Return rows or empty list with a short error message (never raises)."""
-    try:
-        return fetch_wdi_annual_indicator(country_iso3, indicator_id), None
-    except Exception as e:
-        _logger.warning("WDI fetch failed %s %s: %s", country_iso3, indicator_id, e)
-        return [], f"{indicator_id}: {e}"
+    last_err: Exception | None = None
+    for attempt in range(2):
+        try:
+            return fetch_wdi_annual_indicator(country_iso3, indicator_id), None
+        except Exception as e:
+            last_err = e
+            if attempt == 0:
+                _logger.warning("WDI fetch retrying %s %s after error: %s", country_iso3, indicator_id, e)
+                time.sleep(0.35)
+                continue
+            _logger.warning("WDI fetch failed %s %s: %s", country_iso3, indicator_id, e)
+    # Fallback path for intermittent timeout on the shared helper/client: retry once
+    # with a longer direct HTTP timeout for this specific indicator call.
+    if last_err and "timed out" in str(last_err).lower():
+        try:
+            return _fetch_wdi_annual_indicator_long_timeout(country_iso3, indicator_id), None
+        except Exception as e:
+            _logger.warning(
+                "WDI long-timeout fallback failed %s %s: %s",
+                country_iso3,
+                indicator_id,
+                e,
+            )
+            last_err = e
+    return [], f"{indicator_id}: {last_err}"
+
+
+def _fetch_wdi_annual_indicator_long_timeout(country_iso3: str, indicator_id: str) -> list[dict[str, Any]]:
+    """Direct WDI fetch with longer timeout for flaky indicators."""
+    iso = country_iso3.strip().upper()
+    iid = indicator_id.strip()
+    url = f"{WB_BASE}/{iso}/indicator/{iid}"
+    rows: list[dict[str, Any]] = []
+    page = 1
+    with httpx.Client(timeout=90.0, headers={"User-Agent": USER_AGENT}) as client:
+        while True:
+            r = client.get(url, params={"format": "json", "per_page": 1000, "page": page})
+            r.raise_for_status()
+            data = r.json()
+            if not isinstance(data, list) or len(data) < 2:
+                break
+            meta = data[0] if isinstance(data[0], dict) else {}
+            records = data[1]
+            if not isinstance(records, list):
+                break
+            for rec in records:
+                if not isinstance(rec, dict):
+                    continue
+                date_str = rec.get("date")
+                val = rec.get("value")
+                if not date_str or val is None:
+                    continue
+                try:
+                    year = int(date_str)
+                    value = float(val)
+                except (ValueError, TypeError):
+                    continue
+                rows.append({"year": year, "value": value})
+            total_pages = int(meta.get("pages", 1) or 1)
+            if page >= total_pages:
+                break
+            page += 1
+    rows.sort(key=lambda r: r["year"])
+    return rows
 
 
 def _rows_to_points(rows: list[dict[str, Any]], start_year: int, end_year: int) -> list[dict[str, float | str]]:

@@ -1,12 +1,12 @@
 import { NextRequest } from "next/server";
-import { proxySignalGetJson } from "@/lib/signal-api-proxy";
+import { proxySignalGetJson, signalProxyPolicy } from "@/lib/signal-api-proxy";
 
 export async function GET(request: NextRequest) {
   const qs = request.nextUrl.searchParams.toString();
   return proxySignalGetJson(
-    "/api/signals/wdi/dutch-disease-diagnostics-iran",
+    "/api/signals/wdi/iran-external-debt",
     qs,
-    { revalidate: 60, cacheControl: "public, s-maxage=60, stale-while-revalidate=30" as const },
+    signalProxyPolicy.wdiAnnual,
     { logUpstreamFailures: true }
   );
 }

@@ -1311,6 +1311,40 @@ IRAN_DEMAND_NOMINAL_USD_SOURCE = {
 }
 
 
+IRAN_EXTERNAL_DEBT_SOURCE = {
+    "name": "World Bank World Development Indicators",
+    "publisher": "World Bank",
+    "url": "https://data.worldbank.org/indicator/DT.DOD.DECT.CD",
+}
+
+
+def get_iran_external_debt(start: str, end: str) -> dict:
+    """
+    Iran: annual external debt from WDI.
+
+    Primary series is derived ``external debt (% GDP)`` using
+    ``DT.DOD.DECT.CD / NY.GDP.MKTP.CD * 100`` when both are available.
+    Fallback series is external debt stocks (current US$): ``DT.DOD.DECT.CD``.
+    """
+    from signalmap.sources.world_bank_iran_external_debt import fetch_iran_external_debt_bundle
+
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    ck = f"signal:iran_external_debt:v1:{start_year}:{end_year}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+
+    bundle = fetch_iran_external_debt_bundle(start_year, end_year)
+    result = {
+        **bundle,
+        "source": IRAN_EXTERNAL_DEBT_SOURCE,
+        "resolution": "annual",
+    }
+    cache_set(ck, result, CACHE_TTL)
+    return result
+
+
 def get_iran_demand_nominal_usd(start: str, end: str) -> dict:
     """
     Iran: annual demand aggregates — nominal (.CD) and real constant-price (.KD) from WDI.
@@ -1352,7 +1386,7 @@ def get_dutch_disease_diagnostics_iran(start: str, end: str) -> dict:
 
     start_year = int(start[:4])
     end_year = int(end[:4])
-    ck = f"signal:dutch_disease_diagnostics_iran:v3:{start_year}:{end_year}"
+    ck = f"signal:dutch_disease_diagnostics_iran:v4:{start_year}:{end_year}"
     t0 = time.perf_counter()
     cached = cache_get(ck)
     if cached is not None:
@@ -1372,7 +1406,10 @@ def get_dutch_disease_diagnostics_iran(start: str, end: str) -> dict:
         "source": DUTCH_DISEASE_DIAGNOSTICS_SOURCE,
         "resolution": "annual",
     }
-    cache_set(ck, result, CACHE_TTL)
+    # Do not cache partial/error bundles: transient WDI timeouts should not pin empty
+    # indicator series (e.g. natural gas rents) for the full cache TTL.
+    if not result.get("partial"):
+        cache_set(ck, result, CACHE_TTL)
     if _SIGNAL_TIMING_LOG:
         payload = json.dumps(result)
         logger.info(

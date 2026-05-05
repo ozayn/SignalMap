@@ -66,6 +66,10 @@ export type IranEconomyPeriodComparisonPanelsProps = {
   recoIsiIndicatorIds: Record<string, string> | null;
   recoOilRentsPoints: Point[];
   recoNaturalGasRentsPoints: Point[];
+  recoExternalDebtPctGdpPoints: Point[];
+  recoExternalDebtUsdPoints: Point[];
+  recoExternalDebtSource: { name?: string; url?: string; publisher?: string } | null;
+  recoExternalDebtIndicatorIds: Record<string, string> | null;
   recoDutchSource: { name?: string; url?: string; publisher?: string } | null;
   recoM2Points: Point[];
   recoM2CpiPoints: Point[];
@@ -136,6 +140,10 @@ export function IranEconomyPeriodComparisonPanels({
   recoIsiIndicatorIds,
   recoOilRentsPoints,
   recoNaturalGasRentsPoints,
+  recoExternalDebtPctGdpPoints,
+  recoExternalDebtUsdPoints,
+  recoExternalDebtSource,
+  recoExternalDebtIndicatorIds,
   recoDutchSource,
   recoM2Points,
   recoM2CpiPoints,
@@ -195,6 +203,31 @@ export function IranEconomyPeriodComparisonPanels({
         focusGregorianYearRange.endYear
       ),
     [recoWelfareGiniIranPoints, timeRange, focusGregorianYearRange.endYear]
+  );
+
+  const externalDebtContextEvents = useMemo<TimelineEvent[]>(
+    () => [
+      {
+        id: "ext-debt-borrowing-surge-1991",
+        layer: "iran_core",
+        date: "1991-01-01",
+        title: "Foreign borrowing surge during reconstruction period",
+        title_fa: "افزایش استقراض خارجی در دوره بازسازی",
+      },
+      {
+        id: "ext-debt-peak-1995",
+        layer: "iran_core",
+        date: "1995-01-01",
+        title: "Debt peak and rescheduling pressures",
+        title_fa: "اوج بدهی و فشار بازپرداخت",
+      },
+    ],
+    []
+  );
+
+  const externalDebtChartEvents = useMemo(
+    () => [...externalDebtContextEvents, ...events],
+    [externalDebtContextEvents, events]
   );
 
   const ipcGdpDecompositionMultiSeries = useMemo((): ChartSeries[] | null => {
@@ -574,6 +607,109 @@ export function IranEconomyPeriodComparisonPanels({
             </CardContent>
           </Card>
           <Card className="chart-card border-border md:col-span-2">
+            <CardHeader className="space-y-1 px-4 py-2.5">
+              <CardTitle className="text-base font-semibold">
+                {L(
+                  isFa,
+                  recoExternalDebtPctGdpPoints.length > 0
+                    ? "External debt (% of GDP)"
+                    : "External debt (USD)",
+                  recoExternalDebtPctGdpPoints.length > 0
+                    ? "بدهی خارجی (% از تولید ناخالص داخلی)"
+                    : "بدهی خارجی (دلار)"
+                )}
+              </CardTitle>
+              <p className="text-xs text-muted-foreground max-w-3xl leading-relaxed">
+                {L(
+                  isFa,
+                  "External debt measures obligations to non-resident creditors. It does not include domestic debt.",
+                  "«بدهی خارجی شامل بدهی به وام‌دهندگان خارجی است و بدهی داخلی را شامل نمی‌شود.»"
+                )}
+              </p>
+            </CardHeader>
+            <CardContent className="px-4 pb-3 pt-0">
+              {recoExternalDebtPctGdpPoints.length > 0 || recoExternalDebtUsdPoints.length > 0 ? (
+                <TimelineChart
+                  chartLocale={chartLocaleForCharts}
+                  exportPresentationStudyHeading={exportStudyHeading}
+                  exportPresentationTitle={L(
+                    isFa,
+                    recoExternalDebtPctGdpPoints.length > 0
+                      ? `${studyTitle} — External debt (% of GDP)`
+                      : `${studyTitle} — External debt (USD)`,
+                    recoExternalDebtPctGdpPoints.length > 0
+                      ? `${studyTitle} — بدهی خارجی (% از GDP)`
+                      : `${studyTitle} — بدهی خارجی (دلار)`
+                  )}
+                  exportSourceFooter={studyChartExportSource(isFa, [
+                    recoExternalDebtSource?.name ?? "World Bank WDI",
+                    recoExternalDebtPctGdpPoints.length > 0
+                      ? recoExternalDebtIndicatorIds?.external_debt_pct_gdp ?? "derived:DT.DOD.DECT.CD/NY.GDP.MKTP.CD*100"
+                      : recoExternalDebtIndicatorIds?.external_debt_usd ?? "DT.DOD.DECT.CD",
+                  ])}
+                  data={[]}
+                  valueKey="value"
+                  label={L(
+                    isFa,
+                    recoExternalDebtPctGdpPoints.length > 0 ? "External debt (% of GDP)" : "External debt (USD)",
+                    recoExternalDebtPctGdpPoints.length > 0
+                      ? "بدهی خارجی (% از تولید ناخالص داخلی)"
+                      : "بدهی خارجی (دلار)"
+                  )}
+                  events={externalDebtChartEvents}
+                  multiSeries={[
+                    {
+                      key: recoExternalDebtPctGdpPoints.length > 0 ? "external_debt_pct_gdp" : "external_debt_usd",
+                      label: L(
+                        isFa,
+                        recoExternalDebtPctGdpPoints.length > 0 ? "External debt (% of GDP)" : "External debt (USD)",
+                        recoExternalDebtPctGdpPoints.length > 0
+                          ? "بدهی خارجی (% از تولید ناخالص داخلی)"
+                          : "بدهی خارجی (دلار)"
+                      ),
+                      yAxisIndex: 0,
+                      unit: recoExternalDebtPctGdpPoints.length > 0 ? L(isFa, "% of GDP", "درصدی از تولید ناخالص داخلی") : L(isFa, "current US$", "دلار جاری آمریکا"),
+                      points: recoExternalDebtPctGdpPoints.length > 0 ? recoExternalDebtPctGdpPoints : recoExternalDebtUsdPoints,
+                      color: SIGNAL_CONCEPT.gdp,
+                      symbol: "circle",
+                      symbolSize: CHART_LINE_SYMBOL_SIZE,
+                      smooth: false,
+                    },
+                  ]}
+                  timeRange={timeRange}
+                  chartPeriodOverlayBands={chartPeriodOverlayBands}
+                  revolution1979Marker={revolution1979Marker}
+                  chartRangeGranularity="year"
+                  forceTimeAxis
+                  xAxisYearLabel={chartYearAxisLabel}
+                  exportFileStem={
+                    recoExternalDebtPctGdpPoints.length > 0
+                      ? "iran-ipc-external-debt-pct-gdp"
+                      : "iran-ipc-external-debt-usd"
+                  }
+                  showChartControls
+                  chartHeight={IPC_COMPARISON_CHART_HEIGHT}
+                  mutedEventLines
+                  regimeArea={regimeArea}
+                  focusGregorianYearRange={focusGregorianYearRange}
+                  focusHoverHint={focusHoverHint}
+                  multiSeriesYAxisNameOverrides={{
+                    0: recoExternalDebtPctGdpPoints.length > 0
+                      ? L(isFa, "% of GDP", "درصدی از تولید ناخالص داخلی")
+                      : L(isFa, "External debt (current US$)", "بدهی خارجی (دلار جاری)"),
+                  }}
+                  yAxisDetailNote={L(
+                    isFa,
+                    "Annual data; sparse years remain blank (no interpolation).",
+                    "داده‌ها سالانه‌اند و سال‌های پراکنده بدون درون‌یابی خالی می‌مانند."
+                  )}
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground py-6">{L(isFa, "No data available", "داده‌ای در دسترس نیست")}</p>
+              )}
+            </CardContent>
+          </Card>
+          <Card className="chart-card border-border md:col-span-2">
             <CardHeader className="space-y-1.5 px-4 py-2.5">
               <CardTitle className="text-base font-semibold">
                 {ipcGdpDecompMode === "real"
@@ -922,7 +1058,7 @@ export function IranEconomyPeriodComparisonPanels({
                 {L(
                   isFa,
                   "Natural gas rents are estimated resource rents as a share of GDP. They are not the same as government gas revenue or export revenue.",
-                  "«رانت گاز طبیعی برآوردی از رانت منابع طبیعی به‌عنوان درصدی از GDP است و معادل درآمد دولت یا صادرات گاز نیست.»"
+                  "رانت گاز طبیعی برآوردی از رانت منابع طبیعی به‌عنوان درصدی از تولید ناخالص داخلی است و معادل درآمد دولت یا صادرات گاز نیست."
                 )}
               </p>
               <p className="text-xs text-muted-foreground">WDI NY.GDP.NGAS.RT.ZS — Iran.</p>
@@ -941,7 +1077,7 @@ export function IranEconomyPeriodComparisonPanels({
                   data={recoNaturalGasRentsPoints}
                   valueKey="value"
                   label={L(isFa, "Natural gas rents (% of GDP)", "رانت گاز طبیعی (% از تولید ناخالص داخلی)")}
-                  unit="%"
+                  unit={L(isFa, "% of GDP", "درصدی از تولید ناخالص داخلی")}
                   events={events}
                   timeRange={timeRange}
                   chartPeriodOverlayBands={chartPeriodOverlayBands}
@@ -961,8 +1097,8 @@ export function IranEconomyPeriodComparisonPanels({
                 <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
                   {L(
                     isFa,
-                    "No natural-gas-rents observations are available in this window (NY.GDP.NGAS.RT.ZS). Missing years are left blank rather than interpolated.",
-                    "در این بازه مشاهده‌ای از رانت گاز طبیعی (NY.GDP.NGAS.RT.ZS) وجود ندارد. سال‌های بدون داده به‌جای درون‌یابی خالی مانده‌اند."
+                    "No natural gas rents data available for this window.",
+                    "برای این بازه داده‌ای برای رانت گاز طبیعی در دسترس نیست."
                   )}
                 </p>
               ) : (
