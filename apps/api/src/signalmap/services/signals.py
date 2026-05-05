@@ -1315,12 +1315,15 @@ def get_iran_demand_nominal_usd(start: str, end: str) -> dict:
     """
     Iran: annual demand aggregates — nominal (.CD) and real constant-price (.KD) from WDI.
     Descriptive only.
+
+    GDP decomposition inputs (``NY.GDP.MKTP.CD``, ``NY.GDP.PETR.RT.ZS``) are fetched inside the bundle builder
+    with per-indicator row caching; this function adds a whole-bundle cache key on top.
     """
     from signalmap.sources.world_bank_iran_demand_nominal import fetch_iran_demand_nominal_usd_bundle
 
     start_year = int(start[:4])
     end_year = int(end[:4])
-    ck = f"signal:iran_demand_nominal_usd:v3:{start_year}:{end_year}"
+    ck = f"signal:iran_demand_nominal_usd:v4:{start_year}:{end_year}"
     cached = cache_get(ck)
     if cached is not None:
         return cached

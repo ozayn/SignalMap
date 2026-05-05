@@ -45,6 +45,7 @@ import { IranMoneySupplyMethodology } from "@/components/studies/iran-money-supp
 import { InSimpleTerms } from "@/components/in-simple-terms";
 import { StudyAiInterpretation } from "@/components/study-ai-interpretation";
 import { IranEconomyPeriodComparisonPanels } from "@/components/studies/iran-economy-period-comparison-panels";
+import { GdpDecompositionChartSkeleton } from "@/components/studies/gdp-decomposition-chart-ui";
 import { EventsTimeline, type TimelineEvent } from "@/components/events-timeline";
 import { SignalMapBandTimeline } from "@/components/signalmap-band-timeline";
 import {
@@ -683,6 +684,8 @@ export default function StudyDetailPage() {
   const [recoDemandConsumptionPoints, setRecoDemandConsumptionPoints] = useState<{ date: string; value: number }[]>([]);
   const [recoDemandInvestmentPoints, setRecoDemandInvestmentPoints] = useState<{ date: string; value: number }[]>([]);
   const [recoDemandGdpPoints, setRecoDemandGdpPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoGdpDecompNonOilPoints, setRecoGdpDecompNonOilPoints] = useState<{ date: string; value: number }[]>([]);
+  const [recoGdpDecompOilPoints, setRecoGdpDecompOilPoints] = useState<{ date: string; value: number }[]>([]);
   const [recoDemandNominalSource, setRecoDemandNominalSource] = useState<{
     name?: string;
     url?: string;
@@ -4017,6 +4020,8 @@ export default function StudyDetailPage() {
         setRecoDemandConsumptionPoints([]);
         setRecoDemandInvestmentPoints([]);
         setRecoDemandGdpPoints([]);
+        setRecoGdpDecompNonOilPoints([]);
+        setRecoGdpDecompOilPoints([]);
         setRecoDemandNominalSource(null);
         setRecoDemandIndicatorIds(null);
         setRecoDemandRealConsumptionPoints([]);
@@ -4078,6 +4083,8 @@ export default function StudyDetailPage() {
           consumption_usd?: { date: string; value: number }[];
           investment_usd?: { date: string; value: number }[];
           gdp_usd?: { date: string; value: number }[];
+          gdp_non_oil_proxy_usd?: { date: string; value: number }[];
+          gdp_oil_proxy_usd?: { date: string; value: number }[];
           consumption_kd?: { date: string; value: number }[];
           investment_kd?: { date: string; value: number }[];
           gdp_kd?: { date: string; value: number }[];
@@ -4115,6 +4122,8 @@ export default function StudyDetailPage() {
         setRecoDemandConsumptionPoints(demand.series?.consumption_usd ?? []);
         setRecoDemandInvestmentPoints(demand.series?.investment_usd ?? []);
         setRecoDemandGdpPoints(demand.series?.gdp_usd ?? []);
+        setRecoGdpDecompNonOilPoints(demand.series?.gdp_non_oil_proxy_usd ?? []);
+        setRecoGdpDecompOilPoints(demand.series?.gdp_oil_proxy_usd ?? []);
         setRecoDemandNominalSource(demand.source ?? null);
         setRecoDemandIndicatorIds(demand.indicator_ids ?? null);
         setRecoDemandRealConsumptionPoints(demand.series?.consumption_kd ?? []);
@@ -4129,6 +4138,8 @@ export default function StudyDetailPage() {
           (demand.series?.consumption_usd?.length ?? 0) +
           (demand.series?.investment_usd?.length ?? 0) +
           (demand.series?.gdp_usd?.length ?? 0) +
+          (demand.series?.gdp_non_oil_proxy_usd?.length ?? 0) +
+          (demand.series?.gdp_oil_proxy_usd?.length ?? 0) +
           (demand.series?.consumption_kd?.length ?? 0) +
           (demand.series?.investment_kd?.length ?? 0) +
           (demand.series?.gdp_kd?.length ?? 0);
@@ -4167,6 +4178,8 @@ export default function StudyDetailPage() {
         setRecoDemandConsumptionPoints([]);
         setRecoDemandInvestmentPoints([]);
         setRecoDemandGdpPoints([]);
+        setRecoGdpDecompNonOilPoints([]);
+        setRecoGdpDecompOilPoints([]);
         setRecoDemandNominalSource(null);
         setRecoDemandIndicatorIds(null);
         setRecoDemandRealConsumptionPoints([]);
@@ -4195,6 +4208,51 @@ export default function StudyDetailPage() {
       ac.abort();
     };
   }, [iranEconomyMacroFetchRange, isIranEconomyMacroDashboard]);
+
+  const reconstructionGdpDecompositionMultiSeries = useMemo((): ChartSeries[] | null => {
+    if (
+      recoGdpDecompNonOilPoints.length === 0 ||
+      recoGdpDecompOilPoints.length === 0 ||
+      recoDemandGdpPoints.length === 0
+    ) {
+      return null;
+    }
+    return [
+      {
+        key: "gdp_non_oil_proxy",
+        label: L(isFa, "Non-oil GDP proxy", "GDP غیرنفتی (تقریبی)"),
+        yAxisIndex: 0,
+        unit: L(isFa, "current US$", "دلار جاری آمریکا"),
+        points: recoGdpDecompNonOilPoints,
+        smooth: true,
+        showSymbol: false,
+        stack: "gdp_nom_decomp",
+        stackedArea: true,
+      },
+      {
+        key: "gdp_oil_proxy",
+        label: L(isFa, "Oil rents proxy", "رانت نفتی (تقریبی)"),
+        yAxisIndex: 0,
+        unit: L(isFa, "current US$", "دلار جاری آمریکا"),
+        points: recoGdpDecompOilPoints,
+        smooth: true,
+        showSymbol: false,
+        stack: "gdp_nom_decomp",
+        stackedArea: true,
+      },
+      {
+        key: "level_gdp",
+        label: L(isFa, "Total GDP", "GDP کل"),
+        yAxisIndex: 0,
+        unit: L(isFa, "current US$", "دلار جاری آمریکا"),
+        points: recoDemandGdpPoints,
+        smooth: true,
+        linePattern: "dashed",
+        lineWidth: 2,
+        showSymbol: true,
+      },
+    ];
+  }, [recoGdpDecompNonOilPoints, recoGdpDecompOilPoints, recoDemandGdpPoints, isFa]);
 
   useEffect(() => {
     if (!iranEconomyMacroFetchRange || !isIranEconomyMacroDashboard) {
@@ -10837,6 +10895,102 @@ export default function StudyDetailPage() {
                           mutedEventLines
                           seriesColor="hsl(217, 91%, 59%)"
                           gridLeft={80}
+                          regimeArea={recoWelfareRegimeArea}
+                          focusGregorianYearRange={{
+                            startYear: reconstructionGregorianYearBounds.start,
+                            endYear: reconstructionGregorianYearBounds.end,
+                          }}
+                          focusHoverHint={{
+                            en: "Inside focus period",
+                            fa: "داخل دورهٔ تمرکز",
+                          }}
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground py-6">
+                          {L(isFa, "Data unavailable for this window.", "داده در این بازه در دسترس نیست.")}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Card className="chart-card border-border md:col-span-2">
+                    <CardHeader className="pb-2 space-y-1.5">
+                      <CardTitle className="text-base font-semibold">
+                        {L(isFa, "GDP decomposition: oil rents vs non-oil GDP", "تفکیک GDP: رانت نفتی و GDP غیرنفتی")}
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground max-w-3xl leading-relaxed">
+                        {L(
+                          isFa,
+                          "This is a proxy decomposition using WDI oil rents as a share of GDP. It should not be read as an official non-oil GDP series.",
+                          "«این تفکیک تقریبی است و از سهم رانت نفتی در GDP بر اساس داده‌های WDI ساخته شده است. نباید آن را معادل سری رسمی GDP غیرنفتی دانست.»"
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {L(
+                          isFa,
+                          "WDI NY.GDP.MKTP.CD (GDP, current US$) × NY.GDP.PETR.RT.ZS (oil rents % of GDP) — nominal levels only.",
+                          "WDI NY.GDP.MKTP.CD (GDP، دلار جاری) × NY.GDP.PETR.RT.ZS (رانت نفتی٪ GDP) — فقط سطح اسمی."
+                        )}
+                      </p>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      {recoLoading && !recoLoadFailed ? (
+                        <div className="space-y-2" aria-live="polite">
+                          <p className="text-xs text-muted-foreground">
+                            {L(isFa, "Loading data…", "در حال بارگذاری داده‌ها…")}
+                          </p>
+                          <GdpDecompositionChartSkeleton />
+                        </div>
+                      ) : recoLoadFailed ? (
+                        <p className="text-xs text-destructive py-6">
+                          {recoLoadDetail?.trim() ||
+                            L(
+                              isFa,
+                              "Could not load macro data for this window.",
+                              "بارگذاری دادهٔ کلان برای این بازه انجام نشد."
+                            )}
+                        </p>
+                      ) : reconstructionGdpDecompositionMultiSeries ? (
+                        <TimelineChart
+                          chartLocale={chartLocaleForCharts}
+                          exportPresentationStudyHeading={displayStudy.title}
+                          exportPresentationTitle={L(
+                            isFa,
+                            `${displayStudy.title} — GDP decomposition (nominal)`,
+                            `${displayStudy.title} — تفکیک GDP (اسمی)`
+                          )}
+                          exportSourceFooter={studyChartExportSource(isFa, [
+                            recoDemandNominalSource?.name ?? "World Bank WDI",
+                            recoDemandIndicatorIds?.gdp_usd ?? "NY.GDP.MKTP.CD",
+                            recoDemandIndicatorIds?.oil_rents_pct_gdp ?? "NY.GDP.PETR.RT.ZS",
+                            recoDemandIndicatorIds?.gdp_non_oil_proxy_usd ?? undefined,
+                            recoDemandIndicatorIds?.gdp_oil_proxy_usd ?? undefined,
+                          ])}
+                          data={[]}
+                          valueKey="value"
+                          label={L(isFa, "GDP decomposition (nominal)", "تفکیک GDP (اسمی)")}
+                          events={reconstructionChartEvents}
+                          multiSeries={reconstructionGdpDecompositionMultiSeries}
+                          timeRange={reconstructionTimeRange ?? study.timeRange}
+                          chartRangeGranularity="year"
+                          xAxisYearLabel={chartYearAxisLabel}
+                          exportFileStem="iran-reco-gdp-decomposition-nominal"
+                          showChartControls
+                          chartHeight="h-56 md:h-64"
+                          mutedEventLines
+                          multiSeriesValueFormat="gdp_absolute"
+                          multiSeriesYAxisNameOverrides={{
+                            0: L(isFa, "GDP (current US$)", "تولید ناخالص داخلی (دلار جاری آمریکا)"),
+                          }}
+                          regimeArea={recoWelfareRegimeArea}
+                          focusGregorianYearRange={{
+                            startYear: reconstructionGregorianYearBounds.start,
+                            endYear: reconstructionGregorianYearBounds.end,
+                          }}
+                          focusHoverHint={{
+                            en: "Inside focus period",
+                            fa: "داخل دورهٔ تمرکز",
+                          }}
+                          gridLeft={80}
                         />
                       ) : (
                         <p className="text-xs text-muted-foreground py-6">
@@ -11640,6 +11794,17 @@ export default function StudyDetailPage() {
                     ),
                   },
                   {
+                    label: L(isFa, "GDP decomposition (proxy)", "تفکیک GDP (تقریبی)"),
+                    sourceName: recoDemandNominalSource?.name ?? "World Bank WDI",
+                    sourceUrl: recoDemandNominalSource?.url ?? "https://data.worldbank.org/country/iran",
+                    sourceDetail: recoDemandNominalSource?.publisher ?? "World Bank",
+                    unitLabel: L(
+                      isFa,
+                      "current US$ — NY.GDP.MKTP.CD, NY.GDP.PETR.RT.ZS; derived non-oil / oil proxy levels",
+                      "دلار جاری — NY.GDP.MKTP.CD، NY.GDP.PETR.RT.ZS؛ سطوح تقریبی غیرنفتی/نفتی"
+                    ),
+                  },
+                  {
                     label: L(isFa, "Consumption, investment, GDP (real)", "مصرف، سرمایه‌گذاری و GDP (واقعی)"),
                     sourceName: recoDemandNominalSource?.name ?? "World Bank WDI",
                     sourceUrl: recoDemandNominalSource?.url ?? "https://data.worldbank.org/country/iran",
@@ -11850,6 +12015,8 @@ export default function StudyDetailPage() {
                   recoDemandConsumptionPoints={recoDemandConsumptionPoints}
                   recoDemandInvestmentPoints={recoDemandInvestmentPoints}
                   recoDemandGdpPoints={recoDemandGdpPoints}
+                  recoGdpDecompNonOilPoints={recoGdpDecompNonOilPoints}
+                  recoGdpDecompOilPoints={recoGdpDecompOilPoints}
                   recoDemandRealConsumptionPoints={recoDemandRealConsumptionPoints}
                   recoDemandRealInvestmentPoints={recoDemandRealInvestmentPoints}
                   recoDemandRealGdpPoints={recoDemandRealGdpPoints}
@@ -11929,6 +12096,17 @@ export default function StudyDetailPage() {
                       isFa,
                       "current US$ (NE.CON.TOTL.CD, NE.GDI.TOTL.CD, NY.GDP.MKTP.CD)",
                       "دلار جاری (NE.CON.TOTL.CD، NE.GDI.TOTL.CD، NY.GDP.MKTP.CD)"
+                    ),
+                  },
+                  {
+                    label: L(isFa, "GDP decomposition (proxy)", "تفکیک GDP (تقریبی)"),
+                    sourceName: recoDemandNominalSource?.name ?? "World Bank WDI",
+                    sourceUrl: recoDemandNominalSource?.url ?? "https://data.worldbank.org/country/iran",
+                    sourceDetail: recoDemandNominalSource?.publisher ?? "World Bank",
+                    unitLabel: L(
+                      isFa,
+                      "current US$ — NY.GDP.MKTP.CD, NY.GDP.PETR.RT.ZS; derived non-oil / oil proxy levels",
+                      "دلار جاری — NY.GDP.MKTP.CD، NY.GDP.PETR.RT.ZS؛ سطوح تقریبی غیرنفتی/نفتی"
                     ),
                   },
                   {

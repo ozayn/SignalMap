@@ -68,6 +68,15 @@ function cloneOptionBranch<T>(value: T): T {
  * `structuredClone` / JSON cannot copy functions, which breaks offscreen export vs the live chart
  * (FA numerals, dual-year axis, tooltips). Used only for presentation PNG export.
  */
+/** Must match `REGIME_FOCUS_BAND_LABEL_GRAPHIC_ID` in `timeline-chart.tsx` (layout-dependent graphic). */
+const REGIME_FOCUS_BAND_LABEL_GRAPHIC_ID_EXPORT = "regime-focus-band-label";
+
+function stripRegimeFocusBandLabelGraphicFromOption(opt: Record<string, unknown>): void {
+  const g = opt.graphic;
+  if (!Array.isArray(g)) return;
+  opt.graphic = g.filter((x) => (x as { id?: string })?.id !== REGIME_FOCUS_BAND_LABEL_GRAPHIC_ID_EXPORT);
+}
+
 function cloneEchartsOptionPreservingFunctions<T>(value: T, seen?: WeakMap<object, unknown>): T {
   const s = seen ?? new WeakMap<object, unknown>();
 
@@ -226,6 +235,11 @@ export type DownloadEchartsRasterOptions = {
   exportPresentationAllowEmptyTitle?: boolean;
   /** Partial font overrides for the offscreen presentation export only (not the live chart). */
   exportPresentationFontSizes?: Partial<ExportChartFontSizes>;
+  /**
+   * Invoked immediately before `getDataURL` (after export sizing / patches) so charts can repaint
+   * layout-dependent `graphic` layers (e.g. regime focus labels) at the export canvas dimensions.
+   */
+  onBeforeRasterCapture?: (chart: echarts.ECharts) => void;
 };
 
 /** Dedupe and join source publisher strings for an export footer body (no `Source:` prefix). */
@@ -621,6 +635,7 @@ async function exportPresentationPngFromLiveChart(
     const exportSnapshot = cloneEchartsOptionPreservingFunctions(
       liveChart.getOption() as Record<string, unknown>
     ) as Record<string, unknown>;
+    stripRegimeFocusBandLabelGraphicFromOption(exportSnapshot);
     // Presentation title is export-only; dropping any `title` from the snapshot avoids inheriting or leaking title state.
     delete exportSnapshot.title;
 
@@ -667,6 +682,8 @@ async function exportPresentationPngFromLiveChart(
       if (yBoundaryPatch) {
         exportChart.setOption(yBoundaryPatch as never, false);
       }
+
+      opts.onBeforeRasterCapture?.(exportChart);
 
       if (process.env.NODE_ENV === "development") {
         const exportOption = exportChart.getOption() as Record<string, unknown>;
@@ -780,6 +797,7 @@ export function downloadEchartsRaster(
           chart.setOption(axisFitPatch as never, false);
           appliedAxisFit = true;
         }
+        opts?.onBeforeRasterCapture?.(chart);
         dataUrl = chart.getDataURL({
           type: "png",
           pixelRatio: 2,

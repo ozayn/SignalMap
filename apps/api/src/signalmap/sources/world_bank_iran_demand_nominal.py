@@ -14,6 +14,10 @@ _logger = logging.getLogger(__name__)
 WDI_FINAL_CONSUMPTION_CD = "NE.CON.TOTL.CD"
 WDI_GROSS_CAPITAL_FORMATION_CD = "NE.GDI.TOTL.CD"
 WDI_GDP_CD = "NY.GDP.MKTP.CD"
+# Oil rents as % of GDP (World Bank definition) — used only with nominal GDP for a levels proxy split.
+WDI_OIL_RENTS_PCT_GDP = "NY.GDP.PETR.RT.ZS"
+# Both series use ``fetch_wdi_annual_indicator`` → in-process ``wdi_rows:IRN:<indicator>`` cache (6h TTL),
+# shared with other WDI bundles. Full nominal bundle also cached at ``signal:iran_demand_nominal_usd:v4:…``.
 
 # Real (constant 2015 US$)
 WDI_FINAL_CONSUMPTION_KD = "NE.CON.TOTL.KD"
@@ -24,6 +28,7 @@ WDI_LABELS: dict[str, str] = {
     WDI_FINAL_CONSUMPTION_CD: "Final consumption expenditure (current US$)",
     WDI_GROSS_CAPITAL_FORMATION_CD: "Gross capital formation (current US$)",
     WDI_GDP_CD: "GDP (current US$)",
+    WDI_OIL_RENTS_PCT_GDP: "Oil rents (% of GDP)",
     WDI_FINAL_CONSUMPTION_KD: "Final consumption expenditure (constant 2015 US$)",
     WDI_GROSS_CAPITAL_FORMATION_KD: "Gross capital formation (constant 2015 US$)",
     WDI_GDP_KD: "GDP (constant 2015 US$)",
@@ -52,18 +57,57 @@ def _rows_to_points(rows: list[dict[str, Any]], start_year: int, end_year: int) 
     return out
 
 
+def _build_gdp_oil_decomposition_usd_points(
+    gdp_points: list[dict[str, float | str]],
+    oil_pct_rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, float | str]], list[dict[str, float | str]]]:
+    """
+    Proxy levels (current US$): oil_value = GDP × (oil rents % / 100), non_oil = GDP − oil_value.
+    Years missing oil-rent % are omitted from the decomposition lists (GDP total line may still exist).
+    """
+    pct_by_year: dict[int, float] = {}
+    for r in oil_pct_rows:
+        try:
+            y = int(r["year"])
+            pct_by_year[y] = float(r["value"])
+        except (TypeError, ValueError, KeyError):
+            continue
+    non_oil_out: list[dict[str, float | str]] = []
+    oil_out: list[dict[str, float | str]] = []
+    for p in gdp_points:
+        ds = str(p["date"])
+        try:
+            y = int(ds[:4])
+            g = float(p["value"])
+        except (TypeError, ValueError):
+            continue
+        pct = pct_by_year.get(y)
+        if pct is None:
+            continue
+        pct_clamped = min(100.0, max(0.0, pct))
+        oil_v = g * pct_clamped / 100.0
+        if oil_v > g:
+            oil_v = g
+        non_v = g - oil_v
+        non_oil_out.append({"date": ds, "value": round(non_v, 0)})
+        oil_out.append({"date": ds, "value": round(oil_v, 0)})
+    return non_oil_out, oil_out
+
+
 def fetch_iran_demand_nominal_usd_bundle(start_year: int, end_year: int) -> dict[str, Any]:
     """Annual WDI nominal + real national-accounts aggregates for Iran (IRN), chart-ready ``{date, value}`` lists."""
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    with ThreadPoolExecutor(max_workers=7) as pool:
         f_cc = pool.submit(_fetch_indicator_safe, "IRN", WDI_FINAL_CONSUMPTION_CD)
         f_ic = pool.submit(_fetch_indicator_safe, "IRN", WDI_GROSS_CAPITAL_FORMATION_CD)
         f_gc = pool.submit(_fetch_indicator_safe, "IRN", WDI_GDP_CD)
+        f_petr = pool.submit(_fetch_indicator_safe, "IRN", WDI_OIL_RENTS_PCT_GDP)
         f_ck = pool.submit(_fetch_indicator_safe, "IRN", WDI_FINAL_CONSUMPTION_KD)
         f_ik = pool.submit(_fetch_indicator_safe, "IRN", WDI_GROSS_CAPITAL_FORMATION_KD)
         f_gk = pool.submit(_fetch_indicator_safe, "IRN", WDI_GDP_KD)
         cons_c, err_cc = f_cc.result()
         inv_c, err_ic = f_ic.result()
         gdp_c, err_gc = f_gc.result()
+        petr_rows, err_petr = f_petr.result()
         cons_k, err_ck = f_ck.result()
         inv_k, err_ik = f_ik.result()
         gdp_k, err_gk = f_gk.result()
@@ -73,6 +117,7 @@ def fetch_iran_demand_nominal_usd_bundle(start_year: int, end_year: int) -> dict
         ("consumption_usd", err_cc),
         ("investment_usd", err_ic),
         ("gdp_usd", err_gc),
+        ("oil_rents_pct_gdp", err_petr),
         ("consumption_kd", err_ck),
         ("investment_kd", err_ik),
         ("gdp_kd", err_gk),
@@ -80,11 +125,16 @@ def fetch_iran_demand_nominal_usd_bundle(start_year: int, end_year: int) -> dict
         if err:
             series_warnings[key] = err
 
+    gdp_usd_pts = _rows_to_points(gdp_c, start_year, end_year)
+    gdp_non_oil_proxy_usd, gdp_oil_proxy_usd = _build_gdp_oil_decomposition_usd_points(gdp_usd_pts, petr_rows)
+
     out: dict[str, Any] = {
         "series": {
             "consumption_usd": _rows_to_points(cons_c, start_year, end_year),
             "investment_usd": _rows_to_points(inv_c, start_year, end_year),
-            "gdp_usd": _rows_to_points(gdp_c, start_year, end_year),
+            "gdp_usd": gdp_usd_pts,
+            "gdp_non_oil_proxy_usd": gdp_non_oil_proxy_usd,
+            "gdp_oil_proxy_usd": gdp_oil_proxy_usd,
             "consumption_kd": _rows_to_points(cons_k, start_year, end_year),
             "investment_kd": _rows_to_points(inv_k, start_year, end_year),
             "gdp_kd": _rows_to_points(gdp_k, start_year, end_year),
@@ -93,6 +143,9 @@ def fetch_iran_demand_nominal_usd_bundle(start_year: int, end_year: int) -> dict
             "consumption_usd": WDI_FINAL_CONSUMPTION_CD,
             "investment_usd": WDI_GROSS_CAPITAL_FORMATION_CD,
             "gdp_usd": WDI_GDP_CD,
+            "oil_rents_pct_gdp": WDI_OIL_RENTS_PCT_GDP,
+            "gdp_non_oil_proxy_usd": "derived:NY.GDP.MKTP.CD−(NY.GDP.MKTP.CD×NY.GDP.PETR.RT.ZS/100)",
+            "gdp_oil_proxy_usd": "derived:NY.GDP.MKTP.CD×NY.GDP.PETR.RT.ZS/100",
             "consumption_kd": WDI_FINAL_CONSUMPTION_KD,
             "investment_kd": WDI_GROSS_CAPITAL_FORMATION_KD,
             "gdp_kd": WDI_GDP_KD,

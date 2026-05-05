@@ -93,6 +93,70 @@ const MULTI_SERIES_FALLBACK_LEGEND_ICONS: Array<"circle" | "diamond" | "triangle
   "rect",
 ];
 
+const REGIME_FOCUS_BAND_LABEL_GRAPHIC_ID = "regime-focus-band-label";
+const REGIME_FOCUS_BAND_LABEL_MIN_GRID_WIDTH_PX = 200;
+const REGIME_FOCUS_BAND_LABEL_MIN_GRID_HEIGHT_PX = 120;
+const REGIME_FOCUS_BAND_LABEL_MIN_BAND_WIDTH_PX = 36;
+const REGIME_FOCUS_BAND_LABEL_TOP_GAP_PX = 6;
+
+/**
+ * `convertToPixel` on a category x-axis needs a category value; markArea still draws for off-bucket dates
+ * (e.g. regime `1989-07-01` vs WDI `1989-01-01`).
+ */
+/** Gregorian midpoint between focus years (or regime date years); used for label x, not pixel band center. */
+function regimeFocusMidpointTimestampMs(
+  regimeArea: { xStart: string; xEnd: string },
+  focusGregorianYearRange: { startYear: number; endYear: number } | undefined
+): number | null {
+  const startY =
+    focusGregorianYearRange?.startYear ?? parseInt(regimeArea.xStart.trim().slice(0, 4), 10);
+  const endY = focusGregorianYearRange?.endYear ?? parseInt(regimeArea.xEnd.trim().slice(0, 4), 10);
+  if (!Number.isFinite(startY) || !Number.isFinite(endY)) return null;
+  const midpointYear = (startY + endY) / 2;
+  const y0 = Math.floor(midpointYear);
+  const frac = midpointYear - y0;
+  return Date.UTC(y0, 0, 1, 12, 0, 0) + frac * 365.25 * 86400000;
+}
+
+function nearestAxisCategoryForRegimeDate(regimeDateStr: string, categories: string[]): string {
+  if (categories.length === 0) return regimeDateStr.trim().slice(0, 10);
+  const t = regimeDateStr.trim().slice(0, 10);
+  const exact = categories.find((d) => d.trim().slice(0, 10) === t);
+  if (exact) return exact.trim().slice(0, 10);
+  const target = Date.parse(`${t}T12:00:00`);
+  if (!Number.isFinite(target)) return categories[0]!.trim().slice(0, 10);
+  let best = categories[0]!.trim().slice(0, 10);
+  let bestAbs = Infinity;
+  for (const d of categories) {
+    const ds = d.trim().slice(0, 10);
+    const ts = Date.parse(`${ds}T12:00:00`);
+    if (!Number.isFinite(ts)) continue;
+    const diff = Math.abs(ts - target);
+    if (diff < bestAbs) {
+      bestAbs = diff;
+      best = ds;
+    }
+  }
+  return best;
+}
+
+function readGridViewRect(inst: echarts.ECharts): { x: number; y: number; width: number; height: number } | null {
+  try {
+    const model = (inst as unknown as { getModel: () => unknown }).getModel() as {
+      getComponent?: (
+        t: string,
+        i?: number
+      ) => { coordinateSystem?: { getRect?: () => { x: number; y: number; width: number; height: number } } } | undefined;
+    };
+    const gridModel = model.getComponent?.("grid", 0);
+    const r = gridModel?.coordinateSystem?.getRect?.();
+    if (!r || !Number.isFinite(r.width) || r.width < 8 || !Number.isFinite(r.height) || r.height < 8) return null;
+    return r;
+  } catch {
+    return null;
+  }
+}
+
 /** Toman/USD (or FA «تومان/دلار») — used for log-axis min + non-positive sanitization. */
 function isTomanFxUnit(unit: string | undefined): boolean {
   if (!unit) return false;
@@ -277,6 +341,10 @@ export type ChartSeries = {
   linePattern?: "solid" | "dashed" | "dotted";
   /** ECharts line smoothing (default false for macro annual series). */
   smooth?: boolean;
+  /** ECharts stack id; same id stacks areas/lines on one axis. */
+  stack?: string;
+  /** When true, draw a filled area under the line (use with ``stack`` for stacked decomposition). */
+  stackedArea?: boolean;
   /**
    * With ``multiSeriesLegendLayout="grouped"``: row label (e.g. country) and column header (e.g. Imports)
    * for a table-style legend above the chart.
@@ -901,6 +969,8 @@ export function TimelineChart({
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
+  /** Syncs focus-period band label (`graphic`) after layout / resize (not merged in main `option`). */
+  const regimeFocusBandLabelSyncRef = useRef<((target?: echarts.ECharts | null) => void) | null>(null);
   /** Bumps when the chart container gains usable layout size (avoids echarts.init at 0×0). */
   const [chartLayoutRevision, setChartLayoutRevision] = useState(0);
   const [xLabelRotate, setXLabelRotate] = useState(0);
@@ -1170,6 +1240,9 @@ export function TimelineChart({
               exportPresentationDirection: (chartLocale ?? "en") === "fa" ? "rtl" : "ltr",
               exportPresentationLocale: (chartLocale ?? "en") === "fa" ? "fa" : "en",
               exportPresentationTitleColor: titleColor,
+              onBeforeRasterCapture: (exportChart) => {
+                regimeFocusBandLabelSyncRef.current?.(exportChart);
+              },
             };
             downloadEchartsRaster(chart, "png", stem, backgroundColor, exportOpts);
           } catch {
@@ -1228,6 +1301,7 @@ export function TimelineChart({
         if (chart && box && box.clientWidth >= 2 && box.clientHeight >= 2) {
           try {
             chart.resize({ width: box.clientWidth, height: box.clientHeight });
+            regimeFocusBandLabelSyncRef.current?.();
           } catch {
             /* disposed */
           }
@@ -1600,21 +1674,6 @@ export function TimelineChart({
     const regimeFocusMarkAreaLabelText = regimeArea?.label?.trim()
       ? localizeChartNumericDisplayString(regimeArea.label.trim(), chartNumeralLocale)
       : undefined;
-    /** Short president-style name on the shaded focus band (markArea first corner). */
-    const regimeFocusMarkAreaLabel =
-      regimeFocusMarkAreaLabelText != null
-        ? {
-            show: true as const,
-            formatter: regimeFocusMarkAreaLabelText,
-            color: "#6b7280",
-            fontSize: 12,
-            opacity: 0.75,
-            rotate: 90,
-            position: "inside" as const,
-            align: "center" as const,
-            verticalAlign: "middle" as const,
-          }
-        : undefined;
     const axisYearGregColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
     const axisYearJalaliColor = mutedFg;
     const axisLabelBothRich = {
@@ -2776,7 +2835,7 @@ export function TimelineChart({
                 markArea:
                   rangeBandData.length > 0 || sanctionsPeriods.length > 0 || regimeArea || dataCoverageGapMarkAreaRegions.length > 0
                     ? {
-                        silent: false,
+                        silent: true,
                         z: 0,
                         itemStyle: {
                           color: withAlphaHsl(muted, RangeBandOpacity),
@@ -2817,10 +2876,9 @@ export function TimelineChart({
                                   {
                                     xAxis: regimeArea.xStart,
                                     itemStyle: { color: withAlphaHsl(muted, 0.04), borderColor: "transparent" },
-                                    ...(regimeFocusMarkAreaLabel ? { label: regimeFocusMarkAreaLabel } : {}),
                                   },
                                   { xAxis: regimeArea.xEnd },
-                                ] as [{ xAxis: string; itemStyle?: object; label?: object }, { xAxis: string }],
+                                ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }],
                               ]
                             : []),
                           ...dataCoverageGapMarkAreaRegions,
@@ -2873,6 +2931,14 @@ export function TimelineChart({
                   symbol: seriesShape,
                   showSymbol,
                   symbolSize,
+                  ...(s.stack ? { stack: s.stack } : {}),
+                  ...(s.stackedArea
+                    ? {
+                        areaStyle: {
+                          color: withAlphaHsl(lineColor, 0.45),
+                        },
+                      }
+                    : {}),
                   lineStyle: { color: lineColor, width: lineWidth, opacity: 1, ...(lineType ? { type: lineType } : {}) },
                   itemStyle: { color: lineColor, opacity: CHART_LINE_SYMBOL_ITEM_OPACITY },
                   emphasis: {
@@ -2971,7 +3037,7 @@ export function TimelineChart({
                 markArea:
                   rangeBandData.length > 0 || regimeArea || dataCoverageGapMarkAreaRegions.length > 0
                     ? {
-                        silent: !regimeFocusMarkAreaLabelText,
+                        silent: true,
                         z: 0,
                         itemStyle: {
                           color: withAlphaHsl(muted, RangeBandOpacity),
@@ -2994,10 +3060,9 @@ export function TimelineChart({
                                   {
                                     xAxis: regimeArea.xStart,
                                     itemStyle: { color: withAlphaHsl(muted, 0.04), borderColor: "transparent" },
-                                    ...(regimeFocusMarkAreaLabel ? { label: regimeFocusMarkAreaLabel } : {}),
                                   },
                                   { xAxis: regimeArea.xEnd },
-                                ] as [{ xAxis: string; itemStyle?: object; label?: object }, { xAxis: string }],
+                                ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }],
                               ]
                             : []),
                           ...dataCoverageGapMarkAreaRegions,
@@ -3031,7 +3096,7 @@ export function TimelineChart({
                 markArea:
                   rangeBandData.length > 0 || regimeArea || dataCoverageGapMarkAreaRegions.length > 0
                     ? {
-                        silent: !regimeFocusMarkAreaLabelText,
+                        silent: true,
                         z: 0,
                         itemStyle: {
                           color: withAlphaHsl(muted, RangeBandOpacity),
@@ -3054,10 +3119,9 @@ export function TimelineChart({
                                   {
                                     xAxis: regimeArea.xStart,
                                     itemStyle: { color: withAlphaHsl(muted, 0.04), borderColor: "transparent" },
-                                    ...(regimeFocusMarkAreaLabel ? { label: regimeFocusMarkAreaLabel } : {}),
                                   },
                                   { xAxis: regimeArea.xEnd },
-                                ] as [{ xAxis: string; itemStyle?: object; label?: object }, { xAxis: string }],
+                                ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }],
                               ]
                             : []),
                           ...dataCoverageGapMarkAreaRegions,
@@ -3159,6 +3223,180 @@ export function TimelineChart({
       ],
     };
 
+    const regimeBandConvertYAxisIndex =
+      hasMultiSeries && multiSeriesEffective && multiSeriesValues ? 0 : hasData ? 0 : hasOil ? 1 : 0;
+
+    const syncRegimeFocusBandLabel = (target?: echarts.ECharts | null) => {
+      const inst = target ?? chartInstanceRef.current;
+      if (!inst) return;
+      const isExportCanvas = target != null && target !== chartInstanceRef.current;
+      try {
+        if (
+          typeof (inst as echarts.ECharts & { isDisposed?: () => boolean }).isDisposed === "function" &&
+          (inst as echarts.ECharts & { isDisposed: () => boolean }).isDisposed()
+        ) {
+          return;
+        }
+      } catch {
+        return;
+      }
+
+      const applyMergedGraphic = (next: Record<string, unknown> | null) => {
+        try {
+          const raw = inst.getOption() as { graphic?: unknown[] };
+          const prev = Array.isArray(raw.graphic) ? raw.graphic : [];
+          const filtered = prev.filter((x) => (x as { id?: string }).id !== REGIME_FOCUS_BAND_LABEL_GRAPHIC_ID);
+          if (!next) {
+            if (filtered.length === prev.length) return;
+            inst.setOption({ graphic: filtered } as never, false);
+            return;
+          }
+          inst.setOption({ graphic: [...filtered, next] } as never, false);
+        } catch {
+          /* disposed */
+        }
+      };
+
+      if (!regimeArea || !regimeFocusMarkAreaLabelText) {
+        applyMergedGraphic(null);
+        return;
+      }
+
+      const rect = readGridViewRect(inst);
+      if (
+        !rect ||
+        rect.width < REGIME_FOCUS_BAND_LABEL_MIN_GRID_WIDTH_PX ||
+        rect.height < REGIME_FOCUS_BAND_LABEL_MIN_GRID_HEIGHT_PX
+      ) {
+        applyMergedGraphic(null);
+        return;
+      }
+
+      if (!isExportCanvas && isCompact && rect.width < 240) {
+        applyMergedGraphic(null);
+        return;
+      }
+
+      const yRaw = inst.getOption().yAxis;
+      const yArr = Array.isArray(yRaw) ? yRaw : yRaw != null ? [yRaw] : [];
+      const yAxisAtRegime = yArr[regimeBandConvertYAxisIndex] as { type?: string } | undefined;
+      const regimeAxisIsLog = yAxisAtRegime?.type === "log";
+
+      let yProbe = 0;
+      try {
+        const fromMid = inst.convertFromPixel(
+          { gridIndex: 0, xAxisIndex: 0, yAxisIndex: regimeBandConvertYAxisIndex } as never,
+          [rect.x + rect.width / 2, rect.y + rect.height / 2] as never
+        );
+        if (Array.isArray(fromMid) && fromMid.length >= 2) {
+          const yv = fromMid[1];
+          if (typeof yv === "number" && Number.isFinite(yv)) yProbe = yv;
+          else if (typeof yv === "string") {
+            const pn = Number(yv);
+            if (Number.isFinite(pn)) yProbe = pn;
+          }
+        }
+      } catch {
+        yProbe = regimeAxisIsLog ? 1 : 0;
+      }
+      if (regimeAxisIsLog && !(yProbe > 0 && Number.isFinite(yProbe))) yProbe = 1;
+      if (!regimeAxisIsLog && !Number.isFinite(yProbe)) yProbe = 0;
+
+      const midTs = regimeFocusMidpointTimestampMs(regimeArea, focusGregorianYearRange);
+      if (midTs == null || !Number.isFinite(midTs)) {
+        applyMergedGraphic(null);
+        return;
+      }
+
+      const xMidCoord = useTimeAxis
+        ? midTs
+        : nearestAxisCategoryForRegimeDate(new Date(midTs).toISOString().slice(0, 10), dates);
+
+      let xCenter: number;
+      try {
+        const pMid = inst.convertToPixel(
+          { gridIndex: 0, xAxisIndex: 0, yAxisIndex: regimeBandConvertYAxisIndex } as never,
+          [xMidCoord, yProbe] as never
+        );
+        if (!Array.isArray(pMid) || !Number.isFinite(pMid[0])) {
+          applyMergedGraphic(null);
+          return;
+        }
+        xCenter = pMid[0] as number;
+      } catch {
+        applyMergedGraphic(null);
+        return;
+      }
+
+      const xStartCoord = useTimeAxis
+        ? Date.parse(`${regimeArea.xStart.trim().slice(0, 10)}T12:00:00`)
+        : nearestAxisCategoryForRegimeDate(regimeArea.xStart, dates);
+      const xEndCoord = useTimeAxis
+        ? Date.parse(`${regimeArea.xEnd.trim().slice(0, 10)}T12:00:00`)
+        : nearestAxisCategoryForRegimeDate(regimeArea.xEnd, dates);
+
+      let bandPxW = 0;
+      try {
+        const a = inst.convertToPixel(
+          { gridIndex: 0, xAxisIndex: 0, yAxisIndex: regimeBandConvertYAxisIndex } as never,
+          [xStartCoord, yProbe] as never
+        );
+        const b = inst.convertToPixel(
+          { gridIndex: 0, xAxisIndex: 0, yAxisIndex: regimeBandConvertYAxisIndex } as never,
+          [xEndCoord, yProbe] as never
+        );
+        if (Array.isArray(a) && Array.isArray(b)) {
+          const xPix0 = a[0] as number;
+          const xPix1 = b[0] as number;
+          bandPxW = Math.abs(xPix1 - xPix0);
+        }
+      } catch {
+        bandPxW = 0;
+      }
+
+      if (!Number.isFinite(bandPxW) || bandPxW < 1) {
+        applyMergedGraphic(null);
+        return;
+      }
+
+      if (bandPxW < REGIME_FOCUS_BAND_LABEL_MIN_BAND_WIDTH_PX) {
+        applyMergedGraphic(null);
+        return;
+      }
+
+      let displayText = regimeFocusMarkAreaLabelText;
+      if (bandPxW < REGIME_FOCUS_BAND_LABEL_MIN_BAND_WIDTH_PX * 2 && displayText.length > 10) {
+        const maxChars = Math.max(4, Math.floor(bandPxW / 7));
+        if (displayText.length > maxChars) {
+          displayText = `${displayText.slice(0, Math.max(1, maxChars - 1))}…`;
+        }
+      }
+      const labelTopY = rect.y - REGIME_FOCUS_BAND_LABEL_TOP_GAP_PX;
+      if (!Number.isFinite(labelTopY) || labelTopY < 2) {
+        applyMergedGraphic(null);
+        return;
+      }
+
+      const graphicEl: Record<string, unknown> = {
+        id: REGIME_FOCUS_BAND_LABEL_GRAPHIC_ID,
+        type: "text",
+        silent: true,
+        zlevel: 6,
+        z: 200,
+        left: xCenter,
+        top: labelTopY,
+        style: {
+          text: displayText,
+          fill: withAlphaHsl(mutedFg, 0.72),
+          fontSize: 11,
+          fontWeight: 400,
+          textAlign: "center",
+          textVerticalAlign: "bottom",
+        },
+      };
+      applyMergedGraphic(graphicEl);
+    };
+
     const dom = chartRef.current;
     if (!dom) return;
     const cw = dom.clientWidth;
@@ -3174,6 +3412,16 @@ export function TimelineChart({
       });
     }
     chartInstanceRef.current = chart;
+    regimeFocusBandLabelSyncRef.current = syncRegimeFocusBandLabel;
+
+    const onFinished = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          syncRegimeFocusBandLabel();
+        });
+      });
+    };
+    chart.on("finished", onFinished);
 
     let cancelled = false;
     const rafId = requestAnimationFrame(() => {
@@ -3187,12 +3435,23 @@ export function TimelineChart({
         } catch {
           // Chart may be disposed
         }
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (!cancelled) syncRegimeFocusBandLabel();
+          });
+        });
       }
     });
 
     return () => {
       cancelled = true;
       cancelAnimationFrame(rafId);
+      regimeFocusBandLabelSyncRef.current = null;
+      try {
+        chart.off("finished", onFinished);
+      } catch {
+        /* noop */
+      }
     };
   }, [
     data,
@@ -3254,6 +3513,7 @@ export function TimelineChart({
 
   useEffect(() => {
     return () => {
+      regimeFocusBandLabelSyncRef.current = null;
       const chart = chartInstanceRef.current;
       if (chart) {
         try {

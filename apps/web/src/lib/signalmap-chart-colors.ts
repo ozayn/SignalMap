@@ -96,6 +96,9 @@ const LEGACY_KEY: Record<string, string> = {
   level_consumption: SIGNAL_CONCEPT.consumption,
   level_investment: SIGNAL_CONCEPT.investment,
   level_gdp: SIGNAL_CONCEPT.gdp,
+  /** Nominal GDP proxy split (WDI oil rents % × NY.GDP.MKTP.CD) */
+  gdp_non_oil_proxy: "#475569",
+  gdp_oil_proxy: "#d97706",
   pct_consumption: SIGNAL_CONCEPT.consumption,
   pct_investment: SIGNAL_CONCEPT.investment,
   gdp_nominal: SIGNAL_CONCEPT.gdp,
