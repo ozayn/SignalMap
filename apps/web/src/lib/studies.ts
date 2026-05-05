@@ -36,12 +36,12 @@ export type PrimarySignal =
 import type { StudyConceptId } from "./signalmap-concepts";
 
 /** Browse / filter: geographic emphasis (a study may span several). */
-export type StudyCountry = "iran" | "us" | "global";
+export type StudyCountry = "iran" | "us" | "russia" | "turkey" | "global";
 
 /** Browse / filter: coarse theme. */
-export type StudyTheme = "macro" | "oil" | "fx" | "inequality" | "social";
+export type StudyTheme = "macro" | "oil" | "fx" | "inequality" | "social" | "dashboard";
 
-export type StudyGroup = "core" | "iran" | "global" | "policy" | "welfare" | "discourse";
+export type StudyGroup = "core" | "iran" | "country" | "global" | "policy" | "welfare" | "discourse";
 
 export type StudyGroupPlacement = { group: StudyGroup; order: number };
 
@@ -306,7 +306,7 @@ export const STUDIES: StudyMeta[] = [
   },
   {
     id: "timeline-global-events",
-    number: 37,
+    number: 42,
     title: "Global events (interactive timeline)",
     timeRange: ["1914-01-01", new Date().toISOString().slice(0, 10)],
     description:
@@ -323,7 +323,7 @@ export const STUDIES: StudyMeta[] = [
   },
   {
     id: "timeline-bands",
-    number: 38,
+    number: 43,
     title: "Global & Iran context (band timeline)",
     timeRange: ["1914-01-01", new Date().toISOString().slice(0, 10)],
     description:
@@ -347,7 +347,7 @@ export const STUDIES: StudyMeta[] = [
   },
   {
     id: "comparative-history-timeline",
-    number: 40,
+    number: 44,
     title: "Comparative history timeline",
     timeRange: ["-550-01-01", "2030-12-31"],
     description:
@@ -377,7 +377,7 @@ export const STUDIES: StudyMeta[] = [
   },
   {
     id: "iran-dynasties-timeline",
-    number: 39,
+    number: 45,
     title: "Iran dynasties timeline",
     timeRange: ["-2000-01-01", new Date().toISOString().slice(0, 10)],
     description:
@@ -860,7 +860,7 @@ export const STUDIES: StudyMeta[] = [
     description:
       "Iran macro indicators from 1960 onward (default outer window), with an adjustable shaded focus band (presets include late Pahlavi and Islamic Republic presidencies, or custom years). Annual WDI series and annual-mean open-market FX; exploratory comparison only, not causal inference.",
     status: "active",
-    groupPlacements: [{ group: "iran", order: 10 }],
+    groupPlacements: [{ group: "country", order: 1 }],
     primarySignal: { kind: "iran_economy_period_comparison" },
     eventLayers: ["iran_core", "world_core", "sanctions"],
     countries: ["iran"],
@@ -899,11 +899,11 @@ export const STUDIES: StudyMeta[] = [
     description:
       "Country-template macro dashboard for the United States using annual WDI indicators with independent range and focus presets.",
     status: "active",
-    groupPlacements: [{ group: "global", order: 7 }],
+    groupPlacements: [{ group: "country", order: 2 }],
     primarySignal: { kind: "iran_economy_period_comparison" },
     countries: ["us", "global"],
-    themes: ["macro"],
-    tags: ["USA", "WDI", "focus presets", "macro dashboard"],
+    themes: ["macro", "dashboard"],
+    tags: ["USA", "WDI", "focus presets", "macro dashboard", "country dashboard"],
   },
   {
     id: "russia-economy",
@@ -914,11 +914,11 @@ export const STUDIES: StudyMeta[] = [
     description:
       "Country-template macro dashboard for Russia using annual WDI indicators with independent range and focus presets.",
     status: "active",
-    groupPlacements: [{ group: "global", order: 8 }],
+    groupPlacements: [{ group: "country", order: 3 }],
     primarySignal: { kind: "iran_economy_period_comparison" },
-    countries: ["global"],
-    themes: ["macro", "fx"],
-    tags: ["Russia", "WDI", "focus presets", "macro dashboard"],
+    countries: ["russia", "global"],
+    themes: ["macro", "fx", "dashboard"],
+    tags: ["Russia", "WDI", "focus presets", "macro dashboard", "country dashboard"],
   },
   {
     id: "turkey-economy",
@@ -929,11 +929,11 @@ export const STUDIES: StudyMeta[] = [
     description:
       "Country-template macro dashboard for Turkey using annual WDI indicators with independent range and focus presets.",
     status: "active",
-    groupPlacements: [{ group: "global", order: 9 }],
+    groupPlacements: [{ group: "country", order: 4 }],
     primarySignal: { kind: "iran_economy_period_comparison" },
-    countries: ["global"],
-    themes: ["macro", "fx"],
-    tags: ["Turkey", "WDI", "focus presets", "macro dashboard"],
+    countries: ["turkey", "global"],
+    themes: ["macro", "fx", "dashboard"],
+    tags: ["Turkey", "WDI", "focus presets", "macro dashboard", "country dashboard"],
   },
 ];
 
@@ -941,6 +941,7 @@ export const STUDIES: StudyMeta[] = [
 export const STUDY_BROWSE_GROUP_ORDER: readonly StudyGroup[] = [
   "core",
   "iran",
+  "country",
   "global",
   "policy",
   "welfare",
@@ -955,6 +956,11 @@ export const STUDY_BROWSE_GROUP_TITLES: Record<StudyGroup, { title: string; desc
   iran: {
     title: "Iran Economy",
     description: "National accounts, oil, exports, FX, and labor in the Iran view.",
+  },
+  country: {
+    title: "Country Economy Studies",
+    description:
+      "Reusable macro dashboards for comparing countries across inflation, GDP, debt, trade, welfare, and leadership periods.",
   },
   global: {
     title: "Global Context",

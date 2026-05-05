@@ -21,11 +21,14 @@ export type BrowseProfile = {
 export const STUDY_COUNTRY_OPTIONS: { id: StudyCountry; label: string }[] = [
   { id: "iran", label: "Iran" },
   { id: "us", label: "US" },
+  { id: "russia", label: "Russia" },
+  { id: "turkey", label: "Turkey" },
   { id: "global", label: "Global" },
 ];
 
 export const STUDY_THEME_OPTIONS: { id: StudyTheme; label: string }[] = [
   { id: "macro", label: "Macro" },
+  { id: "dashboard", label: "Country dashboard" },
   { id: "oil", label: "Oil" },
   { id: "fx", label: "FX" },
   { id: "inequality", label: "Inequality" },
@@ -36,11 +39,14 @@ export const STUDY_THEME_OPTIONS: { id: StudyTheme; label: string }[] = [
 const COUNTRY_FA: Partial<Record<StudyCountry, string>> = {
   iran: "ایران",
   us: "ایالات متحده آمریکا",
+  russia: "روسیه",
+  turkey: "ترکیه",
   global: "جهانی",
 };
 
 const THEME_FA: Partial<Record<StudyTheme, string>> = {
   macro: "اقتصاد کلان",
+  dashboard: "داشبورد کشوری",
   oil: "نفت",
   fx: "نرخ ارز",
   inequality: "نابرابری",
@@ -55,6 +61,10 @@ const STUDY_BROWSE_GROUP_TITLES_FA: Record<StudyGroup, { title: string; descript
   iran: {
     title: "اقتصاد ایران",
     description: "حساب‌های ملی، نفت، صادرات، نرخ ارز و کار",
+  },
+  country: {
+    title: "مطالعات اقتصاد کشورها",
+    description: "داشبوردهای قابل‌مقایسهٔ کشورها برای تورم، رشد، بدهی، تجارت، رفاه و دوره‌های حکمرانی",
   },
   global: {
     title: "زمینهٔ جهانی",

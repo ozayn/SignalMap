@@ -30,6 +30,7 @@ const VIEW_OPTIONS: { id: ViewMode; label: string }[] = [
 
 export default function StudiesPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("grouped");
+  const [discourseExpanded, setDiscourseExpanded] = useState(false);
   const [search, setSearch] = useState("");
   const [countryFilter, setCountryFilter] = useState<Set<StudyCountry>>(() => new Set());
   const [themeFilter, setThemeFilter] = useState<Set<StudyTheme>>(() => new Set());
@@ -228,6 +229,8 @@ export default function StudiesPage() {
               .filter((s) => isStudyListedForDeployment(s));
             const rows = getBrowseRowsForGroup(listed, group).filter(({ study }) => filteredIds.has(study.id));
             if (rows.length === 0) return null;
+            const isDiscourse = group === "discourse";
+            const showRows = !isDiscourse || discourseExpanded;
             return (
               <section key={group} className={sectionIndex === 0 ? "" : "pt-14"}>
                 <div className="mb-6">
@@ -236,12 +239,18 @@ export default function StudiesPage() {
                       className="font-semibold tracking-[-0.01em] text-[#111827] dark:text-[#e5e7eb]"
                       style={{ fontSize: "clamp(17px, 2vw, 19px)" }}
                     >
-                      {meta.title}
+                      {isDiscourse ? `${meta.title} (In progress)` : meta.title}
                     </h2>
-                    {group === "discourse" ? (
-                      <span className="inline-flex items-center rounded-full bg-[#f3f4f6] px-2 py-0.5 text-[10px] font-medium leading-none text-[#6b7280] dark:bg-[#1f2937] dark:text-[#9ca3af]">
-                        In progress
-                      </span>
+                    {isDiscourse ? (
+                      <button
+                        type="button"
+                        onClick={() => setDiscourseExpanded((v) => !v)}
+                        className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium text-[#6b7280] hover:text-[#111827] dark:text-[#9ca3af] dark:hover:text-[#e5e7eb]"
+                        aria-expanded={discourseExpanded}
+                      >
+                        <span>{discourseExpanded ? "Collapse" : "Expand"}</span>
+                        <span aria-hidden>{discourseExpanded ? "▲" : "▼"}</span>
+                      </button>
                     ) : null}
                   </div>
                   <p
@@ -250,19 +259,21 @@ export default function StudiesPage() {
                     {meta.description}
                   </p>
                 </div>
-                <div className="studies-grid">
-                  {rows.map(({ study, order }) => {
-                    const row = indexed.find((x) => x.study.id === study.id);
-                    const signalTags = row?.signalTags ?? getSignalTags(study);
-                    return (
-                      <StudyCard
-                        key={`${study.id}--${group}--${order}`}
-                        study={study}
-                        signalTags={signalTags}
-                      />
-                    );
-                  })}
-                </div>
+                {showRows ? (
+                  <div className="studies-grid">
+                    {rows.map(({ study, order }) => {
+                      const row = indexed.find((x) => x.study.id === study.id);
+                      const signalTags = row?.signalTags ?? getSignalTags(study);
+                      return (
+                        <StudyCard
+                          key={`${study.id}--${group}--${order}`}
+                          study={study}
+                          signalTags={signalTags}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : null}
               </section>
             );
           })}
