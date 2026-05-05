@@ -3079,7 +3079,9 @@ export function TimelineChart({
                 type: "line" as const,
                 z: 2,
                 data: useTimeAxis ? toTimeData(values) : values,
-                smooth: true,
+                /** Full-year category grid leaves nulls between WDI observations; connect across them and avoid spline artifacts. */
+                smooth: useYearlyCategoryAxisForSparseSingleSeries ? false : true,
+                connectNulls: useYearlyCategoryAxisForSparseSingleSeries,
                 symbol: "circle",
                 symbolSize:
                   chartLineRole === "secondary"
