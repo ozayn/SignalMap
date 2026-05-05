@@ -44,8 +44,13 @@ export type ConceptKey =
   | "topic_grouping"
   | "stopwords"
   | "gdp_aggregate"
+  | "gdp_growth_rate"
   | "final_consumption_share"
   | "gross_capital_formation"
+  | "trade_share"
+  | "industry_share"
+  | "gini_index"
+  | "poverty_headcount"
   | "dutch_disease_pattern";
 
 export type ConceptLink = {
@@ -396,6 +401,14 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
       { label: "GDP (Wikipedia)", href: "https://en.wikipedia.org/wiki/Gross_domestic_product" },
     ],
   },
+  gdp_growth_rate: {
+    title: "GDP growth (annual %)",
+    description:
+      "Year-over-year real GDP growth rate. Positive values indicate expansion relative to the prior year; negative values indicate contraction.",
+    inSimpleTerms:
+      "GDP growth tells you whether the economy got bigger or smaller than the year before.",
+    links: [{ label: "Economic growth (Wikipedia)", href: "https://en.wikipedia.org/wiki/Economic_growth" }],
+  },
   final_consumption_share: {
     title: "Final consumption expenditure (% of GDP)",
     description:
@@ -412,6 +425,36 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
     links: [
       { label: "Gross capital formation (Wikipedia)", href: "https://en.wikipedia.org/wiki/Gross_fixed_capital_formation" },
     ],
+  },
+  trade_share: {
+    title: "Trade share (% of GDP)",
+    description:
+      "Exports and imports as a share of GDP. Useful for tracking how exposed the economy is to external demand and foreign supply channels.",
+    inSimpleTerms:
+      "Higher trade shares usually mean the economy is more connected to the outside world.",
+  },
+  industry_share: {
+    title: "Industry share (% of GDP)",
+    description:
+      "Industry and manufacturing value-added as shares of GDP. Shows how much of total output comes from industrial activity.",
+    inSimpleTerms:
+      "This shows how big industry is inside the economy compared with everything else.",
+  },
+  gini_index: {
+    title: "Gini index",
+    description:
+      "A summary inequality index (0 to 100 in this dataset). Higher values indicate greater dispersion in income or consumption across households.",
+    inSimpleTerms:
+      "Gini is a single-number snapshot of inequality; higher means more unequal distribution.",
+    links: [{ label: "Gini coefficient (Wikipedia)", href: "https://en.wikipedia.org/wiki/Gini_coefficient" }],
+  },
+  poverty_headcount: {
+    title: "Poverty headcount ratio",
+    description:
+      "Share of the population living below a specified poverty line. Coverage can be sparse because household surveys are not available every year.",
+    inSimpleTerms:
+      "This is the percentage of people below a poverty threshold in each available survey year.",
+    links: [{ label: "Poverty (World Bank)", href: "https://datahelpdesk.worldbank.org/knowledgebase/topics/19280-poverty" }],
   },
   dutch_disease_pattern: {
     title: "Dutch disease (diagnostic pattern)",

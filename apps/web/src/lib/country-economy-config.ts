@@ -4,6 +4,7 @@ import type { TimelineEvent } from "@/components/timeline-chart";
 export type CountryFocusPreset = {
   id: string;
   label: string;
+  shortLabel?: string;
   startYear: number;
   endYear: number | null;
 };
@@ -37,16 +38,37 @@ export const COUNTRY_ECONOMY_CONFIGS: CountryEconomyConfig[] = [
     hasFX: false,
     defaultFxLog: false,
     focusPresets: [
-      { id: "reagan", label: "Reagan (1981-1989)", startYear: 1981, endYear: 1989 },
-      { id: "clinton", label: "Clinton (1993-2001)", startYear: 1993, endYear: 2001 },
-      { id: "bush", label: "Bush (2001-2009)", startYear: 2001, endYear: 2009 },
-      { id: "obama", label: "Obama (2009-2017)", startYear: 2009, endYear: 2017 },
-      { id: "trump", label: "Trump (2017-2021)", startYear: 2017, endYear: 2021 },
-      { id: "biden", label: "Biden (2021-)", startYear: 2021, endYear: null },
+      { id: "fdr", label: "Franklin D. Roosevelt (1933-1945)", shortLabel: "FDR", startYear: 1933, endYear: 1945 },
+      { id: "truman", label: "Truman (1945-1953)", shortLabel: "Truman", startYear: 1945, endYear: 1953 },
+      { id: "eisenhower", label: "Eisenhower (1953-1961)", shortLabel: "Eisenhower", startYear: 1953, endYear: 1961 },
+      { id: "jfk-lbj", label: "Kennedy / Johnson (1961-1969)", shortLabel: "JFK/LBJ", startYear: 1961, endYear: 1969 },
+      { id: "nixon-ford", label: "Nixon / Ford (1969-1977)", shortLabel: "Nixon/Ford", startYear: 1969, endYear: 1977 },
+      { id: "carter", label: "Carter (1977-1981)", shortLabel: "Carter", startYear: 1977, endYear: 1981 },
+      { id: "reagan", label: "Reagan (1981-1989)", shortLabel: "Reagan", startYear: 1981, endYear: 1989 },
+      {
+        id: "bush-sr",
+        label: "George H. W. Bush (1989-1993)",
+        shortLabel: "Bush Sr.",
+        startYear: 1989,
+        endYear: 1993,
+      },
+      { id: "clinton", label: "Clinton (1993-2001)", shortLabel: "Clinton", startYear: 1993, endYear: 2001 },
+      {
+        id: "bush-jr",
+        label: "George W. Bush (2001-2009)",
+        shortLabel: "Bush Jr.",
+        startYear: 2001,
+        endYear: 2009,
+      },
+      { id: "obama", label: "Obama (2009-2017)", shortLabel: "Obama", startYear: 2009, endYear: 2017 },
+      { id: "trump-1", label: "Trump I (2017-2021)", shortLabel: "Trump I", startYear: 2017, endYear: 2021 },
+      { id: "biden", label: "Biden (2021-2025)", shortLabel: "Biden", startYear: 2021, endYear: 2025 },
+      { id: "trump-2", label: "Trump II (2025-present)", shortLabel: "Trump II", startYear: 2025, endYear: null },
     ],
     rangePresets: [
-      { id: "full", label: "Full history", startYear: 1960, endYear: null },
       { id: "modern", label: "Modern era (1980-)", startYear: 1980, endYear: null },
+      { id: "postwar", label: "Postwar (1945-)", startYear: 1945, endYear: null },
+      { id: "full", label: "Full history (1933-)", startYear: 1933, endYear: null },
     ],
     overlayEvents: [
       { id: "usa-covid-2020", layer: "world_core", date: "2020-03-01", title: "COVID shock", title_fa: "شوک کووید" },

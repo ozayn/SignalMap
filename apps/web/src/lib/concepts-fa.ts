@@ -112,6 +112,10 @@ const CONCEPT_FA: Partial<Record<ConceptKey, Partial<Pick<Concept, "title" | "de
     title: "تولید ناخالص داخلی (GDP)",
     description: "ارزش افزودهٔ نهایی کالا و خدمات تولیدشده در مرز یک کشور در یک دوره.",
   },
+  gdp_growth_rate: {
+    title: "رشد تولید ناخالص داخلی (درصد سالانه)",
+    description: "نرخ رشد GDP نسبت به سال قبل؛ منفی یعنی کوچک‌تر شدن نسبت به سال گذشته.",
+  },
   final_consumption_share: {
     title: "سهم مصرف نهایی",
     description: "بخشی از GDP که مصرف نهایی خانوار و دولت تشکیل می‌دهد؛ در این نما به‌صورت درصد از GDP.",
@@ -119,6 +123,22 @@ const CONCEPT_FA: Partial<Record<ConceptKey, Partial<Pick<Concept, "title" | "de
   gross_capital_formation: {
     title: "تشکیل سرمایهٔ ناخالص (سرمایه‌گذاری)",
     description: "سرمایه‌گذاری ناخالص ثابت و موجودی تغییرات؛ در این نما اغلب به‌صورت درصد از GDP.",
+  },
+  trade_share: {
+    title: "سهم تجارت از GDP",
+    description: "نسبت صادرات و واردات به GDP؛ شاخصی برای میزان پیوند اقتصاد با تجارت خارجی.",
+  },
+  industry_share: {
+    title: "سهم صنعت از GDP",
+    description: "نسبت ارزش افزوده صنعت و ساخت به GDP؛ نمایی از وزن بخش صنعتی در اقتصاد.",
+  },
+  gini_index: {
+    title: "ضریب جینی",
+    description: "شاخص فشرده نابرابری (۰ تا ۱۰۰ در این داده‌ها). مقدار بالاتر یعنی نابرابری بیشتر.",
+  },
+  poverty_headcount: {
+    title: "نرخ فقر",
+    description: "سهم جمعیت زیر خط فقر مشخص. به‌دلیل ماهیت پیمایشی، پوشش سالانه می‌تواند پراکنده باشد.",
   },
 };
 
