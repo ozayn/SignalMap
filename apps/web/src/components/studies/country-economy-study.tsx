@@ -68,6 +68,14 @@ function deriveGdpOilSplit(gdp: Point[], oilRentsPct: Point[]) {
   return { oil, nonOil };
 }
 
+function trimSeriesFromYear(points: Point[], startYear: number | null): Point[] {
+  if (startYear == null) return points;
+  return points.filter((p) => {
+    const y = Number.parseInt(yearKey(p.date), 10);
+    return Number.isFinite(y) && y >= startYear;
+  });
+}
+
 export function CountryEconomyStudy({
   countryCode,
   countryName,
@@ -200,16 +208,30 @@ export function CountryEconomyStudy({
 
   const gdpSplitNominal = useMemo(() => deriveGdpOilSplit(gdpNominal, oilRents), [gdpNominal, oilRents]);
   const gdpSplitReal = useMemo(() => deriveGdpOilSplit(gdpReal, oilRents), [gdpReal, oilRents]);
-  const gdpSplit = gdpMode === "real" ? gdpSplitReal : gdpSplitNominal;
+  const gdpSplitRaw = gdpMode === "real" ? gdpSplitReal : gdpSplitNominal;
   const gdpSeriesForSplit = gdpMode === "real" ? gdpReal : gdpNominal;
   const gdpStartYearForSplit = useMemo(() => firstAvailableYear(gdpSeriesForSplit), [gdpSeriesForSplit]);
   const oilRentsStartYear = useMemo(() => firstAvailableYear(oilRents), [oilRents]);
-  const decompositionStartYear = useMemo(() => firstAvailableYear(gdpSplit.oil), [gdpSplit.oil]);
+  const decompositionEffectiveStartYear = useMemo(() => {
+    if (gdpStartYearForSplit == null || oilRentsStartYear == null) return null;
+    return Math.max(gdpStartYearForSplit, oilRentsStartYear);
+  }, [gdpStartYearForSplit, oilRentsStartYear]);
+  const gdpSplit = useMemo(
+    () => ({
+      oil: trimSeriesFromYear(gdpSplitRaw.oil, decompositionEffectiveStartYear),
+      nonOil: trimSeriesFromYear(gdpSplitRaw.nonOil, decompositionEffectiveStartYear),
+    }),
+    [gdpSplitRaw.oil, gdpSplitRaw.nonOil, decompositionEffectiveStartYear]
+  );
+  const decompositionTimeRange = useMemo<[string, string]>(
+    () => [`${decompositionEffectiveStartYear ?? rangeStartYear}-01-01`, `${rangeEndYear}-12-31`],
+    [decompositionEffectiveStartYear, rangeStartYear, rangeEndYear]
+  );
   const decompositionOilRentsCoverageNote =
     oilRentsStartYear != null &&
     gdpStartYearForSplit != null &&
     oilRentsStartYear > gdpStartYearForSplit &&
-    decompositionStartYear === oilRentsStartYear
+    decompositionEffectiveStartYear === oilRentsStartYear
       ? `Oil-rents decomposition begins where oil-rents data becomes available in the source dataset. Oil-rents series unavailable before ${oilRentsStartYear}.`
       : null;
 
@@ -748,6 +770,7 @@ export function CountryEconomyStudy({
                     ]}
                     multiSeriesValueFormat="gdp_absolute"
                     {...commonProps}
+                    timeRange={decompositionTimeRange}
                   />
                   {decompositionOilRentsCoverageNote ? (
                     <p className="mt-2 text-xs text-muted-foreground">{decompositionOilRentsCoverageNote}</p>
@@ -1222,6 +1245,7 @@ export function CountryEconomyStudy({
                           ]}
                           multiSeriesValueFormat="gdp_absolute"
                           {...commonProps}
+                          timeRange={decompositionTimeRange}
                         />
                         {decompositionOilRentsCoverageNote ? (
                           <p className="mt-2 text-xs text-muted-foreground">{decompositionOilRentsCoverageNote}</p>
