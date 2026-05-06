@@ -1390,6 +1390,13 @@ export default function StudyDetailPage() {
         `نوار سایه‌دار: دوره‌های ریاست‌جمهوری رفسنجانی (${faRange} میلادی).`
       );
     }
+    if (ipcPresetId === "khamenei_mousavi") {
+      return L(
+        isFa,
+        `Shaded band: Khamenei–Mousavi (${enRange} CE). Wartime and rationing-era macro period during the Iran–Iraq War.`,
+        `نوار سایه‌دار: خامنه‌ای–موسوی (${faRange} میلادی). دوره کلان اقتصادی جنگی و کوپنی در دوران جنگ ایران و عراق.`
+      );
+    }
     return L(
       isFa,
       `Shaded band: ${cfg.labelEn} (${enRange} CE).`,

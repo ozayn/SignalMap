@@ -26,6 +26,7 @@ export function ipcCurrentGregorianYear(): number {
 export type IpcPresidentPreset =
   | "islamic_republic_outer"
   | "mohammad_reza_pahlavi"
+  | "khamenei_mousavi"
   | "rafsanjani"
   | "khatami"
   | "ahmadinejad"
@@ -63,6 +64,12 @@ export const IPC_PRESIDENT_PRESETS: Record<IpcPresidentPreset, IpcPresidentPrese
     widenOuterStartToYear: 1941,
     labelEn: "Pahlavi",
     labelFa: "پهلوی",
+  },
+  khamenei_mousavi: {
+    focusStart: 1981,
+    focusEnd: 1989,
+    labelEn: "Khamenei–Mousavi",
+    labelFa: "خامنه‌ای–موسوی",
   },
   rafsanjani: {
     focusStart: 1989,
@@ -106,6 +113,7 @@ export const IPC_PRESIDENT_PRESETS: Record<IpcPresidentPreset, IpcPresidentPrese
 export const IPC_PRESET_UI_ORDER: IpcPresidentPreset[] = [
   "islamic_republic_outer",
   "mohammad_reza_pahlavi",
+  "khamenei_mousavi",
   "rafsanjani",
   "khatami",
   "ahmadinejad",
@@ -118,6 +126,7 @@ export const IPC_PRESET_UI_ORDER: IpcPresidentPreset[] = [
 export const IPC_PRESET_CHIP: Record<IpcPresidentPreset, { en: string; fa: string }> = {
   islamic_republic_outer: { en: "IR period (1979–)", fa: "دوره جمهوری اسلامی (۱۹۷۹–)" },
   mohammad_reza_pahlavi: { en: "Pahlavi", fa: "پهلوی" },
+  khamenei_mousavi: { en: "Khamenei–Mousavi", fa: "خامنه‌ای–موسوی" },
   rafsanjani: { en: "Rafsanjani", fa: "رفسنجانی" },
   khatami: { en: "Khatami", fa: "خاتمی" },
   ahmadinejad: { en: "Ahmadinejad", fa: "احمدی‌نژاد" },
