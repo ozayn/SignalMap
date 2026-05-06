@@ -998,12 +998,10 @@ export function TimelineChart({
     if (!rangeBounds) return undefined;
     let [a, b] = rangeBounds;
     if (clipStart) {
-      const c = clipStart.slice(0, 10);
-      if (c > a) a = c;
+      a = normalizeChartRangeBound(clipStart, false);
     }
     if (clipEnd) {
-      const c = clipEnd.slice(0, 10);
-      if (c < b) b = c;
+      b = normalizeChartRangeBound(clipEnd, true);
     }
     if (a > b) {
       return [b, a];

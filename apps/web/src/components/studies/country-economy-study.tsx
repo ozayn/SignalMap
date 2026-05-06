@@ -104,8 +104,8 @@ export function CountryEconomyStudy({
   const [showOverlays, setShowOverlays] = useState(true);
   const [rangePresetId, setRangePresetId] = useState(rangePresets[0]?.id ?? "full");
   const [focusPresetIds, setFocusPresetIds] = useState<string[]>(() => (focusPresets[0]?.id ? [focusPresets[0].id] : []));
-  const [demandMode, setDemandMode] = useState<DemandMode>("nominal");
-  const [gdpMode, setGdpMode] = useState<GdpMode>("nominal");
+  const [demandMode, setDemandMode] = useState<DemandMode>("real");
+  const [gdpMode, setGdpMode] = useState<GdpMode>("real");
   const [fxLog, setFxLog] = useState(defaultFxLog);
   const [yearAxisMode, setYearAxisMode] = useState<ChartAxisYearMode>("gregorian");
 
@@ -272,10 +272,6 @@ export function CountryEconomyStudy({
       },
     ],
     [decompositionUnitLabel, gdpSplit.nonOil, gdpSplit.oil, gdpTotalForDecomposition]
-  );
-  const decompositionTimeRange = useMemo<[string, string]>(
-    () => [`${decompositionEffectiveStartYear ?? rangeStartYear}-01-01`, `${rangeEndYear}-12-31`],
-    [decompositionEffectiveStartYear, rangeStartYear, rangeEndYear]
   );
   const decompositionOilRentsCoverageNote =
     oilRentsStartYear != null &&
@@ -729,7 +725,6 @@ export function CountryEconomyStudy({
   }, [focusSummaryLabel, selectedRange?.label, gini.length, povertyExtreme.length, povertyLmic.length, hasFX, fx.length, isUsa, hasUsFiscalMacro, isTurkey, isRussia, policyRate.length]);
 
   const commonProps = {
-    timeRange: [rangeStart, rangeEnd] as [string, string],
     chartRangeGranularity: "year" as const,
     showChartControls: true,
     chartHeight: isTurkey || isRussia ? "h-64 md:h-64" : "h-56 md:h-64",
@@ -749,7 +744,6 @@ export function CountryEconomyStudy({
         }
       : undefined,
     xAxisYearLabel: isUsa ? yearAxisMode : isTurkey ? ("both" as const) : ("gregorian" as const),
-    forceTimeRangeAxis: true as const,
   };
 
   const toggleFocusPreset = (presetId: string) => {
@@ -1017,11 +1011,9 @@ export function CountryEconomyStudy({
           <Card className="border-border md:col-span-2">
             <CardHeader className="space-y-1 pb-2">
               <CardTitle className="text-base">
-                {isRussia
-                  ? gdpMode === "real"
-                    ? "3. GDP decomposition (real)"
-                    : "3. GDP decomposition (nominal)"
-                  : "3. GDP decomposition (oil vs non-oil)"}
+                {gdpMode === "real"
+                  ? "3. GDP decomposition (real)"
+                  : "3. GDP decomposition (nominal)"}
               </CardTitle>
               {isRussia ? (
                 <>
@@ -1061,14 +1053,13 @@ export function CountryEconomyStudy({
                   <TimelineChart
                     data={[]}
                     valueKey="value"
-                    label={isRussia ? `GDP decomposition (${gdpMode})` : "GDP decomposition"}
+                    label={`GDP decomposition (${gdpMode})`}
                     multiSeries={isRussia ? gdpDecompositionMultiSeries : gdpDecompositionMultiSeries.slice(0, 2)}
                     multiSeriesValueFormat="gdp_absolute"
                     multiSeriesYAxisNameOverrides={{
                       0: `GDP (${decompositionUnitLabel})`,
                     }}
                     {...commonProps}
-                    timeRange={decompositionTimeRange}
                   />
                   {decompositionOilRentsCoverageNote ? (
                     <p className="mt-2 text-xs text-muted-foreground">{decompositionOilRentsCoverageNote}</p>
@@ -1122,7 +1113,7 @@ export function CountryEconomyStudy({
                 <TimelineChart
                   data={[]}
                   valueKey="value"
-                  label="Demand aggregates"
+                  label={`Demand aggregates (${demandMode})`}
                   multiSeries={demandSeries.map((s) => ({ ...s, symbol: s.points.length < 3 ? "circle" : undefined }))}
                   multiSeriesValueFormat="gdp_absolute"
                   multiSeriesYAxisNameOverrides={{ 0: demandUnitLabel }}
@@ -1578,7 +1569,6 @@ export function CountryEconomyStudy({
                           ]}
                           multiSeriesValueFormat="gdp_absolute"
                           {...commonProps}
-                          timeRange={decompositionTimeRange}
                         />
                         {decompositionOilRentsCoverageNote ? (
                           <p className="mt-2 text-xs text-muted-foreground">{decompositionOilRentsCoverageNote}</p>
