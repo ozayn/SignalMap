@@ -409,6 +409,8 @@ type TimelineChartProps = {
   gridRight?: string;
   /** Override grid.left (number = px, string = % or px). When omitted, FA charts use wider defaults so vertical y-axis titles are not clipped. */
   gridLeft?: number | string;
+  /** Override ECharts grid containLabel behavior for strict cross-chart plot alignment. */
+  gridContainLabel?: boolean;
   /**
    * Single-series primary line + area fill color. Prefer ``hsl(...)`` so area gradients can vary opacity;
    * falls back to theme primary when omitted.
@@ -933,6 +935,7 @@ export function TimelineChart({
   chartHeight = TIMELINE_CHART_DEFAULT_HEIGHT_CLASS,
   gridRight: gridRightOverride,
   gridLeft: gridLeftOverride,
+  gridContainLabel = true,
   seriesColor: seriesColorProp,
   extendedDates = [],
   lastOfficialDateForExtension,
@@ -2770,7 +2773,7 @@ export function TimelineChart({
                   : "3%"
         ),
         top: gridTopUse,
-        containLabel: true,
+        containLabel: gridContainLabel,
       },
       xAxis: useTimeAxis
         ? (() => {
@@ -3675,6 +3678,7 @@ export function TimelineChart({
     showOilShocks,
     gridRightOverride,
     gridLeftOverride,
+    gridContainLabel,
     seriesColorProp,
     xLabelRotate,
     extendedDates,

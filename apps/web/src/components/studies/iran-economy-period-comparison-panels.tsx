@@ -26,6 +26,8 @@ import type { ChartPeriodOverlayBandInput } from "@/lib/iran-iraq-war-chart-over
 /** Taller plot area than default study charts; tuned for long-run Iran macro panels. */
 const IPC_COMPARISON_CHART_HEIGHT =
   "h-[min(52dvh,400px)] max-md:landscape:h-[min(40dvh,300px)] md:h-[26rem] lg:h-96";
+const FX_COMPARISON_GRID_LEFT = 92;
+const FX_COMPARISON_GRID_RIGHT = "32px";
 
 type Point = { date: string; value: number };
 type GdpDecompMode = "nominal" | "real";
@@ -46,6 +48,46 @@ function trimSeriesFromYear(points: Point[], startYear: number | null): Point[] 
     const y = Number.parseInt(p.date.slice(0, 4), 10);
     return Number.isFinite(y) && y >= startYear;
   });
+}
+
+function deriveRentsDecomposition(gdpPoints: Point[], sharePointsByDate: Map<string, number>) {
+  const rentsProxy: Point[] = [];
+  const remainderProxy: Point[] = [];
+  const totalGdp: Point[] = [];
+  for (const gdp of gdpPoints) {
+    if (!Number.isFinite(gdp.value)) continue;
+    const sharePct = sharePointsByDate.get(gdp.date);
+    if (!Number.isFinite(sharePct)) continue;
+    const rentsValue = (gdp.value * (sharePct as number)) / 100;
+    rentsProxy.push({ date: gdp.date, value: rentsValue });
+    remainderProxy.push({ date: gdp.date, value: gdp.value - rentsValue });
+    totalGdp.push(gdp);
+  }
+  return { rentsProxy, remainderProxy, totalGdp };
+}
+
+function deriveOilGasDecomposition(
+  gdpPoints: Point[],
+  oilShareByDate: Map<string, number>,
+  gasShareByDate: Map<string, number>
+) {
+  const oilProxy: Point[] = [];
+  const gasProxy: Point[] = [];
+  const remainderProxy: Point[] = [];
+  const totalGdp: Point[] = [];
+  for (const gdp of gdpPoints) {
+    if (!Number.isFinite(gdp.value)) continue;
+    const oilPct = oilShareByDate.get(gdp.date);
+    const gasPct = gasShareByDate.get(gdp.date);
+    if (!Number.isFinite(oilPct) || !Number.isFinite(gasPct)) continue;
+    const oilValue = (gdp.value * (oilPct as number)) / 100;
+    const gasValue = (gdp.value * (gasPct as number)) / 100;
+    oilProxy.push({ date: gdp.date, value: oilValue });
+    gasProxy.push({ date: gdp.date, value: gasValue });
+    remainderProxy.push({ date: gdp.date, value: gdp.value - oilValue - gasValue });
+    totalGdp.push(gdp);
+  }
+  return { oilProxy, gasProxy, remainderProxy, totalGdp };
 }
 
 export type IranEconomyPeriodComparisonPanelsProps = {
@@ -247,6 +289,7 @@ export function IranEconomyPeriodComparisonPanels({
     () => [...externalDebtContextEvents, ...events],
     [externalDebtContextEvents, events]
   );
+  const fxSharedTimeRange = timeRange;
 
   const nominalDecompOverlapStartYear = useMemo(() => {
     const gdpStart = firstAvailableYear(recoDemandGdpPoints);
@@ -261,6 +304,22 @@ export function IranEconomyPeriodComparisonPanels({
     if (gdpStart == null || oilStart == null) return null;
     return Math.max(gdpStart, oilStart);
   }, [recoDemandRealGdpPoints, recoOilRentsPoints]);
+
+  const nominalHydroDecompOverlapStartYear = useMemo(() => {
+    const gdpStart = firstAvailableYear(recoDemandGdpPoints);
+    const oilStart = firstAvailableYear(recoOilRentsPoints);
+    const gasStart = firstAvailableYear(recoNaturalGasRentsPoints);
+    if (gdpStart == null || oilStart == null || gasStart == null) return null;
+    return Math.max(gdpStart, oilStart, gasStart);
+  }, [recoDemandGdpPoints, recoOilRentsPoints, recoNaturalGasRentsPoints]);
+
+  const realHydroDecompOverlapStartYear = useMemo(() => {
+    const gdpStart = firstAvailableYear(recoDemandRealGdpPoints);
+    const oilStart = firstAvailableYear(recoOilRentsPoints);
+    const gasStart = firstAvailableYear(recoNaturalGasRentsPoints);
+    if (gdpStart == null || oilStart == null || gasStart == null) return null;
+    return Math.max(gdpStart, oilStart, gasStart);
+  }, [recoDemandRealGdpPoints, recoOilRentsPoints, recoNaturalGasRentsPoints]);
 
   const ipcGdpDecompositionMultiSeries = useMemo((): ChartSeries[] | null => {
     if (
@@ -314,18 +373,10 @@ export function IranEconomyPeriodComparisonPanels({
       if (!Number.isFinite(p.value)) continue;
       oilRentsPctByDate.set(p.date, p.value);
     }
-    const oilProxy: Point[] = [];
-    const nonOilProxy: Point[] = [];
-    const totalGdp: Point[] = [];
-    for (const gdp of recoDemandRealGdpPoints) {
-      if (!Number.isFinite(gdp.value)) continue;
-      const oilRentsPct = oilRentsPctByDate.get(gdp.date);
-      if (!Number.isFinite(oilRentsPct)) continue;
-      const oilValue = (gdp.value * (oilRentsPct as number)) / 100;
-      oilProxy.push({ date: gdp.date, value: oilValue });
-      nonOilProxy.push({ date: gdp.date, value: gdp.value - oilValue });
-      totalGdp.push(gdp);
-    }
+    const { rentsProxy: oilProxy, remainderProxy: nonOilProxy, totalGdp } = deriveRentsDecomposition(
+      recoDemandRealGdpPoints,
+      oilRentsPctByDate
+    );
     return {
       oilProxy,
       nonOilProxy,
@@ -334,6 +385,48 @@ export function IranEconomyPeriodComparisonPanels({
       realGdpYearsInWindow: recoDemandRealGdpPoints.length,
     };
   }, [recoDemandRealGdpPoints, recoOilRentsPoints]);
+
+  const ipcNominalHydrocarbonDecomposition = useMemo(() => {
+    if (
+      recoDemandGdpPoints.length === 0 ||
+      recoOilRentsPoints.length === 0 ||
+      recoNaturalGasRentsPoints.length === 0
+    ) {
+      return null;
+    }
+    const oilByDate = new Map<string, number>();
+    const gasByDate = new Map<string, number>();
+    for (const p of recoOilRentsPoints) {
+      if (!Number.isFinite(p.value)) continue;
+      oilByDate.set(p.date, p.value);
+    }
+    for (const p of recoNaturalGasRentsPoints) {
+      if (!Number.isFinite(p.value)) continue;
+      gasByDate.set(p.date, p.value);
+    }
+    return deriveOilGasDecomposition(recoDemandGdpPoints, oilByDate, gasByDate);
+  }, [recoDemandGdpPoints, recoOilRentsPoints, recoNaturalGasRentsPoints]);
+
+  const ipcRealHydrocarbonDecomposition = useMemo(() => {
+    if (
+      recoDemandRealGdpPoints.length === 0 ||
+      recoOilRentsPoints.length === 0 ||
+      recoNaturalGasRentsPoints.length === 0
+    ) {
+      return null;
+    }
+    const oilByDate = new Map<string, number>();
+    const gasByDate = new Map<string, number>();
+    for (const p of recoOilRentsPoints) {
+      if (!Number.isFinite(p.value)) continue;
+      oilByDate.set(p.date, p.value);
+    }
+    for (const p of recoNaturalGasRentsPoints) {
+      if (!Number.isFinite(p.value)) continue;
+      gasByDate.set(p.date, p.value);
+    }
+    return deriveOilGasDecomposition(recoDemandRealGdpPoints, oilByDate, gasByDate);
+  }, [recoDemandRealGdpPoints, recoOilRentsPoints, recoNaturalGasRentsPoints]);
 
   const ipcGdpDecompPartialNote = useMemo(() => {
     if (!recoGdpDecompCoverage || recoLoading || recoLoadFailed) return null;
@@ -395,12 +488,138 @@ export function IranEconomyPeriodComparisonPanels({
     ];
   }, [ipcRealGdpDecomposition, isFa, L, realDecompOverlapStartYear]);
 
+  const ipcNominalHydrocarbonDecompositionMultiSeries = useMemo((): ChartSeries[] | null => {
+    if (!ipcNominalHydrocarbonDecomposition) return null;
+    if (
+      ipcNominalHydrocarbonDecomposition.remainderProxy.length === 0 ||
+      ipcNominalHydrocarbonDecomposition.oilProxy.length === 0 ||
+      ipcNominalHydrocarbonDecomposition.gasProxy.length === 0 ||
+      ipcNominalHydrocarbonDecomposition.totalGdp.length === 0
+    ) {
+      return null;
+    }
+    return [
+      {
+        key: "gdp_remainder_proxy",
+        label: L(isFa, "Remainder GDP proxy", "باقیمانده GDP (تقریبی)"),
+        yAxisIndex: 0,
+        unit: L(isFa, "current US$", "دلار جاری آمریکا"),
+        points: trimSeriesFromYear(ipcNominalHydrocarbonDecomposition.remainderProxy, nominalHydroDecompOverlapStartYear),
+        color: "#6b7280",
+        smooth: true,
+        showSymbol: false,
+        stack: "gdp_hydro_nom_decomp",
+        stackedArea: true,
+      },
+      {
+        key: "gdp_oil_proxy_hydro",
+        label: L(isFa, "Oil rents proxy", "رانت نفتی (تقریبی)"),
+        yAxisIndex: 0,
+        unit: L(isFa, "current US$", "دلار جاری آمریکا"),
+        points: trimSeriesFromYear(ipcNominalHydrocarbonDecomposition.oilProxy, nominalHydroDecompOverlapStartYear),
+        color: "#f97316",
+        smooth: true,
+        showSymbol: false,
+        stack: "gdp_hydro_nom_decomp",
+        stackedArea: true,
+      },
+      {
+        key: "gdp_gas_proxy_hydro",
+        label: L(isFa, "Natural gas rents proxy", "رانت گاز طبیعی (تقریبی)"),
+        yAxisIndex: 0,
+        unit: L(isFa, "current US$", "دلار جاری آمریکا"),
+        points: trimSeriesFromYear(ipcNominalHydrocarbonDecomposition.gasProxy, nominalHydroDecompOverlapStartYear),
+        color: "#0d9488",
+        smooth: true,
+        showSymbol: false,
+        stack: "gdp_hydro_nom_decomp",
+        stackedArea: true,
+      },
+      {
+        key: "level_gdp_hydro",
+        label: L(isFa, "Total GDP", "GDP کل"),
+        yAxisIndex: 0,
+        unit: L(isFa, "current US$", "دلار جاری آمریکا"),
+        points: trimSeriesFromYear(ipcNominalHydrocarbonDecomposition.totalGdp, nominalHydroDecompOverlapStartYear),
+        smooth: true,
+        linePattern: "dashed",
+        lineWidth: 2,
+        showSymbol: true,
+      },
+    ];
+  }, [ipcNominalHydrocarbonDecomposition, isFa, L, nominalHydroDecompOverlapStartYear]);
+
+  const ipcRealHydrocarbonDecompositionMultiSeries = useMemo((): ChartSeries[] | null => {
+    if (!ipcRealHydrocarbonDecomposition) return null;
+    if (
+      ipcRealHydrocarbonDecomposition.remainderProxy.length === 0 ||
+      ipcRealHydrocarbonDecomposition.oilProxy.length === 0 ||
+      ipcRealHydrocarbonDecomposition.gasProxy.length === 0 ||
+      ipcRealHydrocarbonDecomposition.totalGdp.length === 0
+    ) {
+      return null;
+    }
+    return [
+      {
+        key: "real_gdp_remainder_proxy",
+        label: L(isFa, "Remainder GDP proxy", "باقیمانده GDP (تقریبی)"),
+        yAxisIndex: 0,
+        unit: L(isFa, "constant 2015 US$", "دلار ثابت ۲۰۱۵"),
+        points: trimSeriesFromYear(ipcRealHydrocarbonDecomposition.remainderProxy, realHydroDecompOverlapStartYear),
+        color: "#6b7280",
+        smooth: true,
+        showSymbol: false,
+        stack: "gdp_hydro_real_decomp",
+        stackedArea: true,
+      },
+      {
+        key: "real_gdp_oil_proxy_hydro",
+        label: L(isFa, "Oil rents proxy", "رانت نفتی (تقریبی)"),
+        yAxisIndex: 0,
+        unit: L(isFa, "constant 2015 US$", "دلار ثابت ۲۰۱۵"),
+        points: trimSeriesFromYear(ipcRealHydrocarbonDecomposition.oilProxy, realHydroDecompOverlapStartYear),
+        color: "#f97316",
+        smooth: true,
+        showSymbol: false,
+        stack: "gdp_hydro_real_decomp",
+        stackedArea: true,
+      },
+      {
+        key: "real_gdp_gas_proxy_hydro",
+        label: L(isFa, "Natural gas rents proxy", "رانت گاز طبیعی (تقریبی)"),
+        yAxisIndex: 0,
+        unit: L(isFa, "constant 2015 US$", "دلار ثابت ۲۰۱۵"),
+        points: trimSeriesFromYear(ipcRealHydrocarbonDecomposition.gasProxy, realHydroDecompOverlapStartYear),
+        color: "#0d9488",
+        smooth: true,
+        showSymbol: false,
+        stack: "gdp_hydro_real_decomp",
+        stackedArea: true,
+      },
+      {
+        key: "real_level_gdp_hydro",
+        label: L(isFa, "Total GDP", "GDP کل"),
+        yAxisIndex: 0,
+        unit: L(isFa, "constant 2015 US$", "دلار ثابت ۲۰۱۵"),
+        points: trimSeriesFromYear(ipcRealHydrocarbonDecomposition.totalGdp, realHydroDecompOverlapStartYear),
+        smooth: true,
+        linePattern: "dashed",
+        lineWidth: 2,
+        showSymbol: true,
+      },
+    ];
+  }, [ipcRealHydrocarbonDecomposition, isFa, L, realHydroDecompOverlapStartYear]);
+
   const [ipcGdpDecompMode, setIpcGdpDecompMode] = useState<GdpDecompMode>("real");
   const [ipcDemandMode, setIpcDemandMode] = useState<GdpDecompMode>("real");
   const ipcSelectedGdpDecompMultiSeries =
     ipcGdpDecompMode === "real" ? ipcRealGdpDecompositionMultiSeries : ipcGdpDecompositionMultiSeries;
+  const ipcSelectedHydroDecompMultiSeries =
+    ipcGdpDecompMode === "real" ? ipcRealHydrocarbonDecompositionMultiSeries : ipcNominalHydrocarbonDecompositionMultiSeries;
   const ipcSelectedDecompOverlapStartYear =
     ipcGdpDecompMode === "real" ? realDecompOverlapStartYear : nominalDecompOverlapStartYear;
+  const ipcSelectedHydroDecompOverlapStartYear =
+    ipcGdpDecompMode === "real" ? realHydroDecompOverlapStartYear : nominalHydroDecompOverlapStartYear;
   const ipcGdpDecompTimeRange = useMemo<[string, string]>(() => {
     const defaultStart = Number.parseInt((timeRange[0] ?? "").slice(0, 4), 10);
     const effectiveStartYear =
@@ -411,6 +630,16 @@ export function IranEconomyPeriodComparisonPanels({
           : 1960;
     return [`${effectiveStartYear}-01-01`, timeRange[1]];
   }, [ipcSelectedDecompOverlapStartYear, timeRange]);
+  const ipcHydroDecompTimeRange = useMemo<[string, string]>(() => {
+    const defaultStart = Number.parseInt((timeRange[0] ?? "").slice(0, 4), 10);
+    const effectiveStartYear =
+      ipcSelectedHydroDecompOverlapStartYear != null
+        ? ipcSelectedHydroDecompOverlapStartYear
+        : Number.isFinite(defaultStart)
+          ? defaultStart
+          : 1960;
+    return [`${effectiveStartYear}-01-01`, timeRange[1]];
+  }, [ipcSelectedHydroDecompOverlapStartYear, timeRange]);
   const ipcDemandNominalMultiSeries = useMemo(
     (): ChartSeries[] => [
       {
@@ -900,6 +1129,79 @@ export function IranEconomyPeriodComparisonPanels({
                       {ipcSelectedGdpDecompPartialNote}
                     </p>
                   ) : null}
+                  {ipcSelectedHydroDecompMultiSeries ? (
+                    <div className="mt-4">
+                      <TimelineChart
+                        chartLocale={chartLocaleForCharts}
+                        exportPresentationStudyHeading={exportStudyHeading}
+                        exportPresentationTitle={L(
+                          isFa,
+                          ipcGdpDecompMode === "real"
+                            ? `${studyTitle} — GDP decomposition (oil + gas, real)`
+                            : `${studyTitle} — GDP decomposition (oil + gas, nominal)`,
+                          ipcGdpDecompMode === "real"
+                            ? `${studyTitle} — تفکیک GDP (نفت + گاز، واقعی)`
+                            : `${studyTitle} — تفکیک GDP (نفت + گاز، اسمی)`
+                        )}
+                        exportSourceFooter={studyChartExportSource(isFa, [
+                          recoDemandNominalSource?.name ?? "World Bank WDI",
+                          ipcGdpDecompMode === "real"
+                            ? recoDemandIndicatorIds?.gdp_kd ?? "NY.GDP.MKTP.KD"
+                            : recoDemandIndicatorIds?.gdp_usd ?? "NY.GDP.MKTP.CD",
+                          recoDemandIndicatorIds?.oil_rents_pct_gdp ?? "NY.GDP.PETR.RT.ZS",
+                          recoDemandIndicatorIds?.natural_gas_rents_pct_gdp ?? "NY.GDP.NGAS.RT.ZS",
+                          ipcGdpDecompMode === "real"
+                            ? "Derived: NY.GDP.MKTP.KD×(NY.GDP.PETR.RT.ZS+NY.GDP.NGAS.RT.ZS)/100"
+                            : "Derived: NY.GDP.MKTP.CD×(NY.GDP.PETR.RT.ZS+NY.GDP.NGAS.RT.ZS)/100",
+                        ])}
+                        data={[]}
+                        valueKey="value"
+                        label={L(
+                          isFa,
+                          ipcGdpDecompMode === "real"
+                            ? "GDP decomposition: oil & gas rents vs remainder of GDP (real)"
+                            : "GDP decomposition: oil & gas rents vs remainder of GDP",
+                          ipcGdpDecompMode === "real"
+                            ? "تفکیک GDP: رانت نفت و گاز در برابر باقیمانده GDP (واقعی)"
+                            : "تفکیک GDP: رانت نفت و گاز در برابر باقیمانده GDP"
+                        )}
+                        events={events}
+                        multiSeries={ipcSelectedHydroDecompMultiSeries}
+                        timeRange={ipcHydroDecompTimeRange}
+                        chartPeriodOverlayBands={chartPeriodOverlayBands}
+                        revolution1979Marker={revolution1979Marker}
+                        chartRangeGranularity="year"
+                        forceTimeRangeAxis
+                        xAxisYearLabel={chartYearAxisLabel}
+                        exportFileStem={
+                          ipcGdpDecompMode === "real"
+                            ? "iran-ipc-gdp-decomposition-hydrocarbon-real"
+                            : "iran-ipc-gdp-decomposition-hydrocarbon-nominal"
+                        }
+                        showChartControls
+                        chartHeight={IPC_COMPARISON_CHART_HEIGHT}
+                        mutedEventLines
+                        multiSeriesValueFormat="gdp_absolute"
+                        multiSeriesYAxisNameOverrides={{
+                          0:
+                            ipcGdpDecompMode === "real"
+                              ? L(isFa, "GDP (constant 2015 US$)", "تولید ناخالص داخلی (دلار ثابت ۲۰۱۵)")
+                              : L(isFa, "GDP (current US$)", "تولید ناخالص داخلی (دلار جاری آمریکا)"),
+                        }}
+                        regimeArea={regimeArea}
+                        focusGregorianYearRange={focusGregorianYearRange}
+                        focusHoverHint={focusHoverHint}
+                        gridLeft={80}
+                      />
+                      <p className="text-xs text-muted-foreground mt-2 max-w-3xl leading-relaxed">
+                        {L(
+                          isFa,
+                          "This is a proxy decomposition using WDI oil and natural gas rents as shares of GDP. It is not an official non-oil GDP series.",
+                          "این یک تفکیک تقریبی بر پایه سهم رانت نفت و گاز طبیعی WDI از GDP است و سری رسمی GDP غیرنفتی نیست."
+                        )}
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               ) : (ipcGdpDecompMode === "real" ? recoDemandRealGdpPoints.length : recoDemandGdpPoints.length) > 0 ? (
                 <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
@@ -1211,11 +1513,16 @@ export function IranEconomyPeriodComparisonPanels({
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
                       },
                     ]}
-                    timeRange={timeRange}
+                    timeRange={fxSharedTimeRange}
                     chartPeriodOverlayBands={chartPeriodOverlayBands}
                     revolution1979Marker={revolution1979Marker}
                     chartRangeGranularity="year"
+                    forceTimeAxis
+                    forceTimeRangeAxis
                     xAxisYearLabel={chartYearAxisLabel}
+                    gridLeft={FX_COMPARISON_GRID_LEFT}
+                    gridRight={FX_COMPARISON_GRID_RIGHT}
+                    gridContainLabel={false}
                     exportFileStem="iran-ipc-fx-levels"
                     showChartControls
                     chartHeight={IPC_COMPARISON_CHART_HEIGHT}
@@ -1250,11 +1557,16 @@ export function IranEconomyPeriodComparisonPanels({
                   label={L(isFa, "FX spread (%)", faEconomic.fxSpreadPct)}
                   unit="%"
                   events={events}
-                  timeRange={timeRange}
+                  timeRange={fxSharedTimeRange}
                   chartPeriodOverlayBands={chartPeriodOverlayBands}
                   revolution1979Marker={revolution1979Marker}
                   chartRangeGranularity="year"
+                  forceTimeAxis
+                  forceTimeRangeAxis
                   xAxisYearLabel={chartYearAxisLabel}
+                  gridLeft={FX_COMPARISON_GRID_LEFT}
+                  gridRight={FX_COMPARISON_GRID_RIGHT}
+                  gridContainLabel={false}
                   exportFileStem="iran-ipc-fx-spread"
                   showChartControls
                     chartHeight={IPC_COMPARISON_CHART_HEIGHT}

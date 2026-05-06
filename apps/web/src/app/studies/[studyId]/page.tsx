@@ -12074,7 +12074,12 @@ export default function StudyDetailPage() {
                             timeRange={reconstructionTimeRange ?? study.timeRange}
                             chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
                             chartRangeGranularity="year"
+                            forceTimeAxis
+                            forceTimeRangeAxis
                             xAxisYearLabel={chartYearAxisLabel}
+                            gridLeft={92}
+                            gridRight="32px"
+                            gridContainLabel={false}
                             exportFileStem="iran-reco-fx-levels"
                             showChartControls
                             chartHeight="h-56 md:h-64"
@@ -12115,7 +12120,12 @@ export default function StudyDetailPage() {
                           timeRange={reconstructionTimeRange ?? study.timeRange}
                           chartPeriodOverlayBands={iranIraqWarChartPeriodOverlayBands}
                           chartRangeGranularity="year"
+                          forceTimeAxis
+                          forceTimeRangeAxis
                           xAxisYearLabel={chartYearAxisLabel}
+                          gridLeft={92}
+                          gridRight="32px"
+                          gridContainLabel={false}
                           exportFileStem="iran-reco-fx-spread"
                           showChartControls
                           chartHeight="h-48 md:h-56"
