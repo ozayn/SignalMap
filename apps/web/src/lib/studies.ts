@@ -57,6 +57,8 @@ export type StudyMeta = {
   subtitle?: string;
   timeRange: [string, string];
   description: string;
+  /** Optional short social preview copy for link unfurls (OG/Twitter). */
+  socialDescription?: string;
   status: string;
   primarySignal: PrimarySignal;
   eventLayers?: string[];
@@ -148,6 +150,7 @@ export const STUDIES: StudyMeta[] = [
     title: "Brent oil price as an exogenous context signal",
     timeRange: ["2021-01-15", new Date().toISOString().slice(0, 10)],
     description: "Brent crude in USD: event-anchored windows, optional context markers.",
+    socialDescription: "Track Brent oil prices over time with contextual event overlays and source notes.",
     status: "active",
     groupPlacements: [{ group: "core", order: 2 }],
     primarySignal: { kind: "oil_brent" },
@@ -280,6 +283,8 @@ export const STUDIES: StudyMeta[] = [
     title: "Follower growth dynamics over time",
     timeRange: ["2010-01-01", new Date().toISOString().slice(0, 10)],
     description: "Follower count over time with optional linear, exponential, and logistic fits (exploratory).",
+    socialDescription:
+      "Compare platform follower-growth snapshots from archived Instagram, YouTube, and X data using a cache-first Wayback workflow.",
     status: "active",
     tags: ["Platform", "Growth fit"],
     groupPlacements: [{ group: "discourse", order: 1 }],
@@ -854,6 +859,8 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["1960-01-01", "today"],
     description:
       "Iran macro indicators from 1960 onward (default outer window), with an adjustable shaded focus band (presets include late Pahlavi and Islamic Republic presidencies, or custom years). Annual WDI series and annual-mean open-market FX; exploratory comparison only, not causal inference.",
+    socialDescription:
+      "Explore Iran's economic signals over time, including inflation, exchange rates, oil-related indicators, wages, inequality, trade, and historical event overlays.",
     status: "active",
     groupPlacements: [{ group: "country", order: 1 }],
     primarySignal: { kind: "iran_economy_period_comparison" },
@@ -893,6 +900,8 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["1960-01-01", "today"],
     description:
       "Country-template macro dashboard for the United States using annual WDI indicators with independent range and focus presets.",
+    socialDescription:
+      "Explore the U.S. economy across policy eras using inflation, GDP growth, fiscal indicators, debt, rates, inequality, and poverty with comparison-first charts.",
     status: "active",
     groupPlacements: [{ group: "country", order: 2 }],
     primarySignal: { kind: "iran_economy_period_comparison" },
@@ -908,6 +917,8 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["1960-01-01", "today"],
     description:
       "Country-template macro dashboard for Russia using annual WDI indicators with independent range and focus presets.",
+    socialDescription:
+      "Explore Russia's inflation, GDP growth, exchange rates, oil and gas rents, trade, industry, inequality, and poverty across major historical periods.",
     status: "active",
     groupPlacements: [{ group: "country", order: 4 }],
     primarySignal: { kind: "iran_economy_period_comparison" },
@@ -923,6 +934,8 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["1960-01-01", "today"],
     description:
       "Country-template macro dashboard for Turkey using annual WDI indicators with independent range and focus presets.",
+    socialDescription:
+      "Explore Turkey's inflation, exchange rates, GDP growth, trade, debt, inequality, and poverty across major macroeconomic periods.",
     status: "active",
     groupPlacements: [{ group: "country", order: 3 }],
     primarySignal: { kind: "iran_economy_period_comparison" },

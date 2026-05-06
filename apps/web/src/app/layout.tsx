@@ -17,9 +17,33 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-sans", preload: fals
  */
 export const dynamic = "force-dynamic";
 
+function resolveSiteUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (!raw) return "https://signalmap.ozayn.com";
+  return raw.replace(/\/+$/, "");
+}
+
+const SITE_URL = resolveSiteUrl();
+const DEFAULT_OG_IMAGE = `${SITE_URL}/logo.png`;
+
 export const metadata: Metadata = {
   title: "SignalMap",
-  description: "Longitudinal studies of emotion, language, and interaction",
+  description: "Research-style dashboard for exploring economic, geopolitical, historical, and platform signals over time.",
+  metadataBase: new URL(SITE_URL),
+  openGraph: {
+    title: "SignalMap",
+    description: "Research-style dashboard for exploring economic, geopolitical, historical, and platform signals over time.",
+    url: SITE_URL,
+    siteName: "SignalMap",
+    type: "website",
+    images: [{ url: DEFAULT_OG_IMAGE }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SignalMap",
+    description: "Research-style dashboard for exploring economic, geopolitical, historical, and platform signals over time.",
+    images: [DEFAULT_OG_IMAGE],
+  },
   icons: {
     icon: [
       { url: "/favicon.png", sizes: "32x32", type: "image/png" },

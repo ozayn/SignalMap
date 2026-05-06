@@ -1,6 +1,10 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CountryEconomyStudy } from "@/components/studies/country-economy-study";
 import { getCountryEconomyConfig } from "@/lib/country-economy-config";
+import { buildStudyMetadata } from "@/lib/study-page-metadata";
+
+export const metadata: Metadata = buildStudyMetadata("turkey-economy");
 
 export default function TurkeyEconomyStudyPage() {
   const cfg = getCountryEconomyConfig("turkey-economy");
