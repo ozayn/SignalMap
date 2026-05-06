@@ -23,6 +23,7 @@ export const STUDY_COUNTRY_OPTIONS: { id: StudyCountry; label: string }[] = [
   { id: "us", label: "US" },
   { id: "russia", label: "Russia" },
   { id: "turkey", label: "Turkey" },
+  { id: "saudi", label: "Saudi Arabia" },
   { id: "global", label: "Global" },
 ];
 
@@ -41,6 +42,7 @@ const COUNTRY_FA: Partial<Record<StudyCountry, string>> = {
   us: "ایالات متحده آمریکا",
   russia: "روسیه",
   turkey: "ترکیه",
+  saudi: "عربستان سعودی",
   global: "جهانی",
 };
 

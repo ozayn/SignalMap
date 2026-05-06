@@ -36,7 +36,7 @@ export type PrimarySignal =
 import type { StudyConceptId } from "./signalmap-concepts";
 
 /** Browse / filter: geographic emphasis (a study may span several). */
-export type StudyCountry = "iran" | "us" | "russia" | "turkey" | "global";
+export type StudyCountry = "iran" | "us" | "russia" | "turkey" | "saudi" | "global";
 
 /** Browse / filter: coarse theme. */
 export type StudyTheme = "macro" | "oil" | "fx" | "inequality" | "social" | "dashboard";
@@ -942,6 +942,23 @@ export const STUDIES: StudyMeta[] = [
     countries: ["turkey", "global"],
     themes: ["macro", "fx", "dashboard"],
     tags: ["Turkey", "WDI", "focus presets", "macro dashboard", "country dashboard"],
+  },
+  {
+    id: "saudi-arabia-economy",
+    number: 46,
+    title: "Saudi Arabia economy — full history with focus period",
+    subtitle: "Template-based WDI macro panels with oil-rent and Vision 2030 context overlays",
+    timeRange: ["1960-01-01", "today"],
+    description:
+      "Country-template macro dashboard for Saudi Arabia using annual WDI indicators with independent range and focus presets.",
+    socialDescription:
+      "Explore Saudi Arabia's inflation, growth, oil and gas rent context, diversification signals, external balances, and distribution metrics across major policy eras.",
+    status: "active",
+    groupPlacements: [{ group: "country", order: 5 }],
+    primarySignal: { kind: "iran_economy_period_comparison" },
+    countries: ["saudi", "global"],
+    themes: ["macro", "oil", "dashboard"],
+    tags: ["Saudi Arabia", "WDI", "Vision 2030", "macro dashboard", "country dashboard"],
   },
 ];
 

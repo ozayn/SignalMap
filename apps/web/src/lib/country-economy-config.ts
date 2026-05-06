@@ -17,7 +17,7 @@ export type CountryRangePreset = {
 };
 
 export type CountryEconomyConfig = {
-  routeSlug: "us-economy" | "russia-economy" | "turkey-economy";
+  routeSlug: "us-economy" | "russia-economy" | "turkey-economy" | "saudi-arabia-economy";
   countryCode: string;
   countryName: string;
   hasFX: boolean;
@@ -212,6 +212,116 @@ export const COUNTRY_ECONOMY_CONFIGS: CountryEconomyConfig[] = [
       },
       {
         id: "tur-covid-2020-band",
+        startYear: 2020,
+        endYear: 2020,
+        fill: "rgba(148, 163, 184, 0.10)",
+      },
+    ],
+  },
+  {
+    routeSlug: "saudi-arabia-economy",
+    countryCode: "SAU",
+    countryName: "Saudi Arabia",
+    hasFX: false,
+    defaultFxLog: false,
+    focusPresets: [
+      { id: "fahd", label: "King Fahd (1982-2005)", shortLabel: "Fahd", startYear: 1982, endYear: 2005 },
+      { id: "abdullah", label: "King Abdullah (2005-2015)", shortLabel: "Abdullah", startYear: 2005, endYear: 2015 },
+      {
+        id: "salman-vision2030",
+        label: "King Salman / Vision 2030 (2015-present)",
+        shortLabel: "Salman / Vision 2030",
+        startYear: 2015,
+        endYear: null,
+      },
+      {
+        id: "vision-2030",
+        label: "Vision 2030 period (2016-present)",
+        shortLabel: "Vision 2030",
+        startYear: 2016,
+        endYear: null,
+      },
+    ],
+    rangePresets: [
+      { id: "full", label: "Full history", startYear: 1960, endYear: null },
+      { id: "post-1980", label: "Post-1980", startYear: 1980, endYear: null },
+      { id: "vision-era", label: "Vision era (2016-)", startYear: 2016, endYear: null },
+    ],
+    overlayEvents: [
+      {
+        id: "sau-oil-collapse-1986",
+        layer: "world_core",
+        date: "1986-01-01",
+        title: "1986 oil price collapse",
+        title_fa: "سقوط قیمت نفت ۱۹۸۶",
+      },
+      {
+        id: "sau-gulf-war-1990",
+        layer: "world_core",
+        date: "1990-08-01",
+        title: "1990-1991 Gulf War",
+        title_fa: "جنگ خلیج فارس ۱۹۹۰-۱۹۹۱",
+      },
+      {
+        id: "sau-gfc-2008",
+        layer: "world_core",
+        date: "2008-09-15",
+        title: "2008 financial crisis",
+        title_fa: "بحران مالی ۲۰۰۸",
+      },
+      {
+        id: "sau-oil-collapse-2014",
+        layer: "world_core",
+        date: "2014-11-27",
+        title: "2014 oil price collapse",
+        title_fa: "سقوط قیمت نفت ۲۰۱۴",
+      },
+      {
+        id: "sau-vision-2030-launch",
+        layer: "world_core",
+        date: "2016-04-25",
+        title: "Vision 2030 launch",
+        title_fa: "آغاز چشم‌انداز ۲۰۳۰",
+      },
+      {
+        id: "sau-oil-covid-2020",
+        layer: "world_core",
+        date: "2020-03-01",
+        title: "2020 oil/COVID shock",
+        title_fa: "شوک نفت/کووید ۲۰۲۰",
+      },
+    ],
+    overlayBands: [
+      {
+        id: "sau-gulf-war-band",
+        startYear: 1990,
+        endYear: 1991,
+        fill: "rgba(148, 163, 184, 0.12)",
+        markAreaLabel: "Gulf War",
+      },
+      {
+        id: "sau-gfc-band",
+        startYear: 2008,
+        endYear: 2009,
+        fill: "rgba(148, 163, 184, 0.12)",
+        markAreaLabel: "2008 crisis",
+      },
+      {
+        id: "sau-oil-collapse-2014-band",
+        startYear: 2014,
+        endYear: 2016,
+        fill: "rgba(148, 163, 184, 0.12)",
+        markAreaLabel: "Oil price collapse",
+      },
+      {
+        id: "sau-vision2030-band",
+        startYear: 2016,
+        endYear: THIS_YEAR,
+        fill: "rgba(148, 163, 184, 0.10)",
+        markAreaLabel: "Vision 2030",
+      },
+      {
+        id: "sau-2020-shock-band",
         startYear: 2020,
         endYear: 2020,
         fill: "rgba(148, 163, 184, 0.10)",

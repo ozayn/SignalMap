@@ -24,6 +24,9 @@ const STUDY_METADATA_OVERRIDES: Record<string, StudyMetadataOverride> = {
   "turkey-economy": {
     title: "Turkey Economy Study | SignalMap",
   },
+  "saudi-arabia-economy": {
+    title: "Saudi Arabia Economy Study | SignalMap",
+  },
 };
 
 function resolveSiteUrl(): string {

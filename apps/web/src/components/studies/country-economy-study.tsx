@@ -20,6 +20,7 @@ type Point = { date: string; value: number };
 type DemandMode = "nominal" | "real";
 type GdpMode = "nominal" | "real";
 const MAX_ACTIVE_FOCUS_PERIODS = 3;
+type OilSignalData = { points: Point[] };
 
 type CountryEconomyBundle = {
   series: Record<string, Point[]>;
@@ -79,6 +80,26 @@ function deriveGdpOilSplit(gdp: Point[], oilRentsPct: Point[]) {
   return { oil, nonOil };
 }
 
+function deriveGdpOilGasSplit(gdp: Point[], oilRentsPct: Point[], gasRentsPct: Point[]) {
+  const oilByYear = new Map(oilRentsPct.map((p) => [yearKey(p.date), p.value]));
+  const gasByYear = new Map(gasRentsPct.map((p) => [yearKey(p.date), p.value]));
+  const oil: Point[] = [];
+  const gas: Point[] = [];
+  const remainder: Point[] = [];
+  for (const p of gdp) {
+    const y = yearKey(p.date);
+    const oilShare = oilByYear.get(y);
+    const gasShare = gasByYear.get(y);
+    if (oilShare === undefined || gasShare === undefined) continue;
+    const oilVal = (p.value * oilShare) / 100;
+    const gasVal = (p.value * gasShare) / 100;
+    oil.push({ date: `${y}-01-01`, value: oilVal });
+    gas.push({ date: `${y}-01-01`, value: gasVal });
+    remainder.push({ date: `${y}-01-01`, value: p.value - oilVal - gasVal });
+  }
+  return { oil, gas, remainder };
+}
+
 function trimSeriesFromYear(points: Point[], startYear: number | null): Point[] {
   if (startYear == null) return points;
   return points.filter((p) => {
@@ -108,6 +129,7 @@ export function CountryEconomyStudy({
   const isUsa = countryCode.toUpperCase() === "USA";
   const isTurkey = countryCode.toUpperCase() === "TUR";
   const isRussia = countryCode.toUpperCase() === "RUS";
+  const isSaudi = countryCode.toUpperCase() === "SAU";
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<CountryEconomyBundle | null>(null);
@@ -118,6 +140,7 @@ export function CountryEconomyStudy({
   const [gdpMode, setGdpMode] = useState<GdpMode>("real");
   const [fxLog, setFxLog] = useState(defaultFxLog);
   const [yearAxisMode, setYearAxisMode] = useState<ChartAxisYearMode>("gregorian");
+  const [brentPoints, setBrentPoints] = useState<Point[]>([]);
 
   const selectedRange = useMemo(() => rangePresets.find((r) => r.id === rangePresetId) ?? rangePresets[0], [rangePresetId, rangePresets]);
   const rangeStartYear = selectedRange?.startYear ?? 1960;
@@ -193,6 +216,30 @@ export function CountryEconomyStudy({
     return () => ctl.abort();
   }, [countryCode, rangeStart, rangeEnd]);
 
+  useEffect(() => {
+    if (!isSaudi) {
+      setBrentPoints([]);
+      return;
+    }
+    const ctl = new AbortController();
+    async function run() {
+      try {
+        const qs = new URLSearchParams({ start: rangeStart, end: rangeEnd });
+        const res = await fetch(`/api/signals/oil/brent?${qs.toString()}`, {
+          cache: "no-store",
+          signal: ctl.signal,
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as OilSignalData;
+        setBrentPoints(Array.isArray(json.points) ? json.points : []);
+      } catch {
+        if (!ctl.signal.aborted) setBrentPoints([]);
+      }
+    }
+    void run();
+    return () => ctl.abort();
+  }, [isSaudi, rangeStart, rangeEnd]);
+
   const series = bundle?.series ?? {};
   const source = bundle?.source;
   const indicatorIds = bundle?.indicator_ids ?? {};
@@ -233,20 +280,45 @@ export function CountryEconomyStudy({
 
   const gdpSplitNominal = useMemo(() => deriveGdpOilSplit(gdpNominal, oilRents), [gdpNominal, oilRents]);
   const gdpSplitReal = useMemo(() => deriveGdpOilSplit(gdpReal, oilRents), [gdpReal, oilRents]);
-  const gdpSplitRaw = gdpMode === "real" ? gdpSplitReal : gdpSplitNominal;
+  const gdpOilGasSplitNominal = useMemo(
+    () => deriveGdpOilGasSplit(gdpNominal, oilRents, gasRents),
+    [gdpNominal, oilRents, gasRents]
+  );
+  const gdpOilGasSplitReal = useMemo(
+    () => deriveGdpOilGasSplit(gdpReal, oilRents, gasRents),
+    [gdpReal, oilRents, gasRents]
+  );
+  const gdpSplitRaw = isSaudi
+    ? gdpMode === "real"
+      ? gdpOilGasSplitReal
+      : gdpOilGasSplitNominal
+    : gdpMode === "real"
+      ? gdpSplitReal
+      : gdpSplitNominal;
   const gdpSeriesForSplit = gdpMode === "real" ? gdpReal : gdpNominal;
   const gdpStartYearForSplit = useMemo(() => firstAvailableYear(gdpSeriesForSplit), [gdpSeriesForSplit]);
   const oilRentsStartYear = useMemo(() => firstAvailableYear(oilRents), [oilRents]);
+  const gasRentsStartYear = useMemo(() => firstAvailableYear(gasRents), [gasRents]);
   const decompositionEffectiveStartYear = useMemo(() => {
     if (gdpStartYearForSplit == null || oilRentsStartYear == null) return null;
+    if (isSaudi) {
+      if (gasRentsStartYear == null) return null;
+      return Math.max(gdpStartYearForSplit, oilRentsStartYear, gasRentsStartYear);
+    }
     return Math.max(gdpStartYearForSplit, oilRentsStartYear);
-  }, [gdpStartYearForSplit, oilRentsStartYear]);
+  }, [gdpStartYearForSplit, oilRentsStartYear, gasRentsStartYear, isSaudi]);
   const gdpSplit = useMemo(
     () => ({
       oil: trimSeriesFromYear(gdpSplitRaw.oil, decompositionEffectiveStartYear),
-      nonOil: trimSeriesFromYear(gdpSplitRaw.nonOil, decompositionEffectiveStartYear),
+      gas: trimSeriesFromYear((gdpSplitRaw as { gas?: Point[] }).gas ?? [], decompositionEffectiveStartYear),
+      nonOil: trimSeriesFromYear(
+        (gdpSplitRaw as { nonOil?: Point[]; remainder?: Point[] }).nonOil ??
+          (gdpSplitRaw as { remainder?: Point[] }).remainder ??
+          [],
+        decompositionEffectiveStartYear
+      ),
     }),
-    [gdpSplitRaw.oil, gdpSplitRaw.nonOil, decompositionEffectiveStartYear]
+    [gdpSplitRaw, decompositionEffectiveStartYear]
   );
   const gdpTotalForDecomposition = useMemo(
     () => trimSeriesFromYear(gdpSeriesForSplit, decompositionEffectiveStartYear),
@@ -257,7 +329,7 @@ export function CountryEconomyStudy({
     () => [
       {
         key: "non_oil",
-        label: "Non-oil GDP proxy",
+        label: isSaudi ? "Remainder of GDP proxy" : "Non-oil GDP proxy",
         unit: decompositionUnitLabel,
         yAxisIndex: 0 as const,
         points: gdpSplit.nonOil,
@@ -275,6 +347,20 @@ export function CountryEconomyStudy({
         stack: "gdp_decomp",
         stackedArea: true,
       },
+      ...(isSaudi
+        ? [
+            {
+              key: "gas",
+              label: "Natural gas GDP proxy",
+              unit: decompositionUnitLabel,
+              yAxisIndex: 0 as const,
+              points: gdpSplit.gas,
+              color: SIGNAL_CONCEPT.natural_gas_rents,
+              stack: "gdp_decomp",
+              stackedArea: true,
+            },
+          ]
+        : []),
       {
         key: "gdp_total",
         label: "Total GDP",
@@ -285,15 +371,17 @@ export function CountryEconomyStudy({
         lineStyleType: "dashed" as const,
       },
     ],
-    [decompositionUnitLabel, gdpSplit.nonOil, gdpSplit.oil, gdpTotalForDecomposition]
+    [decompositionUnitLabel, gdpSplit.nonOil, gdpSplit.oil, gdpSplit.gas, gdpTotalForDecomposition, isSaudi]
   );
   const decompositionOilRentsCoverageNote =
-    oilRentsStartYear != null &&
-    gdpStartYearForSplit != null &&
-    oilRentsStartYear > gdpStartYearForSplit &&
-    decompositionEffectiveStartYear === oilRentsStartYear
-      ? `Oil-rents decomposition begins where oil-rents data becomes available in the source dataset. Oil-rents series unavailable before ${oilRentsStartYear}.`
-      : null;
+    isSaudi && gasRentsStartYear != null && decompositionEffectiveStartYear != null
+      ? `Oil-and-gas decomposition begins where both oil-rents and gas-rents series overlap the selected GDP mode (start year ${decompositionEffectiveStartYear}).`
+      : oilRentsStartYear != null &&
+          gdpStartYearForSplit != null &&
+          oilRentsStartYear > gdpStartYearForSplit &&
+          decompositionEffectiveStartYear === oilRentsStartYear
+        ? `Oil-rents decomposition begins where oil-rents data becomes available in the source dataset. Oil-rents series unavailable before ${oilRentsStartYear}.`
+        : null;
 
   const demandSeries =
     demandMode === "real"
@@ -432,6 +520,13 @@ export function CountryEconomyStudy({
           "Each panel is one measurement lens; stronger interpretation comes from checking whether multiple signals move together across the same years.",
           "Overlays and focus shading help anchor timing, but they do not prove that one political period caused a specific outcome.",
         ]
+      : isSaudi
+        ? [
+            `This page combines Saudi Arabia macro and social indicators in ${selectedRange?.label ?? "the selected range"}, with focus windows (${focusSummaryLabel || "selected presets"}) for period comparison.`,
+            "Oil and natural-gas rents are shown near the top as context signals for resource dependence and diversification pressure, not direct fiscal revenue.",
+            "The decomposition panel estimates oil-and-gas-linked GDP proxy versus the remainder of GDP, in nominal or real mode.",
+            "Overlays highlight major stress and transition anchors (1986 oil collapse, Gulf War, 2014 collapse, Vision 2030 launch, and 2020 oil/COVID shock).",
+          ]
       : isRussia
         ? [
             `This page combines Russia macro and social indicators in ${selectedRange?.label ?? "the selected range"}, with shaded focus windows (${focusSummaryLabel || "selected presets"}) for period comparison.`,
@@ -457,6 +552,7 @@ export function CountryEconomyStudy({
     focusSummaryLabel,
     isUsa,
     isTurkey,
+    isSaudi,
     isRussia,
     gini.length,
     povertyExtreme.length,
@@ -502,6 +598,34 @@ export function CountryEconomyStudy({
               ],
             },
           ]
+        : isSaudi
+          ? [
+              {
+                heading: "How to read these charts",
+                bullets: [
+                  "Treat each panel as one measurement lens; compare inflation, growth, rents, and external balances together before drawing conclusions.",
+                  "Use the event overlays (1986, Gulf War, 2014, 2016, 2020) as timing context for oil-cycle and policy-regime shifts.",
+                  "Focus periods are comparison windows, not causal claims.",
+                ],
+              },
+              {
+                heading: "Units and comparability",
+                bullets: [
+                  "Annual %: inflation, GDP growth, money growth, trade shares, industry shares, current account, and external debt.",
+                  "Current US$ vs constant 2015 US$: nominal and real demand/decomposition toggles answer different questions.",
+                  "Resource-rent shares (% GDP) are context indicators for exposure, not direct budget-revenue measures.",
+                ],
+              },
+              {
+                heading: "Concept guide used in this study",
+                bullets: [
+                  "Oil and natural gas rents: resource-income context as shares of GDP.",
+                  "Diversification signal: compare hydrocarbon-linked proxy with remainder GDP proxy, plus industry/manufacturing and trade shares.",
+                  "Fiscal sensitivity to oil cycles: read inflation, growth, and external-balance indicators against oil-cycle overlays.",
+                  "Exchange-rate peg context: Saudi riyal is typically interpreted as peg-stability context rather than crisis-FX dynamics.",
+                ],
+              },
+            ]
         : isRussia
           ? [
               {
@@ -555,7 +679,7 @@ export function CountryEconomyStudy({
               ],
             },
           ],
-    [hasFX, isTurkey, isRussia]
+    [hasFX, isTurkey, isSaudi, isRussia]
   );
 
   const sourceItems = useMemo<SourceInfoItem[]>(() => {
@@ -697,6 +821,24 @@ export function CountryEconomyStudy({
         unitLabel: "% of GDP (derived)",
       });
     }
+    if (isSaudi) {
+      items.push({
+        label: "Hydrocarbon context (oil + natural gas rents)",
+        sourceName: baseName,
+        sourceUrl: source?.url ?? "https://data.worldbank.org",
+        sourceDetail: `${baseCountryDetail}; NY.GDP.PETR.RT.ZS + NY.GDP.NGAS.RT.ZS with GDP decomposition proxy view`,
+        unitLabel: "% of GDP (rents) and US$ (decomposition, selected mode)",
+      });
+      if (brentPoints.length > 0) {
+        items.push({
+          label: "Brent oil context",
+          sourceName: "FRED",
+          sourceUrl: "https://fred.stlouisfed.org/series/DCOILBRENTEU",
+          sourceDetail: "DCOILBRENTEU daily Brent spot (rendered as context panel)",
+          unitLabel: "US$ per barrel",
+        });
+      }
+    }
     return items;
   }, [
     source,
@@ -711,12 +853,16 @@ export function CountryEconomyStudy({
     federalDebtUsd.length,
     hasTurkeyPolicyRateData,
     turkeyPolicyRateIndicatorId,
+    isSaudi,
+    brentPoints.length,
   ]);
 
   const sourceNote = isTurkey
     ? hasTurkeyPolicyRateData
       ? "Primary source family is World Bank WDI country series (plus derived external-debt-to-GDP ratio from debt stocks and nominal GDP). Units include annual %, TRY per USD, current US$, constant 2015 US$, % of GDP, Gini index, and poverty headcount %."
       : `Primary source family is World Bank WDI country series (plus derived external-debt-to-GDP ratio from debt stocks and nominal GDP). Policy-rate proxy is currently hidden because ${turkeyPolicyRateIndicatorId} has no Turkey observations in this selected range.`
+    : isSaudi
+      ? "Primary source family is World Bank WDI country series, with Brent oil context from FRED (DCOILBRENTEU) when available. Oil/gas rents are context signals, not direct government-revenue series."
     : isRussia
       ? "Primary source family is World Bank WDI country series. Units include annual %, current US$, constant 2015 US$, LCU per USD, % of GDP, Gini index, and poverty headcount %. Oil/gas rents are context indicators, not full sector accounting."
       : "Series are annual WDI observations. Missing years remain missing; no interpolation is applied.";
@@ -739,6 +885,16 @@ export function CountryEconomyStudy({
             ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
             : "Data caveat: this page uses annual published observations; visible jumps can reflect data frequency and revisions, not necessarily a single structural break.",
         ]
+      : isSaudi
+        ? [
+            `Within ${focusRange}, compare inflation, growth, and distribution indicators together with oil/gas rent context and decomposition to track diversification signals.`,
+            "Use overlays around 1986, 1990-1991, 2014, 2016, and 2020 as timing anchors for oil-cycle and policy transitions (including Vision 2030).",
+            "Nominal and real toggles are complementary: real better tracks volume, nominal captures current-price scale and oil-cycle valuation effects.",
+            "Resource-rent panels are contextual indicators and should not be interpreted as direct fiscal revenue series.",
+            sparseNotes.length
+              ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
+              : "Data caveat: annual published observations can show abrupt cycle shifts; cross-check with source notes and period context.",
+          ]
       : isRussia
         ? [
             `Within ${focusRange}, compare inflation, growth, FX, energy-rent context, and distribution indicators as descriptive co-movements rather than causal effects.`,
@@ -757,7 +913,21 @@ export function CountryEconomyStudy({
               ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
               : "Data caveat: this view uses annual published observations; apparent jumps can reflect sparse publication frequency, not necessarily sudden structural breaks.",
           ];
-  }, [focusSummaryLabel, selectedRange?.label, gini.length, povertyExtreme.length, povertyLmic.length, hasFX, fx.length, isUsa, hasUsFiscalMacro, isTurkey, isRussia, policyRate.length]);
+  }, [
+    focusSummaryLabel,
+    selectedRange?.label,
+    gini.length,
+    povertyExtreme.length,
+    povertyLmic.length,
+    hasFX,
+    fx.length,
+    isUsa,
+    hasUsFiscalMacro,
+    isTurkey,
+    isSaudi,
+    isRussia,
+    policyRate.length,
+  ]);
 
   const commonProps = {
     chartRangeGranularity: "year" as const,
@@ -803,7 +973,7 @@ export function CountryEconomyStudy({
 
   return (
     <section className="space-y-4">
-      {isTurkey || isRussia ? (
+      {isTurkey || isRussia || isSaudi ? (
         <>
           <Card className="border-border bg-muted/20">
             <CardHeader className="pb-2">
@@ -813,6 +983,10 @@ export function CountryEconomyStudy({
               {isTurkey ? (
                 <p>
                   This study explores Turkey&apos;s economy across major political and macroeconomic periods, using indicators such as inflation, exchange rates, GDP growth, trade, debt, inequality, and poverty.
+                </p>
+              ) : isSaudi ? (
+                <p>
+                  This study explores Saudi Arabia&apos;s economy across leadership and policy eras, emphasizing oil-rent dependence, diversification under Vision 2030, and macro sensitivity to oil cycles.
                 </p>
               ) : (
                 <p>
@@ -839,6 +1013,13 @@ export function CountryEconomyStudy({
                     <li>The Turkish lira depreciation is easier to read on a log scale because proportional moves are more comparable across decades.</li>
                     <li>Current account deficits, external debt, and exchange-rate pressure can be read together as external vulnerability signals.</li>
                     <li>Poverty falls strongly in available observations, while inequality tends to move more gradually.</li>
+                  </>
+                ) : isSaudi ? (
+                  <>
+                    <li>Oil and gas rent context helps explain fiscal sensitivity to global oil-price cycles.</li>
+                    <li>Diversification tracking is strongest when you compare decomposition, industry/manufacturing share, and external-balance panels together.</li>
+                    <li>Vision 2030 era overlays provide timing context for reform and investment narratives, not causal proof.</li>
+                    <li>Saudi riyal is generally interpreted through peg stability context rather than crisis-style FX dynamics.</li>
                   </>
                 ) : (
                   <>
@@ -929,14 +1110,18 @@ export function CountryEconomyStudy({
               <span>Show overlays</span>
             </label>
           </div>
-          {isTurkey || isRussia ? (
+      {isTurkey || isRussia || isSaudi ? (
             <>
               <p className="mt-2 text-xs text-muted-foreground">
-                {isTurkey ? turkeyFocusClarification : russiaFocusClarification}
+                {isTurkey ? turkeyFocusClarification : isSaudi ? "Focus periods are policy/leadership eras used for comparison, not strict causal labels." : russiaFocusClarification}
               </p>
               {isTurkey ? (
                 <p className="mt-1 text-xs text-muted-foreground">
                   Pre-2003 (1960-2002) · Erdogan I (2003-2013) · Erdogan II (2013-2018) · Erdogan III (2018-present)
+                </p>
+              ) : isSaudi ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  King Fahd (1982-2005) · King Abdullah (2005-2015) · King Salman / Vision 2030 (2015-present) · Vision 2030 period (2016-present)
                 </p>
               ) : (
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -1047,14 +1232,95 @@ export function CountryEconomyStudy({
             </CardContent>
           </Card>
 
+          {isSaudi ? (
+            <>
+              <Card className="border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">3. Oil rents (% of GDP)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {oilRents.length > 0 ? (
+                    <TimelineChart
+                      data={oilRents}
+                      valueKey="value"
+                      label="Oil rents"
+                      unit="% of GDP"
+                      seriesColor={SIGNAL_CONCEPT.oil_rents}
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                  )}
+                </CardContent>
+              </Card>
+              <Card className="border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">4. Natural gas rents (% of GDP)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {gasRents.length > 0 ? (
+                    <TimelineChart
+                      data={gasRents}
+                      valueKey="value"
+                      label="Natural gas rents"
+                      unit="% of GDP"
+                      seriesColor={SIGNAL_CONCEPT.natural_gas_rents}
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-6">Natural-gas rents unavailable for this range.</p>
+                  )}
+                </CardContent>
+              </Card>
+              <Card className="border-border md:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Exchange rate peg context</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-xs text-muted-foreground">
+                    Saudi Arabia&apos;s currency regime is generally interpreted as a USD peg context rather than a crisis-style floating FX signal. This dashboard keeps focus on macro, rent, and diversification indicators.
+                  </p>
+                </CardContent>
+              </Card>
+              {brentPoints.length > 0 ? (
+                <Card className="border-border md:col-span-2">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Brent oil price context</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <TimelineChart
+                      data={brentPoints}
+                      valueKey="value"
+                      label="Brent"
+                      unit="US$ per barrel"
+                      seriesColor="#b45309"
+                      {...commonProps}
+                    />
+                  </CardContent>
+                </Card>
+              ) : null}
+            </>
+          ) : null}
+
           {!isUsa && !isTurkey ? (
           <Card className="border-border md:col-span-2">
             <CardHeader className="space-y-1 pb-2">
               <CardTitle className="text-base">
-                {gdpMode === "real"
-                  ? "3. GDP decomposition (real)"
-                  : "3. GDP decomposition (nominal)"}
+                {isSaudi
+                  ? gdpMode === "real"
+                    ? "5. GDP decomposition (real) — oil & gas vs remainder"
+                    : "5. GDP decomposition (nominal) — oil & gas vs remainder"
+                  : gdpMode === "real"
+                    ? "3. GDP decomposition (real)"
+                    : "3. GDP decomposition (nominal)"}
               </CardTitle>
+              {isSaudi ? (
+                <p className="text-xs text-muted-foreground">
+                  Oil and natural gas rent proxies versus remainder of GDP (contextual approximation).
+                </p>
+              ) : null}
               {isRussia ? (
                 <>
                   <p className="text-xs text-muted-foreground">Oil rents proxy vs non-oil GDP proxy</p>
@@ -1094,7 +1360,13 @@ export function CountryEconomyStudy({
                     data={[]}
                     valueKey="value"
                     label={`GDP decomposition (${gdpMode})`}
-                    multiSeries={isRussia ? gdpDecompositionMultiSeries : gdpDecompositionMultiSeries.slice(0, 2)}
+                    multiSeries={
+                      isSaudi
+                        ? gdpDecompositionMultiSeries
+                        : isRussia
+                          ? gdpDecompositionMultiSeries
+                          : gdpDecompositionMultiSeries.slice(0, 2)
+                    }
                     multiSeriesValueFormat="gdp_absolute"
                     multiSeriesYAxisNameOverrides={{
                       0: `GDP (${decompositionUnitLabel})`,
@@ -1103,6 +1375,11 @@ export function CountryEconomyStudy({
                   />
                   {decompositionOilRentsCoverageNote ? (
                     <p className="mt-2 text-xs text-muted-foreground">{decompositionOilRentsCoverageNote}</p>
+                  ) : null}
+                  {isSaudi ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Resource-rent decomposition is a context signal for oil dependence and diversification narrative; it should not be read as direct fiscal revenue accounting.
+                    </p>
                   ) : null}
                   {isRussia ? (
                     <p className="mt-2 text-xs text-muted-foreground">
@@ -1282,7 +1559,7 @@ export function CountryEconomyStudy({
             </>
           ) : null}
 
-          {!isUsa && !isTurkey ? (
+          {!isUsa && !isTurkey && !isSaudi ? (
           <Card className="border-border">
             <CardHeader className="pb-2"><CardTitle className="text-base">5. Oil rents (% of GDP)</CardTitle></CardHeader>
             <CardContent className="pt-0">
@@ -1308,7 +1585,7 @@ export function CountryEconomyStudy({
           </Card>
           ) : null}
 
-          {!isUsa && !isTurkey ? (
+          {!isUsa && !isTurkey && !isSaudi ? (
           <Card className="border-border">
             <CardHeader className="pb-2"><CardTitle className="text-base">6. Natural gas rents (% of GDP)</CardTitle></CardHeader>
             <CardContent className="pt-0">
@@ -1641,6 +1918,15 @@ export function CountryEconomyStudy({
                 </p>
                 <p>
                   Focus windows and overlays are context tools for period comparison, including the 2001 crisis, 2018 currency crisis, and 2021 FX shock. They are not evidence that a single political period caused any specific outcome.
+                </p>
+              </>
+            ) : isSaudi ? (
+              <>
+                <p>
+                  This page compares Saudi Arabia&apos;s macro signals across oil-cycle and policy eras, with emphasis on oil/gas rent context, diversification under Vision 2030, and external vulnerability indicators.
+                </p>
+                <p>
+                  Overlays mark major anchors like the 1986 and 2014 oil-price collapses, the Gulf War, Vision 2030 launch, and the 2020 oil/COVID shock. They are context markers, not causal proof.
                 </p>
               </>
             ) : isRussia ? (
