@@ -992,35 +992,25 @@ export function IranEconomyPeriodComparisonPanels({
                 {ipcGdpDecompMode === "real"
                   ? L(
                       isFa,
-                      "GDP decomposition: oil rents vs non-oil GDP (real)",
-                      "تفکیک GDP: رانت نفتی و GDP غیرنفتی (واقعی)"
+                      "GDP decomposition (real)",
+                      "تفکیک GDP (واقعی)"
                     )
-                  : L(isFa, "GDP decomposition: oil rents vs non-oil GDP", "تفکیک GDP: رانت نفتی و GDP غیرنفتی")}
+                  : L(isFa, "GDP decomposition (nominal)", "تفکیک GDP (اسمی)")}
               </CardTitle>
               <p className="text-xs text-muted-foreground max-w-3xl leading-relaxed">
-                {ipcGdpDecompMode === "real"
-                  ? L(
-                      isFa,
-                      "Inflation-adjusted proxy using constant-price GDP and WDI oil rents as a share of GDP. Not an official non-oil GDP series.",
-                      "«تفکیک تقریبیِ تعدیل‌شده با تورم، با استفاده از GDP به قیمت ثابت و سهم رانت نفتی در داده‌های WDI. این سری، GDP غیرنفتی رسمی نیست.»"
-                    )
-                  : L(
-                      isFa,
-                      "This is a proxy decomposition using WDI oil rents as a share of GDP. It should not be read as an official non-oil GDP series.",
-                      "«این تفکیک تقریبی است و از سهم رانت نفتی در GDP بر اساس داده‌های WDI ساخته شده است. نباید آن را معادل سری رسمی GDP غیرنفتی دانست.»"
-                    )}
+                {L(isFa, "Oil & gas rents vs remainder of GDP", "رانت نفت و گاز در برابر باقیمانده GDP")}
               </p>
               <p className="text-xs text-muted-foreground max-w-3xl">
                 {ipcGdpDecompMode === "real"
                   ? L(
                       isFa,
-                      "WDI NY.GDP.MKTP.KD (GDP, constant 2015 US$) × NY.GDP.PETR.RT.ZS (oil rents % of GDP).",
-                      "WDI NY.GDP.MKTP.KD (GDP، دلار ثابت ۲۰۱۵) × NY.GDP.PETR.RT.ZS (رانت نفتی٪ GDP)."
+                      "WDI NY.GDP.MKTP.KD (GDP, constant 2015 US$), NY.GDP.PETR.RT.ZS (oil rents % of GDP), and NY.GDP.NGAS.RT.ZS (natural gas rents % of GDP).",
+                      "WDI NY.GDP.MKTP.KD (GDP، دلار ثابت ۲۰۱۵)، NY.GDP.PETR.RT.ZS (رانت نفتی٪ GDP) و NY.GDP.NGAS.RT.ZS (رانت گاز طبیعی٪ GDP)."
                     )
                   : L(
                       isFa,
-                      "WDI NY.GDP.MKTP.CD (GDP, current US$) × NY.GDP.PETR.RT.ZS (oil rents % of GDP) — nominal levels only.",
-                      "WDI NY.GDP.MKTP.CD (GDP، دلار جاری) × NY.GDP.PETR.RT.ZS (رانت نفتی٪ GDP) — فقط سطح اسمی."
+                      "WDI NY.GDP.MKTP.CD (GDP, current US$), NY.GDP.PETR.RT.ZS (oil rents % of GDP), and NY.GDP.NGAS.RT.ZS (natural gas rents % of GDP) — nominal levels only.",
+                      "WDI NY.GDP.MKTP.CD (GDP، دلار جاری)، NY.GDP.PETR.RT.ZS (رانت نفتی٪ GDP) و NY.GDP.NGAS.RT.ZS (رانت گاز طبیعی٪ GDP) — فقط سطح اسمی."
                     )}
               </p>
             </CardHeader>
@@ -1041,7 +1031,7 @@ export function IranEconomyPeriodComparisonPanels({
                       "بارگذاری دادهٔ کلان برای این بازه انجام نشد."
                     )}
                 </p>
-              ) : ipcSelectedGdpDecompMultiSeries ? (
+              ) : ipcSelectedHydroDecompMultiSeries ? (
                 <div className="space-y-0">
                   <div className="mb-3 inline-flex rounded-md border border-border bg-background p-0.5">
                     <button
@@ -1073,11 +1063,11 @@ export function IranEconomyPeriodComparisonPanels({
                     exportPresentationTitle={L(
                       isFa,
                       ipcGdpDecompMode === "real"
-                        ? `${studyTitle} — GDP decomposition (real)`
-                        : `${studyTitle} — GDP decomposition (nominal)`,
+                        ? `${studyTitle} — GDP decomposition (real) — Oil & gas rents vs remainder of GDP`
+                        : `${studyTitle} — GDP decomposition (nominal) — Oil & gas rents vs remainder of GDP`,
                       ipcGdpDecompMode === "real"
-                        ? `${studyTitle} — تفکیک GDP (واقعی)`
-                        : `${studyTitle} — تفکیک GDP (اسمی)`
+                        ? `${studyTitle} — تفکیک GDP (واقعی) — رانت نفت و گاز در برابر باقیمانده GDP`
+                        : `${studyTitle} — تفکیک GDP (اسمی) — رانت نفت و گاز در برابر باقیمانده GDP`
                     )}
                     exportSourceFooter={studyChartExportSource(isFa, [
                       recoDemandNominalSource?.name ?? "World Bank WDI",
@@ -1085,13 +1075,13 @@ export function IranEconomyPeriodComparisonPanels({
                         ? recoDemandIndicatorIds?.gdp_kd ?? "NY.GDP.MKTP.KD"
                         : recoDemandIndicatorIds?.gdp_usd ?? "NY.GDP.MKTP.CD",
                       recoDemandIndicatorIds?.oil_rents_pct_gdp ?? "NY.GDP.PETR.RT.ZS",
+                      recoDemandIndicatorIds?.natural_gas_rents_pct_gdp ?? "NY.GDP.NGAS.RT.ZS",
                       ipcGdpDecompMode === "real"
-                        ? "Derived: NY.GDP.MKTP.KD×NY.GDP.PETR.RT.ZS/100"
-                        : recoDemandIndicatorIds?.gdp_oil_proxy_usd ?? "Derived: NY.GDP.MKTP.CD×NY.GDP.PETR.RT.ZS/100",
+                        ? "Derived: NY.GDP.MKTP.KD×NY.GDP.PETR.RT.ZS/100 (oil), NY.GDP.MKTP.KD×NY.GDP.NGAS.RT.ZS/100 (gas)"
+                        : "Derived: NY.GDP.MKTP.CD×NY.GDP.PETR.RT.ZS/100 (oil), NY.GDP.MKTP.CD×NY.GDP.NGAS.RT.ZS/100 (gas)",
                       ipcGdpDecompMode === "real"
-                        ? "Derived: NY.GDP.MKTP.KD−(NY.GDP.MKTP.KD×NY.GDP.PETR.RT.ZS/100)"
-                        : recoDemandIndicatorIds?.gdp_non_oil_proxy_usd ??
-                          "Derived: NY.GDP.MKTP.CD−(NY.GDP.MKTP.CD×NY.GDP.PETR.RT.ZS/100)",
+                        ? "Derived: NY.GDP.MKTP.KD−oil−gas (remainder)"
+                        : "Derived: NY.GDP.MKTP.CD−oil−gas (remainder)",
                     ])}
                     data={[]}
                     valueKey="value"
@@ -1101,8 +1091,8 @@ export function IranEconomyPeriodComparisonPanels({
                       ipcGdpDecompMode === "real" ? "تفکیک GDP (واقعی)" : "تفکیک GDP (اسمی)"
                     )}
                     events={events}
-                    multiSeries={ipcSelectedGdpDecompMultiSeries}
-                    timeRange={ipcGdpDecompTimeRange}
+                    multiSeries={ipcSelectedHydroDecompMultiSeries}
+                    timeRange={ipcHydroDecompTimeRange}
                     chartPeriodOverlayBands={chartPeriodOverlayBands}
                     revolution1979Marker={revolution1979Marker}
                     chartRangeGranularity="year"
@@ -1110,8 +1100,8 @@ export function IranEconomyPeriodComparisonPanels({
                     xAxisYearLabel={chartYearAxisLabel}
                     exportFileStem={
                       ipcGdpDecompMode === "real"
-                        ? "iran-ipc-gdp-decomposition-real"
-                        : "iran-ipc-gdp-decomposition-nominal"
+                        ? "iran-ipc-gdp-decomposition-hydrocarbon-real"
+                        : "iran-ipc-gdp-decomposition-hydrocarbon-nominal"
                     }
                     showChartControls
                     chartHeight={IPC_COMPARISON_CHART_HEIGHT}
@@ -1128,119 +1118,24 @@ export function IranEconomyPeriodComparisonPanels({
                     focusHoverHint={focusHoverHint}
                     gridLeft={80}
                   />
-                  {ipcSelectedGdpDecompPartialNote ? (
-                    <p className="text-xs text-muted-foreground mt-2 max-w-3xl leading-relaxed">
-                      {ipcSelectedGdpDecompPartialNote}
-                    </p>
-                  ) : null}
-                  {ipcSelectedHydroDecompMultiSeries ? (
-                    <div className="mt-4">
-                      <div className="mb-3 inline-flex rounded-md border border-border bg-background p-0.5">
-                        <button
-                          type="button"
-                          onClick={() => setIpcGdpDecompMode("nominal")}
-                          className={`px-2.5 py-1 text-xs rounded ${
-                            ipcGdpDecompMode === "nominal"
-                              ? "bg-primary text-primary-foreground"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`}
-                        >
-                          {L(isFa, "Nominal", "اسمی")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setIpcGdpDecompMode("real")}
-                          className={`px-2.5 py-1 text-xs rounded ${
-                            ipcGdpDecompMode === "real"
-                              ? "bg-primary text-primary-foreground"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`}
-                        >
-                          {L(isFa, "Real", "واقعی")}
-                        </button>
-                      </div>
-                      <TimelineChart
-                        chartLocale={chartLocaleForCharts}
-                        exportPresentationStudyHeading={exportStudyHeading}
-                        exportPresentationTitle={L(
-                          isFa,
-                          ipcGdpDecompMode === "real"
-                            ? `${studyTitle} — GDP decomposition (oil + gas, real)`
-                            : `${studyTitle} — GDP decomposition (oil + gas, nominal)`,
-                          ipcGdpDecompMode === "real"
-                            ? `${studyTitle} — تفکیک GDP (نفت + گاز، واقعی)`
-                            : `${studyTitle} — تفکیک GDP (نفت + گاز، اسمی)`
-                        )}
-                        exportSourceFooter={studyChartExportSource(isFa, [
-                          recoDemandNominalSource?.name ?? "World Bank WDI",
-                          ipcGdpDecompMode === "real"
-                            ? recoDemandIndicatorIds?.gdp_kd ?? "NY.GDP.MKTP.KD"
-                            : recoDemandIndicatorIds?.gdp_usd ?? "NY.GDP.MKTP.CD",
-                          recoDemandIndicatorIds?.oil_rents_pct_gdp ?? "NY.GDP.PETR.RT.ZS",
-                          recoDemandIndicatorIds?.natural_gas_rents_pct_gdp ?? "NY.GDP.NGAS.RT.ZS",
-                          ipcGdpDecompMode === "real"
-                            ? "Derived: NY.GDP.MKTP.KD×(NY.GDP.PETR.RT.ZS+NY.GDP.NGAS.RT.ZS)/100"
-                            : "Derived: NY.GDP.MKTP.CD×(NY.GDP.PETR.RT.ZS+NY.GDP.NGAS.RT.ZS)/100",
-                        ])}
-                        data={[]}
-                        valueKey="value"
-                        label={L(
-                          isFa,
-                          ipcGdpDecompMode === "real"
-                            ? "GDP decomposition: oil & gas rents vs remainder of GDP (real)"
-                            : "GDP decomposition: oil & gas rents vs remainder of GDP",
-                          ipcGdpDecompMode === "real"
-                            ? "تفکیک GDP: رانت نفت و گاز در برابر باقیمانده GDP (واقعی)"
-                            : "تفکیک GDP: رانت نفت و گاز در برابر باقیمانده GDP"
-                        )}
-                        events={events}
-                        multiSeries={ipcSelectedHydroDecompMultiSeries}
-                        timeRange={ipcHydroDecompTimeRange}
-                        chartPeriodOverlayBands={chartPeriodOverlayBands}
-                        revolution1979Marker={revolution1979Marker}
-                        chartRangeGranularity="year"
-                        forceTimeRangeAxis
-                        xAxisYearLabel={chartYearAxisLabel}
-                        exportFileStem={
-                          ipcGdpDecompMode === "real"
-                            ? "iran-ipc-gdp-decomposition-hydrocarbon-real"
-                            : "iran-ipc-gdp-decomposition-hydrocarbon-nominal"
-                        }
-                        showChartControls
-                        chartHeight={IPC_COMPARISON_CHART_HEIGHT}
-                        mutedEventLines
-                        multiSeriesValueFormat="gdp_absolute"
-                        multiSeriesYAxisNameOverrides={{
-                          0:
-                            ipcGdpDecompMode === "real"
-                              ? L(isFa, "GDP (constant 2015 US$)", "تولید ناخالص داخلی (دلار ثابت ۲۰۱۵)")
-                              : L(isFa, "GDP (current US$)", "تولید ناخالص داخلی (دلار جاری آمریکا)"),
-                        }}
-                        regimeArea={regimeArea}
-                        focusGregorianYearRange={focusGregorianYearRange}
-                        focusHoverHint={focusHoverHint}
-                        gridLeft={80}
-                      />
-                      <p className="text-xs text-muted-foreground mt-2 max-w-3xl leading-relaxed">
-                        {L(
-                          isFa,
-                          "This is a proxy decomposition using WDI oil and natural gas rents as shares of GDP. It is not an official non-oil GDP series.",
-                          "این یک تفکیک تقریبی بر پایه سهم رانت نفت و گاز طبیعی WDI از GDP است و سری رسمی GDP غیرنفتی نیست."
-                        )}
-                      </p>
-                    </div>
-                  ) : null}
+                  <p className="text-xs text-muted-foreground mt-2 max-w-3xl leading-relaxed">
+                    {L(
+                      isFa,
+                      "This is a proxy decomposition using WDI oil and natural gas rents as shares of GDP. It is not an official non-oil GDP series.",
+                      "این یک تفکیک تقریبی بر پایه سهم رانت نفت و گاز طبیعی WDI از GDP است و سری رسمی GDP غیرنفتی نیست."
+                    )}
+                  </p>
                 </div>
               ) : (ipcGdpDecompMode === "real" ? recoDemandRealGdpPoints.length : recoDemandGdpPoints.length) > 0 ? (
                 <p className="text-xs text-muted-foreground py-6 max-w-3xl leading-relaxed">
                   {L(
                     isFa,
                     ipcGdpDecompMode === "real"
-                      ? "No overlapping real-GDP and oil-rents data for this window (join uses Gregorian calendar years)."
-                      : "No overlapping GDP and oil-rents data for this window (join uses Gregorian calendar years).",
+                      ? "No overlapping real-GDP, oil-rents, and natural-gas-rents data for this window (join uses Gregorian calendar years)."
+                      : "No overlapping GDP, oil-rents, and natural-gas-rents data for this window (join uses Gregorian calendar years).",
                     ipcGdpDecompMode === "real"
-                      ? "برای این بازه دادهٔ هم‌پوشان GDP واقعی و رانت نفتی (با کلید سال میلادی) وجود ندارد."
-                      : "برای این بازه دادهٔ هم‌پوشان GDP و رانت نفتی (با کلید سال میلادی) وجود ندارد."
+                      ? "برای این بازه دادهٔ هم‌پوشان GDP واقعی، رانت نفتی و رانت گاز طبیعی (با کلید سال میلادی) وجود ندارد."
+                      : "برای این بازه دادهٔ هم‌پوشان GDP، رانت نفتی و رانت گاز طبیعی (با کلید سال میلادی) وجود ندارد."
                   )}
                 </p>
               ) : (
