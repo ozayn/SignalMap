@@ -41,7 +41,7 @@ export type StudyCountry = "iran" | "us" | "russia" | "turkey" | "global";
 /** Browse / filter: coarse theme. */
 export type StudyTheme = "macro" | "oil" | "fx" | "inequality" | "social" | "dashboard";
 
-export type StudyGroup = "core" | "iran" | "country" | "global" | "policy" | "welfare" | "discourse";
+export type StudyGroup = "core" | "iran" | "country" | "global" | "policy" | "welfare" | "misc" | "discourse";
 
 export type StudyGroupPlacement = { group: StudyGroup; order: number };
 
@@ -211,7 +211,7 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["1987-05-20", new Date().toISOString().slice(0, 10)],
     description: "Nominal Brent deflated with US CPI: real oil price and burden, not the spot headline.",
     status: "active",
-    groupPlacements: [{ group: "global", order: 6 }],
+    groupPlacements: [{ group: "misc", order: 12 }],
     primarySignal: { kind: "real_oil" },
     eventLayers: ["world_core", "world_1900"],
     concepts: ["nominal_vs_real", "cpi", "oil_shock", "real_oil_price", "derived_series", "event_overlay"],
@@ -224,7 +224,7 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["1990-01-01", new Date().toISOString().slice(0, 10)],
     description: "Oil in Iran as PPP toman per barrel: domestic purchasing-power burden, not the FX screen rate.",
     status: "active",
-    groupPlacements: [{ group: "iran", order: 7 }],
+    groupPlacements: [{ group: "misc", order: 9 }],
     primarySignal: { kind: "oil_ppp_iran" },
     eventLayers: ["iran_core", "world_core"],
     concepts: ["ppp", "ppp_oil_burden", "log_scale", "structural_break", "derived_series", "event_overlay"],
@@ -237,7 +237,7 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["1990-01-01", new Date().toISOString().slice(0, 10)],
     description: "Same PPP oil-burden methodology for Iran and Turkey: side-by-side comparison.",
     status: "active",
-    groupPlacements: [{ group: "iran", order: 8 }],
+    groupPlacements: [{ group: "misc", order: 10 }],
     primarySignal: { kind: "oil_ppp_iran" },
     eventLayers: [],
     concepts: ["ppp", "ppp_oil_burden", "log_scale", "structural_break", "derived_series"],
@@ -251,7 +251,7 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["2010-01-01", "2024-12-31"],
     description: "Brent vs. an estimated export-capacity index: price and tradable volume in one view (proxy, not revenue).",
     status: "active",
-    groupPlacements: [{ group: "iran", order: 4 }],
+    groupPlacements: [{ group: "misc", order: 11 }],
     primarySignal: { kind: "oil_export_capacity" },
     eventLayers: ["sanctions"],
     concepts: ["oil_benchmark", "price_vs_quantity", "oil_export_volume", "indexing", "export_capacity_proxy", "derived_series", "event_overlay"],
@@ -269,7 +269,7 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["1960-01-01", "today"],
     description: "US, Saudi Arabia, Russia, Iran: annual crude (mb/d). Iran backfilled 1965+ from EI/EIA when the live line has gaps.",
     status: "active",
-    groupPlacements: [{ group: "global", order: 4 }],
+    groupPlacements: [{ group: "misc", order: 7 }],
     primarySignal: { kind: "oil_production_major_exporters" },
     eventLayers: ["iran_core", "sanctions", "opec_decisions"],
     concepts: ["oil_production", "oil_production_vs_exports", "barrels_per_day", "supply_shocks"],
@@ -300,9 +300,8 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["1900-01-01", new Date().toISOString().slice(0, 10)],
     description: "A scrollable 1900+ event list: reference context for other studies (not a price series).",
     status: "active",
-    groupPlacements: [{ group: "global", order: 5 }],
+    groupPlacements: [{ group: "misc", order: 2 }],
     primarySignal: { kind: "events_timeline" },
-    hiddenInProduction: true,
     concepts: ["event_overlay"],
   },
   {
@@ -330,7 +329,7 @@ export const STUDIES: StudyMeta[] = [
     description:
       "Swimlane / world-history view: long spans as soft bands, anchor dates as markers. Zoom, pan, and layer by theme—reference context, not a causal model.",
     status: "active",
-    groupPlacements: [{ group: "global", order: 4 }],
+    groupPlacements: [{ group: "misc", order: 3 }],
     countries: ["global", "iran"],
     themes: ["macro"],
     tags: ["Timeline", "Bands", "Context"],
@@ -354,9 +353,7 @@ export const STUDIES: StudyMeta[] = [
     description:
       "Swimlane band view: Iran, France, the UK, the U.S., and major global cultural/political eras (schematic). Compare periodisation at a glance—reference only, not exhaustive history.",
     status: "active",
-    /** Dev/staging: keep off `/studies` in production until ready to ship. */
-    hiddenInProduction: true,
-    groupPlacements: [{ group: "global", order: 5 }],
+    groupPlacements: [{ group: "misc", order: 4 }],
     countries: ["global", "iran", "us"],
     themes: ["macro"],
     tags: ["Timeline", "Context", "History", "Comparative"],
@@ -384,7 +381,7 @@ export const STUDIES: StudyMeta[] = [
     description:
       "A vertical view of major Iranian polities: present at the top, time running downward. Band height is proportional to each dynasty’s share of the current domain; BCE years are represented on a single numeric (negative) year scale for layout.",
     status: "active",
-    groupPlacements: [{ group: "global", order: 5 }],
+    groupPlacements: [{ group: "misc", order: 1 }],
     countries: ["iran", "global"],
     themes: ["macro"],
     tags: ["Timeline", "Iran", "Context"],
@@ -402,7 +399,7 @@ export const STUDIES: StudyMeta[] = [
     ],
     description: "Last ~90 days of Brent: short-horizon moves with optional shock and policy markers.",
     status: "active",
-    groupPlacements: [{ group: "global", order: 3 }],
+    groupPlacements: [{ group: "misc", order: 6 }],
     primarySignal: { kind: "oil_geopolitical_reaction" },
     eventLayers: ["world_core", "world_1900", "sanctions", "opec_decisions"],
     concepts: ["nominal_price", "oil_benchmark", "event_overlay", "oil_shock"],
@@ -415,7 +412,7 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["2010", String(new Date().getFullYear())],
     description: "Who ships crude to whom: Comtrade network (kb/d) by year, Sankey or node–link view.",
     status: "active",
-    groupPlacements: [{ group: "global", order: 7 }],
+    groupPlacements: [{ group: "misc", order: 5 }],
     primarySignal: { kind: "oil_trade_network" },
     concepts: ["trade_networks", "energy_geopolitics", "export_dependencies"],
   },
@@ -426,8 +423,7 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["2000", "today"],
     description: "Annual crude exports (kb/d) for four majors from HS 2709 Comtrade, mirror-flow derived.",
     status: "active",
-    visible: false,
-    groupPlacements: [{ group: "global", order: 8 }],
+    groupPlacements: [{ group: "misc", order: 8 }],
     primarySignal: { kind: "oil_exporter_timeseries" },
     concepts: ["trade_networks", "energy_geopolitics", "export_dependencies"],
     unitLabel: "thousand barrels/day",
@@ -562,11 +558,9 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["2010-01-01", new Date().toISOString().slice(0, 10)],
     description: "Nominal vs. CPI-deflated minimum wage: purchasing power of the wage, not a full labor market model.",
     status: "active",
-    visible: false,
     tags: ["Wage", "CPI", "Real"],
     groupPlacements: [{ group: "iran", order: 6 }],
     primarySignal: { kind: "wage_cpi_real" },
-    hiddenInProduction: true,
     concepts: ["real_price", "cpi", "purchasing_power", "nominal_minimum_wage", "real_wage", "measurement_vs_reality", "derived_series"],
     observations: [
       "Nominal minimum wage rises sharply in later years over the period shown.",
@@ -584,9 +578,9 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["1900-01-01", new Date().toISOString().slice(0, 10)],
     description: "Consumption and investment as GDP shares, plus level views (WDI; Iran; optional SHJ labels in levels).",
     status: "active",
+    visible: false,
     groupPlacements: [{ group: "iran", order: 1 }],
     primarySignal: { kind: "gdp_composition" },
-    hiddenInProduction: true,
     eventLayers: ["iran_core"],
     concepts: ["gdp", "final_consumption_share", "gross_capital_formation", "event_overlay"],
     observations: [
@@ -608,6 +602,7 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["1900-01-01", new Date().toISOString().slice(0, 10)],
     description: "Academic-style dual axis: C and I (left) vs. GDP (right). Scales are not directly comparable—pattern view only.",
     status: "active",
+    visible: false,
     groupPlacements: [{ group: "iran", order: 2 }],
     primarySignal: { kind: "iran_gdp_accounts_dual" },
     eventLayers: ["iran_core"],
@@ -654,10 +649,7 @@ export const STUDIES: StudyMeta[] = [
     themes: ["macro"],
     tags: ["CPI", "YoY", "6 countries"],
     keywords: ["fp.cpi.totl.zg", "prices"],
-    groupPlacements: [
-      { group: "core", order: 4 },
-      { group: "welfare", order: 3 },
-    ],
+    groupPlacements: [{ group: "core", order: 4 }],
     primarySignal: { kind: "inflation_cpi_yoy" },
     eventLayers: ["iran_core", "world_core", "sanctions"],
     concepts: ["inflation", "cpi", "event_overlay", "measurement_vs_reality"],
@@ -840,7 +832,6 @@ export const STUDIES: StudyMeta[] = [
     description:
       "Dashboard-style annual and FX context for Iran’s post-war reconstruction period (Rafsanjani presidencies): WDI macro panels plus official vs open-market exchange rates. Exploratory economic history, not a causal model.",
     status: "active",
-    visible: false,
     groupPlacements: [{ group: "iran", order: 9 }],
     primarySignal: { kind: "iran_economy_reconstruction_1368_1376" },
     eventLayers: ["iran_core", "world_core", "sanctions"],
@@ -918,7 +909,7 @@ export const STUDIES: StudyMeta[] = [
     description:
       "Country-template macro dashboard for Russia using annual WDI indicators with independent range and focus presets.",
     status: "active",
-    groupPlacements: [{ group: "country", order: 3 }],
+    groupPlacements: [{ group: "country", order: 4 }],
     primarySignal: { kind: "iran_economy_period_comparison" },
     countries: ["russia", "global"],
     themes: ["macro", "fx", "dashboard"],
@@ -933,7 +924,7 @@ export const STUDIES: StudyMeta[] = [
     description:
       "Country-template macro dashboard for Turkey using annual WDI indicators with independent range and focus presets.",
     status: "active",
-    groupPlacements: [{ group: "country", order: 4 }],
+    groupPlacements: [{ group: "country", order: 3 }],
     primarySignal: { kind: "iran_economy_period_comparison" },
     countries: ["turkey", "global"],
     themes: ["macro", "fx", "dashboard"],
@@ -943,11 +934,12 @@ export const STUDIES: StudyMeta[] = [
 
 /** Fixed section order for `/studies` grouped view. */
 export const STUDY_BROWSE_GROUP_ORDER: readonly StudyGroup[] = [
-  "iran",
   "country",
+  "iran",
   "global",
   "policy",
   "welfare",
+  "misc",
   "discourse",
 ] as const;
 
@@ -976,6 +968,10 @@ export const STUDY_BROWSE_GROUP_TITLES: Record<StudyGroup, { title: string; desc
   welfare: {
     title: "Inequality & Welfare",
     description: "Inequality, poverty, and prices—welfare and purchasing power.",
+  },
+  misc: {
+    title: "Misc / Reference",
+    description: "Additional timelines, oil-market references, and exploratory views.",
   },
   discourse: {
     title: "Discourse & Audience",

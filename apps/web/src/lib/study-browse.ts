@@ -67,8 +67,8 @@ const STUDY_BROWSE_GROUP_TITLES_FA: Record<StudyGroup, { title: string; descript
     description: "داشبوردهای قابل‌مقایسهٔ کشورها برای تورم، رشد، بدهی، تجارت، رفاه و دوره‌های حکمرانی",
   },
   global: {
-    title: "زمینهٔ جهانی",
-    description: "مقیاس GDP، نفت بلندمدت، رویدادها، تولید و تجارت",
+    title: "زمینهٔ جهانی و سیگنال‌های اصلی",
+    description: "سیگنال‌های کلان پایه به‌همراه مقیاس GDP، نفت بلندمدت، رویدادها، تولید و تجارت",
   },
   policy: {
     title: "ساختار و سیاست",
@@ -78,6 +78,10 @@ const STUDY_BROWSE_GROUP_TITLES_FA: Record<StudyGroup, { title: string; descript
     title: "نابرابری و رفاه",
     // Omit the exact word for poverty as a single token in this shared blurb, so "فقر" search targets poverty studies and FA text.
     description: "نابرابری در درآمد، رفاه و توان خرید و قیمت‌ها",
+  },
+  misc: {
+    title: "متفرقه / مرجع",
+    description: "تایم‌لاین‌های تکمیلی، ارجاعات بازار نفت، و نماهای اکتشافی",
   },
   discourse: {
     title: "گفتمان و مخاطب",
