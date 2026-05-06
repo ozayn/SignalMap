@@ -336,6 +336,7 @@ export function IranEconomyPeriodComparisonPanels({
         yAxisIndex: 0,
         unit: L(isFa, "current US$", "دلار جاری آمریکا"),
         points: recoGdpDecompNonOilPoints,
+        color: SIGNAL_CONCEPT.remainder_gdp_proxy,
         smooth: true,
         showSymbol: false,
         stack: "gdp_nom_decomp",
@@ -347,6 +348,7 @@ export function IranEconomyPeriodComparisonPanels({
         yAxisIndex: 0,
         unit: L(isFa, "current US$", "دلار جاری آمریکا"),
         points: recoGdpDecompOilPoints,
+        color: SIGNAL_CONCEPT.oil_rents,
         smooth: true,
         showSymbol: false,
         stack: "gdp_nom_decomp",
@@ -458,6 +460,7 @@ export function IranEconomyPeriodComparisonPanels({
         yAxisIndex: 0,
         unit: L(isFa, "constant 2015 US$", "دلار ثابت ۲۰۱۵"),
         points: trimSeriesFromYear(ipcRealGdpDecomposition.nonOilProxy, realDecompOverlapStartYear),
+        color: SIGNAL_CONCEPT.remainder_gdp_proxy,
         smooth: true,
         showSymbol: false,
         stack: "gdp_real_decomp",
@@ -469,6 +472,7 @@ export function IranEconomyPeriodComparisonPanels({
         yAxisIndex: 0,
         unit: L(isFa, "constant 2015 US$", "دلار ثابت ۲۰۱۵"),
         points: trimSeriesFromYear(ipcRealGdpDecomposition.oilProxy, realDecompOverlapStartYear),
+        color: SIGNAL_CONCEPT.oil_rents,
         smooth: true,
         showSymbol: false,
         stack: "gdp_real_decomp",
@@ -505,7 +509,7 @@ export function IranEconomyPeriodComparisonPanels({
         yAxisIndex: 0,
         unit: L(isFa, "current US$", "دلار جاری آمریکا"),
         points: trimSeriesFromYear(ipcNominalHydrocarbonDecomposition.remainderProxy, nominalHydroDecompOverlapStartYear),
-        color: "#6b7280",
+        color: SIGNAL_CONCEPT.remainder_gdp_proxy,
         smooth: true,
         showSymbol: false,
         stack: "gdp_hydro_nom_decomp",
@@ -517,7 +521,7 @@ export function IranEconomyPeriodComparisonPanels({
         yAxisIndex: 0,
         unit: L(isFa, "current US$", "دلار جاری آمریکا"),
         points: trimSeriesFromYear(ipcNominalHydrocarbonDecomposition.oilProxy, nominalHydroDecompOverlapStartYear),
-        color: "#f97316",
+        color: SIGNAL_CONCEPT.oil_rents,
         smooth: true,
         showSymbol: false,
         stack: "gdp_hydro_nom_decomp",
@@ -529,7 +533,7 @@ export function IranEconomyPeriodComparisonPanels({
         yAxisIndex: 0,
         unit: L(isFa, "current US$", "دلار جاری آمریکا"),
         points: trimSeriesFromYear(ipcNominalHydrocarbonDecomposition.gasProxy, nominalHydroDecompOverlapStartYear),
-        color: "#0d9488",
+        color: SIGNAL_CONCEPT.natural_gas_rents,
         smooth: true,
         showSymbol: false,
         stack: "gdp_hydro_nom_decomp",
@@ -566,7 +570,7 @@ export function IranEconomyPeriodComparisonPanels({
         yAxisIndex: 0,
         unit: L(isFa, "constant 2015 US$", "دلار ثابت ۲۰۱۵"),
         points: trimSeriesFromYear(ipcRealHydrocarbonDecomposition.remainderProxy, realHydroDecompOverlapStartYear),
-        color: "#6b7280",
+        color: SIGNAL_CONCEPT.remainder_gdp_proxy,
         smooth: true,
         showSymbol: false,
         stack: "gdp_hydro_real_decomp",
@@ -578,7 +582,7 @@ export function IranEconomyPeriodComparisonPanels({
         yAxisIndex: 0,
         unit: L(isFa, "constant 2015 US$", "دلار ثابت ۲۰۱۵"),
         points: trimSeriesFromYear(ipcRealHydrocarbonDecomposition.oilProxy, realHydroDecompOverlapStartYear),
-        color: "#f97316",
+        color: SIGNAL_CONCEPT.oil_rents,
         smooth: true,
         showSymbol: false,
         stack: "gdp_hydro_real_decomp",
@@ -590,7 +594,7 @@ export function IranEconomyPeriodComparisonPanels({
         yAxisIndex: 0,
         unit: L(isFa, "constant 2015 US$", "دلار ثابت ۲۰۱۵"),
         points: trimSeriesFromYear(ipcRealHydrocarbonDecomposition.gasProxy, realHydroDecompOverlapStartYear),
-        color: "#0d9488",
+        color: SIGNAL_CONCEPT.natural_gas_rents,
         smooth: true,
         showSymbol: false,
         stack: "gdp_hydro_real_decomp",
@@ -1131,6 +1135,30 @@ export function IranEconomyPeriodComparisonPanels({
                   ) : null}
                   {ipcSelectedHydroDecompMultiSeries ? (
                     <div className="mt-4">
+                      <div className="mb-3 inline-flex rounded-md border border-border bg-background p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setIpcGdpDecompMode("nominal")}
+                          className={`px-2.5 py-1 text-xs rounded ${
+                            ipcGdpDecompMode === "nominal"
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {L(isFa, "Nominal", "اسمی")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIpcGdpDecompMode("real")}
+                          className={`px-2.5 py-1 text-xs rounded ${
+                            ipcGdpDecompMode === "real"
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {L(isFa, "Real", "واقعی")}
+                        </button>
+                      </div>
                       <TimelineChart
                         chartLocale={chartLocaleForCharts}
                         exportPresentationStudyHeading={exportStudyHeading}
@@ -1376,6 +1404,7 @@ export function IranEconomyPeriodComparisonPanels({
                   valueKey="value"
                   label={L(isFa, enEconomic.oilRentsPctGdp, faEconomic.oilRentsPctGdp)}
                   unit="%"
+                  seriesColor={SIGNAL_CONCEPT.oil_rents}
                   events={events}
                   timeRange={timeRange}
                   chartPeriodOverlayBands={chartPeriodOverlayBands}
@@ -1424,6 +1453,7 @@ export function IranEconomyPeriodComparisonPanels({
                   valueKey="value"
                   label={L(isFa, "Natural gas rents (% of GDP)", "رانت گاز طبیعی (% از تولید ناخالص داخلی)")}
                   unit={L(isFa, "% of GDP", "درصدی از تولید ناخالص داخلی")}
+                  seriesColor={SIGNAL_CONCEPT.natural_gas_rents}
                   events={events}
                   timeRange={timeRange}
                   chartPeriodOverlayBands={chartPeriodOverlayBands}

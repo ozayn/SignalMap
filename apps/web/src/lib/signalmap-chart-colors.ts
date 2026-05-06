@@ -63,6 +63,10 @@ export const SIGNAL_CONCEPT: Record<string, string> = {
   isi_exports: "#059669",
   isi_manufacturing: "#15803d",
   isi_industry: "#ca8a04",
+  /** Hydrocarbon rent decomposition semantics */
+  oil_rents: "#d97706",
+  natural_gas_rents: "#0f766e",
+  remainder_gdp_proxy: "#6b7280",
 };
 
 // Oil economy “indexed overview” re-exports (same as concepts above)
@@ -97,8 +101,14 @@ const LEGACY_KEY: Record<string, string> = {
   level_investment: SIGNAL_CONCEPT.investment,
   level_gdp: SIGNAL_CONCEPT.gdp,
   /** Nominal GDP proxy split (WDI oil rents % × NY.GDP.MKTP.CD) */
-  gdp_non_oil_proxy: "#475569",
-  gdp_oil_proxy: "#d97706",
+  gdp_non_oil_proxy: SIGNAL_CONCEPT.remainder_gdp_proxy,
+  gdp_oil_proxy: SIGNAL_CONCEPT.oil_rents,
+  gdp_remainder_proxy: SIGNAL_CONCEPT.remainder_gdp_proxy,
+  gdp_oil_proxy_hydro: SIGNAL_CONCEPT.oil_rents,
+  gdp_gas_proxy_hydro: SIGNAL_CONCEPT.natural_gas_rents,
+  real_gdp_remainder_proxy: SIGNAL_CONCEPT.remainder_gdp_proxy,
+  real_gdp_oil_proxy_hydro: SIGNAL_CONCEPT.oil_rents,
+  real_gdp_gas_proxy_hydro: SIGNAL_CONCEPT.natural_gas_rents,
   pct_consumption: SIGNAL_CONCEPT.consumption,
   pct_investment: SIGNAL_CONCEPT.investment,
   gdp_nominal: SIGNAL_CONCEPT.gdp,

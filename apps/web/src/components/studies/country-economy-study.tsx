@@ -14,6 +14,7 @@ import { StudyAiInterpretation } from "@/components/study-ai-interpretation";
 import type { StudyConceptId } from "@/lib/signalmap-concepts";
 import { StudyYearDisplayToggle } from "@/components/study-year-display-toggle";
 import type { ChartAxisYearMode } from "@/lib/chart-axis-year";
+import { SIGNAL_CONCEPT } from "@/lib/signalmap-chart-colors";
 
 type Point = { date: string; value: number };
 type DemandMode = "nominal" | "real";
@@ -759,6 +760,7 @@ export function CountryEconomyStudy({
                         unit: gdpMode === "real" ? "constant 2015 US$" : "current US$",
                         yAxisIndex: 0,
                         points: gdpSplit.oil,
+                        color: SIGNAL_CONCEPT.oil_rents,
                       },
                       {
                         key: "non_oil",
@@ -766,6 +768,7 @@ export function CountryEconomyStudy({
                         unit: gdpMode === "real" ? "constant 2015 US$" : "current US$",
                         yAxisIndex: 0,
                         points: gdpSplit.nonOil,
+                        color: SIGNAL_CONCEPT.remainder_gdp_proxy,
                       },
                     ]}
                     multiSeriesValueFormat="gdp_absolute"
@@ -947,7 +950,7 @@ export function CountryEconomyStudy({
                   valueKey="value"
                   label="Oil rents"
                   unit="% of GDP"
-                  seriesColor="#f97316"
+                  seriesColor={SIGNAL_CONCEPT.oil_rents}
                   forceTimeAxis
                   {...commonProps}
                 />
@@ -968,6 +971,7 @@ export function CountryEconomyStudy({
                   valueKey="value"
                   label="Natural gas rents"
                   unit="% of GDP"
+                  seriesColor={SIGNAL_CONCEPT.natural_gas_rents}
                   forceTimeAxis
                   {...commonProps}
                 />
@@ -1202,7 +1206,7 @@ export function CountryEconomyStudy({
                         valueKey="value"
                         label="Oil rents"
                         unit="% of GDP"
-                        seriesColor="#f97316"
+                        seriesColor={SIGNAL_CONCEPT.oil_rents}
                         forceTimeAxis
                         {...commonProps}
                       />
@@ -1215,6 +1219,7 @@ export function CountryEconomyStudy({
                         valueKey="value"
                         label="Natural gas rents"
                         unit="% of GDP"
+                        seriesColor={SIGNAL_CONCEPT.natural_gas_rents}
                         forceTimeAxis
                         {...commonProps}
                       />
@@ -1234,6 +1239,7 @@ export function CountryEconomyStudy({
                               unit: gdpMode === "real" ? "constant 2015 US$" : "current US$",
                               yAxisIndex: 0,
                               points: gdpSplit.oil,
+                              color: SIGNAL_CONCEPT.oil_rents,
                             },
                             {
                               key: "non_oil",
@@ -1241,6 +1247,7 @@ export function CountryEconomyStudy({
                               unit: gdpMode === "real" ? "constant 2015 US$" : "current US$",
                               yAxisIndex: 0,
                               points: gdpSplit.nonOil,
+                              color: SIGNAL_CONCEPT.remainder_gdp_proxy,
                             },
                           ]}
                           multiSeriesValueFormat="gdp_absolute"
