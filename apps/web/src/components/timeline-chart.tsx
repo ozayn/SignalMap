@@ -1703,8 +1703,21 @@ export function TimelineChart({
 
     const axisYearMode: ChartAxisYearMode = xAxisYearLabel ?? "gregorian";
     const chartNumeralLocale = chartLocale ?? "en";
+    const formatOverlayLabelMultiline = (label: string): string => {
+      const trimmed = label.trim();
+      if (!trimmed) return "";
+      const forceSplit = trimmed === "Khamenei–Mousavi" || trimmed === "Khamenei-Mousavi";
+      const genericSplit = trimmed.length > 14 && /[–-]/.test(trimmed);
+      if (!forceSplit && !genericSplit) return trimmed;
+      const parts = trimmed
+        .split(/[–-]/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+      if (parts.length < 2) return trimmed;
+      return parts.join("\n");
+    };
     const regimeFocusMarkAreaLabelText = regimeArea?.label?.trim()
-      ? localizeChartNumericDisplayString(regimeArea.label.trim(), chartNumeralLocale)
+      ? localizeChartNumericDisplayString(formatOverlayLabelMultiline(regimeArea.label.trim()), chartNumeralLocale)
       : undefined;
     const axisYearGregColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
     const axisYearJalaliColor = mutedFg;
@@ -1782,6 +1795,8 @@ export function TimelineChart({
           color: string;
           fontSize: number;
           distance: number;
+          lineHeight?: number;
+          align?: "center";
         };
       },
       { xAxis: string },
@@ -1796,7 +1811,7 @@ export function TimelineChart({
         );
         if (r == null) continue;
         const labelText = b.markAreaLabel?.trim()
-          ? localizeChartNumericDisplayString(b.markAreaLabel.trim(), chartNumeralLocale)
+          ? localizeChartNumericDisplayString(formatOverlayLabelMultiline(b.markAreaLabel.trim()), chartNumeralLocale)
           : "";
         periodOverlayMarkAreaRegions.push([
           {
@@ -1811,6 +1826,8 @@ export function TimelineChart({
                     color: withAlphaHsl(mutedFg, 0.9),
                     fontSize: 10,
                     distance: 3,
+                    lineHeight: 12,
+                    align: "center" as const,
                   },
                 }
               : {}),
@@ -2365,6 +2382,8 @@ export function TimelineChart({
                   distance: 4,
                   color: "#9ca3af",
                   fontSize: 12,
+                  lineHeight: 14,
+                  align: "center",
                   fontWeight: 400,
                 },
               };

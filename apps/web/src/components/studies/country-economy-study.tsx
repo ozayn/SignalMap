@@ -43,6 +43,16 @@ function yearKey(date: string): string {
   return date.slice(0, 4);
 }
 
+function firstAvailableYear(points: Point[]): number | null {
+  let first: number | null = null;
+  for (const p of points) {
+    const y = Number.parseInt(yearKey(p.date), 10);
+    if (!Number.isFinite(y)) continue;
+    if (first == null || y < first) first = y;
+  }
+  return first;
+}
+
 function deriveGdpOilSplit(gdp: Point[], oilRentsPct: Point[]) {
   const oilByYear = new Map(oilRentsPct.map((p) => [yearKey(p.date), p.value]));
   const oil: Point[] = [];
@@ -191,6 +201,17 @@ export function CountryEconomyStudy({
   const gdpSplitNominal = useMemo(() => deriveGdpOilSplit(gdpNominal, oilRents), [gdpNominal, oilRents]);
   const gdpSplitReal = useMemo(() => deriveGdpOilSplit(gdpReal, oilRents), [gdpReal, oilRents]);
   const gdpSplit = gdpMode === "real" ? gdpSplitReal : gdpSplitNominal;
+  const gdpSeriesForSplit = gdpMode === "real" ? gdpReal : gdpNominal;
+  const gdpStartYearForSplit = useMemo(() => firstAvailableYear(gdpSeriesForSplit), [gdpSeriesForSplit]);
+  const oilRentsStartYear = useMemo(() => firstAvailableYear(oilRents), [oilRents]);
+  const decompositionStartYear = useMemo(() => firstAvailableYear(gdpSplit.oil), [gdpSplit.oil]);
+  const decompositionOilRentsCoverageNote =
+    oilRentsStartYear != null &&
+    gdpStartYearForSplit != null &&
+    oilRentsStartYear > gdpStartYearForSplit &&
+    decompositionStartYear === oilRentsStartYear
+      ? `Oil-rents decomposition begins where oil-rents data becomes available in the source dataset. Oil-rents series unavailable before ${oilRentsStartYear}.`
+      : null;
 
   const demandSeries =
     demandMode === "real"
@@ -704,29 +725,34 @@ export function CountryEconomyStudy({
                 </button>
               </div>
               {gdpSplit.oil.length > 0 && gdpSplit.nonOil.length > 0 ? (
-                <TimelineChart
-                  data={[]}
-                  valueKey="value"
-                  label="GDP decomposition"
-                  multiSeries={[
-                    {
-                      key: "oil",
-                      label: "Oil GDP proxy",
-                      unit: gdpMode === "real" ? "constant 2015 US$" : "current US$",
-                      yAxisIndex: 0,
-                      points: gdpSplit.oil,
-                    },
-                    {
-                      key: "non_oil",
-                      label: "Non-oil GDP proxy",
-                      unit: gdpMode === "real" ? "constant 2015 US$" : "current US$",
-                      yAxisIndex: 0,
-                      points: gdpSplit.nonOil,
-                    },
-                  ]}
-                  multiSeriesValueFormat="gdp_absolute"
-                  {...commonProps}
-                />
+                <>
+                  <TimelineChart
+                    data={[]}
+                    valueKey="value"
+                    label="GDP decomposition"
+                    multiSeries={[
+                      {
+                        key: "oil",
+                        label: "Oil GDP proxy",
+                        unit: gdpMode === "real" ? "constant 2015 US$" : "current US$",
+                        yAxisIndex: 0,
+                        points: gdpSplit.oil,
+                      },
+                      {
+                        key: "non_oil",
+                        label: "Non-oil GDP proxy",
+                        unit: gdpMode === "real" ? "constant 2015 US$" : "current US$",
+                        yAxisIndex: 0,
+                        points: gdpSplit.nonOil,
+                      },
+                    ]}
+                    multiSeriesValueFormat="gdp_absolute"
+                    {...commonProps}
+                  />
+                  {decompositionOilRentsCoverageNote ? (
+                    <p className="mt-2 text-xs text-muted-foreground">{decompositionOilRentsCoverageNote}</p>
+                  ) : null}
+                </>
               ) : (
                 <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
               )}
@@ -1173,29 +1199,34 @@ export function CountryEconomyStudy({
                       <p className="text-xs text-muted-foreground">Natural gas rents unavailable for this range.</p>
                     )}
                     {!isTurkey && gdpSplit.oil.length > 0 && gdpSplit.nonOil.length > 0 ? (
-                      <TimelineChart
-                        data={[]}
-                        valueKey="value"
-                        label="GDP decomposition (optional context)"
-                        multiSeries={[
-                          {
-                            key: "oil",
-                            label: "Oil GDP proxy",
-                            unit: gdpMode === "real" ? "constant 2015 US$" : "current US$",
-                            yAxisIndex: 0,
-                            points: gdpSplit.oil,
-                          },
-                          {
-                            key: "non_oil",
-                            label: "Non-oil GDP proxy",
-                            unit: gdpMode === "real" ? "constant 2015 US$" : "current US$",
-                            yAxisIndex: 0,
-                            points: gdpSplit.nonOil,
-                          },
-                        ]}
-                        multiSeriesValueFormat="gdp_absolute"
-                        {...commonProps}
-                      />
+                      <>
+                        <TimelineChart
+                          data={[]}
+                          valueKey="value"
+                          label="GDP decomposition (optional context)"
+                          multiSeries={[
+                            {
+                              key: "oil",
+                              label: "Oil GDP proxy",
+                              unit: gdpMode === "real" ? "constant 2015 US$" : "current US$",
+                              yAxisIndex: 0,
+                              points: gdpSplit.oil,
+                            },
+                            {
+                              key: "non_oil",
+                              label: "Non-oil GDP proxy",
+                              unit: gdpMode === "real" ? "constant 2015 US$" : "current US$",
+                              yAxisIndex: 0,
+                              points: gdpSplit.nonOil,
+                            },
+                          ]}
+                          multiSeriesValueFormat="gdp_absolute"
+                          {...commonProps}
+                        />
+                        {decompositionOilRentsCoverageNote ? (
+                          <p className="mt-2 text-xs text-muted-foreground">{decompositionOilRentsCoverageNote}</p>
+                        ) : null}
+                      </>
                     ) : !isTurkey ? (
                       <p className="text-xs text-muted-foreground">Oil-linked decomposition unavailable for this range.</p>
                     ) : null}
