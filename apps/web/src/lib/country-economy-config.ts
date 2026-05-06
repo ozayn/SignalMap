@@ -130,7 +130,7 @@ export const COUNTRY_ECONOMY_CONFIGS: CountryEconomyConfig[] = [
       { id: "yeltsin", label: "Yeltsin (1991-1999)", startYear: 1991, endYear: 1999 },
       { id: "putin1", label: "Putin I (2000-2008)", startYear: 2000, endYear: 2008 },
       { id: "medvedev", label: "Medvedev (2008-2012)", startYear: 2008, endYear: 2012 },
-      { id: "putin2", label: "Putin II (2012-)", startYear: 2012, endYear: null },
+      { id: "putin2", label: "Putin II (2012-present)", startYear: 2012, endYear: null },
     ],
     rangePresets: [
       { id: "full", label: "Full history", startYear: 1960, endYear: null },

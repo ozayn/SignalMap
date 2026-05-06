@@ -97,6 +97,7 @@ export function CountryEconomyStudy({
 }: Props) {
   const isUsa = countryCode.toUpperCase() === "USA";
   const isTurkey = countryCode.toUpperCase() === "TUR";
+  const isRussia = countryCode.toUpperCase() === "RUS";
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<CountryEconomyBundle | null>(null);
@@ -233,6 +234,45 @@ export function CountryEconomyStudy({
     }),
     [gdpSplitRaw.oil, gdpSplitRaw.nonOil, decompositionEffectiveStartYear]
   );
+  const gdpTotalForDecomposition = useMemo(
+    () => trimSeriesFromYear(gdpSeriesForSplit, decompositionEffectiveStartYear),
+    [gdpSeriesForSplit, decompositionEffectiveStartYear]
+  );
+  const decompositionUnitLabel = gdpMode === "real" ? "constant 2015 US$" : "current US$";
+  const gdpDecompositionMultiSeries = useMemo(
+    () => [
+      {
+        key: "non_oil",
+        label: "Non-oil GDP proxy",
+        unit: decompositionUnitLabel,
+        yAxisIndex: 0 as const,
+        points: gdpSplit.nonOil,
+        color: SIGNAL_CONCEPT.remainder_gdp_proxy,
+        stack: "gdp_decomp",
+        stackedArea: true,
+      },
+      {
+        key: "oil",
+        label: "Oil GDP proxy",
+        unit: decompositionUnitLabel,
+        yAxisIndex: 0 as const,
+        points: gdpSplit.oil,
+        color: SIGNAL_CONCEPT.oil_rents,
+        stack: "gdp_decomp",
+        stackedArea: true,
+      },
+      {
+        key: "gdp_total",
+        label: "Total GDP",
+        unit: decompositionUnitLabel,
+        yAxisIndex: 0 as const,
+        points: gdpTotalForDecomposition,
+        color: SIGNAL_CONCEPT.gdp,
+        lineStyleType: "dashed" as const,
+      },
+    ],
+    [decompositionUnitLabel, gdpSplit.nonOil, gdpSplit.oil, gdpTotalForDecomposition]
+  );
   const decompositionTimeRange = useMemo<[string, string]>(
     () => [`${decompositionEffectiveStartYear ?? rangeStartYear}-01-01`, `${rangeEndYear}-12-31`],
     [decompositionEffectiveStartYear, rangeStartYear, rangeEndYear]
@@ -269,6 +309,52 @@ export function CountryEconomyStudy({
           { key: "investment", label: "Investment", unit: "current US$", yAxisIndex: 0 as const, points: investmentNominal },
           { key: "gdp", label: "GDP", unit: "current US$", yAxisIndex: 0 as const, points: gdpNominal },
         ];
+  const demandUnitLabel = demandMode === "real" ? "constant 2015 US$" : "current US$";
+  const demandSeriesByKey = useMemo(() => {
+    const by = new Map<string, Point[]>();
+    for (const s of demandSeries) by.set(s.key, s.points);
+    return by;
+  }, [demandSeries]);
+  const demandCoverageWarning = useMemo(() => {
+    const sparse = demandSeries
+      .filter((s) => s.points.length < 3)
+      .map((s) => `${s.label} (${s.points.length} point${s.points.length === 1 ? "" : "s"})`);
+    if (sparse.length === 0) return null;
+    return `Coverage note: ${sparse.join(", ")} in this range. Sparse series can look nearly flat or appear as isolated points.`;
+  }, [demandSeries]);
+
+  useEffect(() => {
+    if (!isTurkey || demandMode !== "real" || process.env.NODE_ENV === "production") return;
+    const sampleYears = Array.from(
+      new Set(
+        [
+          ...((demandSeriesByKey.get("consumption") ?? []).map((p) => Number.parseInt(yearKey(p.date), 10))),
+          ...((demandSeriesByKey.get("investment") ?? []).map((p) => Number.parseInt(yearKey(p.date), 10))),
+          ...((demandSeriesByKey.get("gdp") ?? []).map((p) => Number.parseInt(yearKey(p.date), 10))),
+        ].filter((y) => Number.isFinite(y))
+      )
+    )
+      .sort((a, b) => a - b)
+      .slice(0, 6);
+    const pick = (key: string, y: number) => demandSeriesByKey.get(key)?.find((p) => Number.parseInt(yearKey(p.date), 10) === y)?.value;
+    const sample = sampleYears.map((y) => ({
+      year: y,
+      consumption: pick("consumption", y) ?? null,
+      investment: pick("investment", y) ?? null,
+      gdp: pick("gdp", y) ?? null,
+    }));
+    const minMax = (pts: Point[]) => {
+      if (!pts.length) return { count: 0, min: null as number | null, max: null as number | null };
+      const vals = pts.map((p) => p.value);
+      return { count: pts.length, min: Math.min(...vals), max: Math.max(...vals) };
+    };
+    console.info("[Turkey demand real] sample points", sample);
+    console.info("[Turkey demand real] min/max", {
+      consumption: minMax(demandSeriesByKey.get("consumption") ?? []),
+      investment: minMax(demandSeriesByKey.get("investment") ?? []),
+      gdp: minMax(demandSeriesByKey.get("gdp") ?? []),
+    });
+  }, [isTurkey, demandMode, demandSeriesByKey]);
 
   const timelineEvents = showOverlays ? overlays.events : [];
   const timelineBands = showOverlays ? overlays.bands : [];
@@ -296,6 +382,8 @@ export function CountryEconomyStudy({
   );
   const focusSummaryLabel = selectedFocusPresets.map((f) => f.label).join(", ");
   const turkeyFocusClarification =
+    "Focus periods are approximate political/economic eras used for comparison, not strict causal labels.";
+  const russiaFocusClarification =
     "Focus periods are approximate political/economic eras used for comparison, not strict causal labels.";
 
   const conceptKeys = useMemo<StudyConceptId[]>(() => {
@@ -333,13 +421,20 @@ export function CountryEconomyStudy({
           "Each panel is one measurement lens; stronger interpretation comes from checking whether multiple signals move together across the same years.",
           "Overlays and focus shading help anchor timing, but they do not prove that one political period caused a specific outcome.",
         ]
-      : [
-          `The charts use an outer window of ${selectedRange?.label ?? "the selected range"} and shaded focus periods of ${focusSummaryLabel || "the selected presets"}.`,
-          "CPI inflation (red), GDP growth (blue), and resource-rent shares are plotted as annual WDI observations; gaps are left as gaps.",
-          isUsa
-            ? "Nominal/real demand aggregates are the main GDP-level view for the United States; focus shading always remains inside the visible range."
-            : "Nominal/real demand and GDP decomposition toggles keep the same x-axis window so period comparisons stay aligned.",
-        ];
+      : isRussia
+        ? [
+            `This page combines Russia macro and social indicators in ${selectedRange?.label ?? "the selected range"}, with shaded focus windows (${focusSummaryLabel || "selected presets"}) for period comparison.`,
+            "Series include inflation, GDP growth, oil/non-oil GDP proxy, consumption, investment, oil and gas rents, official FX, trade, industry, money growth, inequality, and poverty coverage where available.",
+            "Each chart is one signal; interpretation is stronger when related signals are compared across the same years rather than read in isolation.",
+            "Event overlays and focus windows are context markers only and should not be read as causal proof.",
+          ]
+        : [
+            `The charts use an outer window of ${selectedRange?.label ?? "the selected range"} and shaded focus periods of ${focusSummaryLabel || "the selected presets"}.`,
+            "CPI inflation (red), GDP growth (blue), and resource-rent shares are plotted as annual WDI observations; gaps are left as gaps.",
+            isUsa
+              ? "Nominal/real demand aggregates are the main GDP-level view for the United States; focus shading always remains inside the visible range."
+              : "Nominal/real demand and GDP decomposition toggles keep the same x-axis window so period comparisons stay aligned.",
+          ];
     if (missingSparse.length > 0) {
       rows.push(
         `Some series are sparse or unavailable in this window (${missingSparse.join(", ")}); the page shows only published points and does not interpolate missing years.`
@@ -351,6 +446,7 @@ export function CountryEconomyStudy({
     focusSummaryLabel,
     isUsa,
     isTurkey,
+    isRussia,
     gini.length,
     povertyExtreme.length,
     povertyLmic.length,
@@ -393,7 +489,39 @@ export function CountryEconomyStudy({
               ],
             },
           ]
-        : [
+        : isRussia
+          ? [
+              {
+                heading: "How to read these charts",
+                bullets: [
+                  "Treat each chart as one measurement signal; interpretation is stronger when related signals are compared across the same period.",
+                  "Read inflation with money growth and exchange-rate movement, and read oil/gas rents alongside GDP/trade context.",
+                  "Overlays and shaded focus periods are timing context only; they do not prove causality.",
+                ],
+              },
+              {
+                heading: "Units and comparability",
+                bullets: [
+                  "Annual %: inflation, GDP growth, broad money growth, trade shares, industry shares, and rents as % of GDP.",
+                  "Current US$ vs constant 2015 US$: nominal and real toggles answer different questions and should not be mixed.",
+                  "LCU per USD: official exchange-rate series (log scale can help compare proportional moves over long periods).",
+                ],
+              },
+              {
+                heading: "Concept guide used in this study",
+                bullets: [
+                  "CPI inflation: annual change in consumer prices.",
+                  "GDP growth: annual real-output change.",
+                  "GDP decomposition: contextual split between oil-linked proxy and non-oil proxy, not full national accounting.",
+                  "Oil and natural gas rents: resource-income context relative to GDP, not total energy-sector output or fiscal revenue.",
+                  "Exchange-rate depreciation: more local currency units per USD over time.",
+                  "Trade and industry shares: openness and sector-weight context as % of GDP.",
+                  "Broad money growth: money-like balance growth context, not standalone causal evidence.",
+                  "Gini and poverty headcount: distribution indicators with shorter/sparser coverage than core macro series.",
+                ],
+              },
+            ]
+          : [
             {
               heading: "How to read these charts",
               bullets: [
@@ -414,7 +542,7 @@ export function CountryEconomyStudy({
               ],
             },
           ],
-    [hasFX, isTurkey]
+    [hasFX, isTurkey, isRussia]
   );
 
   const sourceItems = useMemo<SourceInfoItem[]>(() => {
@@ -559,7 +687,9 @@ export function CountryEconomyStudy({
 
   const sourceNote = isTurkey
     ? "Primary source family is World Bank WDI country series (plus derived external-debt-to-GDP ratio from debt stocks and nominal GDP). Units include annual %, TRY per USD, current US$, constant 2015 US$, % of GDP, Gini index, and poverty headcount %."
-    : "Series are annual WDI observations. Missing years remain missing; no interpolation is applied.";
+    : isRussia
+      ? "Primary source family is World Bank WDI country series. Units include annual %, current US$, constant 2015 US$, LCU per USD, % of GDP, Gini index, and poverty headcount %. Oil/gas rents are context indicators, not full sector accounting."
+      : "Series are annual WDI observations. Missing years remain missing; no interpolation is applied.";
 
   const aiParagraphs = useMemo(() => {
     const focusRange = focusSummaryLabel || "selected focus periods";
@@ -578,21 +708,31 @@ export function CountryEconomyStudy({
             ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
             : "Data caveat: this page uses annual published observations; visible jumps can reflect data frequency and revisions, not necessarily a single structural break.",
         ]
-      : [
-          `Within ${focusRange}, compare inflation, growth, demand composition, and distribution indicators as descriptive co-movements rather than causal effects.`,
-          `Selected focus periods are clipped to the active range (${selectedRange?.label ?? "selected range"}) so shaded years always match the visible window.`,
-          "Interpret nominal and real toggles as two lenses on the same period: nominal reflects current-price levels, while real controls for price-level drift.",
-          sparseNotes.length
-            ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
-            : "Data caveat: this view uses annual published observations; apparent jumps can reflect sparse publication frequency, not necessarily sudden structural breaks.",
-        ];
-  }, [focusSummaryLabel, selectedRange?.label, gini.length, povertyExtreme.length, povertyLmic.length, hasFX, fx.length, isUsa, hasUsFiscalMacro, isTurkey, policyRate.length]);
+      : isRussia
+        ? [
+            `Within ${focusRange}, compare inflation, growth, FX, energy-rent context, and distribution indicators as descriptive co-movements rather than causal effects.`,
+            `Selected focus periods are clipped to ${selectedRange?.label ?? "the selected range"}, so shaded years match the visible window.`,
+            "Nominal and real toggles are complementary views: nominal reflects current-price levels, while real helps compare volume across time.",
+            "AI-assisted interpretation can summarize visible patterns, but it should not be treated as causal proof and should be checked against source notes and historical context.",
+            sparseNotes.length
+              ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
+              : "Data caveat: annual published observations can show large transition-era spikes that visually compress later variation on linear scales.",
+          ]
+        : [
+            `Within ${focusRange}, compare inflation, growth, demand composition, and distribution indicators as descriptive co-movements rather than causal effects.`,
+            `Selected focus periods are clipped to the active range (${selectedRange?.label ?? "selected range"}) so shaded years always match the visible window.`,
+            "Interpret nominal and real toggles as two lenses on the same period: nominal reflects current-price levels, while real controls for price-level drift.",
+            sparseNotes.length
+              ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
+              : "Data caveat: this view uses annual published observations; apparent jumps can reflect sparse publication frequency, not necessarily sudden structural breaks.",
+          ];
+  }, [focusSummaryLabel, selectedRange?.label, gini.length, povertyExtreme.length, povertyLmic.length, hasFX, fx.length, isUsa, hasUsFiscalMacro, isTurkey, isRussia, policyRate.length]);
 
   const commonProps = {
     timeRange: [rangeStart, rangeEnd] as [string, string],
     chartRangeGranularity: "year" as const,
     showChartControls: true,
-    chartHeight: isTurkey ? "h-64 md:h-64" : "h-56 md:h-64",
+    chartHeight: isTurkey || isRussia ? "h-64 md:h-64" : "h-56 md:h-64",
     events: timelineEvents,
     chartPeriodOverlayBands,
     regimeArea: selectedPrimaryFocus
@@ -624,25 +764,34 @@ export function CountryEconomyStudy({
     });
   };
 
-  // TODO(turkey-study-roadmap): extend indicator coverage when reliable long-run series are wired:
+  // TODO(country-economy-roadmap): extend indicator coverage when reliable long-run series are wired:
   // policy interest rate with broader historical coverage, FX reserves, unemployment, REER,
   // government debt (% GDP), tourism receipts, energy-import dependency,
   // manufacturing value added detail, and private-sector credit growth.
+  // Russia-focused additions: oil/gas production volume, oil/gas export revenue,
+  // current account balance, sanctions/event-intensity timeline overlays,
+  // military expenditure (% GDP), federal budget balance, and reliable capital-flow proxies.
 
   return (
     <section className="space-y-4">
-      {isTurkey ? (
+      {isTurkey || isRussia ? (
         <>
           <Card className="border-border bg-muted/20">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Study framing</CardTitle>
             </CardHeader>
             <CardContent className="pt-0 text-sm text-muted-foreground space-y-2">
+              {isTurkey ? (
+                <p>
+                  This study explores Turkey&apos;s economy across major political and macroeconomic periods, using indicators such as inflation, exchange rates, GDP growth, trade, debt, inequality, and poverty.
+                </p>
+              ) : (
+                <p>
+                  This study explores Russia&apos;s economy across major political and macroeconomic periods, using indicators such as inflation, GDP growth, exchange rates, oil and gas rents, trade, industry, inequality, and poverty.
+                </p>
+              )}
               <p>
-                This study explores Turkey&apos;s economy across major political and macroeconomic periods, using indicators such as inflation, exchange rates, GDP growth, trade, debt, inequality, and poverty.
-              </p>
-              <p>
-                The goal is not to claim that one political period caused a specific outcome, but to compare how different signals moved over time.
+                The goal is not to claim that one political period or event caused a specific outcome, but to compare how different signals moved over time.
               </p>
               <p>
                 Event overlays and shaded periods are context markers only. They help the reader ask better questions, not prove causality.
@@ -655,10 +804,22 @@ export function CountryEconomyStudy({
             </CardHeader>
             <CardContent className="pt-0">
               <ul className="list-inside list-disc space-y-1 text-sm text-muted-foreground">
-                <li>Inflation is high and volatile before the early 2000s, moderates for a period, and rises sharply again after the late 2010s.</li>
-                <li>The Turkish lira depreciation is easier to read on a log scale because proportional moves are more comparable across decades.</li>
-                <li>Current account deficits, external debt, and exchange-rate pressure can be read together as external vulnerability signals.</li>
-                <li>Poverty falls strongly in available observations, while inequality tends to move more gradually.</li>
+                {isTurkey ? (
+                  <>
+                    <li>Inflation is high and volatile before the early 2000s, moderates for a period, and rises sharply again after the late 2010s.</li>
+                    <li>The Turkish lira depreciation is easier to read on a log scale because proportional moves are more comparable across decades.</li>
+                    <li>Current account deficits, external debt, and exchange-rate pressure can be read together as external vulnerability signals.</li>
+                    <li>Poverty falls strongly in available observations, while inequality tends to move more gradually.</li>
+                  </>
+                ) : (
+                  <>
+                    <li>The early 1990s show extreme inflation and contraction, so some charts may visually compress later variation.</li>
+                    <li>GDP growth changes sharply across transition, commodity cycles, sanctions periods, and external shocks.</li>
+                    <li>Oil and natural gas rents are context signals for Russia&apos;s exposure to energy markets.</li>
+                    <li>Exchange-rate movement, inflation, and money growth are more informative when read together than separately.</li>
+                    <li>Inequality and poverty series begin later than some macro indicators, so their historical coverage is shorter.</li>
+                  </>
+                )}
               </ul>
             </CardContent>
           </Card>
@@ -698,7 +859,7 @@ export function CountryEconomyStudy({
                       type="button"
                       disabled={!isAvailable || atLimit}
                       onClick={() => toggleFocusPreset(f.id)}
-                      className={`rounded-md border px-2 py-1 text-xs transition-colors ${
+                      className={`rounded-md border px-2 py-1 text-[11px] sm:text-xs transition-colors ${
                         isActive
                           ? "border-primary bg-primary/10 text-foreground"
                           : "border-border bg-background text-muted-foreground hover:bg-muted/40"
@@ -739,12 +900,20 @@ export function CountryEconomyStudy({
               <span>Show overlays</span>
             </label>
           </div>
-          {isTurkey ? (
+          {isTurkey || isRussia ? (
             <>
-              <p className="mt-2 text-xs text-muted-foreground">{turkeyFocusClarification}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Pre-2003 (1960-2002) · Erdogan I (2003-2013) · Erdogan II (2013-2018) · Erdogan III (2018-present)
+              <p className="mt-2 text-xs text-muted-foreground">
+                {isTurkey ? turkeyFocusClarification : russiaFocusClarification}
               </p>
+              {isTurkey ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Pre-2003 (1960-2002) · Erdogan I (2003-2013) · Erdogan II (2013-2018) · Erdogan III (2018-present)
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Yeltsin (1991-1999) · Putin I (2000-2008) · Medvedev (2008-2012) · Putin II (2012-present)
+                </p>
+              )}
             </>
           ) : null}
           <p className="mt-2 text-xs text-muted-foreground">
@@ -777,6 +946,11 @@ export function CountryEconomyStudy({
               ) : (
                 <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
               )}
+              {isRussia ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Early 1990s inflation values are extremely high, so later variation may look visually compressed on a linear scale.
+                </p>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -841,8 +1015,24 @@ export function CountryEconomyStudy({
 
           {!isUsa && !isTurkey ? (
           <Card className="border-border md:col-span-2">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">3. GDP decomposition (oil vs non-oil)</CardTitle>
+            <CardHeader className="space-y-1 pb-2">
+              <CardTitle className="text-base">
+                {isRussia
+                  ? gdpMode === "real"
+                    ? "3. GDP decomposition (real)"
+                    : "3. GDP decomposition (nominal)"
+                  : "3. GDP decomposition (oil vs non-oil)"}
+              </CardTitle>
+              {isRussia ? (
+                <>
+                  <p className="text-xs text-muted-foreground">Oil rents proxy vs non-oil GDP proxy</p>
+                  <p className="text-xs text-muted-foreground">
+                    {gdpMode === "real"
+                      ? "WDI NY.GDP.MKTP.KD with NY.GDP.PETR.RT.ZS-derived proxy components (constant 2015 US$)."
+                      : "WDI NY.GDP.MKTP.CD with NY.GDP.PETR.RT.ZS-derived proxy components (current US$)."}
+                  </p>
+                </>
+              ) : null}
             </CardHeader>
             <CardContent className="pt-0">
               <div className="mb-3 inline-flex rounded-md border border-border bg-background p-0.5">
@@ -861,36 +1051,37 @@ export function CountryEconomyStudy({
                   Real
                 </button>
               </div>
+              {!isUsa ? (
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Nominal values are measured in current prices and can be affected by inflation and exchange-rate changes. Real values adjust for price changes and are better for comparing economic volume over time.
+                </p>
+              ) : null}
               {gdpSplit.oil.length > 0 && gdpSplit.nonOil.length > 0 ? (
                 <>
                   <TimelineChart
                     data={[]}
                     valueKey="value"
-                    label="GDP decomposition"
-                    multiSeries={[
-                      {
-                        key: "oil",
-                        label: "Oil GDP proxy",
-                        unit: gdpMode === "real" ? "constant 2015 US$" : "current US$",
-                        yAxisIndex: 0,
-                        points: gdpSplit.oil,
-                        color: SIGNAL_CONCEPT.oil_rents,
-                      },
-                      {
-                        key: "non_oil",
-                        label: "Non-oil GDP proxy",
-                        unit: gdpMode === "real" ? "constant 2015 US$" : "current US$",
-                        yAxisIndex: 0,
-                        points: gdpSplit.nonOil,
-                        color: SIGNAL_CONCEPT.remainder_gdp_proxy,
-                      },
-                    ]}
+                    label={isRussia ? `GDP decomposition (${gdpMode})` : "GDP decomposition"}
+                    multiSeries={isRussia ? gdpDecompositionMultiSeries : gdpDecompositionMultiSeries.slice(0, 2)}
                     multiSeriesValueFormat="gdp_absolute"
+                    multiSeriesYAxisNameOverrides={{
+                      0: `GDP (${decompositionUnitLabel})`,
+                    }}
                     {...commonProps}
                     timeRange={decompositionTimeRange}
                   />
                   {decompositionOilRentsCoverageNote ? (
                     <p className="mt-2 text-xs text-muted-foreground">{decompositionOilRentsCoverageNote}</p>
+                  ) : null}
+                  {isRussia ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      The oil GDP proxy is an approximation and should be read as a contextual signal, not a complete accounting of Russia&apos;s energy sector.
+                    </p>
+                  ) : null}
+                  {isRussia ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Oil GDP proxy and non-oil GDP proxy are contextual approximations. They help compare the relative scale of resource-linked activity and the broader economy, not produce a full national-accounts decomposition.
+                    </p>
                   ) : null}
                 </>
               ) : (
@@ -926,18 +1117,21 @@ export function CountryEconomyStudy({
               <p className="mb-3 text-xs text-muted-foreground">
                 Nominal values are measured in current prices and can be affected by inflation and exchange-rate changes. Real values adjust for price changes and are better for comparing economic volume over time.
               </p>
+              <p className="mb-3 text-xs text-muted-foreground">Unit: {demandUnitLabel}</p>
               {demandSeries.every((s) => s.points.length > 0) ? (
                 <TimelineChart
                   data={[]}
                   valueKey="value"
                   label="Demand aggregates"
-                  multiSeries={demandSeries}
+                  multiSeries={demandSeries.map((s) => ({ ...s, symbol: s.points.length < 3 ? "circle" : undefined }))}
                   multiSeriesValueFormat="gdp_absolute"
+                  multiSeriesYAxisNameOverrides={{ 0: demandUnitLabel }}
                   {...commonProps}
                 />
               ) : (
                 <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
               )}
+              {demandCoverageWarning ? <p className="mt-2 text-xs text-muted-foreground">{demandCoverageWarning}</p> : null}
             </CardContent>
           </Card>
 
@@ -1074,6 +1268,11 @@ export function CountryEconomyStudy({
               ) : (
                 <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
               )}
+              {isRussia ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Oil rents are shown as context signals. They approximate resource-related income relative to GDP, not government revenue, exports, or total energy-sector output.
+                </p>
+              ) : null}
             </CardContent>
           </Card>
           ) : null}
@@ -1095,6 +1294,11 @@ export function CountryEconomyStudy({
               ) : (
                 <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
               )}
+              {isRussia ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Natural gas rents are shown as context signals. They approximate resource-related income relative to GDP, not government revenue, exports, or total energy-sector output.
+                </p>
+              ) : null}
             </CardContent>
           </Card>
           ) : null}
@@ -1255,6 +1459,11 @@ export function CountryEconomyStudy({
               ) : (
                 <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
               )}
+              {isRussia ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Early transition-era spikes can dominate the vertical scale, so post-1990s variation may look compressed.
+                </p>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -1399,6 +1608,15 @@ export function CountryEconomyStudy({
                 </p>
                 <p>
                   Focus windows and overlays are context tools for period comparison. They are not evidence that a single political period caused any specific outcome.
+                </p>
+              </>
+            ) : isRussia ? (
+              <>
+                <p>
+                  This page helps compare Russia&apos;s economic signals over time. Instead of focusing on one number alone, it lets you compare inflation, growth, exchange rates, energy rents, trade, industry, inequality, and poverty across the same historical periods.
+                </p>
+                <p>
+                  Focus windows and overlays provide context for timing and comparison. They are not evidence that a single period or event caused a specific outcome.
                 </p>
               </>
             ) : (
