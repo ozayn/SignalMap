@@ -54,6 +54,16 @@ function firstAvailableYear(points: Point[]): number | null {
   return first;
 }
 
+function lastAvailableYear(points: Point[]): number | null {
+  let last: number | null = null;
+  for (const p of points) {
+    const y = Number.parseInt(yearKey(p.date), 10);
+    if (!Number.isFinite(y)) continue;
+    if (last == null || y > last) last = y;
+  }
+  return last;
+}
+
 function deriveGdpOilSplit(gdp: Point[], oilRentsPct: Point[]) {
   const oilByYear = new Map(oilRentsPct.map((p) => [yearKey(p.date), p.value]));
   const oil: Point[] = [];
@@ -213,6 +223,10 @@ export function CountryEconomyStudy({
   const federalFundsRate = series.us_federal_funds_rate_pct ?? [];
   const federalDebtUsd = series.us_federal_debt_usd ?? [];
   const policyRate = series.policy_interest_rate_pct ?? [];
+  const policyRateStartYear = useMemo(() => firstAvailableYear(policyRate), [policyRate]);
+  const policyRateEndYear = useMemo(() => lastAvailableYear(policyRate), [policyRate]);
+  const hasTurkeyPolicyRateData = policyRate.length > 0;
+  const turkeyPolicyRateIndicatorId = indicatorIds.policy_interest_rate_pct ?? "FR.INR.LEND";
   const currentAccountPctGdp = series.current_account_pct_gdp ?? [];
   const externalDebtPctGdp = series.external_debt_pct_gdp ?? [];
   const hasUsFiscalMacro = governmentDebtPctGdp.length > 0 || fiscalBalancePctGdp.length > 0 || federalFundsRate.length > 0;
@@ -414,6 +428,7 @@ export function CountryEconomyStudy({
       ? [
           `This page combines annual macro signals for Turkey in ${selectedRange?.label ?? "the selected range"}; shaded focus periods (${focusSummaryLabel || "selected presets"}) are context markers for comparison.`,
           "Indicators shown include inflation, exchange rate, GDP growth, demand aggregates, current account, external debt, trade, industry shares, money growth, inequality, poverty, and available resource-rent context.",
+          "Focus overlays include the 2001 financial crisis, the 2018 currency crisis, and the 2021 FX shock to anchor major volatility episodes.",
           "Each panel is one measurement lens; stronger interpretation comes from checking whether multiple signals move together across the same years.",
           "Overlays and focus shading help anchor timing, but they do not prove that one political period caused a specific outcome.",
         ]
@@ -460,6 +475,7 @@ export function CountryEconomyStudy({
                 "Read each chart as one signal; confidence improves when multiple signals point in a similar direction in the same period.",
                 "Use focus periods as approximate eras for side-by-side comparison, not as strict causal labels.",
                 "Overlay events and shaded windows are timing context only; they do not establish causality.",
+                "For Turkey, use 2001, 2018, and 2021 as volatility anchor years across inflation, FX, and external-balance indicators.",
               ],
             },
             {
@@ -478,6 +494,7 @@ export function CountryEconomyStudy({
                 "GDP growth: annual change in real output, distinct from nominal level growth.",
                 "Current account balance (% GDP): external balance of goods/services/income/transfers relative to economy size.",
                 "External debt (% GDP): external liabilities scaled by GDP to compare debt burden over time.",
+                "External vulnerability: persistent current-account deficits alongside FX pressure and rising external debt can indicate financing stress.",
                 "Trade (% GDP): imports/exports as economy shares; broad openness context, not welfare by itself.",
                 "Broad money growth: annual change in money-like balances; informative context, not a standalone inflation proof.",
                 "Gini and poverty headcount: distribution and poverty signals that are often sparse and survey-dependent.",
@@ -656,13 +673,15 @@ export function CountryEconomyStudy({
         sourceDetail: baseCountryDetail,
         unitLabel: "TRY per USD (official annual average)",
       });
-      items.push({
-        label: "Policy interest rate",
-        sourceName: baseName,
-        sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.policy_interest_rate_pct ?? "FR.INR.LEND"}`,
-        sourceDetail: `${baseCountryDetail}; proxy from WDI lending rate`,
-        unitLabel: "%",
-      });
+      if (hasTurkeyPolicyRateData) {
+        items.push({
+          label: "Policy interest rate",
+          sourceName: baseName,
+          sourceUrl: `https://data.worldbank.org/indicator/${turkeyPolicyRateIndicatorId}`,
+          sourceDetail: `${baseCountryDetail}; proxy from WDI lending rate`,
+          unitLabel: "%",
+        });
+      }
       items.push({
         label: "Current account balance",
         sourceName: baseName,
@@ -679,10 +698,25 @@ export function CountryEconomyStudy({
       });
     }
     return items;
-  }, [source, countryName, countryCode, indicatorIds, oilRents.length, gasRents.length, hasFX, isUsa, isTurkey, federalDebtUsd.length]);
+  }, [
+    source,
+    countryName,
+    countryCode,
+    indicatorIds,
+    oilRents.length,
+    gasRents.length,
+    hasFX,
+    isUsa,
+    isTurkey,
+    federalDebtUsd.length,
+    hasTurkeyPolicyRateData,
+    turkeyPolicyRateIndicatorId,
+  ]);
 
   const sourceNote = isTurkey
-    ? "Primary source family is World Bank WDI country series (plus derived external-debt-to-GDP ratio from debt stocks and nominal GDP). Units include annual %, TRY per USD, current US$, constant 2015 US$, % of GDP, Gini index, and poverty headcount %."
+    ? hasTurkeyPolicyRateData
+      ? "Primary source family is World Bank WDI country series (plus derived external-debt-to-GDP ratio from debt stocks and nominal GDP). Units include annual %, TRY per USD, current US$, constant 2015 US$, % of GDP, Gini index, and poverty headcount %."
+      : `Primary source family is World Bank WDI country series (plus derived external-debt-to-GDP ratio from debt stocks and nominal GDP). Policy-rate proxy is currently hidden because ${turkeyPolicyRateIndicatorId} has no Turkey observations in this selected range.`
     : isRussia
       ? "Primary source family is World Bank WDI country series. Units include annual %, current US$, constant 2015 US$, LCU per USD, % of GDP, Gini index, and poverty headcount %. Oil/gas rents are context indicators, not full sector accounting."
       : "Series are annual WDI observations. Missing years remain missing; no interpolation is applied.";
@@ -698,6 +732,7 @@ export function CountryEconomyStudy({
     return isTurkey
       ? [
           `Within ${focusRange}, compare inflation, lira depreciation, growth, external-balance signals, and distribution indicators as descriptive co-movements rather than causal effects.`,
+          "Use 2001, 2018, and 2021 overlays as timing anchors for major stress episodes in inflation, exchange rate, and external vulnerability indicators.",
           `Selected focus periods are clipped to ${selectedRange?.label ?? "the selected range"}, so shaded years always match the visible window.`,
           "Nominal and real toggles are complementary views: nominal includes current-price effects, while real better tracks volume over time.",
           sparseNotes.length
@@ -908,6 +943,11 @@ export function CountryEconomyStudy({
                   Yeltsin (1991-1999) · Putin I (2000-2008) · Medvedev (2008-2012) · Putin II (2012-present)
                 </p>
               )}
+              {isTurkey && !hasTurkeyPolicyRateData ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Policy-rate panel is hidden for now: source indicator {turkeyPolicyRateIndicatorId} currently has no Turkey observations in this selected range.
+                </p>
+              ) : null}
             </>
           ) : null}
           <p className="mt-2 text-xs text-muted-foreground">
@@ -1324,12 +1364,17 @@ export function CountryEconomyStudy({
           ) : null}
           {isTurkey ? (
             <>
-              <Card className="border-border">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Policy interest rate (%)</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  {policyRate.length > 0 ? (
+              {hasTurkeyPolicyRateData ? (
+                <Card className="border-border">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Policy interest rate (%)</CardTitle>
+                    {policyRateStartYear != null && policyRateEndYear != null ? (
+                      <p className="text-xs text-muted-foreground">
+                        Coverage: {policyRateStartYear}-{policyRateEndYear} ({policyRate.length} points), source {turkeyPolicyRateIndicatorId}.
+                      </p>
+                    ) : null}
+                  </CardHeader>
+                  <CardContent className="pt-0">
                     <TimelineChart
                       data={policyRate}
                       valueKey="value"
@@ -1338,11 +1383,9 @@ export function CountryEconomyStudy({
                       forceTimeAxis
                       {...commonProps}
                     />
-                  ) : (
-                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
-                  )}
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              ) : null}
               <Card className="border-border">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">Current account (% GDP)</CardTitle>
@@ -1594,10 +1637,10 @@ export function CountryEconomyStudy({
             {isTurkey ? (
               <>
                 <p>
-                  This page helps compare Turkey&apos;s economic signals over time. Instead of relying on one number, it lets you read inflation, currency moves, growth, external debt, trade, inequality, and poverty across the same periods.
+                  This page helps compare Turkey&apos;s economic signals over time. Instead of relying on one number, it lets you read inflation volatility, lira depreciation, growth, current-account stress, external debt, inequality, and poverty across the same periods.
                 </p>
                 <p>
-                  Focus windows and overlays are context tools for period comparison. They are not evidence that a single political period caused any specific outcome.
+                  Focus windows and overlays are context tools for period comparison, including the 2001 crisis, 2018 currency crisis, and 2021 FX shock. They are not evidence that a single political period caused any specific outcome.
                 </p>
               </>
             ) : isRussia ? (
