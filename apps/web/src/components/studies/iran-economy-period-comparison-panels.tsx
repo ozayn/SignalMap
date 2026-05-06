@@ -30,6 +30,24 @@ const IPC_COMPARISON_CHART_HEIGHT =
 type Point = { date: string; value: number };
 type GdpDecompMode = "nominal" | "real";
 
+function firstAvailableYear(points: Point[]): number | null {
+  let first: number | null = null;
+  for (const p of points) {
+    const y = Number.parseInt(p.date.slice(0, 4), 10);
+    if (!Number.isFinite(y)) continue;
+    if (first == null || y < first) first = y;
+  }
+  return first;
+}
+
+function trimSeriesFromYear(points: Point[], startYear: number | null): Point[] {
+  if (startYear == null) return points;
+  return points.filter((p) => {
+    const y = Number.parseInt(p.date.slice(0, 4), 10);
+    return Number.isFinite(y) && y >= startYear;
+  });
+}
+
 export type IranEconomyPeriodComparisonPanelsProps = {
   isFa: boolean;
   L: (isFa: boolean, en: string, fa: string) => string;
@@ -230,6 +248,20 @@ export function IranEconomyPeriodComparisonPanels({
     [externalDebtContextEvents, events]
   );
 
+  const nominalDecompOverlapStartYear = useMemo(() => {
+    const gdpStart = firstAvailableYear(recoDemandGdpPoints);
+    const oilStart = firstAvailableYear(recoOilRentsPoints);
+    if (gdpStart == null || oilStart == null) return null;
+    return Math.max(gdpStart, oilStart);
+  }, [recoDemandGdpPoints, recoOilRentsPoints]);
+
+  const realDecompOverlapStartYear = useMemo(() => {
+    const gdpStart = firstAvailableYear(recoDemandRealGdpPoints);
+    const oilStart = firstAvailableYear(recoOilRentsPoints);
+    if (gdpStart == null || oilStart == null) return null;
+    return Math.max(gdpStart, oilStart);
+  }, [recoDemandRealGdpPoints, recoOilRentsPoints]);
+
   const ipcGdpDecompositionMultiSeries = useMemo((): ChartSeries[] | null => {
     if (
       recoGdpDecompNonOilPoints.length === 0 ||
@@ -266,14 +298,14 @@ export function IranEconomyPeriodComparisonPanels({
         label: L(isFa, "Total GDP", "GDP کل"),
         yAxisIndex: 0,
         unit: L(isFa, "current US$", "دلار جاری آمریکا"),
-        points: recoDemandGdpPoints,
+        points: trimSeriesFromYear(recoDemandGdpPoints, nominalDecompOverlapStartYear),
         smooth: true,
         linePattern: "dashed",
         lineWidth: 2,
         showSymbol: true,
       },
     ];
-  }, [recoGdpDecompNonOilPoints, recoGdpDecompOilPoints, recoDemandGdpPoints, isFa]);
+  }, [recoGdpDecompNonOilPoints, recoGdpDecompOilPoints, recoDemandGdpPoints, isFa, nominalDecompOverlapStartYear, L]);
 
   const ipcRealGdpDecomposition = useMemo(() => {
     if (recoDemandRealGdpPoints.length === 0 || recoOilRentsPoints.length === 0) return null;
@@ -332,7 +364,7 @@ export function IranEconomyPeriodComparisonPanels({
         label: L(isFa, "Non-oil GDP proxy", "GDP غیرنفتی (تقریبی)"),
         yAxisIndex: 0,
         unit: L(isFa, "constant 2015 US$", "دلار ثابت ۲۰۱۵"),
-        points: ipcRealGdpDecomposition.nonOilProxy,
+        points: trimSeriesFromYear(ipcRealGdpDecomposition.nonOilProxy, realDecompOverlapStartYear),
         smooth: true,
         showSymbol: false,
         stack: "gdp_real_decomp",
@@ -343,7 +375,7 @@ export function IranEconomyPeriodComparisonPanels({
         label: L(isFa, "Oil rents proxy", "رانت نفتی (تقریبی)"),
         yAxisIndex: 0,
         unit: L(isFa, "constant 2015 US$", "دلار ثابت ۲۰۱۵"),
-        points: ipcRealGdpDecomposition.oilProxy,
+        points: trimSeriesFromYear(ipcRealGdpDecomposition.oilProxy, realDecompOverlapStartYear),
         smooth: true,
         showSymbol: false,
         stack: "gdp_real_decomp",
@@ -354,19 +386,31 @@ export function IranEconomyPeriodComparisonPanels({
         label: L(isFa, "Total GDP", "GDP کل"),
         yAxisIndex: 0,
         unit: L(isFa, "constant 2015 US$", "دلار ثابت ۲۰۱۵"),
-        points: ipcRealGdpDecomposition.totalGdp,
+        points: trimSeriesFromYear(ipcRealGdpDecomposition.totalGdp, realDecompOverlapStartYear),
         smooth: true,
         linePattern: "dashed",
         lineWidth: 2,
         showSymbol: true,
       },
     ];
-  }, [ipcRealGdpDecomposition, isFa, L]);
+  }, [ipcRealGdpDecomposition, isFa, L, realDecompOverlapStartYear]);
 
   const [ipcGdpDecompMode, setIpcGdpDecompMode] = useState<GdpDecompMode>("real");
   const [ipcDemandMode, setIpcDemandMode] = useState<GdpDecompMode>("real");
   const ipcSelectedGdpDecompMultiSeries =
     ipcGdpDecompMode === "real" ? ipcRealGdpDecompositionMultiSeries : ipcGdpDecompositionMultiSeries;
+  const ipcSelectedDecompOverlapStartYear =
+    ipcGdpDecompMode === "real" ? realDecompOverlapStartYear : nominalDecompOverlapStartYear;
+  const ipcGdpDecompTimeRange = useMemo<[string, string]>(() => {
+    const defaultStart = Number.parseInt((timeRange[0] ?? "").slice(0, 4), 10);
+    const effectiveStartYear =
+      ipcSelectedDecompOverlapStartYear != null
+        ? ipcSelectedDecompOverlapStartYear
+        : Number.isFinite(defaultStart)
+          ? defaultStart
+          : 1960;
+    return [`${effectiveStartYear}-01-01`, timeRange[1]];
+  }, [ipcSelectedDecompOverlapStartYear, timeRange]);
   const ipcDemandNominalMultiSeries = useMemo(
     (): ChartSeries[] => [
       {
@@ -825,7 +869,7 @@ export function IranEconomyPeriodComparisonPanels({
                     )}
                     events={events}
                     multiSeries={ipcSelectedGdpDecompMultiSeries}
-                    timeRange={timeRange}
+                    timeRange={ipcGdpDecompTimeRange}
                     chartPeriodOverlayBands={chartPeriodOverlayBands}
                     revolution1979Marker={revolution1979Marker}
                     chartRangeGranularity="year"
