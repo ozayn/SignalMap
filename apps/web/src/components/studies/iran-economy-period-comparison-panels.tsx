@@ -745,6 +745,9 @@ export function IranEconomyPeriodComparisonPanels({
   const fxDataKeyRef = useRef("");
 
   const fxDataKey = `${timeRange[0]}\u0000${timeRange[1]}\u0000${recoFxOfficialPoints.length}\u0000${recoOpenAnnualMean.length}`;
+  const showStandaloneResourceRents = false;
+  const showStandaloneRealWage = false;
+  const showStandaloneGini = false;
   useEffect(() => {
     if (fxDataKeyRef.current !== fxDataKey) {
       fxDataKeyRef.current = fxDataKey;
@@ -1279,6 +1282,8 @@ export function IranEconomyPeriodComparisonPanels({
               )}
             </CardContent>
           </Card>
+          {showStandaloneResourceRents ? (
+          <>
           <Card className="chart-card border-border md:col-span-2">
             <CardHeader className="space-y-1 px-4 py-2.5">
               <CardTitle className="text-base font-semibold">{L(isFa, "5. Oil rents (% of GDP)", `۵. ${faEconomic.oilRentsPctGdp}`)}</CardTitle>
@@ -1377,6 +1382,8 @@ export function IranEconomyPeriodComparisonPanels({
               )}
             </CardContent>
           </Card>
+          </>
+          ) : null}
           <Card className="chart-card border-border md:col-span-2">
             <CardHeader className="space-y-1 px-4 py-2.5">
               <CardTitle className="text-base font-semibold">
@@ -1714,6 +1721,7 @@ export function IranEconomyPeriodComparisonPanels({
               )}
             </CardContent>
           </Card>
+          {showStandaloneRealWage ? (
           <Card className="chart-card border-border md:col-span-2">
             <CardHeader className="space-y-1 px-4 py-2.5">
               <CardTitle className="text-base font-semibold">
@@ -1758,11 +1766,13 @@ export function IranEconomyPeriodComparisonPanels({
               )}
             </CardContent>
           </Card>
+          ) : null}
           <div className="md:col-span-2 mt-6 pt-4 border-t border-border">
             <h3 className="text-sm font-semibold text-foreground mb-3">
               {L(isFa, "Welfare and distribution", "رفاه و توزیع")}
             </h3>
           </div>
+          {showStandaloneGini ? (
           <Card className="chart-card border-border md:col-span-2">
             <CardHeader className="space-y-1 px-4 py-2.5">
               <CardTitle className="text-base font-semibold">{L(isFa, "Gini index", "ضریب جینی")}</CardTitle>
@@ -1836,6 +1846,7 @@ export function IranEconomyPeriodComparisonPanels({
               ) : null}
             </CardContent>
           </Card>
+          ) : null}
           <Card className="chart-card border-border md:col-span-2">
             <CardHeader className="space-y-1.5 px-4 py-2.5">
               <div className="flex items-center gap-1.5 min-w-0">
