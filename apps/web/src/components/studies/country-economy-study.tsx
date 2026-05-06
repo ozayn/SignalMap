@@ -77,6 +77,15 @@ function trimSeriesFromYear(points: Point[], startYear: number | null): Point[] 
   });
 }
 
+function formatFocusYears(startYear: number, endYear: number | null): string {
+  const endLabel = endYear == null ? "present" : String(endYear);
+  return `${startYear}-${endLabel}`;
+}
+
+function EmptyStateHint({ text }: { text: string }) {
+  return <p className="py-6 text-xs text-muted-foreground">{text}</p>;
+}
+
 export function CountryEconomyStudy({
   countryCode,
   countryName,
@@ -286,6 +295,8 @@ export function CountryEconomyStudy({
     [selectedFocusBands, timelineBands]
   );
   const focusSummaryLabel = selectedFocusPresets.map((f) => f.label).join(", ");
+  const turkeyFocusClarification =
+    "Focus periods are approximate political/economic eras used for comparison, not strict causal labels.";
 
   const conceptKeys = useMemo<StudyConceptId[]>(() => {
     const out: StudyConceptId[] = [
@@ -315,15 +326,20 @@ export function CountryEconomyStudy({
       povertyExtreme.length === 0 && povertyLmic.length === 0 ? "poverty headcount" : null,
       hasFX && fx.length === 0 ? "FX" : null,
     ].filter(Boolean) as string[];
-    const rows: string[] = [
-      `The charts use an outer window of ${selectedRange?.label ?? "the selected range"} and shaded focus periods of ${focusSummaryLabel || "the selected presets"}.`,
-      "CPI inflation (red), GDP growth (blue), and resource-rent shares are plotted as annual WDI observations; gaps are left as gaps.",
-      isUsa
-        ? "Nominal/real demand aggregates are the main GDP-level view for the United States; focus shading always remains inside the visible range."
-        : isTurkey
-          ? "Turkey view emphasizes inflation volatility, exchange-rate instability, and policy regime shifts across focus periods."
-          : "Nominal/real demand and GDP decomposition toggles keep the same x-axis window so period comparisons stay aligned.",
-    ];
+    const rows: string[] = isTurkey
+      ? [
+          `This page combines annual macro signals for Turkey in ${selectedRange?.label ?? "the selected range"}; shaded focus periods (${focusSummaryLabel || "selected presets"}) are context markers for comparison.`,
+          "Indicators shown include inflation, exchange rate, GDP growth, demand aggregates, current account, external debt, trade, industry shares, money growth, inequality, poverty, and available resource-rent context.",
+          "Each panel is one measurement lens; stronger interpretation comes from checking whether multiple signals move together across the same years.",
+          "Overlays and focus shading help anchor timing, but they do not prove that one political period caused a specific outcome.",
+        ]
+      : [
+          `The charts use an outer window of ${selectedRange?.label ?? "the selected range"} and shaded focus periods of ${focusSummaryLabel || "the selected presets"}.`,
+          "CPI inflation (red), GDP growth (blue), and resource-rent shares are plotted as annual WDI observations; gaps are left as gaps.",
+          isUsa
+            ? "Nominal/real demand aggregates are the main GDP-level view for the United States; focus shading always remains inside the visible range."
+            : "Nominal/real demand and GDP decomposition toggles keep the same x-axis window so period comparisons stay aligned.",
+        ];
     if (missingSparse.length > 0) {
       rows.push(
         `Some series are sparse or unavailable in this window (${missingSparse.join(", ")}); the page shows only published points and does not interpolate missing years.`
@@ -343,29 +359,61 @@ export function CountryEconomyStudy({
   ]);
 
   const learningSections = useMemo<LearningNoteSection[]>(
-    () => [
-      {
-        heading: "How to read these charts",
-        bullets: [
-          "Compare direction and timing first; treat overlays as context markers, not causal proof.",
-          "Use the range selector for long-run context and focus chips for up to three leadership-window comparisons.",
-          "For sparse indicators (especially Gini and poverty), blank years mean no point is available in this dataset.",
-        ],
-      },
-      {
-        heading: "Units and comparability",
-        bullets: [
-          "Growth and shares are annual percentages; level charts are in current or constant US$ as labeled.",
-          "Nominal and real modes answer different questions; avoid mixing interpretations across them.",
-          hasFX
-            ? "FX is official annual LCU per US$; log scale can help compare proportional moves across decades."
-            : "FX is intentionally hidden for this country template.",
-          isTurkey
-            ? "Turkey charts keep dual year display (Gregorian + Persian year) while all labels remain English."
-            : "Year labels follow the study default axis style.",
-        ],
-      },
-    ],
+    () =>
+      isTurkey
+        ? [
+            {
+              heading: "How to read these charts",
+              bullets: [
+                "Read each chart as one signal; confidence improves when multiple signals point in a similar direction in the same period.",
+                "Use focus periods as approximate eras for side-by-side comparison, not as strict causal labels.",
+                "Overlay events and shaded windows are timing context only; they do not establish causality.",
+              ],
+            },
+            {
+              heading: "Units and comparability",
+              bullets: [
+                "Annual percentages: inflation, GDP growth, money growth, current account, external debt, and trade/industry shares.",
+                "TRY per USD: exchange-rate panel (official annual series). Log scale helps compare proportional depreciation across decades.",
+                "Current US$ vs constant 2015 US$: nominal vs real demand toggles answer different questions and should not be mixed.",
+              ],
+            },
+            {
+              heading: "Concept guide used in this study",
+              bullets: [
+                "CPI inflation: annual change in consumer prices; higher values mean faster broad price increases.",
+                "Exchange-rate depreciation: when more TRY are needed per USD; log scale helps compare proportional changes over long spans.",
+                "GDP growth: annual change in real output, distinct from nominal level growth.",
+                "Current account balance (% GDP): external balance of goods/services/income/transfers relative to economy size.",
+                "External debt (% GDP): external liabilities scaled by GDP to compare debt burden over time.",
+                "Trade (% GDP): imports/exports as economy shares; broad openness context, not welfare by itself.",
+                "Broad money growth: annual change in money-like balances; informative context, not a standalone inflation proof.",
+                "Gini and poverty headcount: distribution and poverty signals that are often sparse and survey-dependent.",
+                "Resource rents: oil/gas-rent shares as context markers for exposure, not a full growth model.",
+              ],
+            },
+          ]
+        : [
+            {
+              heading: "How to read these charts",
+              bullets: [
+                "Compare direction and timing first; treat overlays as context markers, not causal proof.",
+                "Use the range selector for long-run context and focus chips for up to three leadership-window comparisons.",
+                "For sparse indicators (especially Gini and poverty), blank years mean no point is available in this dataset.",
+              ],
+            },
+            {
+              heading: "Units and comparability",
+              bullets: [
+                "Growth and shares are annual percentages; level charts are in current or constant US$ as labeled.",
+                "Nominal and real modes answer different questions; avoid mixing interpretations across them.",
+                hasFX
+                  ? "FX is official annual LCU per US$; log scale can help compare proportional moves across decades."
+                  : "FX is intentionally hidden for this country template.",
+                "Year labels follow the study default axis style.",
+              ],
+            },
+          ],
     [hasFX, isTurkey]
   );
 
@@ -509,6 +557,10 @@ export function CountryEconomyStudy({
     return items;
   }, [source, countryName, countryCode, indicatorIds, oilRents.length, gasRents.length, hasFX, isUsa, isTurkey, federalDebtUsd.length]);
 
+  const sourceNote = isTurkey
+    ? "Primary source family is World Bank WDI country series (plus derived external-debt-to-GDP ratio from debt stocks and nominal GDP). Units include annual %, TRY per USD, current US$, constant 2015 US$, % of GDP, Gini index, and poverty headcount %."
+    : "Series are annual WDI observations. Missing years remain missing; no interpolation is applied.";
+
   const aiParagraphs = useMemo(() => {
     const focusRange = focusSummaryLabel || "selected focus periods";
     const sparseNotes: string[] = [];
@@ -517,21 +569,30 @@ export function CountryEconomyStudy({
     if (hasFX && fx.length === 0) sparseNotes.push("FX data is unavailable");
     if (isUsa && !hasUsFiscalMacro) sparseNotes.push("U.S. fiscal macro series are unavailable for this range");
     if (isTurkey && policyRate.length === 0) sparseNotes.push("policy-rate proxy is unavailable in this window");
-    return [
-      `Within ${focusRange}, compare inflation, growth, demand composition, and distribution indicators as descriptive co-movements rather than causal effects.`,
-      `Selected focus periods are clipped to the active range (${selectedRange?.label ?? "selected range"}) so shaded years always match the visible window.`,
-      "Interpret nominal and real toggles as two lenses on the same period: nominal reflects current-price levels, while real controls for price-level drift.",
-      sparseNotes.length
-        ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
-        : "Data caveat: this view uses annual published observations; apparent jumps can reflect sparse publication frequency, not necessarily sudden structural breaks.",
-    ];
+    return isTurkey
+      ? [
+          `Within ${focusRange}, compare inflation, lira depreciation, growth, external-balance signals, and distribution indicators as descriptive co-movements rather than causal effects.`,
+          `Selected focus periods are clipped to ${selectedRange?.label ?? "the selected range"}, so shaded years always match the visible window.`,
+          "Nominal and real toggles are complementary views: nominal includes current-price effects, while real better tracks volume over time.",
+          sparseNotes.length
+            ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
+            : "Data caveat: this page uses annual published observations; visible jumps can reflect data frequency and revisions, not necessarily a single structural break.",
+        ]
+      : [
+          `Within ${focusRange}, compare inflation, growth, demand composition, and distribution indicators as descriptive co-movements rather than causal effects.`,
+          `Selected focus periods are clipped to the active range (${selectedRange?.label ?? "selected range"}) so shaded years always match the visible window.`,
+          "Interpret nominal and real toggles as two lenses on the same period: nominal reflects current-price levels, while real controls for price-level drift.",
+          sparseNotes.length
+            ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
+            : "Data caveat: this view uses annual published observations; apparent jumps can reflect sparse publication frequency, not necessarily sudden structural breaks.",
+        ];
   }, [focusSummaryLabel, selectedRange?.label, gini.length, povertyExtreme.length, povertyLmic.length, hasFX, fx.length, isUsa, hasUsFiscalMacro, isTurkey, policyRate.length]);
 
   const commonProps = {
     timeRange: [rangeStart, rangeEnd] as [string, string],
     chartRangeGranularity: "year" as const,
     showChartControls: true,
-    chartHeight: "h-56 md:h-64",
+    chartHeight: isTurkey ? "h-64 md:h-64" : "h-56 md:h-64",
     events: timelineEvents,
     chartPeriodOverlayBands,
     regimeArea: selectedPrimaryFocus
@@ -563,18 +624,56 @@ export function CountryEconomyStudy({
     });
   };
 
+  // TODO(turkey-study-roadmap): extend indicator coverage when reliable long-run series are wired:
+  // policy interest rate with broader historical coverage, FX reserves, unemployment, REER,
+  // government debt (% GDP), tourism receipts, energy-import dependency,
+  // manufacturing value added detail, and private-sector credit growth.
+
   return (
     <section className="space-y-4">
+      {isTurkey ? (
+        <>
+          <Card className="border-border bg-muted/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Study framing</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 text-sm text-muted-foreground space-y-2">
+              <p>
+                This study explores Turkey&apos;s economy across major political and macroeconomic periods, using indicators such as inflation, exchange rates, GDP growth, trade, debt, inequality, and poverty.
+              </p>
+              <p>
+                The goal is not to claim that one political period caused a specific outcome, but to compare how different signals moved over time.
+              </p>
+              <p>
+                Event overlays and shaded periods are context markers only. They help the reader ask better questions, not prove causality.
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-border bg-muted/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Key patterns to look for</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <ul className="list-inside list-disc space-y-1 text-sm text-muted-foreground">
+                <li>Inflation is high and volatile before the early 2000s, moderates for a period, and rises sharply again after the late 2010s.</li>
+                <li>The Turkish lira depreciation is easier to read on a log scale because proportional moves are more comparable across decades.</li>
+                <li>Current account deficits, external debt, and exchange-rate pressure can be read together as external vulnerability signals.</li>
+                <li>Poverty falls strongly in available observations, while inequality tends to move more gradually.</li>
+              </ul>
+            </CardContent>
+          </Card>
+        </>
+      ) : null}
       <Card className="border-border">
         <CardHeader className="pb-2">
           <CardTitle className="text-lg font-semibold">{countryName} economy study</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="flex flex-wrap items-center gap-3 text-sm">
+          <div className="flex flex-wrap items-center gap-2.5 text-sm md:gap-3">
             <label className="inline-flex items-center gap-2">
               <span className="text-muted-foreground">Range</span>
               <select
-                className="rounded-md border border-border bg-background px-2 py-1"
+                className="min-w-[9.5rem] rounded-md border border-border bg-background px-2 py-1 text-xs sm:text-sm"
                 value={rangePresetId}
                 onChange={(e) => setRangePresetId(e.target.value)}
               >
@@ -592,6 +691,7 @@ export function CountryEconomyStudy({
                   const isAvailable = availableFocusPresets.some((af) => af.id === f.id);
                   const isActive = focusPresetIds.includes(f.id);
                   const atLimit = !isActive && focusPresetIds.length >= MAX_ACTIVE_FOCUS_PERIODS;
+                  const periodLabel = formatFocusYears(f.startYear, f.endYear);
                   return (
                     <button
                       key={f.id}
@@ -604,7 +704,13 @@ export function CountryEconomyStudy({
                           : "border-border bg-background text-muted-foreground hover:bg-muted/40"
                       } disabled:cursor-not-allowed disabled:opacity-40`}
                       aria-pressed={isActive}
-                      title={!isAvailable ? "Outside selected range" : atLimit ? "Maximum 3 focus periods" : f.label}
+                      title={
+                        !isAvailable
+                          ? "Outside selected range"
+                          : atLimit
+                            ? "Maximum 3 focus periods"
+                            : `${f.label} (${periodLabel})`
+                      }
                     >
                       {isActive ? "✓ " : ""}
                       {f.shortLabel ?? f.label}
@@ -633,6 +739,14 @@ export function CountryEconomyStudy({
               <span>Show overlays</span>
             </label>
           </div>
+          {isTurkey ? (
+            <>
+              <p className="mt-2 text-xs text-muted-foreground">{turkeyFocusClarification}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Pre-2003 (1960-2002) · Erdogan I (2003-2013) · Erdogan II (2013-2018) · Erdogan III (2018-present)
+              </p>
+            </>
+          ) : null}
           <p className="mt-2 text-xs text-muted-foreground">
             Overlays are contextual markers only and do not imply causality.
           </p>
@@ -809,6 +923,9 @@ export function CountryEconomyStudy({
                   Real
                 </button>
               </div>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Nominal values are measured in current prices and can be affected by inflation and exchange-rate changes. Real values adjust for price changes and are better for comparing economic volume over time.
+              </p>
               {demandSeries.every((s) => s.points.length > 0) ? (
                 <TimelineChart
                   data={[]}
@@ -850,7 +967,7 @@ export function CountryEconomyStudy({
                       {...commonProps}
                     />
                   ) : (
-                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                    <EmptyStateHint text="Policy rate data is unavailable for the selected historical range. Try a more recent range, or check whether the source has coverage for this indicator." />
                   )}
                 </CardContent>
               </Card>
@@ -1163,14 +1280,14 @@ export function CountryEconomyStudy({
                   multiSeries={[
                     {
                       key: "extreme",
-                      label: "Extreme poverty ($2.15/day, PPP)",
+                      label: "Extreme poverty ($2.15 PPP)",
                       unit: "%",
                       yAxisIndex: 0,
                       points: povertyExtreme,
                     },
                     {
                       key: "lmic",
-                      label: "Lower-middle poverty line",
+                      label: "LMIC poverty line",
                       unit: "%",
                       yAxisIndex: 0,
                       points: povertyLmic,
@@ -1272,16 +1389,16 @@ export function CountryEconomyStudy({
           {conceptKeys.length ? <ConceptsUsed conceptKeys={conceptKeys} /> : null}
           <SourceInfo
             items={sourceItems}
-            note="Series are annual WDI observations. Missing years remain missing; no interpolation is applied."
+            note={sourceNote}
           />
           <InSimpleTerms>
             {isTurkey ? (
               <>
                 <p>
-                  This Turkey page highlights three linked context dimensions: inflation volatility, exchange-rate instability (USD → TRY), and policy regime shifts across focus windows.
+                  This page helps compare Turkey&apos;s economic signals over time. Instead of relying on one number, it lets you read inflation, currency moves, growth, external debt, trade, inequality, and poverty across the same periods.
                 </p>
                 <p>
-                  Use the shaded focus period to compare eras, but treat overlaps as descriptive context rather than proof of one variable causing another.
+                  Focus windows and overlays are context tools for period comparison. They are not evidence that a single political period caused any specific outcome.
                 </p>
               </>
             ) : (

@@ -150,10 +150,10 @@ export const COUNTRY_ECONOMY_CONFIGS: CountryEconomyConfig[] = [
     hasFX: true,
     defaultFxLog: true,
     focusPresets: [
-      { id: "pre-2003", label: "Pre-2003", shortLabel: "Pre-2003", startYear: 1960, endYear: 2002 },
-      { id: "erdogan-1", label: "Erdogan I (2003-2013)", shortLabel: "Erdogan I", startYear: 2003, endYear: 2013 },
-      { id: "erdogan-2", label: "Erdogan II (2013-2018)", shortLabel: "Erdogan II", startYear: 2013, endYear: 2018 },
-      { id: "erdogan-3", label: "Erdogan III (2018-present)", shortLabel: "Erdogan III", startYear: 2018, endYear: null },
+      { id: "pre-2003", label: "Pre-2003 (1960-2002)", shortLabel: "Pre-2003", startYear: 1960, endYear: 2002 },
+      { id: "erdogan-1", label: "Erdogan I: 2003-2013", shortLabel: "Erdogan I", startYear: 2003, endYear: 2013 },
+      { id: "erdogan-2", label: "Erdogan II: 2013-2018", shortLabel: "Erdogan II", startYear: 2013, endYear: 2018 },
+      { id: "erdogan-3", label: "Erdogan III: 2018-present", shortLabel: "Erdogan III", startYear: 2018, endYear: null },
     ],
     rangePresets: [
       { id: "full", label: "Full history", startYear: 1960, endYear: null },

@@ -38,7 +38,7 @@ const CONTROL_INPUT =
   "h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-sm outline-none transition-[box-shadow,border-color] focus-visible:border-ring/60 focus-visible:ring-2 focus-visible:ring-ring/25";
 
 const EXPORT_BUTTON =
-  "h-8 shrink-0 rounded-md px-2.5 text-xs font-normal leading-none";
+  "h-8 shrink-0 rounded-md px-2.5 text-xs font-normal leading-none sm:ml-auto";
 
 /**
  * Compact per-chart toolbar: start/end as **calendar years** and PNG export.
@@ -149,8 +149,8 @@ export function StudyChartControls({
 
   return (
     <div className={TOOLBAR_ROW}>
-      <div className="flex min-w-0 shrink-0 items-end gap-2 md:contents">
-      <label className="flex w-[4.25rem] shrink-0 flex-col md:w-[5.5rem]" dir="ltr" htmlFor={startId}>
+      <div className="flex min-w-0 shrink-0 items-end gap-2">
+      <label className="flex w-[4.5rem] shrink-0 flex-col sm:w-[5rem] md:w-[5.5rem]" dir="ltr" htmlFor={startId}>
         <span className={FIELD_LABEL} id={startLabelId}>
           {startYearLabel}
         </span>
@@ -179,7 +179,7 @@ export function StudyChartControls({
           className={CONTROL_INPUT}
         />
       </label>
-      <label className="flex w-[4.25rem] shrink-0 flex-col md:w-[5.5rem]" dir="ltr" htmlFor={endId}>
+      <label className="flex w-[4.5rem] shrink-0 flex-col sm:w-[5rem] md:w-[5.5rem]" dir="ltr" htmlFor={endId}>
         <span className={FIELD_LABEL} id={endLabelId}>
           {endYearLabel}
         </span>
