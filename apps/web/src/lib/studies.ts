@@ -162,7 +162,7 @@ export const STUDIES: StudyMeta[] = [
     description:
       "Open-market USD→toman is the lived-economy signal (Bonbast / rial archive; FRED annual pre-archive). Toggle in the official policy rate and the yearly spread—how far open and official diverge—as a distortion indicator.",
     status: "active",
-    groupPlacements: [{ group: "core", order: 1 }],
+    groupPlacements: [{ group: "iran", order: 5 }],
     primarySignal: { kind: "fx_iran_currency_regime" },
     concepts: [
       "fx",
@@ -187,6 +187,7 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["2021-01-15", new Date().toISOString().slice(0, 10)],
     description: "Brent and open-market USD/toman on two y-axes: oil vs. currency pressure together.",
     status: "active",
+    visible: false,
     groupPlacements: [{ group: "core", order: 3 }],
     primarySignal: { kind: "oil_and_fx" },
     concepts: ["nominal_price", "oil_benchmark", "fx", "event_overlay"],
@@ -425,6 +426,7 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["2000", "today"],
     description: "Annual crude exports (kb/d) for four majors from HS 2709 Comtrade, mirror-flow derived.",
     status: "active",
+    visible: false,
     groupPlacements: [{ group: "global", order: 8 }],
     primarySignal: { kind: "oil_exporter_timeseries" },
     concepts: ["trade_networks", "energy_geopolitics", "export_dependencies"],
@@ -560,6 +562,7 @@ export const STUDIES: StudyMeta[] = [
     timeRange: ["2010-01-01", new Date().toISOString().slice(0, 10)],
     description: "Nominal vs. CPI-deflated minimum wage: purchasing power of the wage, not a full labor market model.",
     status: "active",
+    visible: false,
     tags: ["Wage", "CPI", "Real"],
     groupPlacements: [{ group: "iran", order: 6 }],
     primarySignal: { kind: "wage_cpi_real" },
@@ -837,6 +840,7 @@ export const STUDIES: StudyMeta[] = [
     description:
       "Dashboard-style annual and FX context for Iran’s post-war reconstruction period (Rafsanjani presidencies): WDI macro panels plus official vs open-market exchange rates. Exploratory economic history, not a causal model.",
     status: "active",
+    visible: false,
     groupPlacements: [{ group: "iran", order: 9 }],
     primarySignal: { kind: "iran_economy_reconstruction_1368_1376" },
     eventLayers: ["iran_core", "world_core", "sanctions"],
@@ -939,7 +943,6 @@ export const STUDIES: StudyMeta[] = [
 
 /** Fixed section order for `/studies` grouped view. */
 export const STUDY_BROWSE_GROUP_ORDER: readonly StudyGroup[] = [
-  "core",
   "iran",
   "country",
   "global",
@@ -963,8 +966,8 @@ export const STUDY_BROWSE_GROUP_TITLES: Record<StudyGroup, { title: string; desc
       "Reusable macro dashboards for comparing countries across inflation, GDP, debt, trade, welfare, and leadership periods.",
   },
   global: {
-    title: "Global Context",
-    description: "GDP scale, long-run oil, events, production, and trade.",
+    title: "Global Context & Core Signals",
+    description: "Core macro signals plus GDP scale, long-run oil, events, production, and trade.",
   },
   policy: {
     title: "Structural & Policy",
@@ -991,7 +994,11 @@ export function getBrowseRowsForGroup(
   const out: { study: StudyMeta; order: number }[] = [];
   for (const study of studies) {
     for (const p of study.groupPlacements ?? []) {
-      if (p.group === group) out.push({ study, order: p.order });
+      if (group === "global") {
+        if (p.group === "global" || p.group === "core") out.push({ study, order: p.order });
+      } else if (p.group === group) {
+        out.push({ study, order: p.order });
+      }
     }
   }
   out.sort((a, b) => a.order - b.order);
