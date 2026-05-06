@@ -18,6 +18,7 @@ import type { ChartAxisYearMode } from "@/lib/chart-axis-year";
 type Point = { date: string; value: number };
 type DemandMode = "nominal" | "real";
 type GdpMode = "nominal" | "real";
+const MAX_ACTIVE_FOCUS_PERIODS = 3;
 
 type CountryEconomyBundle = {
   series: Record<string, Point[]>;
@@ -73,7 +74,7 @@ export function CountryEconomyStudy({
   const [bundle, setBundle] = useState<CountryEconomyBundle | null>(null);
   const [showOverlays, setShowOverlays] = useState(true);
   const [rangePresetId, setRangePresetId] = useState(rangePresets[0]?.id ?? "full");
-  const [focusPresetId, setFocusPresetId] = useState(focusPresets[0]?.id ?? "");
+  const [focusPresetIds, setFocusPresetIds] = useState<string[]>(() => (focusPresets[0]?.id ? [focusPresets[0].id] : []));
   const [demandMode, setDemandMode] = useState<DemandMode>("nominal");
   const [gdpMode, setGdpMode] = useState<GdpMode>("nominal");
   const [fxLog, setFxLog] = useState(defaultFxLog);
@@ -91,23 +92,37 @@ export function CountryEconomyStudy({
       }),
     [focusPresets, rangeStartYear, rangeEndYear]
   );
-  const selectedFocus = useMemo(
-    () => focusPresets.find((f) => f.id === focusPresetId) ?? availableFocusPresets[0] ?? focusPresets[0],
-    [focusPresetId, focusPresets, availableFocusPresets]
-  );
+  const selectedFocusPresets = useMemo(() => {
+    const selectedById = focusPresetIds
+      .map((id) => focusPresets.find((f) => f.id === id))
+      .filter((f): f is CountryFocusPreset => Boolean(f));
+    if (selectedById.length > 0) return selectedById.slice(0, MAX_ACTIVE_FOCUS_PERIODS);
+    const fallback = availableFocusPresets[0] ?? focusPresets[0];
+    return fallback ? [fallback] : [];
+  }, [focusPresetIds, focusPresets, availableFocusPresets]);
+  const selectedPrimaryFocus = selectedFocusPresets[0];
   const rangeStart = `${selectedRange?.startYear ?? 1960}-01-01`;
   const rangeEnd = `${resolvePresetEndYear(selectedRange?.endYear ?? null)}-12-31`;
-  const focusStart = `${selectedFocus?.startYear ?? 1960}-01-01`;
-  const focusEnd = `${resolvePresetEndYear(selectedFocus?.endYear ?? null)}-12-31`;
 
   useEffect(() => {
-    if (!selectedFocus) return;
-    const fy0 = selectedFocus.startYear;
-    const fy1 = resolvePresetEndYear(selectedFocus.endYear);
-    if (fy0 <= rangeEndYear && fy1 >= rangeStartYear) return;
-    const fallback = availableFocusPresets[0] ?? focusPresets[0];
-    if (fallback && fallback.id !== focusPresetId) setFocusPresetId(fallback.id);
-  }, [selectedFocus, rangeStartYear, rangeEndYear, availableFocusPresets, focusPresets, focusPresetId]);
+    const allowed = new Set(availableFocusPresets.map((f) => f.id));
+    const kept = focusPresetIds.filter((id) => allowed.has(id)).slice(0, MAX_ACTIVE_FOCUS_PERIODS);
+    const uniqueKept = Array.from(new Set(kept));
+    if (uniqueKept.length === 0) {
+      const fallback = availableFocusPresets[0] ?? focusPresets[0];
+      const next = fallback ? [fallback.id] : [];
+      if (next.length !== focusPresetIds.length || next.some((id, i) => id !== focusPresetIds[i])) {
+        setFocusPresetIds(next);
+      }
+      return;
+    }
+    if (
+      uniqueKept.length !== focusPresetIds.length ||
+      uniqueKept.some((id, i) => id !== focusPresetIds[i])
+    ) {
+      setFocusPresetIds(uniqueKept);
+    }
+  }, [focusPresetIds, availableFocusPresets, focusPresets]);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -204,6 +219,29 @@ export function CountryEconomyStudy({
 
   const timelineEvents = showOverlays ? overlays.events : [];
   const timelineBands = showOverlays ? overlays.bands : [];
+  const selectedFocusBands = useMemo(
+    () =>
+      selectedFocusPresets
+        .slice(1)
+        .map((focus, idx): ChartPeriodOverlayBandInput | null => {
+          const startYear = Math.max(focus.startYear, rangeStartYear);
+          const endYear = Math.min(resolvePresetEndYear(focus.endYear), rangeEndYear);
+          if (endYear < startYear) return null;
+          return {
+            id: `focus-${focus.id}-${idx}`,
+            startYear,
+            endYear,
+            fill: "rgba(107, 114, 128, 0.08)",
+          };
+        })
+        .filter((b): b is ChartPeriodOverlayBandInput => b !== null),
+    [selectedFocusPresets, rangeStartYear, rangeEndYear]
+  );
+  const chartPeriodOverlayBands = useMemo(
+    () => [...selectedFocusBands, ...timelineBands],
+    [selectedFocusBands, timelineBands]
+  );
+  const focusSummaryLabel = selectedFocusPresets.map((f) => f.label).join(", ");
 
   const conceptKeys = useMemo<StudyConceptId[]>(() => {
     const out: StudyConceptId[] = [
@@ -234,7 +272,7 @@ export function CountryEconomyStudy({
       hasFX && fx.length === 0 ? "FX" : null,
     ].filter(Boolean) as string[];
     const rows: string[] = [
-      `The charts use an outer window of ${selectedRange?.label ?? "the selected range"} and a shaded focus period of ${selectedFocus?.label ?? "the selected preset"}.`,
+      `The charts use an outer window of ${selectedRange?.label ?? "the selected range"} and shaded focus periods of ${focusSummaryLabel || "the selected presets"}.`,
       "CPI inflation (red), GDP growth (blue), and resource-rent shares are plotted as annual WDI observations; gaps are left as gaps.",
       isUsa
         ? "Nominal/real demand aggregates are the main GDP-level view for the United States; focus shading always remains inside the visible range."
@@ -250,7 +288,7 @@ export function CountryEconomyStudy({
     return rows;
   }, [
     selectedRange?.label,
-    selectedFocus?.label,
+    focusSummaryLabel,
     isUsa,
     isTurkey,
     gini.length,
@@ -266,7 +304,7 @@ export function CountryEconomyStudy({
         heading: "How to read these charts",
         bullets: [
           "Compare direction and timing first; treat overlays as context markers, not causal proof.",
-          "Use the range selector for long-run context and the focus selector for leadership-window comparisons.",
+          "Use the range selector for long-run context and focus chips for up to three leadership-window comparisons.",
           "For sparse indicators (especially Gini and poverty), blank years mean no point is available in this dataset.",
         ],
       },
@@ -428,7 +466,7 @@ export function CountryEconomyStudy({
   }, [source, countryName, countryCode, indicatorIds, oilRents.length, gasRents.length, hasFX, isUsa, isTurkey, federalDebtUsd.length]);
 
   const aiParagraphs = useMemo(() => {
-    const focusRange = `${selectedFocus?.label ?? "selected focus period"}`;
+    const focusRange = focusSummaryLabel || "selected focus periods";
     const sparseNotes: string[] = [];
     if (gini.length === 0) sparseNotes.push("Gini coverage is missing in the current window");
     if (povertyExtreme.length === 0 && povertyLmic.length === 0) sparseNotes.push("poverty headcount is sparse or unavailable");
@@ -437,13 +475,13 @@ export function CountryEconomyStudy({
     if (isTurkey && policyRate.length === 0) sparseNotes.push("policy-rate proxy is unavailable in this window");
     return [
       `Within ${focusRange}, compare inflation, growth, demand composition, and distribution indicators as descriptive co-movements rather than causal effects.`,
-      `The selected focus period is clipped to the active range (${selectedRange?.label ?? "selected range"}) so shaded years always match the visible window.`,
+      `Selected focus periods are clipped to the active range (${selectedRange?.label ?? "selected range"}) so shaded years always match the visible window.`,
       "Interpret nominal and real toggles as two lenses on the same period: nominal reflects current-price levels, while real controls for price-level drift.",
       sparseNotes.length
         ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
         : "Data caveat: this view uses annual published observations; apparent jumps can reflect sparse publication frequency, not necessarily sudden structural breaks.",
     ];
-  }, [selectedFocus?.label, selectedRange?.label, gini.length, povertyExtreme.length, povertyLmic.length, hasFX, fx.length, isUsa, hasUsFiscalMacro, isTurkey, policyRate.length]);
+  }, [focusSummaryLabel, selectedRange?.label, gini.length, povertyExtreme.length, povertyLmic.length, hasFX, fx.length, isUsa, hasUsFiscalMacro, isTurkey, policyRate.length]);
 
   const commonProps = {
     timeRange: [rangeStart, rangeEnd] as [string, string],
@@ -451,18 +489,34 @@ export function CountryEconomyStudy({
     showChartControls: true,
     chartHeight: "h-56 md:h-64",
     events: timelineEvents,
-    chartPeriodOverlayBands: timelineBands,
-    regimeArea: {
-      xStart: focusStart,
-      xEnd: focusEnd,
-      label: selectedFocus?.shortLabel ?? selectedFocus?.label ?? "Focus period",
-    },
-    focusGregorianYearRange: {
-      startYear: selectedFocus?.startYear ?? 1960,
-      endYear: resolvePresetEndYear(selectedFocus?.endYear ?? null),
-    },
+    chartPeriodOverlayBands,
+    regimeArea: selectedPrimaryFocus
+      ? {
+          xStart: `${Math.max(selectedPrimaryFocus.startYear, rangeStartYear)}-01-01`,
+          xEnd: `${Math.min(resolvePresetEndYear(selectedPrimaryFocus.endYear), rangeEndYear)}-12-31`,
+          label: selectedPrimaryFocus.shortLabel ?? selectedPrimaryFocus.label,
+        }
+      : undefined,
+    focusGregorianYearRange: selectedPrimaryFocus
+      ? {
+          startYear: Math.max(selectedPrimaryFocus.startYear, rangeStartYear),
+          endYear: Math.min(resolvePresetEndYear(selectedPrimaryFocus.endYear), rangeEndYear),
+        }
+      : undefined,
     xAxisYearLabel: isUsa ? yearAxisMode : isTurkey ? ("both" as const) : ("gregorian" as const),
     forceTimeRangeAxis: true as const,
+  };
+
+  const toggleFocusPreset = (presetId: string) => {
+    setFocusPresetIds((prev) => {
+      const isActive = prev.includes(presetId);
+      if (isActive) {
+        if (prev.length <= 1) return prev;
+        return prev.filter((id) => id !== presetId);
+      }
+      if (prev.length >= MAX_ACTIVE_FOCUS_PERIODS) return prev;
+      return [...prev, presetId];
+    });
   };
 
   return (
@@ -487,24 +541,34 @@ export function CountryEconomyStudy({
                 ))}
               </select>
             </label>
-            <label className="inline-flex items-center gap-2">
+            <div className="inline-flex items-center gap-2">
               <span className="text-muted-foreground">Focus</span>
-              <select
-                className="rounded-md border border-border bg-background px-2 py-1"
-                value={focusPresetId}
-                onChange={(e) => setFocusPresetId(e.target.value)}
-              >
-                {focusPresets.map((f) => (
-                  <option
-                    key={f.id}
-                    value={f.id}
-                    disabled={!availableFocusPresets.some((af) => af.id === f.id)}
-                  >
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <div className="flex flex-wrap gap-1.5">
+                {focusPresets.map((f) => {
+                  const isAvailable = availableFocusPresets.some((af) => af.id === f.id);
+                  const isActive = focusPresetIds.includes(f.id);
+                  const atLimit = !isActive && focusPresetIds.length >= MAX_ACTIVE_FOCUS_PERIODS;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      disabled={!isAvailable || atLimit}
+                      onClick={() => toggleFocusPreset(f.id)}
+                      className={`rounded-md border px-2 py-1 text-xs transition-colors ${
+                        isActive
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border bg-background text-muted-foreground hover:bg-muted/40"
+                      } disabled:cursor-not-allowed disabled:opacity-40`}
+                      aria-pressed={isActive}
+                      title={!isAvailable ? "Outside selected range" : atLimit ? "Maximum 3 focus periods" : f.label}
+                    >
+                      {isActive ? "✓ " : ""}
+                      {f.shortLabel ?? f.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             {isUsa ? (
               <label className="inline-flex items-center gap-2">
                 <span className="text-muted-foreground">Year axis</span>
@@ -529,7 +593,7 @@ export function CountryEconomyStudy({
             Overlays are contextual markers only and do not imply causality.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Focus presets outside the selected range are disabled to keep shaded periods consistent with visible years.
+            Focus presets outside the selected range are disabled; up to three selected periods are shaded with the first shown as primary.
           </p>
         </CardContent>
       </Card>

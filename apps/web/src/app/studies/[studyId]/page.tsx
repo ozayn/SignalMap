@@ -23,7 +23,6 @@ import {
   IRAN_IRAQ_WAR_OVERLAY_ID,
   IRAN_IRAQ_WAR_SHADE_END_YEAR,
   IRAN_IRAQ_WAR_SHADE_START_YEAR,
-  ipcOuterWarOverlayDefaultOn,
   type ChartPeriodOverlayBandInput,
 } from "@/lib/iran-iraq-war-chart-overlay";
 import {
@@ -943,12 +942,8 @@ export default function StudyDetailPage() {
   }, [isIranEconomyMacroDashboard, showIranIraqWarOverlay, isFa]);
 
   useEffect(() => {
-    if (studyId === "iran-economy-period-comparison") {
-      setShowIranIraqWarOverlay(ipcOuterWarOverlayDefaultOn(ipcOuterStartYear, ipcOuterEndYear));
-    } else {
-      setShowIranIraqWarOverlay(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- default when switching studies only; keep manual toggle while editing outer years
+    setShowIranIraqWarOverlay(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset default when switching studies; keep manual toggle while editing current view
   }, [studyId]);
 
   /** WDI national-accounts levels bundle (composition study or dual-axis reference study). */
