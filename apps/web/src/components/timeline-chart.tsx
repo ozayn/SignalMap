@@ -311,6 +311,8 @@ export type SecondSeries = {
 export type ChartSeries = {
   key: string;
   label: string;
+  /** Draw this multi-series as a line (default) or bar. */
+  renderAs?: "line" | "bar";
   yAxisIndex: 0 | 1 | 2;
   unit: string;
   points: { date: string; value: number }[];
@@ -3287,18 +3289,20 @@ export function TimelineChart({
                 const valuesForEcharts = tomanLogSanitize
                   ? rawSeriesVals.map((v) => (v != null && typeof v === "number" && v > 0 ? v : null))
                   : rawSeriesVals;
+                const isBarSeries = s.renderAs === "bar";
                 return {
                   name: s.label,
-                  type: "line" as const,
+                  type: (isBarSeries ? "bar" : "line") as "line" | "bar",
                   yAxisIndex: s.yAxisIndex,
                   data: useTimeAxis ? toTimeData(valuesForEcharts) : valuesForEcharts,
-                  smooth: s.smooth ?? false,
+                  smooth: isBarSeries ? undefined : (s.smooth ?? false),
                   /** Yearly sparse WDI-style grids: do not draw fake continuity across missing years. */
-                  connectNulls: yearlyMultiSparseDisconnectNulls ? false : true,
-                  step: (isGold ? "start" : false) as "start" | false,
-                  symbol: seriesShape,
-                  showSymbol,
-                  symbolSize,
+                  connectNulls: isBarSeries ? undefined : yearlyMultiSparseDisconnectNulls ? false : true,
+                  step: isBarSeries ? undefined : ((isGold ? "start" : false) as "start" | false),
+                  symbol: isBarSeries ? undefined : seriesShape,
+                  showSymbol: isBarSeries ? undefined : showSymbol,
+                  symbolSize: isBarSeries ? undefined : symbolSize,
+                  ...(isBarSeries ? { barMaxWidth: 18, barMinHeight: 1 } : {}),
                   ...(s.stack ? { stack: s.stack } : {}),
                   ...(s.stackedArea
                     ? {

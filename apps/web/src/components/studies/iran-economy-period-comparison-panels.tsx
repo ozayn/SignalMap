@@ -31,6 +31,23 @@ const FX_COMPARISON_GRID_RIGHT = "32px";
 
 type Point = { date: string; value: number };
 type GdpDecompMode = "nominal" | "real";
+type IranElectionParticipationPoint = { year: number; turnoutPct: number; votesCastMillions: number };
+
+const IRAN_PRESIDENTIAL_ELECTION_PARTICIPATION: IranElectionParticipationPoint[] = [
+  { year: 1980, turnoutPct: 67.42, votesCastMillions: 14.15 },
+  { year: 1981, turnoutPct: 74.26, votesCastMillions: 16.85 },
+  { year: 1985, turnoutPct: 54.78, votesCastMillions: 14.24 },
+  { year: 1989, turnoutPct: 54.59, votesCastMillions: 16.45 },
+  { year: 1993, turnoutPct: 50.66, votesCastMillions: 16.80 },
+  { year: 1997, turnoutPct: 79.92, votesCastMillions: 29.15 },
+  { year: 2001, turnoutPct: 66.77, votesCastMillions: 28.08 },
+  { year: 2005, turnoutPct: 62.84, votesCastMillions: 29.32 },
+  { year: 2009, turnoutPct: 84.83, votesCastMillions: 39.37 },
+  { year: 2013, turnoutPct: 72.94, votesCastMillions: 36.70 },
+  { year: 2017, turnoutPct: 73.33, votesCastMillions: 41.22 },
+  { year: 2021, turnoutPct: 48.80, votesCastMillions: 28.99 },
+  { year: 2024, turnoutPct: 39.93, votesCastMillions: 24.54 },
+];
 
 function firstAvailableYear(points: Point[]): number | null {
   let first: number | null = null;
@@ -290,6 +307,56 @@ export function IranEconomyPeriodComparisonPanels({
     [externalDebtContextEvents, events]
   );
   const fxSharedTimeRange = timeRange;
+  const politicalParticipationTurnoutPoints = useMemo<Point[]>(
+    () =>
+      IRAN_PRESIDENTIAL_ELECTION_PARTICIPATION.map((p) => ({
+        date: `${p.year}-01-01`,
+        value: p.turnoutPct,
+      })),
+    []
+  );
+  const politicalParticipationVotesCastPoints = useMemo<Point[]>(
+    () =>
+      IRAN_PRESIDENTIAL_ELECTION_PARTICIPATION.map((p) => ({
+        date: `${p.year}-01-01`,
+        value: p.votesCastMillions,
+      })),
+    []
+  );
+  const politicalParticipationEvents = useMemo<TimelineEvent[]>(
+    () => [
+      {
+        id: "iran-presidential-election-khatami-1997",
+        layer: "iran_core",
+        date: "1997-01-01",
+        title: "1997 election (Khatami)",
+        title_fa: "انتخابات ۱۳۷۶ (خاتمی)",
+      },
+      {
+        id: "iran-presidential-election-disputed-2009",
+        layer: "iran_core",
+        date: "2009-01-01",
+        title: "2009 disputed election / Green Movement",
+        title_fa: "انتخابات مناقشه‌برانگیز ۱۳۸۸ / جنبش سبز",
+      },
+      {
+        id: "iran-presidential-election-low-turnout-2021",
+        layer: "iran_core",
+        date: "2021-01-01",
+        title: "2021 historically low turnout",
+        title_fa: "مشارکت پایین تاریخی در ۱۴۰۰",
+      },
+      {
+        id: "iran-presidential-election-runoff-2024",
+        layer: "iran_core",
+        date: "2024-01-01",
+        title: "2024 low-turnout runoff election",
+        title_fa: "انتخابات دومرحله‌ای با مشارکت پایین در ۱۴۰۳",
+      },
+      ...events,
+    ],
+    [events]
+  );
 
   const nominalDecompOverlapStartYear = useMemo(() => {
     const gdpStart = firstAvailableYear(recoDemandGdpPoints);
@@ -1955,6 +2022,108 @@ export function IranEconomyPeriodComparisonPanels({
                   ))}
                 </div>
               ) : null}
+            </CardContent>
+          </Card>
+          <Card className="chart-card border-border md:col-span-2">
+            <CardHeader className="space-y-1 px-4 py-2.5">
+              <CardTitle className="text-base font-semibold">
+                {L(isFa, "Political participation", "مشارکت سیاسی")}
+              </CardTitle>
+              <p className="text-xs text-muted-foreground max-w-3xl">
+                {L(
+                  isFa,
+                  "Iran presidential election turnout and votes cast.",
+                  "مشارکت و آرای مأخوذه در انتخابات ریاست‌جمهوری ایران."
+                )}
+              </p>
+              <p className="text-xs text-muted-foreground max-w-3xl">
+                {L(
+                  isFa,
+                  "Presidential elections only (1980, 1981, 1985, 1989, 1993, 1997, 2001, 2005, 2009, 2013, 2017, 2021, 2024).",
+                  "فقط انتخابات ریاست‌جمهوری (۱۹۸۰، ۱۹۸۱، ۱۹۸۵، ۱۹۸۹، ۱۹۹۳، ۱۹۹۷، ۲۰۰۱، ۲۰۰۵، ۲۰۰۹، ۲۰۱۳، ۲۰۱۷، ۲۰۲۱، ۲۰۲۴)."
+                )}
+              </p>
+            </CardHeader>
+            <CardContent className="px-4 pb-3 pt-0">
+              <TimelineChart
+                chartLocale={chartLocaleForCharts}
+                exportPresentationStudyHeading={exportStudyHeading}
+                exportPresentationTitle={L(
+                  isFa,
+                  `${studyTitle} — Political participation (presidential elections)`,
+                  `${studyTitle} — مشارکت سیاسی (انتخابات ریاست‌جمهوری)`
+                )}
+                exportSourceFooter={studyChartExportSource(isFa, [
+                  "Iran Data Portal",
+                  "International IDEA Voter Turnout Database",
+                  "Iran Ministry of Interior (official aggregates)",
+                ])}
+                data={[]}
+                valueKey="value"
+                label={L(isFa, "Election participation", "مشارکت انتخاباتی")}
+                events={politicalParticipationEvents}
+                multiSeries={[
+                  {
+                    key: "presidential_turnout_pct",
+                    label: L(isFa, "Turnout", "نرخ مشارکت"),
+                    yAxisIndex: 0,
+                    unit: "%",
+                    points: politicalParticipationTurnoutPoints,
+                    color: SIGNAL_CONCEPT.gdp,
+                    symbol: "circle",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                    smooth: false,
+                  },
+                  {
+                    key: "presidential_votes_cast_mn",
+                    label: L(isFa, "Votes cast", "آرای مأخوذه"),
+                    renderAs: "bar",
+                    yAxisIndex: 1,
+                    unit: L(isFa, "million votes", "میلیون رأی"),
+                    points: politicalParticipationVotesCastPoints,
+                    color: SIGNAL_CONCEPT.gini,
+                    symbol: "diamond",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                    smooth: false,
+                  },
+                ]}
+                timeRange={timeRange}
+                chartPeriodOverlayBands={chartPeriodOverlayBands}
+                revolution1979Marker={revolution1979Marker}
+                chartRangeGranularity="year"
+                forceTimeAxis
+                xAxisYearLabel={chartYearAxisLabel}
+                exportFileStem="iran-ipc-political-participation"
+                showChartControls
+                chartHeight={IPC_COMPARISON_CHART_HEIGHT}
+                mutedEventLines
+                regimeArea={regimeArea}
+                focusGregorianYearRange={focusGregorianYearRange}
+                focusHoverHint={focusHoverHint}
+                multiSeriesYAxisNameOverrides={{
+                  0: L(isFa, "Turnout (%)", "نرخ مشارکت (%)"),
+                  1: L(isFa, "Votes cast (millions)", "آرای مأخوذه (میلیون)"),
+                }}
+                yAxisDetailNote={L(
+                  isFa,
+                  "Election turnout reflects official reported participation in presidential elections. It should not be interpreted as a direct measure of political support.",
+                  "مشارکت انتخاباتی بازتاب ارقام رسمی مشارکت در انتخابات ریاست‌جمهوری است و نباید به‌عنوان سنجهٔ مستقیم حمایت سیاسی تفسیر شود."
+                )}
+              />
+              <p className="text-xs text-muted-foreground mt-2 max-w-3xl leading-relaxed">
+                {L(
+                  isFa,
+                  "Sparse election-year points are shown as reported; no interpolation is applied between elections.",
+                  "نقاط فقط برای سال‌های انتخابات نمایش داده می‌شوند و بین انتخابات درون‌یابی انجام نمی‌شود."
+                )}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-3xl leading-relaxed">
+                {L(
+                  isFa,
+                  "Gender breakdown is not shown because consistent male/female voter counts are not available in the current source series.",
+                  "تفکیک جنسیتی نمایش داده نمی‌شود، زیرا شمارش سازگار رأی‌دهندگان زن/مرد در سری منابع فعلی در دسترس نیست."
+                )}
+              </p>
             </CardContent>
           </Card>
         </div>
