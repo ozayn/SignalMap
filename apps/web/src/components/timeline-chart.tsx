@@ -1139,8 +1139,9 @@ export function TimelineChart({
     setClipEnd("");
   }, [rangeBounds?.[0], rangeBounds?.[1]]);
 
-  const buildExportPresentationTitle = useCallback((): string => {
-    return (
+  const openExportModal = useCallback(() => {
+    const visibleTitle = localizeChartNumericDisplayString(label.trim(), (chartLocale ?? "en") === "fa" ? "fa" : "en");
+    const fallbackTitle =
       exportPresentationTitle?.trim() ??
       buildPresentationExportTitle({
         studyHeading: exportPresentationStudyHeading,
@@ -1148,24 +1149,14 @@ export function TimelineChart({
         timeRange: chartRange,
         chartLocale: chartLocale ?? "en",
         yearAxisMode: xAxisYearLabel ?? "gregorian",
-      })
-    );
-  }, [
-    chartLocale,
-    chartRange,
-    exportPresentationStudyHeading,
-    exportPresentationTitle,
-    label,
-    xAxisYearLabel,
-  ]);
-
-  const openExportModal = useCallback(() => {
+      });
     setExportModalDefaults({
-      title: buildExportPresentationTitle(),
+      // Match the visible chart title by default; only fall back if the visible label is empty.
+      title: visibleTitle || fallbackTitle,
       fontSizes: { ...DEFAULT_EXPORT_CHART_FONT_SIZES },
     });
     setExportModalOpen(true);
-  }, [buildExportPresentationTitle]);
+  }, [chartLocale, chartRange, exportPresentationTitle, exportPresentationStudyHeading, label, xAxisYearLabel]);
 
   const handleExportDownload = useCallback(
     (settings: ExportChartSettings) => {
@@ -1212,7 +1203,8 @@ export function TimelineChart({
       const useExportAuxLegend =
         (exportPresentationCountryKey?.length ?? 0) > 0 && exportPresentationLineStyleKey != null;
 
-      const exportPresentationSubtitle =
+      const visibleSubtitleForExport = yAxisDetailNote?.trim() || undefined;
+      const groupedLegendSubtitle =
         groupedLegendModel?.variant === "country" && !useExportAuxLegend
           ? buildCountryGroupedExportSubtitle({
               model: groupedLegendModel,
@@ -1220,6 +1212,7 @@ export function TimelineChart({
               chartLocale: chartLocale ?? "en",
             })
           : undefined;
+      const exportPresentationSubtitle = visibleSubtitleForExport ?? groupedLegendSubtitle;
 
       const titleForExport = settings.titleText.trim();
 
@@ -1261,6 +1254,7 @@ export function TimelineChart({
       xAxisYearLabel,
       groupedLegendModel,
       groupedLegendSelected,
+      yAxisDetailNote,
     ]
   );
 
