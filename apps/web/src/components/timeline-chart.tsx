@@ -1163,7 +1163,12 @@ export function TimelineChart({
   useEffect(() => {
     if (!rangeBounds || didHydrateFromShareUrlRef.current) return;
     if (!searchParams) return;
-    const targetChart = searchParams.get("chart");
+    const hashTarget =
+      typeof window !== "undefined" && window.location.hash
+        ? decodeURIComponent(window.location.hash.replace(/^#/, ""))
+        : "";
+    const legacyChartParam = searchParams.get("chart");
+    const targetChart = hashTarget || legacyChartParam || "";
     if (!targetChart || targetChart !== resolvedShareChartId) return;
 
     const startParam = searchParams.get("start");
@@ -1177,7 +1182,10 @@ export function TimelineChart({
     didHydrateFromShareUrlRef.current = true;
 
     const t = window.setTimeout(() => {
-      chartRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const container = chartRef.current?.closest("[data-chart-id]") as HTMLElement | null;
+      container?.scrollIntoView({ behavior: "smooth", block: "start" });
+      // Sticky header offset correction after smooth-scroll starts.
+      window.setTimeout(() => window.scrollBy({ top: -84, behavior: "auto" }), 120);
       setSharedLinkHighlight(true);
       window.setTimeout(() => setSharedLinkHighlight(false), 1700);
     }, 120);
@@ -1187,7 +1195,8 @@ export function TimelineChart({
   const copyLiveChartLink = useCallback(async () => {
     if (!chartRange || typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    params.set("chart", resolvedShareChartId);
+    // Hash target is now the canonical chart anchor.
+    params.delete("chart");
     params.set("start", chartRange[0].slice(0, 4));
     params.set("end", chartRange[1].slice(0, 4));
 
@@ -1215,7 +1224,8 @@ export function TimelineChart({
     }
 
     const query = params.toString();
-    const url = `${window.location.origin}${pathname}${query ? `?${query}` : ""}`;
+    const hash = encodeURIComponent(resolvedShareChartId);
+    const url = `${window.location.origin}${pathname}${query ? `?${query}` : ""}#${hash}`;
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(url);
@@ -3890,7 +3900,8 @@ export function TimelineChart({
 
   const inner = (
     <div
-      className={`min-w-0 flex flex-col rounded-md transition-colors ${STUDY_CHART_STACK_GAP_CLASS} ${
+      id={resolvedShareChartId}
+      className={`min-w-0 scroll-mt-24 md:scroll-mt-28 flex flex-col rounded-md transition-colors ${STUDY_CHART_STACK_GAP_CLASS} ${
         sharedLinkHighlight ? "ring-2 ring-primary/35" : ""
       }`}
       data-chart-id={resolvedShareChartId}
