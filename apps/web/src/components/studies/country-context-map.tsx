@@ -54,7 +54,13 @@ function linePath(
 
 export function CountryContextMap({ countryCode, countryName }: Props) {
   const context = COUNTRY_CONTEXT_MAPS[countryCode.toUpperCase()];
-  if (!context) return null;
+  if (!context) {
+    if (process.env.NODE_ENV !== "production") {
+      // eslint-disable-next-line no-console
+      console.debug(`No country map data for countryCode: ${countryCode}`);
+    }
+    return null;
+  }
 
   return (
     <Card className="border-border bg-muted/10">

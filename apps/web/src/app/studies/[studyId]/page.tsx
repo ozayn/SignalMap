@@ -53,6 +53,7 @@ import { IranMoneySupplyMethodology } from "@/components/studies/iran-money-supp
 import { InSimpleTerms } from "@/components/in-simple-terms";
 import { StudyAiInterpretation } from "@/components/study-ai-interpretation";
 import { IranEconomyPeriodComparisonPanels } from "@/components/studies/iran-economy-period-comparison-panels";
+import { CountryContextMap } from "@/components/studies/country-context-map";
 import { GdpDecompositionChartSkeleton } from "@/components/studies/gdp-decomposition-chart-ui";
 import type { GdpDecompositionCoverage } from "@/lib/gdp-decomposition-coverage";
 import { EventsTimeline, type TimelineEvent } from "@/components/events-timeline";
@@ -11373,6 +11374,9 @@ export default function StudyDetailPage() {
               <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl mb-4">
                 {L(isFa, enEconomic.annualWdiVsMarketNoteEn, faEconomic.annualWdiVsMarketNoteFa)}
               </p>
+              <div className="mb-4 max-w-6xl">
+                <CountryContextMap countryCode="IRN" countryName="Iran" />
+              </div>
               {recoLoading && !recoLoadFailed ? (
                 <p className="text-sm text-muted-foreground mb-4">
                   {L(isFa, "Loading macro series…", "در حال بارگذاری سری‌های کلان…")}
@@ -12802,6 +12806,9 @@ export default function StudyDetailPage() {
                   </label>
                 </div>
               </ClientOnlyAfterMount>
+              <div className="mb-4 max-w-6xl">
+                <CountryContextMap countryCode="IRN" countryName="Iran" />
+              </div>
               {ipcTimeRange ? (
                 <IranEconomyPeriodComparisonPanels
                   isFa={isFa}
