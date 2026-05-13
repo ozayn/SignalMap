@@ -1002,6 +1002,7 @@ export function TimelineChart({
   }>({ title: "", fontSizes: { ...DEFAULT_EXPORT_CHART_FONT_SIZES } });
   const { isCompact, isLandscapeCompact } = useChartViewportLayout();
   const didHydrateFromShareUrlRef = useRef(false);
+  const shareScrollTimerRef = useRef<number | null>(null);
 
   const rangeBounds = useMemo((): [string, string] | undefined => {
     if (timeRangeProp?.[0] && timeRangeProp[1]) {
@@ -1160,6 +1161,37 @@ export function TimelineChart({
     setClipEnd("");
   }, [rangeBounds?.[0], rangeBounds?.[1]]);
 
+  const runDeferredSharedChartScroll = useCallback(
+    (targetId: string) => {
+      if (typeof window === "undefined") return;
+      if (shareScrollTimerRef.current != null) {
+        window.clearTimeout(shareScrollTimerRef.current);
+        shareScrollTimerRef.current = null;
+      }
+      const started = Date.now();
+      const deadlineMs = 5000;
+      const tryScroll = () => {
+        const el = document.getElementById(targetId);
+        if (process.env.NODE_ENV !== "production") {
+          // eslint-disable-next-line no-console
+          console.log("[chart-link] target", targetId, "found", Boolean(el));
+        }
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          window.setTimeout(() => window.scrollBy({ top: -84, behavior: "auto" }), 120);
+          didHydrateFromShareUrlRef.current = true;
+          setSharedLinkHighlight(true);
+          window.setTimeout(() => setSharedLinkHighlight(false), 1700);
+          return;
+        }
+        if (Date.now() - started >= deadlineMs) return;
+        shareScrollTimerRef.current = window.setTimeout(tryScroll, 100);
+      };
+      shareScrollTimerRef.current = window.setTimeout(tryScroll, 60);
+    },
+    []
+  );
+
   useEffect(() => {
     if (!rangeBounds || didHydrateFromShareUrlRef.current) return;
     if (!searchParams) return;
@@ -1179,18 +1211,32 @@ export function TimelineChart({
     if (endParam && /^\d{4}$/.test(endParam)) {
       setClipEnd(normalizeChartRangeBound(endParam, true));
     }
-    didHydrateFromShareUrlRef.current = true;
 
-    const t = window.setTimeout(() => {
-      const container = chartRef.current?.closest("[data-chart-id]") as HTMLElement | null;
-      container?.scrollIntoView({ behavior: "smooth", block: "start" });
-      // Sticky header offset correction after smooth-scroll starts.
-      window.setTimeout(() => window.scrollBy({ top: -84, behavior: "auto" }), 120);
-      setSharedLinkHighlight(true);
-      window.setTimeout(() => setSharedLinkHighlight(false), 1700);
-    }, 120);
-    return () => window.clearTimeout(t);
-  }, [rangeBounds, searchParams, resolvedShareChartId]);
+    runDeferredSharedChartScroll(targetChart);
+  }, [rangeBounds, searchParams, resolvedShareChartId, chartLayoutRevision, runDeferredSharedChartScroll]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onHashChange = () => {
+      const targetId = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+      if (!targetId || targetId !== resolvedShareChartId) return;
+      didHydrateFromShareUrlRef.current = false;
+      runDeferredSharedChartScroll(targetId);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => {
+      window.removeEventListener("hashchange", onHashChange);
+    };
+  }, [resolvedShareChartId, runDeferredSharedChartScroll]);
+
+  useEffect(() => {
+    return () => {
+      if (shareScrollTimerRef.current != null && typeof window !== "undefined") {
+        window.clearTimeout(shareScrollTimerRef.current);
+        shareScrollTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const copyLiveChartLink = useCallback(async () => {
     if (!chartRange || typeof window === "undefined") return;
@@ -1231,8 +1277,11 @@ export function TimelineChart({
         await navigator.clipboard.writeText(url);
       } else {
         const ta = document.createElement("textarea");
+        ta.id = "chart-link-copy-fallback";
+        ta.name = "chart-link-copy-fallback";
         ta.value = url;
         ta.setAttribute("readonly", "true");
+        ta.setAttribute("aria-hidden", "true");
         ta.style.position = "absolute";
         ta.style.left = "-9999px";
         document.body.appendChild(ta);
