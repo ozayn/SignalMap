@@ -251,6 +251,60 @@ export function CountryEconomyStudy({
   const selectedPrimaryFocus = selectedFocusPresets[0];
   const rangeStart = `${selectedRange?.startYear ?? 1960}-01-01`;
   const rangeEnd = `${resolvePresetEndYear(selectedRange?.endYear ?? null)}-12-31`;
+  const [didInitFromUrl, setDidInitFromUrl] = useState(false);
+
+  useEffect(() => {
+    if (didInitFromUrl || typeof window === "undefined") return;
+    const qs = new URLSearchParams(window.location.search);
+
+    const rangeFromUrl = qs.get("rangePreset");
+    if (rangeFromUrl && rangePresets.some((r) => r.id === rangeFromUrl)) {
+      setRangePresetId(rangeFromUrl);
+    }
+
+    const focusFromUrl = qs.get("focus");
+    if (focusFromUrl) {
+      const wanted = focusFromUrl
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const allowed = new Set(focusPresets.map((f) => f.id));
+      const next = wanted.filter((id) => allowed.has(id)).slice(0, MAX_ACTIVE_FOCUS_PERIODS);
+      if (next.length > 0) setFocusPresetIds(next);
+    }
+
+    const demandFromUrl = qs.get("demand");
+    if (demandFromUrl === "nominal" || demandFromUrl === "real") {
+      setDemandMode(demandFromUrl);
+    }
+
+    const gdpFromUrl = qs.get("gdp");
+    if (gdpFromUrl === "nominal" || gdpFromUrl === "real") {
+      setGdpMode(gdpFromUrl);
+    }
+
+    const overlaysFromUrl = qs.get("overlays");
+    if (overlaysFromUrl === "0" || overlaysFromUrl === "1") {
+      setShowOverlays(overlaysFromUrl === "1");
+    }
+
+    const logFromUrl = qs.get("log");
+    if (logFromUrl === "0" || logFromUrl === "1") {
+      setFxLog(logFromUrl === "1");
+    }
+
+    const calendarFromUrl = qs.get("calendar");
+    if (
+      calendarFromUrl === "gregorian" ||
+      calendarFromUrl === "jalali" ||
+      calendarFromUrl === "both" ||
+      calendarFromUrl === "iranian"
+    ) {
+      setYearAxisMode(calendarFromUrl === "iranian" ? "jalali" : calendarFromUrl);
+    }
+
+    setDidInitFromUrl(true);
+  }, [didInitFromUrl, focusPresets, rangePresets]);
 
   useEffect(() => {
     const allowed = new Set(availableFocusPresets.map((f) => f.id));
@@ -1175,6 +1229,15 @@ export function CountryEconomyStudy({
         : isTurkey
           ? ("both" as const)
           : ("gregorian" as const),
+    shareQueryState: {
+      rangePreset: rangePresetId,
+      focus: focusPresetIds,
+      demand: demandMode,
+      gdp: gdpMode,
+      overlays: showOverlays,
+      log: fxLog,
+      calendar: isUsa || isTajikistan ? yearAxisMode : undefined,
+    },
   };
 
   const toggleFocusPreset = (presetId: string) => {

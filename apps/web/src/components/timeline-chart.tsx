@@ -86,6 +86,7 @@ import {
   TIMELINE_CHART_DEFAULT_HEIGHT_CLASS,
 } from "@/lib/chart-study-typography";
 import { useChartViewportLayout } from "@/lib/use-chart-viewport-layout";
+import { usePathname, useSearchParams } from "next/navigation";
 
 const MULTI_SERIES_FALLBACK_LEGEND_ICONS: Array<"circle" | "diamond" | "triangle" | "rect"> = [
   "circle",
@@ -265,6 +266,7 @@ function isGdpCompactMultiSeriesFormat(fmt?: string): boolean {
 }
 
 type DataPoint = { date: string; value: number; confidence?: number };
+type ShareableQueryValue = string | number | boolean | Array<string | number> | null | undefined;
 
 export type TimelineEvent = {
   id: string;
@@ -442,6 +444,13 @@ type TimelineChartProps = {
    * @default true
    */
   showPngExportWhenRangeHidden?: boolean;
+  /** Optional stable chart key used in shared URLs (`?chart=<key>`). */
+  shareChartId?: string;
+  /**
+   * Extra query parameters to serialize in "Copy live chart link".
+   * Values are stringified with clean defaults (arrays join with commas, booleans to 1/0).
+   */
+  shareQueryState?: Record<string, ShareableQueryValue>;
   /** Range picker resolution; when omitted, inferred from point spacing in the series. */
   chartRangeGranularity?: ChartRangeGranularity;
   /** Download filename stem for PNG export (sanitized); defaults to `label`. */
@@ -957,6 +966,8 @@ export function TimelineChart({
   categoryYearTickStep,
   showChartControls = true,
   showPngExportWhenRangeHidden = true,
+  shareChartId,
+  shareQueryState,
   chartRangeGranularity: chartRangeGranularityProp,
   exportFileStem,
   exportSourceFooter,
@@ -975,17 +986,22 @@ export function TimelineChart({
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   /** Bumps when the chart container gains usable layout size (avoids echarts.init at 0×0). */
   const [chartLayoutRevision, setChartLayoutRevision] = useState(0);
   const [xLabelRotate, setXLabelRotate] = useState(0);
   const [clipStart, setClipStart] = useState("");
   const [clipEnd, setClipEnd] = useState("");
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [sharedLinkHighlight, setSharedLinkHighlight] = useState(false);
   const [exportModalDefaults, setExportModalDefaults] = useState<{
     title: string;
     fontSizes: ExportChartFontSizes;
   }>({ title: "", fontSizes: { ...DEFAULT_EXPORT_CHART_FONT_SIZES } });
   const { isCompact, isLandscapeCompact } = useChartViewportLayout();
+  const didHydrateFromShareUrlRef = useRef(false);
 
   const rangeBounds = useMemo((): [string, string] | undefined => {
     if (timeRangeProp?.[0] && timeRangeProp[1]) {
@@ -1019,6 +1035,11 @@ export function TimelineChart({
     }
     return [a, b];
   }, [rangeBounds, clipStart, clipEnd]);
+
+  const resolvedShareChartId = useMemo(() => {
+    const raw = shareChartId?.trim() || exportFileStem?.trim() || label.trim() || "chart";
+    return slugifyChartFilename(raw) || "chart";
+  }, [shareChartId, exportFileStem, label]);
 
   /** Study PNG export: filename range segment and shared toolbar always use calendar years (data may be daily). */
   const studyExportRangeGranularity: ChartRangeGranularity = "year";
@@ -1138,6 +1159,84 @@ export function TimelineChart({
     setClipStart("");
     setClipEnd("");
   }, [rangeBounds?.[0], rangeBounds?.[1]]);
+
+  useEffect(() => {
+    if (!rangeBounds || didHydrateFromShareUrlRef.current) return;
+    if (!searchParams) return;
+    const targetChart = searchParams.get("chart");
+    if (!targetChart || targetChart !== resolvedShareChartId) return;
+
+    const startParam = searchParams.get("start");
+    const endParam = searchParams.get("end");
+    if (startParam && /^\d{4}$/.test(startParam)) {
+      setClipStart(normalizeChartRangeBound(startParam, false));
+    }
+    if (endParam && /^\d{4}$/.test(endParam)) {
+      setClipEnd(normalizeChartRangeBound(endParam, true));
+    }
+    didHydrateFromShareUrlRef.current = true;
+
+    const t = window.setTimeout(() => {
+      chartRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setSharedLinkHighlight(true);
+      window.setTimeout(() => setSharedLinkHighlight(false), 1700);
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [rangeBounds, searchParams, resolvedShareChartId]);
+
+  const copyLiveChartLink = useCallback(async () => {
+    if (!chartRange || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    params.set("chart", resolvedShareChartId);
+    params.set("start", chartRange[0].slice(0, 4));
+    params.set("end", chartRange[1].slice(0, 4));
+
+    if (shareQueryState) {
+      for (const [k, raw] of Object.entries(shareQueryState)) {
+        if (raw == null || raw === "") {
+          params.delete(k);
+          continue;
+        }
+        if (Array.isArray(raw)) {
+          const v = raw
+            .map((x) => String(x).trim())
+            .filter(Boolean)
+            .join(",");
+          if (v) params.set(k, v);
+          else params.delete(k);
+          continue;
+        }
+        if (typeof raw === "boolean") {
+          params.set(k, raw ? "1" : "0");
+          continue;
+        }
+        params.set(k, String(raw));
+      }
+    }
+
+    const query = params.toString();
+    const url = `${window.location.origin}${pathname}${query ? `?${query}` : ""}`;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = url;
+        ta.setAttribute("readonly", "true");
+        ta.style.position = "absolute";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopyStatus("copied");
+      window.setTimeout(() => setCopyStatus("idle"), 1400);
+    } catch {
+      setCopyStatus("error");
+      window.setTimeout(() => setCopyStatus("idle"), 1800);
+    }
+  }, [chartRange, pathname, resolvedShareChartId, shareQueryState]);
 
   const openExportModal = useCallback(() => {
     const visibleTitle = localizeChartNumericDisplayString(label.trim(), (chartLocale ?? "en") === "fa" ? "fa" : "en");
@@ -3790,7 +3889,12 @@ export function TimelineChart({
   const sourceLine = formatStudyExportSourceLine(exportSourceFooter, chartLocaleResolved);
 
   const inner = (
-    <div className={`min-w-0 flex flex-col ${STUDY_CHART_STACK_GAP_CLASS}`}>
+    <div
+      className={`min-w-0 flex flex-col rounded-md transition-colors ${STUDY_CHART_STACK_GAP_CLASS} ${
+        sharedLinkHighlight ? "ring-2 ring-primary/35" : ""
+      }`}
+      data-chart-id={resolvedShareChartId}
+    >
       {showFullRangeToolbar ? (
         <StudyChartControls
           minDate={rangeBounds[0]!}
@@ -3800,6 +3904,25 @@ export function TimelineChart({
           onStartChange={setClipStart}
           onEndChange={setClipEnd}
           onExportPng={openExportModal}
+          onCopyLiveChartLink={copyLiveChartLink}
+          copyLinkLabel={
+            copyStatus === "copied"
+              ? chartLocaleResolved === "fa"
+                ? "لینک کپی شد"
+                : "Link copied"
+              : copyStatus === "error"
+                ? chartLocaleResolved === "fa"
+                  ? "کپی ناموفق"
+                  : "Copy failed"
+                : chartLocaleResolved === "fa"
+                  ? "کپی لینک زنده نمودار"
+                  : "Copy live chart link"
+          }
+          helperText={
+            chartLocaleResolved === "fa"
+              ? "برای اسلاید از PNG استفاده کنید، یا لینک زنده نمودار تعاملی را به‌اشتراک بگذارید."
+              : "Use PNG for slides, or share the live interactive chart link."
+          }
           mode="full"
           startYearLabel={chartLocaleResolved === "fa" ? "سال شروع" : "Start Year"}
           endYearLabel={chartLocaleResolved === "fa" ? "سال پایان" : "End Year"}
@@ -3813,6 +3936,25 @@ export function TimelineChart({
           onStartChange={setClipStart}
           onEndChange={setClipEnd}
           onExportPng={openExportModal}
+          onCopyLiveChartLink={copyLiveChartLink}
+          copyLinkLabel={
+            copyStatus === "copied"
+              ? chartLocaleResolved === "fa"
+                ? "لینک کپی شد"
+                : "Link copied"
+              : copyStatus === "error"
+                ? chartLocaleResolved === "fa"
+                  ? "کپی ناموفق"
+                  : "Copy failed"
+                : chartLocaleResolved === "fa"
+                  ? "کپی لینک زنده نمودار"
+                  : "Copy live chart link"
+          }
+          helperText={
+            chartLocaleResolved === "fa"
+              ? "برای اسلاید از PNG استفاده کنید، یا لینک زنده نمودار تعاملی را به‌اشتراک بگذارید."
+              : "Use PNG for slides, or share the live interactive chart link."
+          }
           mode="exportOnly"
           startYearLabel={chartLocaleResolved === "fa" ? "سال شروع" : "Start Year"}
           endYearLabel={chartLocaleResolved === "fa" ? "سال پایان" : "End Year"}

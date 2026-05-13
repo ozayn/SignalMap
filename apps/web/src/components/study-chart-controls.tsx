@@ -14,7 +14,11 @@ export type StudyChartControlsProps = {
   onStartChange: (value: string) => void;
   onEndChange: (value: string) => void;
   onExportPng: () => void;
+  onCopyLiveChartLink?: () => void;
   disabledExport?: boolean;
+  disabledCopyLink?: boolean;
+  copyLinkLabel?: string;
+  helperText?: string;
   /**
    * `exportOnly`: single Export PNG button (e.g. when the parent page owns range controls or the chart is year-scoped).
    * `full`: start/end + export (default).
@@ -53,7 +57,11 @@ export function StudyChartControls({
   onStartChange,
   onEndChange,
   onExportPng,
+  onCopyLiveChartLink,
   disabledExport,
+  disabledCopyLink,
+  copyLinkLabel = "Copy live chart link",
+  helperText,
   mode = "full",
   startYearLabel = "Start Year",
   endYearLabel = "End Year",
@@ -139,89 +147,110 @@ export function StudyChartControls({
     </Button>
   );
 
+  const copyLinkButton = onCopyLiveChartLink ? (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="h-8 shrink-0 rounded-md px-2.5 text-xs font-normal leading-none"
+      onClick={onCopyLiveChartLink}
+      disabled={disabledCopyLink}
+    >
+      {copyLinkLabel}
+    </Button>
+  ) : null;
+
   if (mode === "exportOnly") {
     return (
-      <div className={`${TOOLBAR_ROW} flex-wrap justify-end`} aria-label="Chart export">
-        {exportButton}
-      </div>
+      <>
+        <div className={`${TOOLBAR_ROW} flex-wrap justify-end`} aria-label="Chart export and share">
+          {copyLinkButton}
+          {exportButton}
+        </div>
+        {helperText ? <p className="text-[11px] text-muted-foreground">{helperText}</p> : null}
+      </>
     );
   }
 
   return (
-    <div className={TOOLBAR_ROW}>
-      <div className="flex min-w-0 shrink-0 items-end gap-2" suppressHydrationWarning>
-      <label
-        className="flex w-[4.5rem] shrink-0 flex-col sm:w-[5rem] md:w-[5.5rem]"
-        dir="ltr"
-        htmlFor={startId}
-        suppressHydrationWarning
-      >
-        <span className={FIELD_LABEL} id={startLabelId}>
-          {startYearLabel}
-        </span>
-        <input
-          id={startId}
-          name={startId}
-          type="text"
-          inputMode="numeric"
-          autoComplete="off"
-          spellCheck={false}
-          aria-labelledby={startLabelId}
-          value={draftStart}
-          onChange={(e) => setDraftStart(e.target.value)}
-          onFocus={() => {
-            startFocus.current = true;
-          }}
-          onBlur={() => {
-            startFocus.current = false;
-            commitStart();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.currentTarget.blur();
-            }
-          }}
-          className={CONTROL_INPUT}
-          suppressHydrationWarning
-        />
-      </label>
-      <label
-        className="flex w-[4.5rem] shrink-0 flex-col sm:w-[5rem] md:w-[5.5rem]"
-        dir="ltr"
-        htmlFor={endId}
-        suppressHydrationWarning
-      >
-        <span className={FIELD_LABEL} id={endLabelId}>
-          {endYearLabel}
-        </span>
-        <input
-          id={endId}
-          name={endId}
-          type="text"
-          inputMode="numeric"
-          autoComplete="off"
-          spellCheck={false}
-          aria-labelledby={endLabelId}
-          value={draftEnd}
-          onChange={(e) => setDraftEnd(e.target.value)}
-          onFocus={() => {
-            endFocus.current = true;
-          }}
-          onBlur={() => {
-            endFocus.current = false;
-            commitEnd();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.currentTarget.blur();
-            }
-          }}
-          className={CONTROL_INPUT}
-          suppressHydrationWarning
-        />
-      </label>
+    <>
+      <div className={TOOLBAR_ROW}>
+        <div className="flex min-w-0 shrink-0 items-end gap-2" suppressHydrationWarning>
+          <label
+            className="flex w-[4.5rem] shrink-0 flex-col sm:w-[5rem] md:w-[5.5rem]"
+            dir="ltr"
+            htmlFor={startId}
+            suppressHydrationWarning
+          >
+            <span className={FIELD_LABEL} id={startLabelId}>
+              {startYearLabel}
+            </span>
+            <input
+              id={startId}
+              name={startId}
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              spellCheck={false}
+              aria-labelledby={startLabelId}
+              value={draftStart}
+              onChange={(e) => setDraftStart(e.target.value)}
+              onFocus={() => {
+                startFocus.current = true;
+              }}
+              onBlur={() => {
+                startFocus.current = false;
+                commitStart();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
+              className={CONTROL_INPUT}
+              suppressHydrationWarning
+            />
+          </label>
+          <label
+            className="flex w-[4.5rem] shrink-0 flex-col sm:w-[5rem] md:w-[5.5rem]"
+            dir="ltr"
+            htmlFor={endId}
+            suppressHydrationWarning
+          >
+            <span className={FIELD_LABEL} id={endLabelId}>
+              {endYearLabel}
+            </span>
+            <input
+              id={endId}
+              name={endId}
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              spellCheck={false}
+              aria-labelledby={endLabelId}
+              value={draftEnd}
+              onChange={(e) => setDraftEnd(e.target.value)}
+              onFocus={() => {
+                endFocus.current = true;
+              }}
+              onBlur={() => {
+                endFocus.current = false;
+                commitEnd();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
+              className={CONTROL_INPUT}
+              suppressHydrationWarning
+            />
+          </label>
+        </div>
+        {copyLinkButton}
+        {exportButton}
       </div>
-      {exportButton}
-    </div>
+      {helperText ? <p className="text-[11px] text-muted-foreground">{helperText}</p> : null}
+    </>
   );
 }
