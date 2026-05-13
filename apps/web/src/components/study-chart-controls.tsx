@@ -149,8 +149,13 @@ export function StudyChartControls({
 
   return (
     <div className={TOOLBAR_ROW}>
-      <div className="flex min-w-0 shrink-0 items-end gap-2">
-      <label className="flex w-[4.5rem] shrink-0 flex-col sm:w-[5rem] md:w-[5.5rem]" dir="ltr" htmlFor={startId}>
+      <div className="flex min-w-0 shrink-0 items-end gap-2" suppressHydrationWarning>
+      <label
+        className="flex w-[4.5rem] shrink-0 flex-col sm:w-[5rem] md:w-[5.5rem]"
+        dir="ltr"
+        htmlFor={startId}
+        suppressHydrationWarning
+      >
         <span className={FIELD_LABEL} id={startLabelId}>
           {startYearLabel}
         </span>
@@ -177,9 +182,15 @@ export function StudyChartControls({
             }
           }}
           className={CONTROL_INPUT}
+          suppressHydrationWarning
         />
       </label>
-      <label className="flex w-[4.5rem] shrink-0 flex-col sm:w-[5rem] md:w-[5.5rem]" dir="ltr" htmlFor={endId}>
+      <label
+        className="flex w-[4.5rem] shrink-0 flex-col sm:w-[5rem] md:w-[5.5rem]"
+        dir="ltr"
+        htmlFor={endId}
+        suppressHydrationWarning
+      >
         <span className={FIELD_LABEL} id={endLabelId}>
           {endYearLabel}
         </span>
@@ -206,6 +217,7 @@ export function StudyChartControls({
             }
           }}
           className={CONTROL_INPUT}
+          suppressHydrationWarning
         />
       </label>
       </div>

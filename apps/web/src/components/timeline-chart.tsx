@@ -479,6 +479,8 @@ type TimelineChartProps = {
    * “Real USD (2020-adjusted)”).
    */
   tooltipValueBasisNote?: string;
+  /** Optional per-date tooltip extras appended after series values. */
+  tooltipExtraLines?: (dateStr: string) => string[] | null | undefined;
 };
 
 type GroupedLegendCell = {
@@ -963,6 +965,7 @@ export function TimelineChart({
   multiSeriesLegendGroupedVariant = "grid",
   chartLocale,
   tooltipValueBasisNote,
+  tooltipExtraLines,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
@@ -2726,6 +2729,10 @@ export function TimelineChart({
               lines.push(`${comparatorResolved.label}: ${compFormatted}`);
             }
           }
+          const extraLines = tooltipExtraLines?.(dateStr);
+          if (extraLines && extraLines.length > 0) {
+            lines.push(...extraLines);
+          }
           return localizeChartNumericDisplayStringSafe(lines.join("<br/>"), chartNumeralLocale);
         },
       },
@@ -3692,6 +3699,7 @@ export function TimelineChart({
     yAxisMax,
     xAxisYearLabel,
     chartLocale,
+    tooltipExtraLines,
     groupedLegendModel,
     groupedLegendSelected,
     multiSeriesLegendGroupedVariant,

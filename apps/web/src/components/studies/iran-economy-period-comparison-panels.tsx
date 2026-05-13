@@ -31,22 +31,151 @@ const FX_COMPARISON_GRID_RIGHT = "32px";
 
 type Point = { date: string; value: number };
 type GdpDecompMode = "nominal" | "real";
-type IranElectionParticipationPoint = { year: number; turnoutPct: number; votesCastMillions: number };
+type IranElectionTopCandidate = {
+  name: string;
+  nameFa: string;
+  votes: number | null;
+  percent: number | null;
+};
+type IranElectionParticipationPoint = {
+  year: number;
+  electionDate?: string;
+  turnoutPct: number;
+  votesCastMillions: number;
+  topCandidates: [IranElectionTopCandidate, IranElectionTopCandidate];
+};
 
 const IRAN_PRESIDENTIAL_ELECTION_PARTICIPATION: IranElectionParticipationPoint[] = [
-  { year: 1980, turnoutPct: 67.42, votesCastMillions: 14.15 },
-  { year: 1981, turnoutPct: 74.26, votesCastMillions: 16.85 },
-  { year: 1985, turnoutPct: 54.78, votesCastMillions: 14.24 },
-  { year: 1989, turnoutPct: 54.59, votesCastMillions: 16.45 },
-  { year: 1993, turnoutPct: 50.66, votesCastMillions: 16.80 },
-  { year: 1997, turnoutPct: 79.92, votesCastMillions: 29.15 },
-  { year: 2001, turnoutPct: 66.77, votesCastMillions: 28.08 },
-  { year: 2005, turnoutPct: 62.84, votesCastMillions: 29.32 },
-  { year: 2009, turnoutPct: 84.83, votesCastMillions: 39.37 },
-  { year: 2013, turnoutPct: 72.94, votesCastMillions: 36.70 },
-  { year: 2017, turnoutPct: 73.33, votesCastMillions: 41.22 },
-  { year: 2021, turnoutPct: 48.80, votesCastMillions: 28.99 },
-  { year: 2024, turnoutPct: 39.93, votesCastMillions: 24.54 },
+  {
+    year: 1980,
+    electionDate: "1980-01-25",
+    turnoutPct: 67.42,
+    votesCastMillions: 14.15,
+    topCandidates: [
+      { name: "Abolhassan Banisadr", nameFa: "ابوالحسن بنی‌صدر", votes: 10753052, percent: 76.5 },
+      { name: "Ahmad Madani", nameFa: "احمد مدنی", votes: 2224675, percent: 15.9 },
+    ],
+  },
+  {
+    year: 1981,
+    electionDate: "1981-07-24",
+    turnoutPct: 74.26,
+    votesCastMillions: 16.85,
+    topCandidates: [
+      { name: "Mohammad-Ali Rajai", nameFa: "محمدعلی رجایی", votes: 12900321, percent: 90.0 },
+      { name: "Abbas Sheibani", nameFa: "عباس شیبانی", votes: 658498, percent: 4.6 },
+    ],
+  },
+  {
+    year: 1985,
+    electionDate: "1985-08-16",
+    turnoutPct: 54.78,
+    votesCastMillions: 14.24,
+    topCandidates: [
+      { name: "Ali Khamenei", nameFa: "سید علی خامنه‌ای", votes: 12107821, percent: 85.7 },
+      { name: "Mehdi Karroubi", nameFa: "مهدی کروبی", votes: 640326, percent: 4.5 },
+    ],
+  },
+  {
+    year: 1989,
+    electionDate: "1989-07-28",
+    turnoutPct: 54.59,
+    votesCastMillions: 16.45,
+    topCandidates: [
+      { name: "Akbar Hashemi Rafsanjani", nameFa: "اکبر هاشمی رفسنجانی", votes: 15905524, percent: 94.5 },
+      { name: "Abbas Sheibani", nameFa: "عباس شیبانی", votes: 635165, percent: 3.8 },
+    ],
+  },
+  {
+    year: 1993,
+    electionDate: "1993-06-11",
+    turnoutPct: 50.66,
+    votesCastMillions: 16.80,
+    topCandidates: [
+      { name: "Akbar Hashemi Rafsanjani", nameFa: "اکبر هاشمی رفسنجانی", votes: 10623446, percent: 63.0 },
+      { name: "Ahmad Tavakkoli", nameFa: "احمد توکلی", votes: 3868597, percent: 22.9 },
+    ],
+  },
+  {
+    year: 1997,
+    electionDate: "1997-05-23",
+    turnoutPct: 79.92,
+    votesCastMillions: 29.15,
+    topCandidates: [
+      { name: "Mohammad Khatami", nameFa: "محمد خاتمی", votes: 20078187, percent: 69.1 },
+      { name: "Ali Akbar Nateq-Nouri", nameFa: "علی‌اکبر ناطق نوری", votes: 7242669, percent: 24.8 },
+    ],
+  },
+  {
+    year: 2001,
+    electionDate: "2001-06-08",
+    turnoutPct: 66.77,
+    votesCastMillions: 28.08,
+    topCandidates: [
+      { name: "Mohammad Khatami", nameFa: "محمد خاتمی", votes: 21700804, percent: 77.9 },
+      { name: "Ahmad Tavakkoli", nameFa: "احمد توکلی", votes: 4387708, percent: 15.8 },
+    ],
+  },
+  {
+    year: 2005,
+    electionDate: "2005-06-24",
+    turnoutPct: 62.84,
+    votesCastMillions: 29.32,
+    topCandidates: [
+      { name: "Mahmoud Ahmadinejad", nameFa: "محمود احمدی‌نژاد", votes: 17284000, percent: 61.7 },
+      { name: "Akbar Hashemi Rafsanjani", nameFa: "اکبر هاشمی رفسنجانی", votes: 10346566, percent: 35.9 },
+    ],
+  },
+  {
+    year: 2009,
+    electionDate: "2009-06-12",
+    turnoutPct: 84.83,
+    votesCastMillions: 39.37,
+    topCandidates: [
+      { name: "Mahmoud Ahmadinejad", nameFa: "محمود احمدی‌نژاد", votes: 24852793, percent: 62.6 },
+      { name: "Mir-Hossein Mousavi", nameFa: "میرحسین موسوی", votes: 13216411, percent: 33.8 },
+    ],
+  },
+  {
+    year: 2013,
+    electionDate: "2013-06-14",
+    turnoutPct: 72.94,
+    votesCastMillions: 36.70,
+    topCandidates: [
+      { name: "Hassan Rouhani", nameFa: "حسن روحانی", votes: 18613329, percent: 50.7 },
+      { name: "Mohammad Bagher Ghalibaf", nameFa: "محمدباقر قالیباف", votes: 6077292, percent: 16.6 },
+    ],
+  },
+  {
+    year: 2017,
+    electionDate: "2017-05-19",
+    turnoutPct: 73.33,
+    votesCastMillions: 41.22,
+    topCandidates: [
+      { name: "Hassan Rouhani", nameFa: "حسن روحانی", votes: 23549616, percent: 57.1 },
+      { name: "Ebrahim Raisi", nameFa: "ابراهیم رئیسی", votes: 15786349, percent: 38.3 },
+    ],
+  },
+  {
+    year: 2021,
+    electionDate: "2021-06-18",
+    turnoutPct: 48.8,
+    votesCastMillions: 28.99,
+    topCandidates: [
+      { name: "Ebrahim Raisi", nameFa: "ابراهیم رئیسی", votes: 17926345, percent: 62.0 },
+      { name: "Mohsen Rezaee", nameFa: "محسن رضایی", votes: 3440395, percent: 11.9 },
+    ],
+  },
+  {
+    year: 2024,
+    electionDate: "2024-07-05",
+    turnoutPct: 39.93,
+    votesCastMillions: 24.54,
+    topCandidates: [
+      { name: "Masoud Pezeshkian", nameFa: "مسعود پزشکیان", votes: 16384603, percent: 53.7 },
+      { name: "Saeed Jalili", nameFa: "سعید جلیلی", votes: 13538179, percent: 44.3 },
+    ],
+  },
 ];
 
 function firstAvailableYear(points: Point[]): number | null {
@@ -310,7 +439,7 @@ export function IranEconomyPeriodComparisonPanels({
   const politicalParticipationTurnoutPoints = useMemo<Point[]>(
     () =>
       IRAN_PRESIDENTIAL_ELECTION_PARTICIPATION.map((p) => ({
-        date: `${p.year}-01-01`,
+        date: p.electionDate ?? `${p.year}-01-01`,
         value: p.turnoutPct,
       })),
     []
@@ -318,38 +447,77 @@ export function IranEconomyPeriodComparisonPanels({
   const politicalParticipationVotesCastPoints = useMemo<Point[]>(
     () =>
       IRAN_PRESIDENTIAL_ELECTION_PARTICIPATION.map((p) => ({
-        date: `${p.year}-01-01`,
+        date: p.electionDate ?? `${p.year}-01-01`,
         value: p.votesCastMillions,
       })),
     []
+  );
+  const politicalParticipationByDate = useMemo(
+    () =>
+      new Map(
+        IRAN_PRESIDENTIAL_ELECTION_PARTICIPATION.map((p) => [p.electionDate ?? `${p.year}-01-01`, p] as const)
+      ),
+    []
+  );
+  const politicalParticipationByYear = useMemo(
+    () => new Map(IRAN_PRESIDENTIAL_ELECTION_PARTICIPATION.map((p) => [p.year, p] as const)),
+    []
+  );
+  const politicalParticipationTooltipExtraLines = useMemo(
+    () => (dateStr: string) => {
+      const dateKey = dateStr.slice(0, 10);
+      const year = Number.parseInt(dateStr.slice(0, 4), 10);
+      const point =
+        politicalParticipationByDate.get(dateKey) ??
+        (Number.isFinite(year) ? politicalParticipationByYear.get(year) : undefined);
+      if (!point) return null;
+      const lines: string[] = [
+        `<span style="font-size:10px;color:#888">${L(isFa, "Top candidates:", "نامزدهای اصلی:")}</span>`,
+      ];
+      point.topCandidates.forEach((c, idx) => {
+        const displayName = isFa ? c.nameFa : c.name;
+        const votesPart =
+          c.votes != null
+            ? L(
+                isFa,
+                `${(c.votes / 1_000_000).toFixed(2)}M votes`,
+                `${(c.votes / 1_000_000).toFixed(2)} میلیون رأی`
+              )
+            : L(isFa, "votes n/a", "آرا ناموجود");
+        const pctPart = c.percent != null ? ` (${c.percent.toFixed(1)}%)` : "";
+        lines.push(`${idx + 1}. ${displayName} — ${votesPart}${pctPart}`);
+      });
+      return lines;
+    },
+    [isFa, L, politicalParticipationByDate, politicalParticipationByYear]
   );
   const politicalParticipationEvents = useMemo<TimelineEvent[]>(
     () => [
       {
         id: "iran-presidential-election-khatami-1997",
         layer: "iran_core",
-        date: "1997-01-01",
+        date: "1997-05-23",
         title: "1997 election (Khatami)",
         title_fa: "انتخابات ۱۳۷۶ (خاتمی)",
       },
       {
         id: "iran-presidential-election-disputed-2009",
         layer: "iran_core",
-        date: "2009-01-01",
+        date: "2009-06-12",
         title: "2009 disputed election / Green Movement",
         title_fa: "انتخابات مناقشه‌برانگیز ۱۳۸۸ / جنبش سبز",
       },
       {
         id: "iran-presidential-election-low-turnout-2021",
         layer: "iran_core",
-        date: "2021-01-01",
+        date: "2021-06-18",
         title: "2021 historically low turnout",
         title_fa: "مشارکت پایین تاریخی در ۱۴۰۰",
       },
       {
         id: "iran-presidential-election-runoff-2024",
         layer: "iran_core",
-        date: "2024-01-01",
+        date: "2024-07-05",
         title: "2024 low-turnout runoff election",
         title_fa: "انتخابات دومرحله‌ای با مشارکت پایین در ۱۴۰۳",
       },
@@ -2055,6 +2223,7 @@ export function IranEconomyPeriodComparisonPanels({
                 )}
                 exportSourceFooter={studyChartExportSource(isFa, [
                   "Iran Data Portal",
+                  "Persian Wikipedia (Iran presidential election pages)",
                   "International IDEA Voter Turnout Database",
                   "Iran Ministry of Interior (official aggregates)",
                 ])}
@@ -2109,6 +2278,7 @@ export function IranEconomyPeriodComparisonPanels({
                   "Election turnout reflects official reported participation in presidential elections. It should not be interpreted as a direct measure of political support.",
                   "مشارکت انتخاباتی بازتاب ارقام رسمی مشارکت در انتخابات ریاست‌جمهوری است و نباید به‌عنوان سنجهٔ مستقیم حمایت سیاسی تفسیر شود."
                 )}
+                tooltipExtraLines={politicalParticipationTooltipExtraLines}
               />
               <p className="text-xs text-muted-foreground mt-2 max-w-3xl leading-relaxed">
                 {L(
