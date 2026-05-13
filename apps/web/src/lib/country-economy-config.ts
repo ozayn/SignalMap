@@ -17,7 +17,12 @@ export type CountryRangePreset = {
 };
 
 export type CountryEconomyConfig = {
-  routeSlug: "us-economy" | "russia-economy" | "turkey-economy" | "saudi-arabia-economy";
+  routeSlug:
+    | "us-economy"
+    | "russia-economy"
+    | "turkey-economy"
+    | "saudi-arabia-economy"
+    | "tajikistan-economy";
   countryCode: string;
   countryName: string;
   hasFX: boolean;
@@ -325,6 +330,115 @@ export const COUNTRY_ECONOMY_CONFIGS: CountryEconomyConfig[] = [
         startYear: 2020,
         endYear: 2020,
         fill: "rgba(148, 163, 184, 0.10)",
+      },
+    ],
+  },
+  {
+    routeSlug: "tajikistan-economy",
+    countryCode: "TJK",
+    countryName: "Tajikistan",
+    hasFX: true,
+    defaultFxLog: true,
+    focusPresets: [
+      {
+        id: "soviet-context",
+        label: "Soviet / pre-independence context (if available)",
+        shortLabel: "Soviet context",
+        startYear: 1960,
+        endYear: 1991,
+      },
+      {
+        id: "independence-civil-war",
+        label: "Independence and civil war (1991-1997)",
+        shortLabel: "1991-1997",
+        startYear: 1991,
+        endYear: 1997,
+      },
+      {
+        id: "post-war-stabilization",
+        label: "Post-war stabilization (1997-2005)",
+        shortLabel: "1997-2005",
+        startYear: 1997,
+        endYear: 2005,
+      },
+      {
+        id: "remittance-led-growth",
+        label: "Remittance-led growth period (2005-2014)",
+        shortLabel: "2005-2014",
+        startYear: 2005,
+        endYear: 2014,
+      },
+      {
+        id: "recent-period",
+        label: "Recent period (2015-present)",
+        shortLabel: "2015-present",
+        startYear: 2015,
+        endYear: null,
+      },
+    ],
+    rangePresets: [
+      { id: "full", label: "Full history", startYear: 1960, endYear: null },
+      { id: "post-independence", label: "Post-independence (1991-)", startYear: 1991, endYear: null },
+      { id: "recent", label: "Recent (2005-)", startYear: 2005, endYear: null },
+    ],
+    overlayEvents: [
+      {
+        id: "tjk-independence-1991",
+        layer: "world_core",
+        date: "1991-09-09",
+        title: "Independence from USSR (1991)",
+        title_fa: "استقلال از شوروی (۱۹۹۱)",
+      },
+      {
+        id: "tjk-civil-war-start-1992",
+        layer: "world_core",
+        date: "1992-05-01",
+        title: "Civil war begins (1992)",
+        title_fa: "آغاز جنگ داخلی (۱۹۹۲)",
+      },
+      {
+        id: "tjk-peace-1997",
+        layer: "world_core",
+        date: "1997-06-27",
+        title: "Peace agreement (1997)",
+        title_fa: "توافق صلح (۱۹۹۷)",
+      },
+      {
+        id: "tjk-remittance-era-2000s",
+        layer: "world_core",
+        date: "2005-01-01",
+        title: "Labor migration / remittance dependence (2000s)",
+        title_fa: "وابستگی به مهاجرت کار و حواله (دهه ۲۰۰۰)",
+      },
+      {
+        id: "tjk-covid-2020",
+        layer: "world_core",
+        date: "2020-03-01",
+        title: "COVID period",
+        title_fa: "دوره کووید",
+      },
+    ],
+    overlayBands: [
+      {
+        id: "tjk-civil-war-band",
+        startYear: 1992,
+        endYear: 1997,
+        fill: "rgba(148, 163, 184, 0.14)",
+        markAreaLabel: "Civil war",
+      },
+      {
+        id: "tjk-remittance-band",
+        startYear: 2005,
+        endYear: 2014,
+        fill: "rgba(148, 163, 184, 0.10)",
+        markAreaLabel: "Remittance-led growth",
+      },
+      {
+        id: "tjk-covid-band",
+        startYear: 2020,
+        endYear: 2021,
+        fill: "rgba(148, 163, 184, 0.10)",
+        markAreaLabel: "COVID period",
       },
     ],
   },

@@ -36,7 +36,7 @@ export type PrimarySignal =
 import type { StudyConceptId } from "./signalmap-concepts";
 
 /** Browse / filter: geographic emphasis (a study may span several). */
-export type StudyCountry = "iran" | "us" | "russia" | "turkey" | "saudi" | "global";
+export type StudyCountry = "iran" | "us" | "russia" | "turkey" | "saudi" | "tajik" | "global";
 
 /** Browse / filter: coarse theme. */
 export type StudyTheme = "macro" | "oil" | "fx" | "inequality" | "social" | "dashboard";
@@ -959,6 +959,23 @@ export const STUDIES: StudyMeta[] = [
     countries: ["saudi", "global"],
     themes: ["macro", "oil", "dashboard"],
     tags: ["Saudi Arabia", "WDI", "Vision 2030", "macro dashboard", "country dashboard"],
+  },
+  {
+    id: "tajikistan-economy",
+    number: 47,
+    title: "Tajikistan economy — history and travel context",
+    subtitle: "Template-based WDI macro context with remittances, migration, and post-Soviet transition emphasis",
+    timeRange: ["1960-01-01", "today"],
+    description:
+      "Country-template macro and context dashboard for Tajikistan using annual WDI indicators with focus periods around independence, civil war, remittance dependence, and recent stabilization.",
+    socialDescription:
+      "Explore Tajikistan through inflation, growth, remittances, GDP per capita, exchange rate, welfare indicators, and post-Soviet historical context.",
+    status: "active",
+    groupPlacements: [{ group: "country", order: 6 }],
+    primarySignal: { kind: "iran_economy_period_comparison" },
+    countries: ["tajik", "global"],
+    themes: ["macro", "fx", "dashboard"],
+    tags: ["Tajikistan", "WDI", "remittances", "post-Soviet", "macro dashboard", "country dashboard"],
   },
 ];
 

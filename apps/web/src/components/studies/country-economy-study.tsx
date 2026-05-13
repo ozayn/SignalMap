@@ -130,6 +130,7 @@ export function CountryEconomyStudy({
   const isTurkey = countryCode.toUpperCase() === "TUR";
   const isRussia = countryCode.toUpperCase() === "RUS";
   const isSaudi = countryCode.toUpperCase() === "SAU";
+  const isTajikistan = countryCode.toUpperCase() === "TJK";
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<CountryEconomyBundle | null>(null);
@@ -247,14 +248,18 @@ export function CountryEconomyStudy({
   const gdpGrowth = series.gdp_growth_yoy_pct ?? [];
   const gdpNominal = series.gdp_current_usd ?? [];
   const gdpReal = series.gdp_constant_2015_usd ?? [];
+  const gdpPerCapita = series.gdp_per_capita_current_usd ?? [];
   const consumptionNominal = series.consumption_current_usd ?? [];
   const investmentNominal = series.investment_current_usd ?? [];
   const consumptionReal = series.consumption_constant_2015_usd ?? [];
   const investmentReal = series.investment_constant_2015_usd ?? [];
+  const remittancesPctGdp = series.remittances_pct_gdp ?? [];
   const oilRents = series.oil_rents_pct_gdp ?? [];
   const gasRents = series.natural_gas_rents_pct_gdp ?? [];
   const imports = series.imports_pct_gdp ?? [];
   const exports = series.exports_pct_gdp ?? [];
+  const agriculture = series.agriculture_pct_gdp ?? [];
+  const services = series.services_pct_gdp ?? [];
   const manufacturing = series.manufacturing_pct_gdp ?? [];
   const industry = series.industry_pct_gdp ?? [];
   const m2 = series.broad_money_growth_pct ?? [];
@@ -534,7 +539,15 @@ export function CountryEconomyStudy({
             "Each chart is one signal; interpretation is stronger when related signals are compared across the same years rather than read in isolation.",
             "Event overlays and focus windows are context markers only and should not be read as causal proof.",
           ]
-        : [
+        : isTajikistan
+          ? [
+              `This page combines Tajikistan macro and welfare context indicators in ${selectedRange?.label ?? "the selected range"}, with shaded windows (${focusSummaryLabel || "selected presets"}) for post-Soviet period comparison.`,
+              "Remittances, GDP per capita, and exchange rate panels are placed near the top because migration-linked inflows and currency movements are central context signals for travelers.",
+              "Historical overlays mark independence, civil-war years, post-war stabilization, and COVID-era disruption as timing context.",
+              "Mountainous geography and infrastructure constraints can shape transport costs, labor mobility, and uneven regional economic outcomes.",
+              "Series are annual observations; missing years remain blank and are not interpolated.",
+            ]
+          : [
             `The charts use an outer window of ${selectedRange?.label ?? "the selected range"} and shaded focus periods of ${focusSummaryLabel || "the selected presets"}.`,
             "CPI inflation (red), GDP growth (blue), and resource-rent shares are plotted as annual WDI observations; gaps are left as gaps.",
             isUsa
@@ -554,6 +567,7 @@ export function CountryEconomyStudy({
     isTurkey,
     isSaudi,
     isRussia,
+    isTajikistan,
     gini.length,
     povertyExtreme.length,
     povertyLmic.length,
@@ -658,7 +672,36 @@ export function CountryEconomyStudy({
                 ],
               },
             ]
-          : [
+          : isTajikistan
+            ? [
+                {
+                  heading: "How to read these charts",
+                  bullets: [
+                    "Read remittances, exchange rate, GDP per capita, and poverty indicators together for practical context rather than as causal proof.",
+                    "Use focus periods as broad historical windows (independence, civil war, stabilization, remittance-led years, recent period).",
+                    "Overlays are timeline anchors only; they help orient interpretation but do not establish causality.",
+                  ],
+                },
+                {
+                  heading: "Units and comparability",
+                  bullets: [
+                    "Annual %: inflation, GDP growth, remittances share, trade shares, sector shares, and external debt burden.",
+                    "Current US$: GDP per capita reflects average income scale in dollar terms, sensitive to exchange-rate moves and price levels.",
+                    "Somoni per USD (official annual): useful for long-run currency context; log scale helps compare proportional depreciation.",
+                  ],
+                },
+                {
+                  heading: "Concept guide used in this study",
+                  bullets: [
+                    "Post-Soviet transition: structural and institutional change context after independence.",
+                    "Remittance dependence: external household-income channel linked to migration and host-country labor conditions.",
+                    "Welfare indicators (poverty/Gini): useful but often sparse; missing years should be treated as unavailable, not flat.",
+                    "Sector shares (agriculture, industry, services): broad structure map, not full productivity accounting.",
+                    "Geography and infrastructure constraints: contextual factors for market integration and transport costs.",
+                  ],
+                },
+              ]
+            : [
             {
               heading: "How to read these charts",
               bullets: [
@@ -679,7 +722,7 @@ export function CountryEconomyStudy({
               ],
             },
           ],
-    [hasFX, isTurkey, isSaudi, isRussia]
+    [hasFX, isTurkey, isSaudi, isRussia, isTajikistan]
   );
 
   const sourceItems = useMemo<SourceInfoItem[]>(() => {
@@ -712,7 +755,7 @@ export function CountryEconomyStudy({
         label: "Trade and industry",
         sourceName: baseName,
         sourceUrl: source?.url ?? "https://data.worldbank.org",
-        sourceDetail: `${baseCountryDetail}; NE.IMP.GNFS.ZS, NE.EXP.GNFS.ZS, NV.IND.MANF.ZS, NV.IND.TOTL.ZS`,
+        sourceDetail: `${baseCountryDetail}; NE.IMP.GNFS.ZS, NE.EXP.GNFS.ZS, NV.IND.MANF.ZS, NV.IND.TOTL.ZS, NV.AGR.TOTL.ZS, NV.SRV.TOTL.ZS`,
         unitLabel: "% of GDP",
       },
       {
@@ -839,6 +882,40 @@ export function CountryEconomyStudy({
         });
       }
     }
+    if (isTajikistan) {
+      items.push({
+        label: "GDP per capita",
+        sourceName: baseName,
+        sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.gdp_per_capita_current_usd ?? "NY.GDP.PCAP.CD"}`,
+        sourceDetail: baseCountryDetail,
+        unitLabel: "Current US$",
+      });
+      items.push({
+        label: "Remittances received",
+        sourceName: baseName,
+        sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.remittances_pct_gdp ?? "BX.TRF.PWKR.DT.GD.ZS"}`,
+        sourceDetail: baseCountryDetail,
+        unitLabel: "% of GDP",
+      });
+      if (hasFX) {
+        items.push({
+          label: "Exchange rate (USD → TJS)",
+          sourceName: baseName,
+          sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.fx_official_lcu_per_usd ?? "PA.NUS.FCRF"}`,
+          sourceDetail: baseCountryDetail,
+          unitLabel: "Somoni per USD (official annual average)",
+        });
+      }
+      if (externalDebtPctGdp.length > 0) {
+        items.push({
+          label: "External debt",
+          sourceName: baseName,
+          sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.external_debt_stocks_usd ?? "DT.DOD.DECT.CD"}`,
+          sourceDetail: `${baseCountryDetail}; %GDP derived from DT.DOD.DECT.CD / NY.GDP.MKTP.CD`,
+          unitLabel: "% of GDP (derived)",
+        });
+      }
+    }
     return items;
   }, [
     source,
@@ -855,6 +932,13 @@ export function CountryEconomyStudy({
     turkeyPolicyRateIndicatorId,
     isSaudi,
     brentPoints.length,
+    isTajikistan,
+    hasFX,
+    externalDebtPctGdp.length,
+    indicatorIds.gdp_per_capita_current_usd,
+    indicatorIds.remittances_pct_gdp,
+    indicatorIds.fx_official_lcu_per_usd,
+    indicatorIds.external_debt_stocks_usd,
   ]);
 
   const sourceNote = isTurkey
@@ -865,6 +949,8 @@ export function CountryEconomyStudy({
       ? "Primary source family is World Bank WDI country series, with Brent oil context from FRED (DCOILBRENTEU) when available. Oil/gas rents are context signals, not direct government-revenue series."
     : isRussia
       ? "Primary source family is World Bank WDI country series. Units include annual %, current US$, constant 2015 US$, LCU per USD, % of GDP, Gini index, and poverty headcount %. Oil/gas rents are context indicators, not full sector accounting."
+      : isTajikistan
+        ? "Primary source family is World Bank WDI country series. Focus indicators include remittances (%GDP), GDP per capita, official exchange rate (somoni/USD), poverty and inequality where available, and external debt burden."
       : "Series are annual WDI observations. Missing years remain missing; no interpolation is applied.";
 
   const aiParagraphs = useMemo(() => {
@@ -875,6 +961,7 @@ export function CountryEconomyStudy({
     if (hasFX && fx.length === 0) sparseNotes.push("FX data is unavailable");
     if (isUsa && !hasUsFiscalMacro) sparseNotes.push("U.S. fiscal macro series are unavailable for this range");
     if (isTurkey && policyRate.length === 0) sparseNotes.push("policy-rate proxy is unavailable in this window");
+    if (isTajikistan && remittancesPctGdp.length === 0) sparseNotes.push("remittance series is unavailable in this window");
     return isTurkey
       ? [
           `Within ${focusRange}, compare inflation, lira depreciation, growth, external-balance signals, and distribution indicators as descriptive co-movements rather than causal effects.`,
@@ -905,7 +992,17 @@ export function CountryEconomyStudy({
               ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
               : "Data caveat: annual published observations can show large transition-era spikes that visually compress later variation on linear scales.",
           ]
-        : [
+        : isTajikistan
+          ? [
+              `Within ${focusRange}, read remittances, exchange rate, GDP per capita, and poverty/inequality together as context signals for travel and social conditions.`,
+              "Use independence, civil-war, peace-agreement, remittance-era, and COVID overlays as timing anchors for interpretation.",
+              "Migration links to Russia can amplify remittance and demand sensitivity to external labor-market and geopolitical conditions.",
+              "Mountainous geography and infrastructure constraints can create uneven regional outcomes and slower market integration.",
+              sparseNotes.length
+                ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
+                : "Data caveat: this page uses annual published observations; sparse welfare and remittance series should be interpreted cautiously.",
+            ]
+          : [
             `Within ${focusRange}, compare inflation, growth, demand composition, and distribution indicators as descriptive co-movements rather than causal effects.`,
             `Selected focus periods are clipped to the active range (${selectedRange?.label ?? "selected range"}) so shaded years always match the visible window.`,
             "Interpret nominal and real toggles as two lenses on the same period: nominal reflects current-price levels, while real controls for price-level drift.",
@@ -926,7 +1023,9 @@ export function CountryEconomyStudy({
     isTurkey,
     isSaudi,
     isRussia,
+    isTajikistan,
     policyRate.length,
+    remittancesPctGdp.length,
   ]);
 
   const commonProps = {
@@ -948,7 +1047,12 @@ export function CountryEconomyStudy({
           endYear: Math.min(resolvePresetEndYear(selectedPrimaryFocus.endYear), rangeEndYear),
         }
       : undefined,
-    xAxisYearLabel: isUsa ? yearAxisMode : isTurkey ? ("both" as const) : ("gregorian" as const),
+    xAxisYearLabel:
+      isUsa || isTajikistan
+        ? yearAxisMode
+        : isTurkey
+          ? ("both" as const)
+          : ("gregorian" as const),
   };
 
   const toggleFocusPreset = (presetId: string) => {
@@ -973,7 +1077,7 @@ export function CountryEconomyStudy({
 
   return (
     <section className="space-y-4">
-      {isTurkey || isRussia || isSaudi ? (
+      {isTurkey || isRussia || isSaudi || isTajikistan ? (
         <>
           <Card className="border-border bg-muted/20">
             <CardHeader className="pb-2">
@@ -987,6 +1091,10 @@ export function CountryEconomyStudy({
               ) : isSaudi ? (
                 <p>
                   This study explores Saudi Arabia&apos;s economy across leadership and policy eras, emphasizing oil-rent dependence, diversification under Vision 2030, and macro sensitivity to oil cycles.
+                </p>
+              ) : isTajikistan ? (
+                <p>
+                  This study explores Tajikistan through post-Soviet transition, civil-war disruption and stabilization, migration-linked remittance dependence (especially Russia-linked), exchange-rate shifts, and welfare trends.
                 </p>
               ) : (
                 <p>
@@ -1020,6 +1128,14 @@ export function CountryEconomyStudy({
                     <li>Diversification tracking is strongest when you compare decomposition, industry/manufacturing share, and external-balance panels together.</li>
                     <li>Vision 2030 era overlays provide timing context for reform and investment narratives, not causal proof.</li>
                     <li>Saudi riyal is generally interpreted through peg stability context rather than crisis-style FX dynamics.</li>
+                  </>
+                ) : isTajikistan ? (
+                  <>
+                    <li>Remittances as a share of GDP are a core macro vulnerability/insulation channel and are often linked to labor migration conditions in Russia.</li>
+                    <li>GDP per capita is useful as a traveler-oriented living-standards context signal, but it should be read together with poverty and inequality data availability.</li>
+                    <li>The somoni exchange-rate panel helps anchor affordability and import-cost pressure context over time.</li>
+                    <li>Civil-war and post-war period overlays provide historical timing context; they are not causal proof.</li>
+                    <li>Mountainous geography and infrastructure constraints can help explain why growth, trade, and welfare signals may evolve unevenly.</li>
                   </>
                 ) : (
                   <>
@@ -1090,7 +1206,7 @@ export function CountryEconomyStudy({
                 })}
               </div>
             </div>
-            {isUsa ? (
+            {isUsa || isTajikistan ? (
               <label className="inline-flex items-center gap-2">
                 <span className="text-muted-foreground">Year axis</span>
                 <StudyYearDisplayToggle
@@ -1110,10 +1226,16 @@ export function CountryEconomyStudy({
               <span>Show overlays</span>
             </label>
           </div>
-      {isTurkey || isRussia || isSaudi ? (
+      {isTurkey || isRussia || isSaudi || isTajikistan ? (
             <>
               <p className="mt-2 text-xs text-muted-foreground">
-                {isTurkey ? turkeyFocusClarification : isSaudi ? "Focus periods are policy/leadership eras used for comparison, not strict causal labels." : russiaFocusClarification}
+                {isTurkey
+                  ? turkeyFocusClarification
+                  : isSaudi
+                    ? "Focus periods are policy/leadership eras used for comparison, not strict causal labels."
+                    : isTajikistan
+                      ? "Focus periods are broad historical context windows, not presidency labels and not strict causal claims."
+                      : russiaFocusClarification}
               </p>
               {isTurkey ? (
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -1122,6 +1244,10 @@ export function CountryEconomyStudy({
               ) : isSaudi ? (
                 <p className="mt-1 text-xs text-muted-foreground">
                   King Fahd (1982-2005) · King Abdullah (2005-2015) · King Salman / Vision 2030 (2015-present) · Vision 2030 period (2016-present)
+                </p>
+              ) : isTajikistan ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Soviet/pre-independence context · Independence/civil war (1991-1997) · Post-war stabilization (1997-2005) · Remittance-led growth (2005-2014) · Recent period (2015-present)
                 </p>
               ) : (
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -1232,6 +1358,138 @@ export function CountryEconomyStudy({
             </CardContent>
           </Card>
 
+          {isTajikistan ? (
+            <>
+              <Card className="border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">3. Remittances (% of GDP)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {remittancesPctGdp.length > 0 ? (
+                    <TimelineChart
+                      data={remittancesPctGdp}
+                      valueKey="value"
+                      label="Personal remittances received"
+                      unit="% of GDP"
+                      seriesColor="#7c3aed"
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                  )}
+                </CardContent>
+              </Card>
+              <Card className="border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">4. GDP per capita (current US$)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {gdpPerCapita.length > 0 ? (
+                    <TimelineChart
+                      data={gdpPerCapita}
+                      valueKey="value"
+                      label="GDP per capita"
+                      unit="current US$"
+                      seriesColor="#0ea5e9"
+                      multiSeriesValueFormat="gdp_absolute"
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                  )}
+                </CardContent>
+              </Card>
+              <Card className="border-border md:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">5. Exchange rate (USD → TJS)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <label className="mb-2 inline-flex items-center gap-2 text-xs text-muted-foreground">
+                    <input type="checkbox" checked={fxLog} onChange={(e) => setFxLog(e.target.checked)} />
+                    Log scale
+                  </label>
+                  {fx.length > 0 ? (
+                    <TimelineChart
+                      data={fx}
+                      valueKey="value"
+                      label="USD → TJS"
+                      unit="somoni per USD"
+                      seriesColor="#16a34a"
+                      yAxisLog={fxLog}
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                  )}
+                </CardContent>
+              </Card>
+              <Card className="border-border md:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">6. Welfare context (poverty and inequality)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {povertyExtreme.length > 0 || povertyLmic.length > 0 || gini.length > 0 ? (
+                    <TimelineChart
+                      data={[]}
+                      valueKey="value"
+                      label="Welfare context"
+                      multiSeries={[
+                        {
+                          key: "extreme",
+                          label: "Extreme poverty ($2.15 PPP)",
+                          unit: "%",
+                          yAxisIndex: 0,
+                          points: povertyExtreme,
+                        },
+                        {
+                          key: "lmic",
+                          label: "LMIC poverty line",
+                          unit: "%",
+                          yAxisIndex: 0,
+                          points: povertyLmic,
+                        },
+                        {
+                          key: "gini",
+                          label: "Gini index",
+                          unit: "index",
+                          yAxisIndex: 1,
+                          points: gini,
+                          linePattern: "dashed",
+                        },
+                      ]}
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                  )}
+                </CardContent>
+              </Card>
+              <Card className="border-border md:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">7. External debt (% GDP)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {externalDebtPctGdp.length > 0 ? (
+                    <TimelineChart
+                      data={externalDebtPctGdp}
+                      valueKey="value"
+                      label="External debt"
+                      unit="% of GDP"
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          ) : null}
+
           {isSaudi ? (
             <>
               <Card className="border-border">
@@ -1304,7 +1562,7 @@ export function CountryEconomyStudy({
             </>
           ) : null}
 
-          {!isUsa && !isTurkey ? (
+          {!isUsa && !isTurkey && !isTajikistan ? (
           <Card className="border-border md:col-span-2">
             <CardHeader className="space-y-1 pb-2">
               <CardTitle className="text-base">
@@ -1559,7 +1817,7 @@ export function CountryEconomyStudy({
             </>
           ) : null}
 
-          {!isUsa && !isTurkey && !isSaudi ? (
+          {!isUsa && !isTurkey && !isSaudi && !isTajikistan ? (
           <Card className="border-border">
             <CardHeader className="pb-2"><CardTitle className="text-base">5. Oil rents (% of GDP)</CardTitle></CardHeader>
             <CardContent className="pt-0">
@@ -1585,7 +1843,7 @@ export function CountryEconomyStudy({
           </Card>
           ) : null}
 
-          {!isUsa && !isTurkey && !isSaudi ? (
+          {!isUsa && !isTurkey && !isSaudi && !isTajikistan ? (
           <Card className="border-border">
             <CardHeader className="pb-2"><CardTitle className="text-base">6. Natural gas rents (% of GDP)</CardTitle></CardHeader>
             <CardContent className="pt-0">
@@ -1611,7 +1869,7 @@ export function CountryEconomyStudy({
           </Card>
           ) : null}
 
-          {hasFX && !isTurkey ? (
+          {hasFX && !isTurkey && !isTajikistan ? (
             <Card className="border-border md:col-span-2">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">
@@ -1728,21 +1986,29 @@ export function CountryEconomyStudy({
           <Card className="border-border">
             <CardHeader className="pb-2"><CardTitle className="text-base">9. Industry (% of GDP)</CardTitle></CardHeader>
             <CardContent className="pt-0">
-              {industry.length > 0 || manufacturing.length > 0 ? (
+              {industry.length > 0 || manufacturing.length > 0 || (isTajikistan && (agriculture.length > 0 || services.length > 0)) ? (
                 <TimelineChart
                   data={[]}
                   valueKey="value"
-                  label="Industry"
-                  multiSeries={[
-                    { key: "industry", label: "Industry", unit: "% of GDP", yAxisIndex: 0, points: industry },
-                    {
-                      key: "manufacturing",
-                      label: "Manufacturing",
-                      unit: "% of GDP",
-                      yAxisIndex: 0,
-                      points: manufacturing,
-                    },
-                  ]}
+                  label={isTajikistan ? "Sector shares" : "Industry"}
+                  multiSeries={
+                    isTajikistan
+                      ? [
+                          { key: "industry", label: "Industry", unit: "% of GDP", yAxisIndex: 0, points: industry },
+                          { key: "agriculture", label: "Agriculture", unit: "% of GDP", yAxisIndex: 0, points: agriculture },
+                          { key: "services", label: "Services", unit: "% of GDP", yAxisIndex: 0, points: services },
+                        ]
+                      : [
+                          { key: "industry", label: "Industry", unit: "% of GDP", yAxisIndex: 0, points: industry },
+                          {
+                            key: "manufacturing",
+                            label: "Manufacturing",
+                            unit: "% of GDP",
+                            yAxisIndex: 0,
+                            points: manufacturing,
+                          },
+                        ]
+                  }
                   forceTimeAxis
                   {...commonProps}
                 />
@@ -1778,6 +2044,7 @@ export function CountryEconomyStudy({
             </CardContent>
           </Card>
 
+          {!isTajikistan ? (
           <Card className="border-border">
             <CardHeader className="pb-2"><CardTitle className="text-base">11. Gini index</CardTitle></CardHeader>
             <CardContent className="pt-0">
@@ -1788,7 +2055,9 @@ export function CountryEconomyStudy({
               )}
             </CardContent>
           </Card>
+          ) : null}
 
+          {!isTajikistan ? (
           <Card className="border-border">
             <CardHeader className="pb-2"><CardTitle className="text-base">12. Poverty headcount</CardTitle></CardHeader>
             <CardContent className="pt-0">
@@ -1821,6 +2090,7 @@ export function CountryEconomyStudy({
               )}
             </CardContent>
           </Card>
+          ) : null}
           {isUsa || isTurkey ? (
             <Card className="border-border md:col-span-2">
               <CardHeader className="pb-2">
@@ -1936,6 +2206,15 @@ export function CountryEconomyStudy({
                 </p>
                 <p>
                   Focus windows and overlays provide context for timing and comparison. They are not evidence that a single period or event caused a specific outcome.
+                </p>
+              </>
+            ) : isTajikistan ? (
+              <>
+                <p>
+                  This page is a contextual guide to Tajikistan&apos;s economy for travelers: it highlights inflation, growth, exchange rate movement, remittance dependence, GDP per capita, and welfare indicators where data exists.
+                </p>
+                <p>
+                  The period overlays anchor post-Soviet transition history (independence, civil war, stabilization, migration/remittance era, COVID). They are context markers, not proof of causality.
                 </p>
               </>
             ) : (
