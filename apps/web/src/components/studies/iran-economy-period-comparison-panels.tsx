@@ -491,6 +491,17 @@ export function IranEconomyPeriodComparisonPanels({
     },
     [isFa, L, politicalParticipationByDate, politicalParticipationByYear]
   );
+  const politicalParticipationTooltipDateOverride = useMemo(
+    () => (dateStr: string) => {
+      const dateKey = dateStr.slice(0, 10);
+      const year = Number.parseInt(dateStr.slice(0, 4), 10);
+      const point =
+        politicalParticipationByDate.get(dateKey) ??
+        (Number.isFinite(year) ? politicalParticipationByYear.get(year) : undefined);
+      return point?.electionDate ?? dateStr;
+    },
+    [politicalParticipationByDate, politicalParticipationByYear]
+  );
   const politicalParticipationEvents = useMemo<TimelineEvent[]>(
     () => [
       {
@@ -2278,6 +2289,7 @@ export function IranEconomyPeriodComparisonPanels({
                   "Election turnout reflects official reported participation in presidential elections. It should not be interpreted as a direct measure of political support.",
                   "مشارکت انتخاباتی بازتاب ارقام رسمی مشارکت در انتخابات ریاست‌جمهوری است و نباید به‌عنوان سنجهٔ مستقیم حمایت سیاسی تفسیر شود."
                 )}
+                tooltipDateOverride={politicalParticipationTooltipDateOverride}
                 tooltipExtraLines={politicalParticipationTooltipExtraLines}
               />
               <p className="text-xs text-muted-foreground mt-2 max-w-3xl leading-relaxed">

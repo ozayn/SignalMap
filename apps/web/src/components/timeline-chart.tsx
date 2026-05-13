@@ -479,6 +479,11 @@ type TimelineChartProps = {
    * “Real USD (2020-adjusted)”).
    */
   tooltipValueBasisNote?: string;
+  /**
+   * Optional per-point date override used by tooltip year/calendar rendering.
+   * Useful when axis buckets (e.g. yearly) differ from the source observation date.
+   */
+  tooltipDateOverride?: (dateStr: string, dataIndex: number) => string | null | undefined;
   /** Optional per-date tooltip extras appended after series values. */
   tooltipExtraLines?: (dateStr: string) => string[] | null | undefined;
 };
@@ -965,6 +970,7 @@ export function TimelineChart({
   multiSeriesLegendGroupedVariant = "grid",
   chartLocale,
   tooltipValueBasisNote,
+  tooltipDateOverride,
   tooltipExtraLines,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
@@ -2515,7 +2521,8 @@ export function TimelineChart({
               : typeof axisValue === "string"
                 ? axisValue
                 : "");
-          const hoverTime = dateStr ? new Date(dateStr).getTime() : 0;
+          const tooltipDateStr = tooltipDateOverride?.(dateStr, idx) || dateStr;
+          const hoverTime = tooltipDateStr ? new Date(tooltipDateStr).getTime() : 0;
           const dayMs = 86400000;
           const rangeBand = rangeBandData.find((r) => dateStr >= r.xStart && dateStr <= r.xEnd);
           const sanctionsBand = sanctionsPeriods.find((p) => dateStr >= p.date_start && dateStr <= p.date_end);
@@ -2626,7 +2633,7 @@ export function TimelineChart({
           }
           lines.push(
             formatChartTooltipYearLine(
-              dateStr,
+              tooltipDateStr,
               axisYearMode,
               chartLocale === "fa" ? "fa" : "en",
               tooltipYearLineColors,
@@ -2634,8 +2641,8 @@ export function TimelineChart({
               tooltipDateResolution
             )
           );
-          if (focusGregorianYearRange && focusHoverHint && dateStr.length >= 4) {
-            const yHover = parseInt(dateStr.slice(0, 4), 10);
+          if (focusGregorianYearRange && focusHoverHint && tooltipDateStr.length >= 4) {
+            const yHover = parseInt(tooltipDateStr.slice(0, 4), 10);
             if (
               Number.isFinite(yHover) &&
               yHover >= focusGregorianYearRange.startYear &&
@@ -2729,7 +2736,7 @@ export function TimelineChart({
               lines.push(`${comparatorResolved.label}: ${compFormatted}`);
             }
           }
-          const extraLines = tooltipExtraLines?.(dateStr);
+          const extraLines = tooltipExtraLines?.(tooltipDateStr);
           if (extraLines && extraLines.length > 0) {
             lines.push(...extraLines);
           }
@@ -3699,6 +3706,7 @@ export function TimelineChart({
     yAxisMax,
     xAxisYearLabel,
     chartLocale,
+    tooltipDateOverride,
     tooltipExtraLines,
     groupedLegendModel,
     groupedLegendSelected,
