@@ -15,12 +15,97 @@ import type { StudyConceptId } from "@/lib/signalmap-concepts";
 import { StudyYearDisplayToggle } from "@/components/study-year-display-toggle";
 import type { ChartAxisYearMode } from "@/lib/chart-axis-year";
 import { SIGNAL_CONCEPT } from "@/lib/signalmap-chart-colors";
+import { CountryContextMap } from "@/components/studies/country-context-map";
 
 type Point = { date: string; value: number };
 type DemandMode = "nominal" | "real";
 type GdpMode = "nominal" | "real";
 const MAX_ACTIVE_FOCUS_PERIODS = 3;
 type OilSignalData = { points: Point[] };
+type TajikCityContext = {
+  id: "dushanbe" | "bokhtar" | "kulob";
+  displayName: string;
+  populationApprox: string;
+  elevationM: number;
+  climateSummary: string;
+  region: string;
+  economicRole: string;
+  historicalNote: string;
+  lat: number;
+  lon: number;
+  monthlyTempC: number[];
+  monthlyPrecipMm: number[];
+};
+
+const MONTH_KEYS = [
+  "2024-01-01",
+  "2024-02-01",
+  "2024-03-01",
+  "2024-04-01",
+  "2024-05-01",
+  "2024-06-01",
+  "2024-07-01",
+  "2024-08-01",
+  "2024-09-01",
+  "2024-10-01",
+  "2024-11-01",
+  "2024-12-01",
+];
+
+const TAJIK_CITY_CONTEXT: TajikCityContext[] = [
+  {
+    id: "dushanbe",
+    displayName: "Dushanbe",
+    populationApprox: "~1.2M (metro context, approximate)",
+    elevationM: 800,
+    climateSummary: "Hot-summer continental; wet spring, dry high summer",
+    region: "Republic-administered capital area",
+    economicRole: "Administrative center, services, education, government",
+    historicalNote: "Soviet-era planned boulevards layered with post-independence redevelopment",
+    lat: 38.56,
+    lon: 68.79,
+    monthlyTempC: [2.5, 5.2, 10.6, 16.2, 21.2, 26.0, 28.9, 27.8, 22.6, 16.0, 10.1, 5.0],
+    monthlyPrecipMm: [70, 78, 108, 96, 58, 19, 3, 2, 4, 21, 43, 63],
+  },
+  {
+    id: "bokhtar",
+    displayName: "Bokhtar (formerly Qurghonteppa)",
+    populationApprox: "~120k (city proper, approximate)",
+    elevationM: 430,
+    climateSummary: "Warmer southern lowland climate; very hot summers",
+    region: "Khatlon Region",
+    economicRole: "Regional transport and agricultural services hub",
+    historicalNote: "Post-Soviet growth tied to migration-remittance and agro-regional trade links",
+    lat: 37.84,
+    lon: 68.78,
+    monthlyTempC: [4.2, 7.2, 12.5, 18.1, 23.8, 28.8, 31.8, 30.6, 25.1, 18.2, 11.5, 6.2],
+    monthlyPrecipMm: [43, 48, 74, 61, 31, 9, 2, 1, 2, 10, 24, 36],
+  },
+  {
+    id: "kulob",
+    displayName: "Kulob",
+    populationApprox: "~110k (city proper, approximate)",
+    elevationM: 580,
+    climateSummary: "Continental with hot summers and cooler shoulder seasons",
+    region: "Khatlon Region",
+    economicRole: "Regional market center connecting valleys and upland districts",
+    historicalNote: "Long Persianate urban tradition within a Soviet/post-Soviet built form",
+    lat: 37.91,
+    lon: 69.78,
+    monthlyTempC: [3.3, 6.3, 11.6, 17.4, 23.0, 28.1, 31.1, 30.0, 24.2, 17.0, 10.2, 5.3],
+    monthlyPrecipMm: [49, 55, 79, 67, 36, 12, 3, 2, 4, 13, 27, 40],
+  },
+];
+
+function estimateDaylightHoursAtMonthMid(latDeg: number, monthIdx: number): number {
+  const latRad = (latDeg * Math.PI) / 180;
+  const dayOfYear = Math.round((monthIdx + 0.5) * (365 / 12));
+  const decl = ((-23.44 * Math.PI) / 180) * Math.cos((2 * Math.PI * (dayOfYear + 10)) / 365);
+  const cosH = -Math.tan(latRad) * Math.tan(decl);
+  const clamped = Math.max(-1, Math.min(1, cosH));
+  const hourAngle = Math.acos(clamped);
+  return (24 * hourAngle) / Math.PI;
+}
 
 type CountryEconomyBundle = {
   series: Record<string, Point[]>;
@@ -458,6 +543,43 @@ export function CountryEconomyStudy({
       gdp: minMax(demandSeriesByKey.get("gdp") ?? []),
     });
   }, [isTurkey, demandMode, demandSeriesByKey]);
+
+  const tajikClimateTempSeries = useMemo(
+    () =>
+      TAJIK_CITY_CONTEXT.map((city) => ({
+        key: `temp_${city.id}`,
+        label: `${city.displayName} temperature`,
+        unit: "°C",
+        yAxisIndex: 0 as const,
+        points: MONTH_KEYS.map((date, i) => ({ date, value: city.monthlyTempC[i] ?? 0 })),
+      })),
+    []
+  );
+  const tajikClimatePrecipSeries = useMemo(
+    () =>
+      TAJIK_CITY_CONTEXT.map((city) => ({
+        key: `precip_${city.id}`,
+        label: `${city.displayName} precipitation`,
+        unit: "mm",
+        yAxisIndex: 1 as const,
+        points: MONTH_KEYS.map((date, i) => ({ date, value: city.monthlyPrecipMm[i] ?? 0 })),
+      })),
+    []
+  );
+  const tajikDaylightSeries = useMemo(
+    () =>
+      TAJIK_CITY_CONTEXT.map((city) => ({
+        key: `daylight_${city.id}`,
+        label: `${city.displayName} daylight`,
+        unit: "hours",
+        yAxisIndex: 0 as const,
+        points: MONTH_KEYS.map((date, i) => ({
+          date,
+          value: Number(estimateDaylightHoursAtMonthMid(city.lat, i).toFixed(2)),
+        })),
+      })),
+    []
+  );
 
   const timelineEvents = showOverlays ? overlays.events : [];
   const timelineBands = showOverlays ? overlays.bands : [];
@@ -1150,6 +1272,112 @@ export function CountryEconomyStudy({
             </CardContent>
           </Card>
         </>
+      ) : null}
+      <CountryContextMap countryCode={countryCode} countryName={countryName} />
+      {isTajikistan ? (
+        <Card className="border-border bg-muted/10">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Regional context</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Major southern Tajikistan cities and travel/geographic context
+            </p>
+          </CardHeader>
+          <CardContent className="pt-0 space-y-4">
+            <p className="text-xs text-muted-foreground">
+              City cards and climate values below are contextual orientation aids (approximate city-profile summaries and monthly normals), not official city-economy accounts.
+            </p>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              {TAJIK_CITY_CONTEXT.map((city) => (
+                <Card key={city.id} className="border-border/80 bg-background/70">
+                  <CardHeader className="pb-1.5">
+                    <CardTitle className="text-sm">{city.displayName}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0 space-y-1.5 text-xs text-muted-foreground">
+                    <p><span className="text-foreground">Population:</span> {city.populationApprox}</p>
+                    <p><span className="text-foreground">Elevation:</span> {city.elevationM} m</p>
+                    <p><span className="text-foreground">Climate:</span> {city.climateSummary}</p>
+                    <p><span className="text-foreground">Region:</span> {city.region}</p>
+                    <p><span className="text-foreground">Economic role:</span> {city.economicRole}</p>
+                    <p><span className="text-foreground">Historical note:</span> {city.historicalNote}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Card className="border-border/80 bg-background/70">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Monthly climate context</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <TimelineChart
+                    data={[]}
+                    valueKey="value"
+                    label="Monthly climate"
+                    multiSeries={[...tajikClimateTempSeries, ...tajikClimatePrecipSeries]}
+                    timeRange={["2024-01-01", "2024-12-31"]}
+                    chartRangeGranularity="year"
+                    showChartControls
+                    forceTimeAxis
+                    xAxisYearLabel="gregorian"
+                    multiSeriesYAxisNameOverrides={{
+                      0: "Temperature (°C)",
+                      1: "Precipitation (mm)",
+                    }}
+                    chartHeight="h-56"
+                  />
+                </CardContent>
+              </Card>
+              <Card className="border-border/80 bg-background/70">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Daylight hours by month (photo timing context)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <TimelineChart
+                    data={[]}
+                    valueKey="value"
+                    label="Daylight hours"
+                    multiSeries={tajikDaylightSeries}
+                    timeRange={["2024-01-01", "2024-12-31"]}
+                    chartRangeGranularity="year"
+                    showChartControls
+                    forceTimeAxis
+                    xAxisYearLabel="gregorian"
+                    multiSeriesYAxisNameOverrides={{ 0: "Hours of daylight" }}
+                    chartHeight="h-56"
+                  />
+                </CardContent>
+              </Card>
+            </div>
+            <Card className="border-border/80 bg-background/70">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Approximate route sketch (minimal context map)</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <svg viewBox="0 0 420 180" className="h-40 w-full rounded border border-border/60 bg-muted/20">
+                  <line x1="90" y1="52" x2="122" y2="120" stroke="hsl(var(--muted-foreground))" strokeWidth="2" />
+                  <line x1="122" y1="120" x2="300" y2="112" stroke="hsl(var(--muted-foreground))" strokeWidth="2" />
+                  <line x1="90" y1="52" x2="300" y2="112" stroke="hsl(var(--muted-foreground))" strokeWidth="1.5" strokeDasharray="4 4" />
+                  <circle cx="90" cy="52" r="5" fill="hsl(var(--foreground))" />
+                  <circle cx="122" cy="120" r="5" fill="hsl(var(--foreground))" />
+                  <circle cx="300" cy="112" r="5" fill="hsl(var(--foreground))" />
+                  <text x="102" y="48" fontSize="12" fill="hsl(var(--foreground))">Dushanbe</text>
+                  <text x="134" y="140" fontSize="12" fill="hsl(var(--foreground))">Bokhtar (Qurghonteppa)</text>
+                  <text x="312" y="108" fontSize="12" fill="hsl(var(--foreground))">Kulob</text>
+                </svg>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Schematic only: relative placement and route lines are approximate for orientation, not navigation.
+                </p>
+              </CardContent>
+            </Card>
+            <div className="space-y-1 text-xs text-muted-foreground">
+              <p>Mountainous geography still shapes logistics and travel times beyond map-distance intuition.</p>
+              <p>Southern lowland zones tend to be hotter in summer than Dushanbe, which affects seasonal comfort and travel pacing.</p>
+              <p>Urban form reflects Soviet planning layers plus post-Soviet adaptation.</p>
+              <p>Persianate culture is expressed in Tajik language using Cyrillic script in everyday public signage.</p>
+              <p>Migration and remittance dynamics influence household demand, housing patterns, and city-level activity.</p>
+            </div>
+          </CardContent>
+        </Card>
       ) : null}
       <Card className="border-border">
         <CardHeader className="pb-2">
