@@ -142,6 +142,7 @@ export function StudyChartControls({
       className={EXPORT_BUTTON}
       onClick={onExportPng}
       disabled={disabledExport}
+      suppressHydrationWarning
     >
       Export PNG
     </Button>
@@ -155,6 +156,7 @@ export function StudyChartControls({
       className="h-8 shrink-0 rounded-md px-2.5 text-xs font-normal leading-none"
       onClick={onCopyLiveChartLink}
       disabled={disabledCopyLink}
+      suppressHydrationWarning
     >
       {copyLinkLabel}
     </Button>
@@ -163,7 +165,11 @@ export function StudyChartControls({
   if (mode === "exportOnly") {
     return (
       <>
-        <div className={`${TOOLBAR_ROW} flex-wrap justify-end`} aria-label="Chart export and share">
+        <div
+          className={`${TOOLBAR_ROW} flex-wrap justify-end`}
+          aria-label="Chart export and share"
+          suppressHydrationWarning
+        >
           {copyLinkButton}
           {exportButton}
         </div>
@@ -174,7 +180,7 @@ export function StudyChartControls({
 
   return (
     <>
-      <div className={TOOLBAR_ROW}>
+      <div className={TOOLBAR_ROW} suppressHydrationWarning>
         <div className="flex min-w-0 shrink-0 items-end gap-2" suppressHydrationWarning>
           <label
             className="flex w-[4.5rem] shrink-0 flex-col sm:w-[5rem] md:w-[5.5rem]"
