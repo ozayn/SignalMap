@@ -12,6 +12,7 @@ export const SIGNAL_COUNTRY: Record<string, string> = {
   usa: "#2563eb",
   united_states: "#2563eb",
   china: "#dc2626",
+  japan: "#0f766e",
   turkey: "#10b981",
   saudi_arabia: "#9333ea",
   /** EIA/Comtrade oil *volume* series (short key); WDI uses `saudi_arabia`. */

@@ -1002,6 +1002,8 @@ export function TimelineChart({
   const { isCompact, isLandscapeCompact } = useChartViewportLayout();
   const didHydrateFromShareUrlRef = useRef(false);
   const shareScrollTimerRef = useRef<number | null>(null);
+  /** Tracks the actual series currently hovered in the chart canvas. */
+  const hoveredSeriesNameRef = useRef<string | null>(null);
 
   const rangeBounds = useMemo((): [string, string] | undefined => {
     if (timeRangeProp?.[0] && timeRangeProp[1]) {
@@ -2911,6 +2913,25 @@ export function TimelineChart({
             }
           }
           if (hasMultiSeries && multiSeriesEffective && multiSeriesValues) {
+            const seriesLabelSet = new Set(multiSeriesEffective.map((s) => s.label));
+            const tooltipSeriesMeta = new Map<string, { color?: string }>();
+            let hoveredSeriesName: string | null = hoveredSeriesNameRef.current;
+            for (const raw of arr) {
+              if (!raw || typeof raw !== "object") continue;
+              const candidate = raw as {
+                seriesName?: unknown;
+                dataIndex?: unknown;
+                color?: unknown;
+              };
+              const seriesName = typeof candidate.seriesName === "string" ? candidate.seriesName : null;
+              if (!seriesName || !seriesLabelSet.has(seriesName)) continue;
+              const color = typeof candidate.color === "string" ? candidate.color : undefined;
+              tooltipSeriesMeta.set(seriesName, { color });
+            }
+            if (!hoveredSeriesName || !seriesLabelSet.has(hoveredSeriesName)) {
+              hoveredSeriesName = multiSeriesEffective[0]?.label ?? null;
+            }
+            const multiSeriesRows: Array<{ label: string; html: string; hovered: boolean }> = [];
             multiSeriesEffective.forEach((s, i) => {
               const val = multiSeriesValues[i]?.[idx];
               const formatted =
@@ -2926,8 +2947,24 @@ export function TimelineChart({
                         return `${core} ${u}`;
                       })()
                   : "—";
-              lines.push(`${s.label}: ${formatted}`);
+              const fallbackColor = multiSeriesLineColors?.[i] ?? s.color ?? mutedFg;
+              const rowColor = tooltipSeriesMeta.get(s.label)?.color ?? fallbackColor;
+              const bullet = `<span style="display:inline-block;width:8px;height:8px;border-radius:999px;background:${rowColor};margin-inline-end:6px;vertical-align:middle"></span>`;
+              const rowCore = `${bullet}${s.label}: ${formatted}`;
+              const hovered = Boolean(hoveredSeriesName && s.label === hoveredSeriesName);
+              multiSeriesRows.push({
+                label: s.label,
+                hovered,
+                html: hovered
+                  ? `<span style="font-weight:700;color:#111827;background:rgba(17,24,39,0.07);padding:1px 4px;border-radius:4px">${rowCore}</span>`
+                  : rowCore,
+              });
             });
+            multiSeriesRows.sort((a, b) => {
+              if (a.hovered === b.hovered) return 0;
+              return a.hovered ? -1 : 1;
+            });
+            lines.push(...multiSeriesRows.map((r) => r.html));
             if (extendedDates.includes(dateStr) && lastOfficialDateForExtension) {
               lines.push(
                 `<span style="font-size:10px;color:#888">${ui.estimatedExtension(lastOfficialDateForExtension)}</span>`
@@ -3510,6 +3547,7 @@ export function TimelineChart({
                 const defaultLineWidth =
                   isGold || isOil || isProductionKey ? 1.5 : hasMultiSeries && !isGold && !isOil && !isProductionKey ? 1.35 : 1;
                 const lineWidth = s.lineWidth ?? defaultLineWidth;
+                const lineWidthHover = Math.max(lineWidth + 0.8, lineWidth * 1.15);
                 const patternLineType =
                   s.linePattern === "dashed"
                     ? ("dashed" as const)
@@ -3556,7 +3594,12 @@ export function TimelineChart({
                   emphasis: {
                     focus: "none" as const,
                     scale: false,
-                    lineStyle: { color: lineColor, width: lineWidth, opacity: 1, ...(lineType ? { type: lineType } : {}) },
+                    lineStyle: {
+                      color: lineColor,
+                      width: isBarSeries ? lineWidth : lineWidthHover,
+                      opacity: 1,
+                      ...(lineType ? { type: lineType } : {}),
+                    },
                     itemStyle: { color: lineColor, opacity: 1 },
                   },
                   markPoint:
@@ -3860,6 +3903,20 @@ export function TimelineChart({
       });
     }
     chartInstanceRef.current = chart;
+    const handleSeriesMouseOver = (evt: unknown) => {
+      if (!evt || typeof evt !== "object") return;
+      const candidate = evt as { componentType?: unknown; seriesName?: unknown };
+      if (candidate.componentType !== "series") return;
+      if (typeof candidate.seriesName !== "string") return;
+      hoveredSeriesNameRef.current = candidate.seriesName;
+    };
+    const handleGlobalOut = () => {
+      hoveredSeriesNameRef.current = null;
+    };
+    chart.off("mouseover", handleSeriesMouseOver);
+    chart.off("globalout", handleGlobalOut);
+    chart.on("mouseover", handleSeriesMouseOver);
+    chart.on("globalout", handleGlobalOut);
 
     let cancelled = false;
 
@@ -3879,6 +3936,8 @@ export function TimelineChart({
 
     return () => {
       cancelled = true;
+      chart.off("mouseover", handleSeriesMouseOver);
+      chart.off("globalout", handleGlobalOut);
       cancelAnimationFrame(rafId);
     };
   }, [

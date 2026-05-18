@@ -596,9 +596,9 @@ export default function StudyDetailPage() {
   const [inflationSeriesWarnings, setInflationSeriesWarnings] = useState<Record<string, string> | null>(null);
   const [gdpGlobalUnitedStatesPoints, setGdpGlobalUnitedStatesPoints] = useState<{ date: string; value: number }[]>([]);
   const [gdpGlobalChinaPoints, setGdpGlobalChinaPoints] = useState<{ date: string; value: number }[]>([]);
-  const [gdpGlobalIranPoints, setGdpGlobalIranPoints] = useState<{ date: string; value: number }[]>([]);
-  const [gdpGlobalTurkeyPoints, setGdpGlobalTurkeyPoints] = useState<{ date: string; value: number }[]>([]);
-  const [gdpGlobalSaudiArabiaPoints, setGdpGlobalSaudiArabiaPoints] = useState<{ date: string; value: number }[]>([]);
+  const [gdpGlobalJapanPoints, setGdpGlobalJapanPoints] = useState<{ date: string; value: number }[]>([]);
+  const [gdpGlobalGermanyPoints, setGdpGlobalGermanyPoints] = useState<{ date: string; value: number }[]>([]);
+  const [gdpGlobalIndiaPoints, setGdpGlobalIndiaPoints] = useState<{ date: string; value: number }[]>([]);
   const [gdpGlobalRussiaPoints, setGdpGlobalRussiaPoints] = useState<{ date: string; value: number }[]>([]);
   const [gdpGlobalWorldPoints, setGdpGlobalWorldPoints] = useState<{ date: string; value: number }[]>([]);
   const [gdpGlobalSource, setGdpGlobalSource] = useState<{ name?: string; url?: string; publisher?: string } | null>(null);
@@ -606,6 +606,9 @@ export default function StudyDetailPage() {
   const [gdpGlobalPerCountryIndicatorId, setGdpGlobalPerCountryIndicatorId] = useState<Record<string, string> | null>(
     null
   );
+  const [gdpGlobalCurrentUsdSeries, setGdpGlobalCurrentUsdSeries] = useState<
+    Record<string, { date: string; value: number }[]> | null
+  >(null);
   const [gdpGlobalDisplayMode, setGdpGlobalDisplayMode] = useState<"absolute" | "indexed">("indexed");
   const [gdpGlobalAbsoluteLog, setGdpGlobalAbsoluteLog] = useState(false);
   const [gdpGlobalWdiLoading, setGdpGlobalWdiLoading] = useState(false);
@@ -1486,18 +1489,18 @@ export default function StudyDetailPage() {
     () => ({
       us: gdpGlobalUnitedStatesPoints,
       china: gdpGlobalChinaPoints,
-      iran: gdpGlobalIranPoints,
-      turkey: gdpGlobalTurkeyPoints,
-      saudi_arabia: gdpGlobalSaudiArabiaPoints,
+      japan: gdpGlobalJapanPoints,
+      germany: gdpGlobalGermanyPoints,
+      india: gdpGlobalIndiaPoints,
       russia: gdpGlobalRussiaPoints,
       world: gdpGlobalWorldPoints,
     }),
     [
       gdpGlobalUnitedStatesPoints,
       gdpGlobalChinaPoints,
-      gdpGlobalIranPoints,
-      gdpGlobalTurkeyPoints,
-      gdpGlobalSaudiArabiaPoints,
+      gdpGlobalJapanPoints,
+      gdpGlobalGermanyPoints,
+      gdpGlobalIndiaPoints,
       gdpGlobalRussiaPoints,
       gdpGlobalWorldPoints,
     ]
@@ -1522,9 +1525,9 @@ export default function StudyDetailPage() {
     return {
       us: deflateIfCurrent(raw.us, "united_states"),
       china: deflateIfCurrent(raw.china, "china"),
-      iran: deflateIfCurrent(raw.iran, "iran"),
-      turkey: deflateIfCurrent(raw.turkey, "turkey"),
-      saudi_arabia: deflateIfCurrent(raw.saudi_arabia, "saudi_arabia"),
+      japan: deflateIfCurrent(raw.japan, "japan"),
+      germany: deflateIfCurrent(raw.germany, "germany"),
+      india: deflateIfCurrent(raw.india, "india"),
       russia: deflateIfCurrent(raw.russia, "russia"),
       world: deflateIfCurrent(raw.world, "world"),
     };
@@ -1543,9 +1546,9 @@ export default function StudyDetailPage() {
       return {
         us: indexGdpComparisonTo100Base2000(raw.us),
         china: indexGdpComparisonTo100Base2000(raw.china),
-        iran: indexGdpComparisonTo100Base2000(raw.iran),
-        turkey: indexGdpComparisonTo100Base2000(raw.turkey),
-        saudi_arabia: indexGdpComparisonTo100Base2000(raw.saudi_arabia),
+        japan: indexGdpComparisonTo100Base2000(raw.japan),
+        germany: indexGdpComparisonTo100Base2000(raw.germany),
+        india: indexGdpComparisonTo100Base2000(raw.india),
         russia: indexGdpComparisonTo100Base2000(raw.russia),
         world: indexGdpComparisonTo100Base2000(raw.world),
       };
@@ -1558,20 +1561,20 @@ export default function StudyDetailPage() {
   ]);
 
   const gdpGlobalShareSeries = useMemo(() => {
-    if (!gdpGlobalAbsoluteDisplayed) return null;
-    const usByDate = new Map(gdpGlobalAbsoluteDisplayed.us.map((p) => [p.date, p.value] as const));
-    const chinaByDate = new Map(gdpGlobalAbsoluteDisplayed.china.map((p) => [p.date, p.value] as const));
-    const iranByDate = new Map(gdpGlobalAbsoluteDisplayed.iran.map((p) => [p.date, p.value] as const));
-    const turkeyByDate = new Map(gdpGlobalAbsoluteDisplayed.turkey.map((p) => [p.date, p.value] as const));
-    const saudiByDate = new Map(gdpGlobalAbsoluteDisplayed.saudi_arabia.map((p) => [p.date, p.value] as const));
-    const russiaByDate = new Map(gdpGlobalAbsoluteDisplayed.russia.map((p) => [p.date, p.value] as const));
-    const worldByDate = new Map(gdpGlobalAbsoluteDisplayed.world.map((p) => [p.date, p.value] as const));
+    if (!gdpGlobalCurrentUsdSeries) return null;
+    const usByDate = new Map((gdpGlobalCurrentUsdSeries.united_states ?? []).map((p) => [p.date, p.value] as const));
+    const chinaByDate = new Map((gdpGlobalCurrentUsdSeries.china ?? []).map((p) => [p.date, p.value] as const));
+    const japanByDate = new Map((gdpGlobalCurrentUsdSeries.japan ?? []).map((p) => [p.date, p.value] as const));
+    const germanyByDate = new Map((gdpGlobalCurrentUsdSeries.germany ?? []).map((p) => [p.date, p.value] as const));
+    const indiaByDate = new Map((gdpGlobalCurrentUsdSeries.india ?? []).map((p) => [p.date, p.value] as const));
+    const russiaByDate = new Map((gdpGlobalCurrentUsdSeries.russia ?? []).map((p) => [p.date, p.value] as const));
+    const worldByDate = new Map((gdpGlobalCurrentUsdSeries.world ?? []).map((p) => [p.date, p.value] as const));
 
     const us: { date: string; value: number }[] = [];
     const china: { date: string; value: number }[] = [];
-    const iran: { date: string; value: number }[] = [];
-    const turkey: { date: string; value: number }[] = [];
-    const saudi: { date: string; value: number }[] = [];
+    const japan: { date: string; value: number }[] = [];
+    const germany: { date: string; value: number }[] = [];
+    const india: { date: string; value: number }[] = [];
     const russia: { date: string; value: number }[] = [];
     const other: { date: string; value: number }[] = [];
 
@@ -1582,42 +1585,52 @@ export default function StudyDetailPage() {
       const selectedVals = [
         usByDate.get(date),
         chinaByDate.get(date),
-        iranByDate.get(date),
-        turkeyByDate.get(date),
-        saudiByDate.get(date),
+        japanByDate.get(date),
+        germanyByDate.get(date),
+        indiaByDate.get(date),
         russiaByDate.get(date),
       ].filter((v): v is number => Number.isFinite(v as number));
       if (selectedVals.length === 0) continue;
       const mkShare = (v: number | undefined) => (Number.isFinite(v as number) ? (((v as number) / world) * 100) : null);
       const usShare = mkShare(usByDate.get(date));
       const chinaShare = mkShare(chinaByDate.get(date));
-      const iranShare = mkShare(iranByDate.get(date));
-      const turkeyShare = mkShare(turkeyByDate.get(date));
-      const saudiShare = mkShare(saudiByDate.get(date));
+      const japanShare = mkShare(japanByDate.get(date));
+      const germanyShare = mkShare(germanyByDate.get(date));
+      const indiaShare = mkShare(indiaByDate.get(date));
       const russiaShare = mkShare(russiaByDate.get(date));
       const selectedShareSum =
         (usShare ?? 0) +
         (chinaShare ?? 0) +
-        (iranShare ?? 0) +
-        (turkeyShare ?? 0) +
-        (saudiShare ?? 0) +
+        (japanShare ?? 0) +
+        (germanyShare ?? 0) +
+        (indiaShare ?? 0) +
         (russiaShare ?? 0);
-      const otherShare = Math.max(0, Math.min(100, 100 - selectedShareSum));
+      const rawOtherShare = 100 - selectedShareSum;
+      let otherShare: number;
+      if (rawOtherShare >= 0 && rawOtherShare <= 100) {
+        otherShare = rawOtherShare;
+      } else if (rawOtherShare < 0 && rawOtherShare >= -0.001) {
+        otherShare = 0;
+      } else if (rawOtherShare > 100 && rawOtherShare <= 100.001) {
+        otherShare = 100;
+      } else {
+        continue;
+      }
       if (usShare != null) us.push({ date, value: usShare });
       if (chinaShare != null) china.push({ date, value: chinaShare });
-      if (iranShare != null) iran.push({ date, value: iranShare });
-      if (turkeyShare != null) turkey.push({ date, value: turkeyShare });
-      if (saudiShare != null) saudi.push({ date, value: saudiShare });
+      if (japanShare != null) japan.push({ date, value: japanShare });
+      if (germanyShare != null) germany.push({ date, value: germanyShare });
+      if (indiaShare != null) india.push({ date, value: indiaShare });
       if (russiaShare != null) russia.push({ date, value: russiaShare });
       other.push({ date, value: otherShare });
     }
 
-    return { us, china, iran, turkey, saudi, russia, other };
-  }, [gdpGlobalAbsoluteDisplayed]);
+    return { us, china, japan, germany, india, russia, other };
+  }, [gdpGlobalCurrentUsdSeries]);
 
   const gdpGlobalShareTooltipExtraLines = useMemo(() => {
-    if (!gdpGlobalAbsoluteDisplayed) return undefined;
-    const worldByDate = new Map(gdpGlobalAbsoluteDisplayed.world.map((p) => [p.date, p.value] as const));
+    if (!gdpGlobalCurrentUsdSeries) return undefined;
+    const worldByDate = new Map((gdpGlobalCurrentUsdSeries.world ?? []).map((p) => [p.date, p.value] as const));
     return (dateStr: string) => {
       const date = dateStr.slice(0, 10);
       const worldVal = worldByDate.get(date);
@@ -1626,7 +1639,7 @@ export default function StudyDetailPage() {
       return [L(isFa, `World GDP: ${worldTrn.toFixed(2)}T US$`, `GDP جهان: ${worldTrn.toFixed(2)} تریلیون دلار`)];
     };
   }, [
-    gdpGlobalAbsoluteDisplayed,
+    gdpGlobalCurrentUsdSeries,
     isFa,
   ]);
 
@@ -3863,14 +3876,15 @@ export default function StudyDetailPage() {
       if (isGdpGlobalComparison) {
         setGdpGlobalUnitedStatesPoints([]);
         setGdpGlobalChinaPoints([]);
-        setGdpGlobalIranPoints([]);
-        setGdpGlobalTurkeyPoints([]);
-        setGdpGlobalSaudiArabiaPoints([]);
+        setGdpGlobalJapanPoints([]);
+        setGdpGlobalGermanyPoints([]);
+        setGdpGlobalIndiaPoints([]);
         setGdpGlobalRussiaPoints([]);
         setGdpGlobalWorldPoints([]);
         setGdpGlobalSource(null);
         setGdpGlobalPerCountryBasis(null);
         setGdpGlobalPerCountryIndicatorId(null);
+        setGdpGlobalCurrentUsdSeries(null);
         setGdpGlobalLoadFailed(false);
         setGdpGlobalLoadDetail(null);
         setGdpGlobalSeriesWarnings(null);
@@ -3888,9 +3902,9 @@ export default function StudyDetailPage() {
       series?: {
         united_states: { date: string; value: number }[];
         china: { date: string; value: number }[];
-        iran: { date: string; value: number }[];
-        turkey: { date: string; value: number }[];
-        saudi_arabia: { date: string; value: number }[];
+        japan: { date: string; value: number }[];
+        germany: { date: string; value: number }[];
+        india: { date: string; value: number }[];
         russia: { date: string; value: number }[];
         world: { date: string; value: number }[];
       };
@@ -3898,6 +3912,7 @@ export default function StudyDetailPage() {
       partial?: boolean;
       per_country_price_basis?: Record<string, string>;
       per_country_indicator_id?: Record<string, string>;
+      series_current_usd?: Record<string, { date: string; value: number }[]>;
       source?: { name: string; url?: string; publisher?: string };
     }>(
       `/api/signals/wdi/gdp-global-comparison?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
@@ -3908,22 +3923,23 @@ export default function StudyDetailPage() {
         const s = res.series;
         setGdpGlobalUnitedStatesPoints(s?.united_states ?? []);
         setGdpGlobalChinaPoints(s?.china ?? []);
-        setGdpGlobalIranPoints(s?.iran ?? []);
-        setGdpGlobalTurkeyPoints(s?.turkey ?? []);
-        setGdpGlobalSaudiArabiaPoints(s?.saudi_arabia ?? []);
+        setGdpGlobalJapanPoints(s?.japan ?? []);
+        setGdpGlobalGermanyPoints(s?.germany ?? []);
+        setGdpGlobalIndiaPoints(s?.india ?? []);
         setGdpGlobalRussiaPoints(s?.russia ?? []);
         setGdpGlobalWorldPoints(s?.world ?? []);
         setGdpGlobalSource(res.source ?? null);
         setGdpGlobalPerCountryBasis(res.per_country_price_basis ?? null);
         setGdpGlobalPerCountryIndicatorId(res.per_country_indicator_id ?? null);
+        setGdpGlobalCurrentUsdSeries(res.series_current_usd ?? null);
         const warn = res.series_warnings;
         setGdpGlobalSeriesWarnings(warn && typeof warn === "object" ? warn : null);
         const nPts =
           (s?.united_states?.length ?? 0) +
           (s?.china?.length ?? 0) +
-          (s?.iran?.length ?? 0) +
-          (s?.turkey?.length ?? 0) +
-          (s?.saudi_arabia?.length ?? 0) +
+          (s?.japan?.length ?? 0) +
+          (s?.germany?.length ?? 0) +
+          (s?.india?.length ?? 0) +
           (s?.russia?.length ?? 0) +
           (s?.world?.length ?? 0);
         if (nPts === 0) {
@@ -3947,14 +3963,15 @@ export default function StudyDetailPage() {
         if (aborted) return;
         setGdpGlobalUnitedStatesPoints([]);
         setGdpGlobalChinaPoints([]);
-        setGdpGlobalIranPoints([]);
-        setGdpGlobalTurkeyPoints([]);
-        setGdpGlobalSaudiArabiaPoints([]);
+        setGdpGlobalJapanPoints([]);
+        setGdpGlobalGermanyPoints([]);
+        setGdpGlobalIndiaPoints([]);
         setGdpGlobalRussiaPoints([]);
         setGdpGlobalWorldPoints([]);
         setGdpGlobalSource(null);
         setGdpGlobalPerCountryBasis(null);
         setGdpGlobalPerCountryIndicatorId(null);
+        setGdpGlobalCurrentUsdSeries(null);
         setGdpGlobalSeriesWarnings(null);
         setGdpGlobalLoadFailed(true);
         setGdpGlobalLoadDetail(e instanceof Error ? e.message : "GDP comparison fetch failed");
@@ -5191,18 +5208,18 @@ export default function StudyDetailPage() {
     () =>
       gdpGlobalUnitedStatesPoints.length +
         gdpGlobalChinaPoints.length +
-        gdpGlobalIranPoints.length +
-        gdpGlobalTurkeyPoints.length +
-        gdpGlobalSaudiArabiaPoints.length +
+        gdpGlobalJapanPoints.length +
+        gdpGlobalGermanyPoints.length +
+        gdpGlobalIndiaPoints.length +
         gdpGlobalRussiaPoints.length +
         gdpGlobalWorldPoints.length >
       0,
     [
       gdpGlobalUnitedStatesPoints,
       gdpGlobalChinaPoints,
-      gdpGlobalIranPoints,
-      gdpGlobalTurkeyPoints,
-      gdpGlobalSaudiArabiaPoints,
+      gdpGlobalJapanPoints,
+      gdpGlobalGermanyPoints,
+      gdpGlobalIndiaPoints,
       gdpGlobalRussiaPoints,
       gdpGlobalWorldPoints,
     ]
@@ -5339,9 +5356,9 @@ export default function StudyDetailPage() {
                       : isGdpGlobalComparison
                         ? gdpGlobalUnitedStatesPoints.length > 0 ||
                           gdpGlobalChinaPoints.length > 0 ||
-                          gdpGlobalIranPoints.length > 0 ||
-                          gdpGlobalTurkeyPoints.length > 0 ||
-                          gdpGlobalSaudiArabiaPoints.length > 0 ||
+                          gdpGlobalJapanPoints.length > 0 ||
+                          gdpGlobalGermanyPoints.length > 0 ||
+                          gdpGlobalIndiaPoints.length > 0 ||
                           gdpGlobalWorldPoints.length > 0
                       : isIsiDiagnostics
                         ? isiDataReady
@@ -5459,9 +5476,10 @@ export default function StudyDetailPage() {
     if (isGdpGlobalComparison) {
       if (gdpGlobalUnitedStatesPoints.length > 0) allDates.push(...collect(gdpGlobalUnitedStatesPoints));
       if (gdpGlobalChinaPoints.length > 0) allDates.push(...collect(gdpGlobalChinaPoints));
-      if (gdpGlobalIranPoints.length > 0) allDates.push(...collect(gdpGlobalIranPoints));
-      if (gdpGlobalTurkeyPoints.length > 0) allDates.push(...collect(gdpGlobalTurkeyPoints));
-      if (gdpGlobalSaudiArabiaPoints.length > 0) allDates.push(...collect(gdpGlobalSaudiArabiaPoints));
+      if (gdpGlobalJapanPoints.length > 0) allDates.push(...collect(gdpGlobalJapanPoints));
+      if (gdpGlobalGermanyPoints.length > 0) allDates.push(...collect(gdpGlobalGermanyPoints));
+      if (gdpGlobalIndiaPoints.length > 0) allDates.push(...collect(gdpGlobalIndiaPoints));
+      if (gdpGlobalRussiaPoints.length > 0) allDates.push(...collect(gdpGlobalRussiaPoints));
       if (gdpGlobalWorldPoints.length > 0) allDates.push(...collect(gdpGlobalWorldPoints));
     }
     if (isIsiDiagnostics && isiSeriesTyped) {
@@ -5661,9 +5679,10 @@ export default function StudyDetailPage() {
       if (isGdpGlobalComparison) {
         if (gdpGlobalUnitedStatesPoints.length > 0) arrays.push(gdpGlobalUnitedStatesPoints);
         if (gdpGlobalChinaPoints.length > 0) arrays.push(gdpGlobalChinaPoints);
-        if (gdpGlobalIranPoints.length > 0) arrays.push(gdpGlobalIranPoints);
-        if (gdpGlobalTurkeyPoints.length > 0) arrays.push(gdpGlobalTurkeyPoints);
-        if (gdpGlobalSaudiArabiaPoints.length > 0) arrays.push(gdpGlobalSaudiArabiaPoints);
+        if (gdpGlobalJapanPoints.length > 0) arrays.push(gdpGlobalJapanPoints);
+        if (gdpGlobalGermanyPoints.length > 0) arrays.push(gdpGlobalGermanyPoints);
+        if (gdpGlobalIndiaPoints.length > 0) arrays.push(gdpGlobalIndiaPoints);
+        if (gdpGlobalRussiaPoints.length > 0) arrays.push(gdpGlobalRussiaPoints);
         if (gdpGlobalWorldPoints.length > 0) arrays.push(gdpGlobalWorldPoints);
       }
       if (isIsiDiagnostics && isiSeriesTyped) {
@@ -10537,28 +10556,28 @@ export default function StudyDetailPage() {
                     points: gdpGlobalDisplayed.china,
                   },
                   {
-                    label: L(isFa, "Iran", "ایران"),
+                    label: L(isFa, "Japan", "ژاپن"),
                     unit:
                       gdpGlobalDisplayMode === "indexed"
                         ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
-                    points: gdpGlobalDisplayed.iran,
+                    points: gdpGlobalDisplayed.japan,
                   },
                   {
-                    label: L(isFa, "Turkey", "ترکیه"),
+                    label: L(isFa, "Germany", "آلمان"),
                     unit:
                       gdpGlobalDisplayMode === "indexed"
                         ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
-                    points: gdpGlobalDisplayed.turkey,
+                    points: gdpGlobalDisplayed.germany,
                   },
                   {
-                    label: L(isFa, "Saudi Arabia", "عربستان سعودی"),
+                    label: L(isFa, "India", "هند"),
                     unit:
                       gdpGlobalDisplayMode === "indexed"
                         ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
-                    points: gdpGlobalDisplayed.saudi_arabia,
+                    points: gdpGlobalDisplayed.india,
                   },
                   {
                     label: L(isFa, "Russia", "روسیه"),
@@ -10634,42 +10653,42 @@ export default function StudyDetailPage() {
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   {
-                    key: "iran",
-                    label: L(isFa, "Iran", "ایران"),
+                    key: "japan",
+                    label: L(isFa, "Japan", "ژاپن"),
                     yAxisIndex: 0,
                     unit:
                       gdpGlobalDisplayMode === "indexed"
                         ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
-                    points: gdpGlobalDisplayed.iran,
-                    color: COUNTRY_COMPARATOR_STYLES.iran.color,
-                    symbol: COUNTRY_COMPARATOR_STYLES.iran.symbol,
+                    points: gdpGlobalDisplayed.japan,
+                    color: COUNTRY_COMPARATOR_STYLES.japan.color,
+                    symbol: COUNTRY_COMPARATOR_STYLES.japan.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   {
-                    key: "turkey",
-                    label: L(isFa, "Turkey", "ترکیه"),
+                    key: "germany",
+                    label: L(isFa, "Germany", "آلمان"),
                     yAxisIndex: 0,
                     unit:
                       gdpGlobalDisplayMode === "indexed"
                         ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
-                    points: gdpGlobalDisplayed.turkey,
-                    color: COUNTRY_COMPARATOR_STYLES.turkey.color,
-                    symbol: COUNTRY_COMPARATOR_STYLES.turkey.symbol,
+                    points: gdpGlobalDisplayed.germany,
+                    color: COUNTRY_COMPARATOR_STYLES.germany.color,
+                    symbol: COUNTRY_COMPARATOR_STYLES.germany.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   {
-                    key: "saudi_arabia",
-                    label: L(isFa, "Saudi Arabia", "عربستان سعودی"),
+                    key: "india",
+                    label: L(isFa, "India", "هند"),
                     yAxisIndex: 0,
                     unit:
                       gdpGlobalDisplayMode === "indexed"
                         ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
-                    points: gdpGlobalDisplayed.saudi_arabia,
-                    color: COUNTRY_COMPARATOR_STYLES.saudi_arabia.color,
-                    symbol: COUNTRY_COMPARATOR_STYLES.saudi_arabia.symbol,
+                    points: gdpGlobalDisplayed.india,
+                    color: COUNTRY_COMPARATOR_STYLES.india.color,
+                    symbol: COUNTRY_COMPARATOR_STYLES.india.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
                   {
@@ -10757,6 +10776,10 @@ export default function StudyDetailPage() {
                         color: COUNTRY_COMPARATOR_STYLES.us.color,
                         symbol: COUNTRY_COMPARATOR_STYLES.us.symbol,
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
+                        showSymbol: false,
+                        lineWidth: 1.2,
+                        smooth: false,
+                        stack: "world-share",
                         stackedArea: true,
                       },
                       {
@@ -10768,39 +10791,55 @@ export default function StudyDetailPage() {
                         color: COUNTRY_COMPARATOR_STYLES.china.color,
                         symbol: COUNTRY_COMPARATOR_STYLES.china.symbol,
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
+                        showSymbol: false,
+                        lineWidth: 1.2,
+                        smooth: false,
+                        stack: "world-share",
                         stackedArea: true,
                       },
                       {
-                        key: "iran_share",
-                        label: L(isFa, "Iran", "ایران"),
+                        key: "japan_share",
+                        label: L(isFa, "Japan", "ژاپن"),
                         yAxisIndex: 0,
                         unit: "%",
-                        points: gdpGlobalShareSeries.iran,
-                        color: COUNTRY_COMPARATOR_STYLES.iran.color,
-                        symbol: COUNTRY_COMPARATOR_STYLES.iran.symbol,
+                        points: gdpGlobalShareSeries.japan,
+                        color: COUNTRY_COMPARATOR_STYLES.japan.color,
+                        symbol: COUNTRY_COMPARATOR_STYLES.japan.symbol,
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
+                        showSymbol: false,
+                        lineWidth: 1.2,
+                        smooth: false,
+                        stack: "world-share",
                         stackedArea: true,
                       },
                       {
-                        key: "saudi_share",
-                        label: L(isFa, "Saudi Arabia", "عربستان سعودی"),
+                        key: "germany_share",
+                        label: L(isFa, "Germany", "آلمان"),
                         yAxisIndex: 0,
                         unit: "%",
-                        points: gdpGlobalShareSeries.saudi,
-                        color: COUNTRY_COMPARATOR_STYLES.saudi_arabia.color,
-                        symbol: COUNTRY_COMPARATOR_STYLES.saudi_arabia.symbol,
+                        points: gdpGlobalShareSeries.germany,
+                        color: COUNTRY_COMPARATOR_STYLES.germany.color,
+                        symbol: COUNTRY_COMPARATOR_STYLES.germany.symbol,
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
+                        showSymbol: false,
+                        lineWidth: 1.2,
+                        smooth: false,
+                        stack: "world-share",
                         stackedArea: true,
                       },
                       {
-                        key: "turkey_share",
-                        label: L(isFa, "Turkey", "ترکیه"),
+                        key: "india_share",
+                        label: L(isFa, "India", "هند"),
                         yAxisIndex: 0,
                         unit: "%",
-                        points: gdpGlobalShareSeries.turkey,
-                        color: COUNTRY_COMPARATOR_STYLES.turkey.color,
-                        symbol: COUNTRY_COMPARATOR_STYLES.turkey.symbol,
+                        points: gdpGlobalShareSeries.india,
+                        color: COUNTRY_COMPARATOR_STYLES.india.color,
+                        symbol: COUNTRY_COMPARATOR_STYLES.india.symbol,
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
+                        showSymbol: false,
+                        lineWidth: 1.2,
+                        smooth: false,
+                        stack: "world-share",
                         stackedArea: true,
                       },
                       {
@@ -10812,6 +10851,10 @@ export default function StudyDetailPage() {
                         color: COUNTRY_COMPARATOR_STYLES.russia.color,
                         symbol: COUNTRY_COMPARATOR_STYLES.russia.symbol,
                         symbolSize: CHART_LINE_SYMBOL_SIZE,
+                        showSymbol: false,
+                        lineWidth: 1.2,
+                        smooth: false,
+                        stack: "world-share",
                         stackedArea: true,
                       },
                       {
@@ -10823,6 +10866,9 @@ export default function StudyDetailPage() {
                         color: SIGNAL_COUNTRY.world,
                         symbol: "circle",
                         showSymbol: false,
+                        lineWidth: 1.2,
+                        smooth: false,
+                        stack: "world-share",
                         stackedArea: true,
                       },
                     ]}
@@ -10837,8 +10883,8 @@ export default function StudyDetailPage() {
                   <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
                     {L(
                       isFa,
-                      "Shares are computed against the World Bank world aggregate. 'Other' means all countries not individually shown.",
-                      "سهم‌ها نسبت به مجموع جهانی بانک جهانی محاسبه شده‌اند. «سایر» یعنی همهٔ کشورهایی که به‌صورت جداگانه نمایش داده نشده‌اند."
+                      "Shares are based on World Bank world GDP aggregates using nominal GDP (current US$). 'Other' means all countries not individually shown.",
+                      "سهم‌ها بر پایهٔ مجموع جهانی GDP بانک جهانی با GDP اسمی (دلار جاری) محاسبه شده‌اند. «سایر» یعنی همهٔ کشورهایی که به‌صورت جداگانه نمایش داده نشده‌اند."
                     )}
                   </p>
                 </div>

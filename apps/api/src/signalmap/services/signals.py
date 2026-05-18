@@ -1183,14 +1183,14 @@ GDP_GLOBAL_COMPARISON_SOURCE = {
 
 def get_gdp_global_comparison(start: str, end: str) -> dict:
     """
-    Annual GDP (levels) for the United States, China, Iran, Turkey, Saudi Arabia, Russia, and world aggregate.
+    Annual GDP (levels) for the United States, China, Japan, Germany, India, Russia, and world aggregate.
     Prefers constant 2015 US$ (NY.GDP.MKTP.KD) per economy; falls back to current US$ (NY.GDP.MKTP.CD) when KD is empty.
     """
     from signalmap.sources.world_bank_gdp_totals import fetch_gdp_global_comparison_bundle
 
     start_year = int(start[:4])
     end_year = int(end[:4])
-    ck = f"signal:gdp_global_comparison:v2:{start_year}:{end_year}"
+    ck = f"signal:gdp_global_comparison:v3:{start_year}:{end_year}"
     cached = cache_get(ck)
     if cached is not None:
         return cached
