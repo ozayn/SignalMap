@@ -184,6 +184,7 @@ export function FollowerGrowthChart({
               exportPresentationTitle: titleForExport,
               exportPresentationAllowEmptyTitle: true,
               exportPresentationFontSizes: settings.fontSizes,
+              exportPresentationPreset: settings.fontPreset,
               exportPresentationDirection: (chartLocale ?? "en") === "fa" ? "rtl" : "ltr",
               exportPresentationLocale: (chartLocale ?? "en") === "fa" ? "fa" : "en",
               exportPresentationTitleColor: titleColor,

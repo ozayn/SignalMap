@@ -68,10 +68,14 @@ export type ExportChartSettings = {
 };
 
 /** Merge modal font sizes with presentation defaults (derived fields scale from ratios in `PRESENTATION_EXPORT_FONTS`). */
-export function mergePresentationExportFonts(partial?: Partial<ExportChartFontSizes>): PresentationExportFonts {
+export function mergePresentationExportFonts(
+  partial?: Partial<ExportChartFontSizes>,
+  preset: ExportChartFontPreset = "presentation"
+): PresentationExportFonts {
   const o: ExportChartFontSizes = { ...DEFAULT_EXPORT_CHART_FONT_SIZES, ...partial };
   const axisLabel = o.axisTick;
   const r = PRESENTATION_EXPORT_FONTS;
+  const derivedMarkLineLabel = Math.round(axisLabel * (r.markLineLabel / r.axisLabel));
   return {
     ...r,
     title: o.title,
@@ -81,7 +85,7 @@ export function mergePresentationExportFonts(partial?: Partial<ExportChartFontSi
     legend: o.legend,
     legendPage: Math.max(10, Math.round(o.legend * (r.legendPage / r.legend))),
     sourceGraphic: o.source,
-    markLineLabel: Math.round(axisLabel * (r.markLineLabel / r.axisLabel)),
+    markLineLabel: preset === "presentation" ? Math.max(30, derivedMarkLineLabel) : derivedMarkLineLabel,
     tooltip: Math.round(axisLabel * (r.tooltip / r.axisLabel)),
     seriesLabel: Math.round(axisLabel * (r.seriesLabel / r.axisLabel)),
   } satisfies PresentationExportFonts;
@@ -105,6 +109,8 @@ export type PresentationEchartsExportContext = {
    * Should match the height passed to `echarts.init` for presentation PNG export.
    */
   chartPixelHeight?: number;
+  /** Strengthen period overlays and overlay labels for projected slide readability. */
+  emphasizeOverlayContrast?: boolean;
 };
 
 /** Slide chrome in base (logical) pixels before `pixelRatio` scaling. */
@@ -1187,6 +1193,12 @@ export function buildPresentationEchartsPatch(
       PRESENTATION_EST_LEGEND_HEIGHT_PX +
       10
     : EXPORT_AUX_LEGEND_SOURCE_RESERVE_MIN;
+  const emphasizeOverlayContrast = ctx.emphasizeOverlayContrast === true;
+  const exportOverlayFill = "rgba(90,90,90,0.32)";
+  const exportOverlayLabelColor = "rgba(70,70,70,0.9)";
+  const exportOverlayLabelWeight = 600;
+  const exportAxisTextColor = "#444444";
+  const exportGridLineColor = "rgba(120,120,120,0.18)";
 
   /**
    * `echarts` may omit `axisLabel.formatter` on `getOption()`. Y value axes get a built-in compact tick
@@ -1241,6 +1253,7 @@ export function buildPresentationEchartsPatch(
       ...al,
       fontSize: fonts.axisLabel,
       margin,
+      ...(emphasizeOverlayContrast ? { color: exportAxisTextColor } : {}),
       ...(rich ? { rich: scaleRichForPresentation(rich, fonts.axisLabel) } : {}),
     };
     if (isY && isValueY) {
@@ -1250,10 +1263,32 @@ export function buildPresentationEchartsPatch(
       ...ax,
       ...nameGapPatch,
       axisLabel: axisLabelOut,
+      ...(emphasizeOverlayContrast
+        ? {
+            axisTick: {
+              ...((ax.axisTick as Record<string, unknown> | undefined) ?? {}),
+              lineStyle: {
+                ...((((ax.axisTick as Record<string, unknown> | undefined)?.lineStyle as Record<string, unknown> | undefined) ??
+                  {}) as Record<string, unknown>),
+                color: exportAxisTextColor,
+              },
+            },
+            splitLine: {
+              ...((ax.splitLine as Record<string, unknown> | undefined) ?? {}),
+              show: true,
+              lineStyle: {
+                ...((((ax.splitLine as Record<string, unknown> | undefined)?.lineStyle as Record<string, unknown> | undefined) ??
+                  {}) as Record<string, unknown>),
+                color: exportGridLineColor,
+              },
+            },
+          }
+        : {}),
       nameTextStyle: {
         ...nt,
         fontSize: fonts.axisName,
         lineHeight: fonts.axisNameLineHeight,
+        ...(emphasizeOverlayContrast ? { color: exportAxisTextColor } : {}),
         padding: Array.isArray(nt.padding) ? (nt.padding as number[]).map((n) => Math.round(n * 1.15)) : nt.padding,
       },
     };
@@ -1279,19 +1314,75 @@ export function buildPresentationEchartsPatch(
     };
   });
 
+  const patchOverlayLabelStyle = (
+    label: Record<string, unknown> | undefined
+  ): Record<string, unknown> | undefined => {
+    if (!label || label.show === false) return label;
+    if (!emphasizeOverlayContrast) {
+      return { ...label, fontSize: Math.max(fonts.markLineLabel, typeof label.fontSize === "number" ? label.fontSize : 0) };
+    }
+    return {
+      ...label,
+      fontSize: Math.max(fonts.markLineLabel, typeof label.fontSize === "number" ? label.fontSize : 0),
+      color: exportOverlayLabelColor,
+      fontWeight:
+        typeof label.fontWeight === "number"
+          ? Math.max(label.fontWeight, exportOverlayLabelWeight)
+          : exportOverlayLabelWeight,
+    };
+  };
+
   const patchMarkLineEntry = (item: unknown): unknown => {
     if (Array.isArray(item)) return item.map(patchMarkLineEntry);
     if (!item || typeof item !== "object") return item;
     const row = item as Record<string, unknown>;
     const label = row.label as Record<string, unknown> | undefined;
-    if (!label || label.show === false) return item;
+    const patchedLabel = patchOverlayLabelStyle(label);
+    if (!patchedLabel) return item;
     return {
       ...row,
-      label: {
-        ...label,
-        fontSize: fonts.markLineLabel,
-      },
+      label: patchedLabel,
     };
+  };
+
+  const patchMarkAreaObject = (raw: Record<string, unknown>): Record<string, unknown> => {
+    const next = { ...raw };
+    const itemStyle = raw.itemStyle as Record<string, unknown> | undefined;
+    if (emphasizeOverlayContrast) {
+      next.itemStyle = {
+        ...(itemStyle ?? {}),
+        color: exportOverlayFill,
+      };
+    } else if (itemStyle) {
+      next.itemStyle = { ...itemStyle };
+    }
+    const label = raw.label as Record<string, unknown> | undefined;
+    if (label) {
+      const patched = patchOverlayLabelStyle(label);
+      if (patched) next.label = patched;
+    }
+    const emphasis = raw.emphasis as Record<string, unknown> | undefined;
+    if (emphasis) {
+      const emphasisLabel =
+        emphasis.label && typeof emphasis.label === "object" ? (emphasis.label as Record<string, unknown>) : undefined;
+      const emphasisItemStyle =
+        emphasis.itemStyle && typeof emphasis.itemStyle === "object"
+          ? (emphasis.itemStyle as Record<string, unknown>)
+          : undefined;
+      next.emphasis = {
+        ...emphasis,
+        ...(emphasisLabel ? { label: patchOverlayLabelStyle(emphasisLabel) } : {}),
+        ...(emphasizeOverlayContrast
+          ? {
+              itemStyle: {
+                ...(emphasisItemStyle ?? {}),
+                color: exportOverlayFill,
+              },
+            }
+          : {}),
+      };
+    }
+    return next;
   };
 
   const patchSeriesTextLabels = (sRec: Record<string, unknown>): Record<string, unknown> => {
@@ -1320,17 +1411,31 @@ export function buildPresentationEchartsPatch(
   const series = asArray(opt.series).map((s) => {
     const sRec = s as Record<string, unknown>;
     const ml = sRec.markLine as Record<string, unknown> | undefined;
+    const ma = sRec.markArea as Record<string, unknown> | undefined;
     let next: Record<string, unknown> = patchSeriesTextLabels({ ...sRec });
-    if (ml && Array.isArray(ml.data)) {
-      next = { ...next, markLine: { ...ml, data: (ml.data as unknown[]).map(patchMarkLineEntry) } };
+    if (ml) {
+      const mlLabel = ml.label as Record<string, unknown> | undefined;
+      next = {
+        ...next,
+        markLine: {
+          ...ml,
+          ...(mlLabel ? { label: patchOverlayLabelStyle(mlLabel) } : {}),
+          ...(Array.isArray(ml.data) ? { data: (ml.data as unknown[]).map(patchMarkLineEntry) } : {}),
+        },
+      };
+    }
+    if (ma) {
+      next = { ...next, markArea: patchMarkAreaObject(ma) };
     }
     const t = next.type;
     if (t != null && t !== "line") return next;
     const ls = (next.lineStyle ?? {}) as Record<string, unknown>;
+    const existingLineWidth = typeof ls.width === "number" ? ls.width : 2;
+    const exportLineWidth = emphasizeOverlayContrast ? existingLineWidth + 1.2 : 2;
     return {
       ...next,
       symbolSize: 4,
-      lineStyle: { ...ls, width: 2 },
+      lineStyle: { ...ls, width: exportLineWidth },
     };
   });
 
@@ -1347,7 +1452,7 @@ export function buildPresentationEchartsPatch(
             width: compactSourceWrapWidthPx,
             lineHeight: sourceLineHeightPx,
             fontSize: fonts.sourceGraphic,
-            fill: "#666666",
+            fill: emphasizeOverlayContrast ? "#4a4a4a" : "#666666",
             fontFamily: MEASURE_CANVAS_FONT,
             textAlign: (dir === "rtl" ? "right" : "left") as "right" | "left",
             textVerticalAlign: "bottom" as const,

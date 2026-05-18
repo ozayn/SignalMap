@@ -21,11 +21,11 @@ const FONT_PRESET_PAPER: ExportChartFontSizes = {
 };
 
 const FONT_PRESET_PRESENTATION: ExportChartFontSizes = {
-  title: 32,
-  axisName: 23,
-  axisTick: 21,
-  legend: 20,
-  source: 17,
+  title: 40,
+  axisName: 30,
+  axisTick: 28,
+  legend: 26,
+  source: 24,
 };
 
 function clampFont(n: number): number {

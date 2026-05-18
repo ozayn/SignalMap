@@ -139,6 +139,7 @@ export function OilTradeSankey({
         exportPresentationTitle: titleForExport,
         exportPresentationAllowEmptyTitle: true,
         exportPresentationFontSizes: settings.fontSizes,
+        exportPresentationPreset: settings.fontPreset,
         exportPresentationDirection: chartLocale === "fa" ? "rtl" : "ltr",
         exportPresentationLocale: chartLocale === "fa" ? "fa" : "en",
         exportPresentationTitleColor: titleColor,

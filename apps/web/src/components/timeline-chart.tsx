@@ -1379,6 +1379,7 @@ export function TimelineChart({
               exportPresentationTitle: titleForExport,
               exportPresentationAllowEmptyTitle: true,
               exportPresentationFontSizes: settings.fontSizes,
+              exportPresentationPreset: settings.fontPreset,
               exportPresentationSubtitle,
               ...(useExportAuxLegend
                 ? {

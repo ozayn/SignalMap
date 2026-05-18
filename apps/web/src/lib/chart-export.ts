@@ -9,6 +9,7 @@ import {
   compactExportSlideTitleString,
   formatStudyExportSourceLine,
   mergePresentationExportFonts,
+  type ExportChartFontPreset,
   type ExportChartFontSizes,
   type PresentationSlideLayout,
 } from "@/lib/chart-export-presentation";
@@ -226,6 +227,8 @@ export type DownloadEchartsRasterOptions = {
   exportPresentationAllowEmptyTitle?: boolean;
   /** Partial font overrides for the offscreen presentation export only (not the live chart). */
   exportPresentationFontSizes?: Partial<ExportChartFontSizes>;
+  /** Active export font preset so export-only style tweaks can stay preset-specific. */
+  exportPresentationPreset?: ExportChartFontPreset;
   /**
    * Invoked immediately before `getDataURL` (after export sizing / patches) so charts can repaint
    * layout-dependent `graphic` layers (e.g. regime focus labels) at the export canvas dimensions.
@@ -629,21 +632,25 @@ async function exportPresentationPngFromLiveChart(
     // Presentation title is export-only; dropping any `title` from the snapshot avoids inheriting or leaking title state.
     delete exportSnapshot.title;
 
-    const exportFonts = mergePresentationExportFonts(opts.exportPresentationFontSizes);
+    const exportFonts = mergePresentationExportFonts(
+      opts.exportPresentationFontSizes,
+      opts.exportPresentationPreset ?? "presentation"
+    );
 
     /** Build patch from the snapshot before any `setOption` so the snapshot cannot be altered by the export instance merge. */
     const presentationPatch = buildPresentationEchartsPatch(
       exportSnapshot,
       {
-      chartTitle: compactTitle,
-      chartSubtitle: opts.exportPresentationSubtitle?.trim(),
-      countryColorKey: opts.exportPresentationCountryKey,
-      lineStyleKey: opts.exportPresentationLineStyleKey,
-      sourceFooter: opts.exportSourceFooter?.trim(),
-      direction: opts.exportPresentationDirection ?? "ltr",
-      chartLocale: opts.exportPresentationLocale ?? "en",
-      chartPixelHeight: layout.chartSlotBaseH,
-    },
+        chartTitle: compactTitle,
+        chartSubtitle: opts.exportPresentationSubtitle?.trim(),
+        countryColorKey: opts.exportPresentationCountryKey,
+        lineStyleKey: opts.exportPresentationLineStyleKey,
+        sourceFooter: opts.exportSourceFooter?.trim(),
+        direction: opts.exportPresentationDirection ?? "ltr",
+        chartLocale: opts.exportPresentationLocale ?? "en",
+        chartPixelHeight: layout.chartSlotBaseH,
+        emphasizeOverlayContrast: opts.exportPresentationPreset === "presentation",
+      },
       exportFonts
     );
     exportChart.setOption(exportSnapshot as never, { notMerge: true });
