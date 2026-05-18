@@ -30,6 +30,9 @@ const STUDY_METADATA_OVERRIDES: Record<string, StudyMetadataOverride> = {
   "tajikistan-economy": {
     title: "Tajikistan Economy Study | SignalMap",
   },
+  "china-economy": {
+    title: "China Economy Study | SignalMap",
+  },
 };
 
 function resolveSiteUrl(): string {

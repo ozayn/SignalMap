@@ -216,6 +216,7 @@ export function CountryEconomyStudy({
   const isRussia = countryCode.toUpperCase() === "RUS";
   const isSaudi = countryCode.toUpperCase() === "SAU";
   const isTajikistan = countryCode.toUpperCase() === "TJK";
+  const isChina = countryCode.toUpperCase() === "CHN";
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<CountryEconomyBundle | null>(null);
@@ -420,6 +421,7 @@ export function CountryEconomyStudy({
   const turkeyPolicyRateIndicatorId = indicatorIds.policy_interest_rate_pct ?? "FR.INR.LEND";
   const currentAccountPctGdp = series.current_account_pct_gdp ?? [];
   const externalDebtPctGdp = series.external_debt_pct_gdp ?? [];
+  const urbanPopulationPct = series.urban_population_pct ?? [];
   const hasUsFiscalMacro = governmentDebtPctGdp.length > 0 || fiscalBalancePctGdp.length > 0 || federalFundsRate.length > 0;
 
   const gdpSplitNominal = useMemo(() => deriveGdpOilSplit(gdpNominal, oilRents), [gdpNominal, oilRents]);
@@ -723,7 +725,14 @@ export function CountryEconomyStudy({
               "Mountainous geography and infrastructure constraints can shape transport costs, labor mobility, and uneven regional economic outcomes.",
               "Series are annual observations; missing years remain blank and are not interpolated.",
             ]
-          : [
+          : isChina
+            ? [
+                `This page combines China macro and social indicators in ${selectedRange?.label ?? "the selected range"}, with focus windows (${focusSummaryLabel || "selected presets"}) for reform-era comparison.`,
+                "The chart set emphasizes investment-versus-consumption dynamics, manufacturing/industry structure, trade openness, money growth, GDP per capita, and official exchange-rate context.",
+                "Overlays mark reform opening, WTO accession, post-2008 stimulus, 2015 market turbulence, COVID shock, and recent property-sector stress as timing anchors.",
+                "China's transition from planned-economy institutions toward market-oriented growth is treated as historical context, not a single-cause narrative.",
+              ]
+            : [
             `The charts use an outer window of ${selectedRange?.label ?? "the selected range"} and shaded focus periods of ${focusSummaryLabel || "the selected presets"}.`,
             "CPI inflation (red), GDP growth (blue), and resource-rent shares are plotted as annual WDI observations; gaps are left as gaps.",
             isUsa
@@ -744,6 +753,7 @@ export function CountryEconomyStudy({
     isSaudi,
     isRussia,
     isTajikistan,
+    isChina,
     gini.length,
     povertyExtreme.length,
     povertyLmic.length,
@@ -877,7 +887,37 @@ export function CountryEconomyStudy({
                   ],
                 },
               ]
-            : [
+            : isChina
+              ? [
+                  {
+                    heading: "How to read these charts",
+                    bullets: [
+                      "Read each panel as one signal, then compare related indicators over the same years before drawing conclusions.",
+                      "Use focus periods as broad policy-era windows (reform opening, WTO integration, post-2008 stimulus, recent slowdown), not causal labels.",
+                      "Overlays and shaded windows are timeline context only; they do not prove causal effects.",
+                    ],
+                  },
+                  {
+                    heading: "Units and comparability",
+                    bullets: [
+                      "Annual %: inflation, GDP growth, money growth, trade shares, industry shares, current account, external debt, and urbanization rate.",
+                      "Current US$ vs constant 2015 US$: nominal and real demand toggles answer different questions and should not be mixed.",
+                      "Official CNY per USD is context for macro and trade interpretation, not a crisis-style FX signal.",
+                    ],
+                  },
+                  {
+                    heading: "Concept guide used in this study",
+                    bullets: [
+                      "Investment vs consumption: compare demand shares over time to read model shifts in growth composition.",
+                      "Manufacturing/industry shares: broad structure indicators, not full productivity accounts.",
+                      "Trade openness: imports/exports as % of GDP for external integration context.",
+                      "Broad money growth: monetary/credit expansion context, not standalone proof of inflation outcomes.",
+                      "Urbanization and GDP per capita: structural development context signals.",
+                      "Current account and external debt: external-balance and liability context, not full sovereign-risk modelling.",
+                    ],
+                  },
+                ]
+              : [
             {
               heading: "How to read these charts",
               bullets: [
@@ -898,7 +938,7 @@ export function CountryEconomyStudy({
               ],
             },
           ],
-    [hasFX, isTurkey, isSaudi, isRussia, isTajikistan]
+    [hasFX, isTurkey, isSaudi, isRussia, isTajikistan, isChina]
   );
 
   const sourceItems = useMemo<SourceInfoItem[]>(() => {
@@ -1092,6 +1132,40 @@ export function CountryEconomyStudy({
         });
       }
     }
+    if (isChina) {
+      items.push({
+        label: "GDP per capita",
+        sourceName: baseName,
+        sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.gdp_per_capita_current_usd ?? "NY.GDP.PCAP.CD"}`,
+        sourceDetail: baseCountryDetail,
+        unitLabel: "Current US$",
+      });
+      items.push({
+        label: "Current account balance",
+        sourceName: baseName,
+        sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.current_account_pct_gdp ?? "BN.CAB.XOKA.GD.ZS"}`,
+        sourceDetail: baseCountryDetail,
+        unitLabel: "% of GDP",
+      });
+      if (externalDebtPctGdp.length > 0) {
+        items.push({
+          label: "External debt",
+          sourceName: baseName,
+          sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.external_debt_stocks_usd ?? "DT.DOD.DECT.CD"}`,
+          sourceDetail: `${baseCountryDetail}; %GDP derived from DT.DOD.DECT.CD / NY.GDP.MKTP.CD`,
+          unitLabel: "% of GDP (derived)",
+        });
+      }
+      if (urbanPopulationPct.length > 0) {
+        items.push({
+          label: "Urbanization rate",
+          sourceName: baseName,
+          sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.urban_population_pct ?? "SP.URB.TOTL.IN.ZS"}`,
+          sourceDetail: baseCountryDetail,
+          unitLabel: "% of population (urban)",
+        });
+      }
+    }
     return items;
   }, [
     source,
@@ -1109,12 +1183,16 @@ export function CountryEconomyStudy({
     isSaudi,
     brentPoints.length,
     isTajikistan,
+    isChina,
     hasFX,
     externalDebtPctGdp.length,
+    urbanPopulationPct.length,
     indicatorIds.gdp_per_capita_current_usd,
     indicatorIds.remittances_pct_gdp,
     indicatorIds.fx_official_lcu_per_usd,
     indicatorIds.external_debt_stocks_usd,
+    indicatorIds.current_account_pct_gdp,
+    indicatorIds.urban_population_pct,
   ]);
 
   const sourceNote = isTurkey
@@ -1127,6 +1205,8 @@ export function CountryEconomyStudy({
       ? "Primary source family is World Bank WDI country series. Units include annual %, current US$, constant 2015 US$, LCU per USD, % of GDP, Gini index, and poverty headcount %. Oil/gas rents are context indicators, not full sector accounting."
       : isTajikistan
         ? "Primary source family is World Bank WDI country series. Focus indicators include remittances (%GDP), GDP per capita, official exchange rate (somoni/USD), poverty and inequality where available, and external debt burden."
+      : isChina
+        ? "Primary source family is World Bank WDI country series. Focus indicators include demand composition (nominal/real), trade and industry shares, broad money growth, GDP per capita, official CNY/USD exchange rate context, and external-balance indicators where available."
       : "Series are annual WDI observations. Missing years remain missing; no interpolation is applied.";
 
   const aiParagraphs = useMemo(() => {
@@ -1138,6 +1218,7 @@ export function CountryEconomyStudy({
     if (isUsa && !hasUsFiscalMacro) sparseNotes.push("U.S. fiscal macro series are unavailable for this range");
     if (isTurkey && policyRate.length === 0) sparseNotes.push("policy-rate proxy is unavailable in this window");
     if (isTajikistan && remittancesPctGdp.length === 0) sparseNotes.push("remittance series is unavailable in this window");
+    if (isChina && gdpPerCapita.length === 0) sparseNotes.push("GDP per capita series is unavailable in this window");
     return isTurkey
       ? [
           `Within ${focusRange}, compare inflation, lira depreciation, growth, external-balance signals, and distribution indicators as descriptive co-movements rather than causal effects.`,
@@ -1178,6 +1259,16 @@ export function CountryEconomyStudy({
                 ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
                 : "Data caveat: this page uses annual published observations; sparse welfare and remittance series should be interpreted cautiously.",
             ]
+          : isChina
+            ? [
+                `Within ${focusRange}, compare investment/consumption mix, trade openness, industrial structure, money growth, and GDP per capita as descriptive co-movements rather than causal proof.`,
+                "Use 1978, 1992, 2001, 2008, 2015, 2020, and 2021 overlays as timing anchors for reform, integration, stimulus, market stress, and property/debt-risk context.",
+                "Nominal and real demand toggles are complementary: nominal captures current-price scale, while real better tracks volume over time.",
+                "Official USD→CNY is presented as policy/external-context signal, not a crisis-style floating-FX stress indicator.",
+                sparseNotes.length
+                  ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
+                  : "Data caveat: annual published observations can show step changes around policy and cycle shifts; interpret with source notes and period context.",
+              ]
           : [
             `Within ${focusRange}, compare inflation, growth, demand composition, and distribution indicators as descriptive co-movements rather than causal effects.`,
             `Selected focus periods are clipped to the active range (${selectedRange?.label ?? "selected range"}) so shaded years always match the visible window.`,
@@ -1200,8 +1291,10 @@ export function CountryEconomyStudy({
     isSaudi,
     isRussia,
     isTajikistan,
+    isChina,
     policyRate.length,
     remittancesPctGdp.length,
+    gdpPerCapita.length,
   ]);
 
   const commonProps = {
@@ -1224,7 +1317,7 @@ export function CountryEconomyStudy({
         }
       : undefined,
     xAxisYearLabel:
-      isUsa || isTajikistan
+      isUsa || isTajikistan || isChina
         ? yearAxisMode
         : isTurkey
           ? ("both" as const)
@@ -1236,7 +1329,7 @@ export function CountryEconomyStudy({
       gdp: gdpMode,
       overlays: showOverlays,
       log: fxLog,
-      calendar: isUsa || isTajikistan ? yearAxisMode : undefined,
+      calendar: isUsa || isTajikistan || isChina ? yearAxisMode : undefined,
     },
   };
 
@@ -1262,7 +1355,7 @@ export function CountryEconomyStudy({
 
   return (
     <section className="space-y-4">
-      {isTurkey || isRussia || isSaudi || isTajikistan ? (
+      {isTurkey || isRussia || isSaudi || isTajikistan || isChina ? (
         <>
           <Card className="border-border bg-muted/20">
             <CardHeader className="pb-2">
@@ -1280,6 +1373,10 @@ export function CountryEconomyStudy({
               ) : isTajikistan ? (
                 <p>
                   This study explores Tajikistan through post-Soviet transition, civil-war disruption and stabilization, migration-linked remittance dependence (especially Russia-linked), exchange-rate shifts, and welfare trends.
+                </p>
+              ) : isChina ? (
+                <p>
+                  This study explores China&apos;s transition from planned-economy institutions toward market-oriented growth, emphasizing investment/export-led expansion, manufacturing and trade integration, post-2008 credit expansion, and recent property/debt-risk context.
                 </p>
               ) : (
                 <p>
@@ -1321,6 +1418,14 @@ export function CountryEconomyStudy({
                     <li>The somoni exchange-rate panel helps anchor affordability and import-cost pressure context over time.</li>
                     <li>Civil-war and post-war period overlays provide historical timing context; they are not causal proof.</li>
                     <li>Mountainous geography and infrastructure constraints can help explain why growth, trade, and welfare signals may evolve unevenly.</li>
+                  </>
+                ) : isChina ? (
+                  <>
+                    <li>Compare investment versus consumption over time to track how China&apos;s growth model composition changes across policy eras.</li>
+                    <li>Manufacturing and industry shares provide structural context for export-led integration and rebalancing pressures.</li>
+                    <li>Trade openness, official USD→CNY context, and current-account patterns are best interpreted together.</li>
+                    <li>Post-2008 money/credit expansion and later property-sector stress are timing anchors, not standalone causal proof.</li>
+                    <li>GDP per capita and urbanization trends provide long-run development context alongside growth and distribution indicators.</li>
                   </>
                 ) : (
                   <>
@@ -1497,7 +1602,7 @@ export function CountryEconomyStudy({
                 })}
               </div>
             </div>
-            {isUsa || isTajikistan ? (
+            {isUsa || isTajikistan || isChina ? (
               <label className="inline-flex items-center gap-2">
                 <span className="text-muted-foreground">Year axis</span>
                 <StudyYearDisplayToggle
@@ -1517,15 +1622,17 @@ export function CountryEconomyStudy({
               <span>Show overlays</span>
             </label>
           </div>
-      {isTurkey || isRussia || isSaudi || isTajikistan ? (
+      {isTurkey || isRussia || isSaudi || isTajikistan || isChina ? (
             <>
               <p className="mt-2 text-xs text-muted-foreground">
                 {isTurkey
                   ? turkeyFocusClarification
                   : isSaudi
                     ? "Focus periods are policy/leadership eras used for comparison, not strict causal labels."
-                    : isTajikistan
+                  : isTajikistan
                       ? "Focus periods are broad historical context windows, not presidency labels and not strict causal claims."
+                    : isChina
+                      ? "Focus periods are broad policy-era comparison windows (reform, integration, stimulus, slowdown), not strict causal labels."
                       : russiaFocusClarification}
               </p>
               {isTurkey ? (
@@ -1539,6 +1646,10 @@ export function CountryEconomyStudy({
               ) : isTajikistan ? (
                 <p className="mt-1 text-xs text-muted-foreground">
                   Soviet/pre-independence context · Independence/civil war (1991-1997) · Post-war stabilization (1997-2005) · Remittance-led growth (2005-2014) · Recent period (2015-present)
+                </p>
+              ) : isChina ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Mao/pre-reform context · Reform and opening (1978-1992) · Jiang/Zhu (1993-2002) · Hu/Wen (2003-2012) · Xi era (2012-present)
                 </p>
               ) : (
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -1648,6 +1759,50 @@ export function CountryEconomyStudy({
               )}
             </CardContent>
           </Card>
+
+          {isChina ? (
+            <>
+              <Card className="border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">3. GDP per capita (current US$)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {gdpPerCapita.length > 0 ? (
+                    <TimelineChart
+                      data={gdpPerCapita}
+                      valueKey="value"
+                      label="GDP per capita"
+                      unit="current US$"
+                      seriesColor="#0ea5e9"
+                      multiSeriesValueFormat="gdp_absolute"
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                  )}
+                </CardContent>
+              </Card>
+              {urbanPopulationPct.length > 0 ? (
+                <Card className="border-border">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">4. Urbanization rate (% of population)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <TimelineChart
+                      data={urbanPopulationPct}
+                      valueKey="value"
+                      label="Urban population"
+                      unit="% of population"
+                      seriesColor="#6366f1"
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  </CardContent>
+                </Card>
+              ) : null}
+            </>
+          ) : null}
 
           {isTajikistan ? (
             <>
@@ -2108,7 +2263,7 @@ export function CountryEconomyStudy({
             </>
           ) : null}
 
-          {!isUsa && !isTurkey && !isSaudi && !isTajikistan ? (
+          {!isUsa && !isTurkey && !isSaudi && !isTajikistan && !isChina ? (
           <Card className="border-border">
             <CardHeader className="pb-2"><CardTitle className="text-base">5. Oil rents (% of GDP)</CardTitle></CardHeader>
             <CardContent className="pt-0">
@@ -2134,7 +2289,7 @@ export function CountryEconomyStudy({
           </Card>
           ) : null}
 
-          {!isUsa && !isTurkey && !isSaudi && !isTajikistan ? (
+          {!isUsa && !isTurkey && !isSaudi && !isTajikistan && !isChina ? (
           <Card className="border-border">
             <CardHeader className="pb-2"><CardTitle className="text-base">6. Natural gas rents (% of GDP)</CardTitle></CardHeader>
             <CardContent className="pt-0">
@@ -2164,7 +2319,7 @@ export function CountryEconomyStudy({
             <Card className="border-border md:col-span-2">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">
-                  {isTurkey ? "Exchange rate (USD → TRY)" : "7. FX (official LCU per US$)"}
+                  {isChina ? "Official exchange rate context (USD → CNY)" : isTurkey ? "Exchange rate (USD → TRY)" : "7. FX (official LCU per US$)"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
@@ -2176,8 +2331,8 @@ export function CountryEconomyStudy({
                   <TimelineChart
                     data={fx}
                     valueKey="value"
-                    label={isTurkey ? "USD → TRY" : "Official FX"}
-                    unit={isTurkey ? "TRY per USD" : "LCU per US$"}
+                    label={isChina ? "USD → CNY (official)" : isTurkey ? "USD → TRY" : "Official FX"}
+                    unit={isChina ? "CNY per USD" : isTurkey ? "TRY per USD" : "LCU per US$"}
                     seriesColor={isTurkey ? "#16a34a" : undefined}
                     yAxisLog={fxLog}
                     {...commonProps}
@@ -2185,6 +2340,11 @@ export function CountryEconomyStudy({
                 ) : (
                   <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
                 )}
+                {isChina ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Official USD→CNY is shown as policy/external context, not a crisis-style floating FX stress signal.
+                  </p>
+                ) : null}
               </CardContent>
             </Card>
           ) : null}
@@ -2232,6 +2392,48 @@ export function CountryEconomyStudy({
                 </CardContent>
               </Card>
               <Card className="border-border md:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">External debt (% GDP)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {externalDebtPctGdp.length > 0 ? (
+                    <TimelineChart
+                      data={externalDebtPctGdp}
+                      valueKey="value"
+                      label="External debt"
+                      unit="% of GDP"
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          ) : null}
+          {isChina ? (
+            <>
+              <Card className="border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Current account (% GDP)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {currentAccountPctGdp.length > 0 ? (
+                    <TimelineChart
+                      data={currentAccountPctGdp}
+                      valueKey="value"
+                      label="Current account balance"
+                      unit="% of GDP"
+                      forceTimeAxis
+                      {...commonProps}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                  )}
+                </CardContent>
+              </Card>
+              <Card className="border-border">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">External debt (% GDP)</CardTitle>
                 </CardHeader>

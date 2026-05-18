@@ -22,6 +22,7 @@ export type CountryEconomyConfig = {
     | "russia-economy"
     | "turkey-economy"
     | "saudi-arabia-economy"
+    | "china-economy"
     | "tajikistan-economy";
   countryCode: string;
   countryName: string;
@@ -329,6 +330,141 @@ export const COUNTRY_ECONOMY_CONFIGS: CountryEconomyConfig[] = [
         id: "sau-2020-shock-band",
         startYear: 2020,
         endYear: 2020,
+        fill: "rgba(148, 163, 184, 0.10)",
+      },
+    ],
+  },
+  {
+    routeSlug: "china-economy",
+    countryCode: "CHN",
+    countryName: "China",
+    hasFX: true,
+    defaultFxLog: false,
+    focusPresets: [
+      {
+        id: "mao-pre-reform",
+        label: "Mao era / pre-reform context (if available)",
+        shortLabel: "Pre-reform",
+        startYear: 1960,
+        endYear: 1978,
+      },
+      {
+        id: "reform-opening",
+        label: "Reform and opening (1978-1992)",
+        shortLabel: "1978-1992",
+        startYear: 1978,
+        endYear: 1992,
+      },
+      {
+        id: "jiang-zhu",
+        label: "Jiang / Zhu era (1993-2002)",
+        shortLabel: "Jiang/Zhu",
+        startYear: 1993,
+        endYear: 2002,
+      },
+      {
+        id: "hu-wen",
+        label: "Hu / Wen era (2003-2012)",
+        shortLabel: "Hu/Wen",
+        startYear: 2003,
+        endYear: 2012,
+      },
+      {
+        id: "xi-era",
+        label: "Xi era (2012-present)",
+        shortLabel: "Xi era",
+        startYear: 2012,
+        endYear: null,
+      },
+    ],
+    rangePresets: [
+      { id: "full", label: "Full history", startYear: 1960, endYear: null },
+      { id: "reform-era", label: "Reform era (1978-)", startYear: 1978, endYear: null },
+      { id: "post-2000", label: "Post-2000", startYear: 2000, endYear: null },
+    ],
+    overlayEvents: [
+      {
+        id: "chn-reform-opening-1978",
+        layer: "world_core",
+        date: "1978-12-18",
+        title: "Reform and opening",
+        title_fa: "آغاز اصلاحات و گشایش",
+      },
+      {
+        id: "chn-southern-tour-1992",
+        layer: "world_core",
+        date: "1992-01-18",
+        title: "1992 Southern Tour",
+        title_fa: "سفر جنوبی ۱۹۹۲",
+      },
+      {
+        id: "chn-wto-2001",
+        layer: "world_core",
+        date: "2001-12-11",
+        title: "WTO accession (2001)",
+        title_fa: "پیوستن به WTO (۲۰۰۱)",
+      },
+      {
+        id: "chn-gfc-2008",
+        layer: "world_core",
+        date: "2008-09-15",
+        title: "Global financial crisis / stimulus (2008)",
+        title_fa: "بحران مالی جهانی / محرک ۲۰۰۸",
+      },
+      {
+        id: "chn-stock-turbulence-2015",
+        layer: "world_core",
+        date: "2015-06-12",
+        title: "2015 stock market turbulence",
+        title_fa: "نوسان بازار سهام ۲۰۱۵",
+      },
+      {
+        id: "chn-covid-2020",
+        layer: "world_core",
+        date: "2020-02-01",
+        title: "COVID shock",
+        title_fa: "شوک کووید",
+      },
+      {
+        id: "chn-property-stress-2021",
+        layer: "world_core",
+        date: "2021-09-01",
+        title: "Property-sector stress (Evergrande)",
+        title_fa: "تنش بخش مسکن (اورگرند)",
+      },
+    ],
+    overlayBands: [
+      {
+        id: "chn-reform-era-band",
+        startYear: 1978,
+        endYear: 1992,
+        fill: "rgba(148, 163, 184, 0.10)",
+        markAreaLabel: "Reform opening",
+      },
+      {
+        id: "chn-wto-era-band",
+        startYear: 2001,
+        endYear: 2008,
+        fill: "rgba(148, 163, 184, 0.10)",
+        markAreaLabel: "WTO integration",
+      },
+      {
+        id: "chn-gfc-stimulus-band",
+        startYear: 2008,
+        endYear: 2010,
+        fill: "rgba(148, 163, 184, 0.12)",
+        markAreaLabel: "GFC / stimulus",
+      },
+      {
+        id: "chn-stock-turbulence-band",
+        startYear: 2015,
+        endYear: 2016,
+        fill: "rgba(148, 163, 184, 0.10)",
+      },
+      {
+        id: "chn-covid-band",
+        startYear: 2020,
+        endYear: 2021,
         fill: "rgba(148, 163, 184, 0.10)",
       },
     ],

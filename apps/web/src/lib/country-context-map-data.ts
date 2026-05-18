@@ -26,7 +26,7 @@ export type CountryContextMarker = {
 };
 
 export type CountryContextMapData = {
-  countryCode: "IRN" | "USA" | "TUR" | "RUS" | "SAU" | "TJK";
+  countryCode: "IRN" | "USA" | "TUR" | "RUS" | "SAU" | "TJK" | "CHN";
   bbox: { minLat: number; maxLat: number; minLon: number; maxLon: number };
   outline: GeoPoint[];
   cities: CountryContextCity[];
@@ -274,6 +274,46 @@ export const COUNTRY_CONTEXT_MAPS: Record<string, CountryContextMapData> = {
       { name: "Uzbekistan", point: { lat: 39.9, lon: 66.7 } },
       { name: "Kyrgyzstan", point: { lat: 40.8, lon: 73.5 } },
       { name: "Afghanistan", point: { lat: 37.1, lon: 71.8 } },
+    ],
+  },
+  CHN: {
+    countryCode: "CHN",
+    bbox: { minLat: 18.0, maxLat: 54.0, minLon: 73.0, maxLon: 135.0 },
+    outline: [
+      { lat: 49.5, lon: 87.5 },
+      { lat: 48.0, lon: 97.5 },
+      { lat: 49.2, lon: 106.0 },
+      { lat: 48.6, lon: 119.5 },
+      { lat: 47.4, lon: 126.5 },
+      { lat: 45.0, lon: 130.0 },
+      { lat: 42.8, lon: 131.2 },
+      { lat: 39.5, lon: 123.5 },
+      { lat: 34.7, lon: 120.2 },
+      { lat: 27.0, lon: 121.0 },
+      { lat: 22.2, lon: 113.8 },
+      { lat: 20.3, lon: 109.0 },
+      { lat: 22.5, lon: 100.0 },
+      { lat: 26.5, lon: 98.0 },
+      { lat: 29.8, lon: 91.0 },
+      { lat: 33.8, lon: 78.8 },
+      { lat: 39.0, lon: 75.2 },
+      { lat: 44.0, lon: 80.5 },
+      { lat: 49.5, lon: 87.5 },
+    ],
+    cities: [
+      { id: "beijing", name: "Beijing", point: { lat: 39.9042, lon: 116.4074 }, isCapital: true },
+      { id: "shanghai", name: "Shanghai", point: { lat: 31.2304, lon: 121.4737 } },
+      { id: "shenzhen", name: "Shenzhen", point: { lat: 22.5431, lon: 114.0579 } },
+      { id: "guangzhou", name: "Guangzhou", point: { lat: 23.1291, lon: 113.2644 } },
+    ],
+    regions: [],
+    overlays: [],
+    markers: [],
+    neighboringLabels: [
+      { name: "Mongolia", point: { lat: 47.0, lon: 104.0 } },
+      { name: "Russia", point: { lat: 50.5, lon: 124.0 } },
+      { name: "India", point: { lat: 30.0, lon: 80.0 } },
+      { name: "Vietnam", point: { lat: 21.5, lon: 106.0 } },
     ],
   },
 };

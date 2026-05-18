@@ -31,6 +31,7 @@ INDICATORS: dict[str, str] = {
     "exports_pct_gdp": "NE.EXP.GNFS.ZS",
     "agriculture_pct_gdp": "NV.AGR.TOTL.ZS",
     "services_pct_gdp": "NV.SRV.TOTL.ZS",
+    "urban_population_pct": "SP.URB.TOTL.IN.ZS",
     "manufacturing_pct_gdp": "NV.IND.MANF.ZS",
     "industry_pct_gdp": "NV.IND.TOTL.ZS",
     "broad_money_growth_pct": "FM.LBL.BMNY.ZG",

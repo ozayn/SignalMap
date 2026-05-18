@@ -36,7 +36,7 @@ export type PrimarySignal =
 import type { StudyConceptId } from "./signalmap-concepts";
 
 /** Browse / filter: geographic emphasis (a study may span several). */
-export type StudyCountry = "iran" | "us" | "russia" | "turkey" | "saudi" | "tajik" | "global";
+export type StudyCountry = "iran" | "us" | "russia" | "turkey" | "saudi" | "tajik" | "china" | "global";
 
 /** Browse / filter: coarse theme. */
 export type StudyTheme = "macro" | "oil" | "fx" | "inequality" | "social" | "dashboard";
@@ -976,6 +976,23 @@ export const STUDIES: StudyMeta[] = [
     countries: ["tajik", "global"],
     themes: ["macro", "fx", "dashboard"],
     tags: ["Tajikistan", "WDI", "remittances", "post-Soviet", "macro dashboard", "country dashboard"],
+  },
+  {
+    id: "china-economy",
+    number: 48,
+    title: "China economy — full history with focus period",
+    subtitle: "Template-based WDI macro panels with reform-era focus presets and policy-shift overlays",
+    timeRange: ["1960-01-01", "today"],
+    description:
+      "Country-template macro dashboard for China using annual WDI indicators with focus windows around reform opening, WTO integration, post-2008 credit expansion, and recent slowdown/property stress context.",
+    socialDescription:
+      "Explore China's inflation, growth, GDP per capita, investment-consumption mix, trade openness, industry structure, money growth, FX context, and distribution indicators across major policy eras.",
+    status: "active",
+    groupPlacements: [{ group: "country", order: 7 }],
+    primarySignal: { kind: "iran_economy_period_comparison" },
+    countries: ["china", "global"],
+    themes: ["macro", "fx", "dashboard"],
+    tags: ["China", "WDI", "reform era", "macro dashboard", "country dashboard"],
   },
 ];
 
