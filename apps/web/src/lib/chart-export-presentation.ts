@@ -73,6 +73,7 @@ export function mergePresentationExportFonts(
   preset: ExportChartFontPreset = "presentation"
 ): PresentationExportFonts {
   const o: ExportChartFontSizes = { ...DEFAULT_EXPORT_CHART_FONT_SIZES, ...partial };
+  const legendSize = preset === "presentation" ? Math.min(34, Math.max(30, o.legend)) : o.legend;
   const axisLabel = o.axisTick;
   const r = PRESENTATION_EXPORT_FONTS;
   const derivedMarkLineLabel = Math.round(axisLabel * (r.markLineLabel / r.axisLabel));
@@ -82,8 +83,8 @@ export function mergePresentationExportFonts(
     axisName: o.axisName,
     axisNameLineHeight: Math.max(14, Math.round(o.axisName * (r.axisNameLineHeight / r.axisName))),
     axisLabel: o.axisTick,
-    legend: o.legend,
-    legendPage: Math.max(10, Math.round(o.legend * (r.legendPage / r.legend))),
+    legend: legendSize,
+    legendPage: Math.max(10, Math.round(legendSize * (r.legendPage / r.legend))),
     sourceGraphic: o.source,
     markLineLabel: preset === "presentation" ? Math.max(30, derivedMarkLineLabel) : derivedMarkLineLabel,
     tooltip: Math.round(axisLabel * (r.tooltip / r.axisLabel)),
@@ -896,6 +897,8 @@ const EXPORT_X_PAD_FRACTION = 0.015;
 const EXPORT_Y_PAD_FRACTION = 0.05;
 const EXPORT_Y_MIN_SPAN_RATIO = 0.06;
 const EXPORT_LOG_PAD_FRACTION = 0.05;
+const EXPORT_STACKED_HEADROOM = 1.08;
+const EXPORT_STACKED_HEADROOM_PRESENTATION = 1.12;
 
 function isFiniteNum(n: unknown): n is number {
   return typeof n === "number" && Number.isFinite(n);
@@ -945,6 +948,19 @@ function yAxisUsesLog(yAxis: Record<string, unknown> | undefined): boolean {
   return yAxis?.type === "log";
 }
 
+function niceCeil(v: number): number {
+  if (!Number.isFinite(v)) return v;
+  if (v === 0) return 0;
+  const sign = v < 0 ? -1 : 1;
+  const abs = Math.abs(v);
+  const exp = Math.floor(Math.log10(abs));
+  const base = 10 ** exp;
+  const scaled = abs / base;
+  const steps = [1, 1.2, 1.5, 2, 2.5, 5, 10];
+  const step = steps.find((s) => scaled <= s) ?? 10;
+  return sign * step * base;
+}
+
 /**
  * Builds `{ xAxis, yAxis }` overrides so the export canvas uses only the visible data window
  * (legend-hidden series excluded via `show: false` on the export instance) with small padding.
@@ -977,6 +993,8 @@ export function buildExportDataFitAxisPatch(
   let catIdxMax = -Infinity;
   const yMinByAxis = new Map<number, number>();
   const yMaxByAxis = new Map<number, number>();
+  const stackTotals = new Map<string, Map<number, number>>();
+  const stackedMaxByAxis = new Map<number, number>();
 
   const bumpY = (axisIdx: number, y: number) => {
     const lo = yMinByAxis.get(axisIdx) ?? Infinity;
@@ -990,6 +1008,8 @@ export function buildExportDataFitAxisPatch(
     const st = s.type;
     if (st !== "line" && st !== "bar" && st !== "scatter") continue;
     const yAxisIndex = typeof s.yAxisIndex === "number" && Number.isFinite(s.yAxisIndex) ? Math.floor(s.yAxisIndex) : 0;
+    const stackKeyRaw = s.stack;
+    const stackKey = typeof stackKeyRaw === "string" && stackKeyRaw.trim() ? stackKeyRaw.trim() : null;
     const data = s.data;
     if (!Array.isArray(data)) continue;
 
@@ -1002,6 +1022,12 @@ export function buildExportDataFitAxisPatch(
         catIdxMin = Math.min(catIdxMin, i);
         catIdxMax = Math.max(catIdxMax, i);
         bumpY(yAxisIndex, p.y);
+        if (stackKey && p.y >= 0) {
+          const groupKey = `${yAxisIndex}::${stackKey}`;
+          const byX = stackTotals.get(groupKey) ?? new Map<number, number>();
+          byX.set(p.x, (byX.get(p.x) ?? 0) + p.y);
+          stackTotals.set(groupKey, byX);
+        }
       }
     } else if (xType === "time" || xType === "value") {
       for (let i = 0; i < data.length; i++) {
@@ -1010,8 +1036,25 @@ export function buildExportDataFitAxisPatch(
         xMin = Math.min(xMin, p.x);
         xMax = Math.max(xMax, p.x);
         bumpY(yAxisIndex, p.y);
+        if (stackKey && p.y >= 0) {
+          const groupKey = `${yAxisIndex}::${stackKey}`;
+          const byX = stackTotals.get(groupKey) ?? new Map<number, number>();
+          byX.set(p.x, (byX.get(p.x) ?? 0) + p.y);
+          stackTotals.set(groupKey, byX);
+        }
       }
     }
+  }
+
+  for (const [groupKey, byX] of stackTotals.entries()) {
+    const axisIdxRaw = Number(groupKey.split("::")[0] ?? 0);
+    if (!Number.isFinite(axisIdxRaw)) continue;
+    let groupMax = -Infinity;
+    for (const v of byX.values()) {
+      if (Number.isFinite(v)) groupMax = Math.max(groupMax, v);
+    }
+    if (!Number.isFinite(groupMax)) continue;
+    stackedMaxByAxis.set(axisIdxRaw, Math.max(stackedMaxByAxis.get(axisIdxRaw) ?? -Infinity, groupMax));
   }
 
   if (yMinByAxis.size === 0) return null;
@@ -1035,6 +1078,11 @@ export function buildExportDataFitAxisPatch(
       continue;
     }
     if (hi < lo) [lo, hi] = [hi, lo];
+    const stackHi = stackedMaxByAxis.get(ai);
+    const isStackedAxis = typeof stackHi === "number" && Number.isFinite(stackHi);
+    if (isStackedAxis) {
+      hi = Math.max(hi, stackHi as number);
+    }
 
     const logAxis = yAxisUsesLog(yAx);
     let nymin: number;
@@ -1058,6 +1106,13 @@ export function buildExportDataFitAxisPatch(
       if (nymin <= 0 || !Number.isFinite(nymin)) nymin = lo * 0.92;
       if (nymax <= nymin || !Number.isFinite(nymax)) nymax = hi * 1.08;
     } else {
+      if (isStackedAxis && lo >= 0) {
+        nymin = 0;
+        const headroom = niceSlide ? EXPORT_STACKED_HEADROOM_PRESENTATION : EXPORT_STACKED_HEADROOM;
+        nymax = niceCeil(Math.max(hi, 0) * headroom);
+        if (!Number.isFinite(nymax) || nymax <= 0) nymax = Math.max(hi, 0) * headroom;
+        if (!(nymax > nymin)) nymax = Math.max(1, hi * headroom);
+      } else {
       const span = hi - lo;
       if (span <= 0 || !Number.isFinite(span)) {
         const mid = lo;
@@ -1074,6 +1129,7 @@ export function buildExportDataFitAxisPatch(
           nymin = mid - minSpan / 2;
           nymax = mid + minSpan / 2;
         }
+      }
       }
     }
 
@@ -1175,6 +1231,11 @@ export function buildPresentationEchartsPatch(
   const sourceTextBlockH = sourceLinesList.length * sourceLineHeightPx;
   const hasExportSource = sourceLinesList.length > 0;
   const sourceTextForGraphic = hasExportSource ? sourceLinesList.join("\n") : undefined;
+  const emphasizeOverlayContrast = ctx.emphasizeOverlayContrast === true;
+  const legendEstimatedHeightPx = emphasizeOverlayContrast ? 66 : PRESENTATION_EST_LEGEND_HEIGHT_PX;
+  const legendItemGapPx = emphasizeOverlayContrast ? 24 : 10;
+  const legendItemHeightPx = emphasizeOverlayContrast ? 22 : 16;
+  const legendItemWidthPx = emphasizeOverlayContrast ? 44 : 32;
   /**
    * Footer zones (bottom → top): source (bottom‑aligned) → gap → ECharts legend (centered) → x‑axis.
    * `bottom` is distance from **container** bottom to the **bottom** of the legend; legend grows upward.
@@ -1182,7 +1243,10 @@ export function buildPresentationEchartsPatch(
   const legendBottomPx = hasExportSource
     ? Math.max(
         PRESENTATION_LEGEND_MIN_BOTTOM,
-        PRESENTATION_SOURCE_TEXT_BOTTOM + sourceTextBlockH + PRESENTATION_SOURCE_LEGEND_GAP
+        PRESENTATION_SOURCE_TEXT_BOTTOM +
+          sourceTextBlockH +
+          PRESENTATION_SOURCE_LEGEND_GAP +
+          (emphasizeOverlayContrast ? 8 : 0)
       )
     : 36;
   /** Aux band (country/line key) must sit **above** legend+source, not in the zoned text band. */
@@ -1190,10 +1254,9 @@ export function buildPresentationEchartsPatch(
     ? PRESENTATION_SOURCE_TEXT_BOTTOM +
       sourceTextBlockH +
       PRESENTATION_SOURCE_LEGEND_GAP +
-      PRESENTATION_EST_LEGEND_HEIGHT_PX +
+      legendEstimatedHeightPx +
       10
     : EXPORT_AUX_LEGEND_SOURCE_RESERVE_MIN;
-  const emphasizeOverlayContrast = ctx.emphasizeOverlayContrast === true;
   const exportOverlayFill = "rgba(90,90,90,0.35)";
   const exportOverlayLabelColor = "rgba(55,55,55,0.95)";
   const exportOverlayLabelWeight = 700;
@@ -1306,9 +1369,9 @@ export function buildPresentationEchartsPatch(
       left: "center" as const,
       orient: "horizontal" as const,
       bottom: legendBottomPx,
-      itemGap: 10,
-      itemWidth: 32,
-      itemHeight: 16,
+      itemGap: legendItemGapPx,
+      itemWidth: legendItemWidthPx,
+      itemHeight: legendItemHeightPx,
       textStyle: { ...ts, fontSize: fonts.legend },
       pageTextStyle: { ...pts, fontSize: fonts.legendPage },
     };
@@ -1457,10 +1520,10 @@ export function buildPresentationEchartsPatch(
     if (t != null && t !== "line") return next;
     const ls = (next.lineStyle ?? {}) as Record<string, unknown>;
     const existingLineWidth = typeof ls.width === "number" ? ls.width : 2;
-    const exportLineWidth = emphasizeOverlayContrast ? existingLineWidth + 1.2 : 2;
+    const exportLineWidth = emphasizeOverlayContrast ? existingLineWidth + 1.5 : 2;
     return {
       ...next,
-      symbolSize: 4,
+      symbolSize: emphasizeOverlayContrast ? 6 : 4,
       lineStyle: { ...ls, width: exportLineWidth },
     };
   });
@@ -1543,7 +1606,7 @@ export function buildPresentationEchartsPatch(
       PRESENTATION_SOURCE_TEXT_BOTTOM +
         sourceTextBlockH +
         PRESENTATION_SOURCE_LEGEND_GAP +
-        PRESENTATION_EST_LEGEND_HEIGHT_PX +
+        legendEstimatedHeightPx +
         PRESENTATION_LEGEND_TO_PLOT_GAP_PX +
         PRESENTATION_PLOT_FOOTER_EXTRA_PAD_PX
     );
