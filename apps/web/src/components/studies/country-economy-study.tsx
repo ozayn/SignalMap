@@ -111,7 +111,15 @@ type CountryEconomyBundle = {
   series: Record<string, Point[]>;
   source?: { name?: string; publisher?: string; url?: string };
   indicator_ids?: Record<string, string>;
+  series_warnings?: Record<string, string>;
+  partial?: boolean;
 };
+
+const WDI_TEMPORARY_UNAVAILABLE_TEXT = "World Bank data temporarily unavailable. Try again later.";
+
+function isTemporaryWdiWarning(msg: string | undefined): boolean {
+  return typeof msg === "string" && msg.toLowerCase().includes("world bank data temporarily unavailable");
+}
 
 type Props = {
   countryCode: string;
@@ -220,7 +228,7 @@ export function CountryEconomyStudy({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<CountryEconomyBundle | null>(null);
-  const [showOverlays, setShowOverlays] = useState(true);
+  const [showOverlays, setShowOverlays] = useState(false);
   const [rangePresetId, setRangePresetId] = useState(rangePresets[0]?.id ?? "full");
   const [focusPresetIds, setFocusPresetIds] = useState<string[]>(() => (focusPresets[0]?.id ? [focusPresets[0].id] : []));
   const [demandMode, setDemandMode] = useState<DemandMode>("real");
@@ -285,8 +293,8 @@ export function CountryEconomyStudy({
     }
 
     const overlaysFromUrl = qs.get("overlays");
-    if (overlaysFromUrl === "0" || overlaysFromUrl === "1") {
-      setShowOverlays(overlaysFromUrl === "1");
+    if (overlaysFromUrl === "0" || overlaysFromUrl === "1" || overlaysFromUrl === "true" || overlaysFromUrl === "false") {
+      setShowOverlays(overlaysFromUrl === "1" || overlaysFromUrl === "true");
     }
 
     const logFromUrl = qs.get("log");
@@ -384,6 +392,9 @@ export function CountryEconomyStudy({
   const series = bundle?.series ?? {};
   const source = bundle?.source;
   const indicatorIds = bundle?.indicator_ids ?? {};
+  const seriesWarnings = bundle?.series_warnings ?? {};
+  const unavailableTextFor = (keys: string[], fallback: string = "Data unavailable for this window.") =>
+    keys.some((k) => isTemporaryWdiWarning(seriesWarnings[k])) ? WDI_TEMPORARY_UNAVAILABLE_TEXT : fallback;
   const inflation = series.cpi_inflation_yoy_pct ?? [];
   const gdpGrowth = series.gdp_growth_yoy_pct ?? [];
   const gdpNominal = series.gdp_current_usd ?? [];
@@ -1691,7 +1702,9 @@ export function CountryEconomyStudy({
                   {...commonProps}
                 />
               ) : (
-                <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                <p className="text-xs text-muted-foreground py-6">
+                  {unavailableTextFor(["cpi_inflation_yoy_pct"])}
+                </p>
               )}
               {isRussia ? (
                 <p className="mt-2 text-xs text-muted-foreground">
@@ -1733,7 +1746,10 @@ export function CountryEconomyStudy({
                   />
                 ) : (
                   <p className="text-xs text-muted-foreground py-6">
-                    Data unavailable for this window (PA.NUS.FCRF / USD→TRY annual series).
+                    {unavailableTextFor(
+                      ["fx_official_lcu_per_usd"],
+                      "Data unavailable for this window (PA.NUS.FCRF / USD→TRY annual series)."
+                    )}
                   </p>
                 )}
               </CardContent>
@@ -1755,7 +1771,9 @@ export function CountryEconomyStudy({
                   {...commonProps}
                 />
               ) : (
-                <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                <p className="text-xs text-muted-foreground py-6">
+                  {unavailableTextFor(["gdp_growth_yoy_pct"])}
+                </p>
               )}
             </CardContent>
           </Card>
@@ -1779,7 +1797,9 @@ export function CountryEconomyStudy({
                       {...commonProps}
                     />
                   ) : (
-                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                    <p className="text-xs text-muted-foreground py-6">
+                      {unavailableTextFor(["gdp_per_capita_current_usd"])}
+                    </p>
                   )}
                 </CardContent>
               </Card>
@@ -1822,7 +1842,9 @@ export function CountryEconomyStudy({
                       {...commonProps}
                     />
                   ) : (
-                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                    <p className="text-xs text-muted-foreground py-6">
+                      {unavailableTextFor(["remittances_pct_gdp"])}
+                    </p>
                   )}
                 </CardContent>
               </Card>
@@ -1843,7 +1865,9 @@ export function CountryEconomyStudy({
                       {...commonProps}
                     />
                   ) : (
-                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                    <p className="text-xs text-muted-foreground py-6">
+                      {unavailableTextFor(["gdp_per_capita_current_usd"])}
+                    </p>
                   )}
                 </CardContent>
               </Card>
@@ -1868,7 +1892,9 @@ export function CountryEconomyStudy({
                       {...commonProps}
                     />
                   ) : (
-                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
+                    <p className="text-xs text-muted-foreground py-6">
+                      {unavailableTextFor(["fx_official_lcu_per_usd"])}
+                    </p>
                   )}
                 </CardContent>
               </Card>

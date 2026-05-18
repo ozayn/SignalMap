@@ -854,8 +854,8 @@ export const STUDIES: StudyMeta[] = [
   {
     id: "iran-economy-period-comparison",
     number: 38,
-    title: "Iran economy",
-    subtitle: "Revolution, war, sanctions, inflation, oil dependence",
+    title: "Iran economy & political participation",
+    subtitle: "Long-run macro indicators, resource rents, FX, welfare, and presidential-election participation.",
     timeRange: ["1960-01-01", "today"],
     description:
       "Iran macro indicators from 1960 onward (default outer window), with an adjustable shaded focus band (presets include late Pahlavi and Islamic Republic presidencies, or custom years). Annual WDI series and annual-mean open-market FX; exploratory comparison only, not causal inference.",

@@ -13,7 +13,7 @@ type StudyMetadataOverride = {
 
 const STUDY_METADATA_OVERRIDES: Record<string, StudyMetadataOverride> = {
   "iran-economy-period-comparison": {
-    title: "Iran Economy — Period Comparison | SignalMap",
+    title: "Iran Economy & Political Participation | SignalMap",
   },
   "us-economy": {
     title: "United States Economy Study | SignalMap",

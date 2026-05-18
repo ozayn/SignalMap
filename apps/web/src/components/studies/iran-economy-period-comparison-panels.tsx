@@ -43,6 +43,11 @@ type IranElectionParticipationPoint = {
   turnoutPct: number;
   votesCastMillions: number;
   topCandidates: [IranElectionTopCandidate, IranElectionTopCandidate];
+  runoff?: {
+    firstRoundDate: string;
+    runoffDate: string;
+    runoffCandidates: [IranElectionTopCandidate, IranElectionTopCandidate];
+  };
 };
 
 const IRAN_PRESIDENTIAL_ELECTION_PARTICIPATION: IranElectionParticipationPoint[] = [
@@ -125,6 +130,14 @@ const IRAN_PRESIDENTIAL_ELECTION_PARTICIPATION: IranElectionParticipationPoint[]
       { name: "Mahmoud Ahmadinejad", nameFa: "محمود احمدی‌نژاد", votes: 17284000, percent: 61.7 },
       { name: "Akbar Hashemi Rafsanjani", nameFa: "اکبر هاشمی رفسنجانی", votes: 10346566, percent: 35.9 },
     ],
+    runoff: {
+      firstRoundDate: "2005-06-17",
+      runoffDate: "2005-06-24",
+      runoffCandidates: [
+        { name: "Mahmoud Ahmadinejad", nameFa: "محمود احمدی‌نژاد", votes: 17284000, percent: 61.7 },
+        { name: "Akbar Hashemi Rafsanjani", nameFa: "اکبر هاشمی رفسنجانی", votes: 10346566, percent: 35.9 },
+      ],
+    },
   },
   {
     year: 2009,
@@ -175,6 +188,14 @@ const IRAN_PRESIDENTIAL_ELECTION_PARTICIPATION: IranElectionParticipationPoint[]
       { name: "Masoud Pezeshkian", nameFa: "مسعود پزشکیان", votes: 16384603, percent: 53.7 },
       { name: "Saeed Jalili", nameFa: "سعید جلیلی", votes: 13538179, percent: 44.3 },
     ],
+    runoff: {
+      firstRoundDate: "2024-06-28",
+      runoffDate: "2024-07-05",
+      runoffCandidates: [
+        { name: "Masoud Pezeshkian", nameFa: "مسعود پزشکیان", votes: 16384603, percent: 53.7 },
+        { name: "Saeed Jalili", nameFa: "سعید جلیلی", votes: 13538179, percent: 44.3 },
+      ],
+    },
   },
 ];
 
@@ -194,6 +215,18 @@ function trimSeriesFromYear(points: Point[], startYear: number | null): Point[] 
     const y = Number.parseInt(p.date.slice(0, 4), 10);
     return Number.isFinite(y) && y >= startYear;
   });
+}
+
+function formatElectionTooltipDate(dateIso: string, isFa: boolean): string {
+  const d = new Date(`${dateIso}T00:00:00Z`);
+  if (!Number.isFinite(d.getTime())) return dateIso;
+  const locale = isFa ? "fa-IR" : "en-US";
+  return new Intl.DateTimeFormat(locale, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(d);
 }
 
 function deriveRentsDecomposition(gdpPoints: Point[], sharePointsByDate: Map<string, number>) {
@@ -471,10 +504,39 @@ export function IranEconomyPeriodComparisonPanels({
         politicalParticipationByDate.get(dateKey) ??
         (Number.isFinite(year) ? politicalParticipationByYear.get(year) : undefined);
       if (!point) return null;
+      const runoff = point.runoff;
       const lines: string[] = [
-        `<span style="font-size:10px;color:#888">${L(isFa, "Top candidates:", "نامزدهای اصلی:")}</span>`,
+        `<span style="font-size:10px;color:#888">${L(isFa, "Election:", "انتخابات:")}</span> ${L(
+          isFa,
+          `${point.year} presidential election`,
+          `انتخابات ریاست‌جمهوری ${point.year}`
+        )}`,
+        `<span style="font-size:10px;color:#888">${L(isFa, "Runoff:", "مرحله دوم:")}</span> ${L(
+          isFa,
+          runoff ? "yes" : "no",
+          runoff ? "بله" : "خیر"
+        )}`,
       ];
-      point.topCandidates.forEach((c, idx) => {
+
+      if (runoff) {
+        lines.push(`<span style="font-size:10px;color:#888">${L(isFa, "Rounds:", "مراحل:")}</span>`);
+        lines.push(
+          `- ${L(isFa, "First round", "دور اول")}: ${formatElectionTooltipDate(runoff.firstRoundDate, isFa)}`
+        );
+        lines.push(`- ${L(isFa, "Runoff", "مرحله دوم")}: ${formatElectionTooltipDate(runoff.runoffDate, isFa)}`);
+        lines.push(
+          `<span style="font-size:10px;color:#888">${L(
+            isFa,
+            "Top runoff candidates:",
+            "نامزدهای اصلی مرحله دوم:"
+          )}</span>`
+        );
+      } else {
+        lines.push(`<span style="font-size:10px;color:#888">${L(isFa, "Top candidates:", "نامزدهای اصلی:")}</span>`);
+      }
+
+      const candidates = runoff?.runoffCandidates ?? point.topCandidates;
+      candidates.forEach((c, idx) => {
         const displayName = isFa ? c.nameFa : c.name;
         const votesPart =
           c.votes != null

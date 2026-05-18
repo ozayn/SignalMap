@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-from signalmap.sources.world_bank_national_accounts import fetch_wdi_annual_indicator
+from signalmap.sources.world_bank_national_accounts import fetch_wdi_annual_indicator_with_meta
 
 _logger = logging.getLogger(__name__)
 
@@ -61,7 +61,10 @@ FRED_SERIES_US = {
 
 def _fetch_indicator_safe(country_iso3: str, indicator_id: str) -> tuple[list[dict[str, Any]], str | None]:
     try:
-        return fetch_wdi_annual_indicator(country_iso3, indicator_id), None
+        rows, stale_cache_used = fetch_wdi_annual_indicator_with_meta(country_iso3, indicator_id)
+        if stale_cache_used:
+            return rows, "stale cache fallback used after transient World Bank API failure"
+        return rows, None
     except Exception as e:
         _logger.warning("Country economy WDI fetch failed %s %s: %s", country_iso3, indicator_id, e)
         return [], f"{indicator_id}: {e}"

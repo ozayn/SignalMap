@@ -1,13 +1,18 @@
 """World Bank WDI: national accounts shares and GDP (annual)."""
 
+import logging
+import time
 from typing import Any
 
 import httpx
 
-from signalmap.utils.ttl_cache import get as cache_get, set as cache_set
+from signalmap.utils.ttl_cache import get as cache_get, get_stale as cache_get_stale, set as cache_set
 
 WB_BASE = "https://api.worldbank.org/v2/country"
 USER_AGENT = "SignalMap/1.0 (research; +https://github.com/ozayn/SignalMap)"
+_logger = logging.getLogger(__name__)
+_WDI_RETRYABLE_STATUS_CODES = {502, 503, 504}
+_WDI_RETRY_DELAYS_SECONDS = (0.5, 1.0, 2.0)
 
 # In-process cache for raw WDI indicator rows (shared across signal bundles). Invalidated with
 # ``invalidate_prefix("wdi_rows:")`` when the weekly WDI refresh job runs.
@@ -85,7 +90,7 @@ def resolve_national_account_levels_rows(iso: str, gdp_current_usd_rows: list[di
     }
 
 
-def fetch_wdi_annual_indicator(country_iso3: str, indicator_id: str) -> list[dict[str, Any]]:
+def fetch_wdi_annual_indicator_with_meta(country_iso3: str, indicator_id: str) -> tuple[list[dict[str, Any]], bool]:
     """
     Fetch one WDI indicator for a country. Returns [{year: int, value: float}, ...] sorted by year.
     Paginates until all rows are read. Results are cached in-process (``wdi_rows:…``) to avoid
@@ -96,41 +101,82 @@ def fetch_wdi_annual_indicator(country_iso3: str, indicator_id: str) -> list[dic
     ck = f"wdi_rows:{iso}:{iid}"
     hit = cache_get(ck)
     if hit is not None:
-        return hit  # type: ignore[return-value]
+        return hit, False  # type: ignore[return-value]
 
+    stale_hit = cache_get_stale(ck)
     url = f"{WB_BASE}/{iso}/indicator/{iid}"
-    rows: list[dict[str, Any]] = []
-    page = 1
-    with httpx.Client(timeout=30.0, headers={"User-Agent": USER_AGENT}) as client:
-        while True:
-            r = client.get(url, params={"format": "json", "per_page": 1000, "page": page})
-            r.raise_for_status()
-            data = r.json()
-            if not isinstance(data, list) or len(data) < 2:
-                break
-            meta = data[0] if isinstance(data[0], dict) else {}
-            records = data[1]
-            if not isinstance(records, list):
-                break
-            for rec in records:
-                if not isinstance(rec, dict):
-                    continue
-                date_str = rec.get("date")
-                val = rec.get("value")
-                if not date_str or val is None:
-                    continue
-                try:
-                    year = int(date_str)
-                    value = float(val)
-                except (ValueError, TypeError):
-                    continue
-                rows.append({"year": year, "value": value})
-            total_pages = int(meta.get("pages", 1) or 1)
-            if page >= total_pages:
-                break
-            page += 1
-    rows.sort(key=lambda r: r["year"])
-    cache_set(ck, rows, WDI_ROWS_TTL_SECONDS)
+
+    for attempt, delay_seconds in enumerate(_WDI_RETRY_DELAYS_SECONDS, start=1):
+        rows: list[dict[str, Any]] = []
+        page = 1
+        try:
+            with httpx.Client(timeout=30.0, headers={"User-Agent": USER_AGENT}) as client:
+                while True:
+                    r = client.get(url, params={"format": "json", "per_page": 1000, "page": page})
+                    if r.status_code in _WDI_RETRYABLE_STATUS_CODES:
+                        raise httpx.HTTPStatusError(
+                            f"Server error '{r.status_code} {r.reason_phrase}' for url '{r.request.url}'",
+                            request=r.request,
+                            response=r,
+                        )
+                    r.raise_for_status()
+                    data = r.json()
+                    if not isinstance(data, list) or len(data) < 2:
+                        break
+                    meta = data[0] if isinstance(data[0], dict) else {}
+                    records = data[1]
+                    if not isinstance(records, list):
+                        break
+                    for rec in records:
+                        if not isinstance(rec, dict):
+                            continue
+                        date_str = rec.get("date")
+                        val = rec.get("value")
+                        if not date_str or val is None:
+                            continue
+                        try:
+                            year = int(date_str)
+                            value = float(val)
+                        except (ValueError, TypeError):
+                            continue
+                        rows.append({"year": year, "value": value})
+                    total_pages = int(meta.get("pages", 1) or 1)
+                    if page >= total_pages:
+                        break
+                    page += 1
+            rows.sort(key=lambda r: r["year"])
+            cache_set(ck, rows, WDI_ROWS_TTL_SECONDS)
+            return rows, False
+        except httpx.HTTPStatusError as e:
+            status_code = e.response.status_code if e.response is not None else None
+            if status_code not in _WDI_RETRYABLE_STATUS_CODES:
+                raise
+            _logger.warning(
+                "WDI transient fetch failure country=%s indicator=%s attempt=%d/%d status=%s cache_fallback_available=%s",
+                iso,
+                iid,
+                attempt,
+                len(_WDI_RETRY_DELAYS_SECONDS),
+                status_code,
+                stale_hit is not None,
+            )
+            if attempt < len(_WDI_RETRY_DELAYS_SECONDS):
+                time.sleep(delay_seconds)
+
+    if stale_hit is not None:
+        _logger.warning(
+            "WDI stale cache fallback used country=%s indicator=%s cache_fallback_used=%s",
+            iso,
+            iid,
+            True,
+        )
+        return stale_hit, True  # type: ignore[return-value]
+
+    raise RuntimeError("World Bank data temporarily unavailable. Try again later.")
+
+
+def fetch_wdi_annual_indicator(country_iso3: str, indicator_id: str) -> list[dict[str, Any]]:
+    rows, _ = fetch_wdi_annual_indicator_with_meta(country_iso3, indicator_id)
     return rows
 
 

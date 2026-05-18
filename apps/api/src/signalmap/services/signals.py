@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 from signalmap.data.oil_production_exporters import SOURCE as OIL_PRODUCTION_SOURCE_NAME, UNIT as OIL_PRODUCTION_UNIT
 from signalmap.sources.oil_production_exporters import fetch_oil_production_exporters
 from signalmap.store.signals_repo import get_points, upsert_points
-from signalmap.utils.ttl_cache import get as cache_get, set as cache_set
+from signalmap.utils.ttl_cache import get as cache_get, get_stale as cache_get_stale, set as cache_set
 
 _SIGNAL_TIMING_LOG = os.environ.get("SIGNAL_TIMING_LOG")
 
@@ -1482,15 +1482,30 @@ def get_country_economy_bundle(iso3: str, start: str, end: str) -> dict:
     cached = cache_get(ck)
     if cached is not None:
         return cached
+    stale_cached = cache_get_stale(ck)
 
-    bundle = fetch_country_economy_bundle(iso, start_year, end_year)
-    result = {
-        **bundle,
-        "source": COUNTRY_ECONOMY_SOURCE,
-        "resolution": "annual",
-    }
-    cache_set(ck, result, CACHE_TTL)
-    return result
+    try:
+        bundle = fetch_country_economy_bundle(iso, start_year, end_year)
+        result = {
+            **bundle,
+            "source": COUNTRY_ECONOMY_SOURCE,
+            "resolution": "annual",
+        }
+        # Do not cache partial/error bundles: transient WDI failures should not pin sparse/empty
+        # indicator panels for the full cache TTL.
+        if not result.get("partial"):
+            cache_set(ck, result, CACHE_TTL)
+        return result
+    except Exception:
+        if stale_cached is not None:
+            logger.warning(
+                "country_economy_bundle stale cache fallback used iso=%s start_year=%d end_year=%d",
+                iso,
+                start_year,
+                end_year,
+            )
+            return stale_cached
+        raise
 
 
 def _filter_indicator_points_by_year(

@@ -12,8 +12,15 @@ def get(key: str) -> Optional[Any]:
         return None
     value, expires_at = _cache[key]
     if time.time() >= expires_at:
-        del _cache[key]
         return None
+    return value
+
+
+def get_stale(key: str) -> Optional[Any]:
+    """Return cached value even if expired (stale fallback), else None."""
+    if key not in _cache:
+        return None
+    value, _ = _cache[key]
     return value
 
 
