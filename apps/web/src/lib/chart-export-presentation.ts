@@ -59,9 +59,12 @@ export const DEFAULT_EXPORT_CHART_FONT_SIZES: ExportChartFontSizes = {
   source: PRESENTATION_EXPORT_FONTS.sourceGraphic,
 };
 
+export type ExportChartFontPreset = "presentation" | "paper";
+
 export type ExportChartSettings = {
   titleText: string;
   fontSizes: ExportChartFontSizes;
+  fontPreset: ExportChartFontPreset;
 };
 
 /** Merge modal font sizes with presentation defaults (derived fields scale from ratios in `PRESENTATION_EXPORT_FONTS`). */

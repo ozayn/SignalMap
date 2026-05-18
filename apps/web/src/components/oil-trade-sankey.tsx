@@ -131,6 +131,7 @@ export function OilTradeSankey({
               rangeGranularity: "year",
             })
           : slugifyChartFilename(exportFileStem ?? DEFAULT_SANKEY_EXPORT_STEM);
+      const stemWithPreset = `${stem}-${settings.fontPreset}`;
       const titleForExport = settings.titleText.trim();
       const exportOpts: DownloadEchartsRasterOptions = {
         exportSourceFooter: exportSourceFooter?.trim(),
@@ -145,7 +146,7 @@ export function OilTradeSankey({
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           try {
-            downloadEchartsRaster(inst, "png", stem, backgroundColor, exportOpts);
+            downloadEchartsRaster(inst, "png", stemWithPreset, backgroundColor, exportOpts);
           } catch {
             /* */
           }

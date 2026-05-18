@@ -209,6 +209,7 @@ export function NetworkGraph({
               rangeGranularity: "year",
             })
           : slugifyChartFilename(exportFileStem ?? DEFAULT_EXPORT_STEM);
+      const stemWithPreset = `${stem}-${settings.fontPreset}`;
       const titleForExport = settings.titleText.trim();
       const exportOpts: DownloadEchartsRasterOptions = {
         exportSourceFooter: exportSourceFooter?.trim(),
@@ -223,7 +224,7 @@ export function NetworkGraph({
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           try {
-            downloadEchartsRaster(inst, "png", stem, backgroundColor, exportOpts);
+            downloadEchartsRaster(inst, "png", stemWithPreset, backgroundColor, exportOpts);
           } catch {
             /* instance disposed */
           }

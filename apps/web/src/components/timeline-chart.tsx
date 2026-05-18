@@ -1336,6 +1336,7 @@ export function TimelineChart({
               rangeGranularity: studyExportRangeGranularity,
             })
           : slugifyChartFilename(exportFileStem ?? label);
+      const stemWithPreset = `${stem}-${settings.fontPreset}`;
       const footerColor = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
       const titleColor = cssHsl("--foreground", "hsl(240, 10%, 3.9%)");
       const isCountryGroupOn = (labels: string[]) =>
@@ -1389,7 +1390,7 @@ export function TimelineChart({
               exportPresentationLocale: (chartLocale ?? "en") === "fa" ? "fa" : "en",
               exportPresentationTitleColor: titleColor,
             };
-            downloadEchartsRaster(chart, "png", stem, backgroundColor, exportOpts);
+            downloadEchartsRaster(chart, "png", stemWithPreset, backgroundColor, exportOpts);
           } catch {
             // Instance may be disposed mid-frame
           }
