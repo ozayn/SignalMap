@@ -854,8 +854,8 @@ export const STUDIES: StudyMeta[] = [
   {
     id: "iran-economy-period-comparison",
     number: 38,
-    title: "Iran economy — full history with focus period",
-    subtitle: "Long-run WDI-style panels and annual-mean FX; shade a chosen window (monarchy, presidency, or custom years) for visual comparison",
+    title: "Iran economy",
+    subtitle: "Revolution, war, sanctions, inflation, oil dependence",
     timeRange: ["1960-01-01", "today"],
     description:
       "Iran macro indicators from 1960 onward (default outer window), with an adjustable shaded focus band (presets include late Pahlavi and Islamic Republic presidencies, or custom years). Annual WDI series and annual-mean open-market FX; exploratory comparison only, not causal inference.",
@@ -895,11 +895,11 @@ export const STUDIES: StudyMeta[] = [
   {
     id: "us-economy",
     number: 39,
-    title: "US economy — full history with focus period",
-    subtitle: "Template-based WDI macro panels with presidential focus presets and contextual overlays",
+    title: "US economy",
+    subtitle: "Inflation, debt, productivity, postwar growth",
     timeRange: ["1960-01-01", "today"],
     description:
-      "Country-template macro dashboard for the United States using annual WDI indicators with independent range and focus presets.",
+      "United States macro profile across postwar policy eras, with inflation, debt, growth, and productivity context.",
     socialDescription:
       "Explore the U.S. economy across policy eras using inflation, GDP growth, fiscal indicators, debt, rates, inequality, and poverty with comparison-first charts.",
     status: "active",
@@ -912,11 +912,11 @@ export const STUDIES: StudyMeta[] = [
   {
     id: "russia-economy",
     number: 40,
-    title: "Russia economy — full history with focus period",
-    subtitle: "Template-based WDI macro panels with leadership focus presets and contextual overlays",
+    title: "Russia economy",
+    subtitle: "Energy dependence, transition, sanctions",
     timeRange: ["1960-01-01", "today"],
     description:
-      "Country-template macro dashboard for Russia using annual WDI indicators with independent range and focus presets.",
+      "Russia macro profile across transition and sanctions eras, emphasizing energy exposure, growth, and external balance shifts.",
     socialDescription:
       "Explore Russia's inflation, GDP growth, exchange rates, oil and gas rents, trade, industry, inequality, and poverty across major historical periods.",
     status: "active",
@@ -929,11 +929,11 @@ export const STUDIES: StudyMeta[] = [
   {
     id: "turkey-economy",
     number: 41,
-    title: "Turkey economy — full history with focus period",
-    subtitle: "Template-based WDI macro panels with Erdogan-era focus presets and contextual overlays",
+    title: "Turkey economy",
+    subtitle: "Inflation, lira crises, external vulnerability",
     timeRange: ["1960-01-01", "today"],
     description:
-      "Country-template macro dashboard for Turkey using annual WDI indicators with independent range and focus presets.",
+      "Turkey macro profile through inflation cycles, currency stress episodes, and external-financing pressure.",
     socialDescription:
       "Explore Turkey's inflation, exchange rates, GDP growth, trade, debt, inequality, and poverty across major macroeconomic periods.",
     status: "active",
@@ -946,11 +946,11 @@ export const STUDIES: StudyMeta[] = [
   {
     id: "saudi-arabia-economy",
     number: 46,
-    title: "Saudi Arabia economy — full history with focus period",
-    subtitle: "Template-based WDI macro panels with oil-rent and Vision 2030 context overlays",
+    title: "Saudi Arabia economy",
+    subtitle: "Oil rents, diversification, Vision 2030",
     timeRange: ["1960-01-01", "today"],
     description:
-      "Country-template macro dashboard for Saudi Arabia using annual WDI indicators with independent range and focus presets.",
+      "Saudi macro profile centered on hydrocarbon rents, fiscal adjustment, and diversification signals during the Vision 2030 era.",
     socialDescription:
       "Explore Saudi Arabia's inflation, growth, oil and gas rent context, diversification signals, external balances, and distribution metrics across major policy eras.",
     status: "active",
@@ -963,11 +963,11 @@ export const STUDIES: StudyMeta[] = [
   {
     id: "tajikistan-economy",
     number: 47,
-    title: "Tajikistan economy — history and travel context",
-    subtitle: "Template-based WDI macro context with remittances, migration, and post-Soviet transition emphasis",
+    title: "Tajikistan economy",
+    subtitle: "Remittances, post-Soviet transition, travel context",
     timeRange: ["1960-01-01", "today"],
     description:
-      "Country-template macro and context dashboard for Tajikistan using annual WDI indicators with focus periods around independence, civil war, remittance dependence, and recent stabilization.",
+      "Tajikistan macro and regional context study focused on post-Soviet adjustment, remittance dependence, welfare, and city-level travel framing.",
     socialDescription:
       "Explore Tajikistan through inflation, growth, remittances, GDP per capita, exchange rate, welfare indicators, and post-Soviet historical context.",
     status: "active",
@@ -980,11 +980,11 @@ export const STUDIES: StudyMeta[] = [
   {
     id: "china-economy",
     number: 48,
-    title: "China economy — full history with focus period",
-    subtitle: "Template-based WDI macro panels with reform-era focus presets and policy-shift overlays",
+    title: "China economy",
+    subtitle: "Reform-era growth, manufacturing, investment model",
     timeRange: ["1960-01-01", "today"],
     description:
-      "Country-template macro dashboard for China using annual WDI indicators with focus windows around reform opening, WTO integration, post-2008 credit expansion, and recent slowdown/property stress context.",
+      "China macro profile spanning reform-era acceleration, manufacturing scale-up, investment-heavy growth, and recent property/debt stress.",
     socialDescription:
       "Explore China's inflation, growth, GDP per capita, investment-consumption mix, trade openness, industry structure, money growth, FX context, and distribution indicators across major policy eras.",
     status: "active",
