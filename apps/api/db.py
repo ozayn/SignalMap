@@ -135,7 +135,7 @@ def init_tables() -> None:
             except Exception:
                 pass
             cur.execute("""
-                CREATE TABLE IF NOT EXISTS signal_points (
+                CREATE TABLE IF NOT EXISTS public.signal_points (
                     signal_key TEXT NOT NULL,
                     date TEXT NOT NULL,
                     value DOUBLE PRECISION NOT NULL,

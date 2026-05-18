@@ -15,16 +15,55 @@ def _has_db() -> bool:
     return bool(DATABASE_URL and cursor)
 
 
+def _is_missing_signal_points_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return (
+        'relation "signal_points" does not exist' in msg
+        or 'relation "public.signal_points" does not exist' in msg
+    )
+
+
+def _ensure_signal_points_table() -> None:
+    if not _has_db():
+        return
+    with cursor() as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS public.signal_points (
+                signal_key TEXT NOT NULL,
+                date TEXT NOT NULL,
+                value DOUBLE PRECISION NOT NULL,
+                source TEXT NOT NULL,
+                confidence DOUBLE PRECISION,
+                metadata JSONB,
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                PRIMARY KEY (signal_key, date)
+            )
+            """
+        )
+
+
 def get_max_date(signal_key: str) -> Optional[str]:
     """Return max(date) for signal_key, or None if table empty."""
     if not _has_db():
         return None
-    with cursor() as cur:
-        cur.execute(
-            "SELECT MAX(date) AS max_date FROM signal_points WHERE signal_key = %s",
-            (signal_key,),
-        )
-        row = cur.fetchone()
+    try:
+        with cursor() as cur:
+            cur.execute(
+                "SELECT MAX(date) AS max_date FROM public.signal_points WHERE signal_key = %s",
+                (signal_key,),
+            )
+            row = cur.fetchone()
+    except Exception as e:
+        if not _is_missing_signal_points_error(e):
+            raise
+        _ensure_signal_points_table()
+        with cursor() as cur:
+            cur.execute(
+                "SELECT MAX(date) AS max_date FROM public.signal_points WHERE signal_key = %s",
+                (signal_key,),
+            )
+            row = cur.fetchone()
     return row["max_date"] if row and row.get("max_date") else None
 
 
@@ -41,23 +80,30 @@ def insert_points_ignore_conflict(
         return 0
     meta_json = json.dumps(metadata or {})
     count = 0
-    with cursor() as cur:
-        for p in points:
-            date = p.get("date")
-            value = p.get("value")
-            if not date or value is None:
-                continue
-            confidence_val = p.get("confidence") if p.get("confidence") is not None else confidence
-            cur.execute(
-                """
-                INSERT INTO signal_points (signal_key, date, value, source, confidence, metadata, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, NOW())
-                ON CONFLICT (signal_key, date) DO NOTHING
-                """,
-                (signal_key, date, value, source, confidence_val, meta_json),
-            )
-            if cur.rowcount > 0:
-                count += 1
+    for attempt in range(2):
+        try:
+            with cursor() as cur:
+                for p in points:
+                    date = p.get("date")
+                    value = p.get("value")
+                    if not date or value is None:
+                        continue
+                    confidence_val = p.get("confidence") if p.get("confidence") is not None else confidence
+                    cur.execute(
+                        """
+                        INSERT INTO public.signal_points (signal_key, date, value, source, confidence, metadata, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                        ON CONFLICT (signal_key, date) DO NOTHING
+                        """,
+                        (signal_key, date, value, source, confidence_val, meta_json),
+                    )
+                    if cur.rowcount > 0:
+                        count += 1
+            break
+        except Exception as e:
+            if attempt == 1 or not _is_missing_signal_points_error(e):
+                raise
+            _ensure_signal_points_table()
     return count
 
 
@@ -71,17 +117,33 @@ def get_points(
     """
     if not _has_db():
         return []
-    with cursor() as cur:
-        cur.execute(
-            """
-            SELECT date, value, source, confidence, metadata
-            FROM signal_points
-            WHERE signal_key = %s AND date >= %s AND date <= %s
-            ORDER BY date
-            """,
-            (signal_key, start, end),
-        )
-        rows = cur.fetchall()
+    try:
+        with cursor() as cur:
+            cur.execute(
+                """
+                SELECT date, value, source, confidence, metadata
+                FROM public.signal_points
+                WHERE signal_key = %s AND date >= %s AND date <= %s
+                ORDER BY date
+                """,
+                (signal_key, start, end),
+            )
+            rows = cur.fetchall()
+    except Exception as e:
+        if not _is_missing_signal_points_error(e):
+            raise
+        _ensure_signal_points_table()
+        with cursor() as cur:
+            cur.execute(
+                """
+                SELECT date, value, source, confidence, metadata
+                FROM public.signal_points
+                WHERE signal_key = %s AND date >= %s AND date <= %s
+                ORDER BY date
+                """,
+                (signal_key, start, end),
+            )
+            rows = cur.fetchall()
     return [
         {
             "date": r["date"],
@@ -107,25 +169,32 @@ def upsert_points(
         return 0
     meta_json = json.dumps(metadata or {})
     count = 0
-    with cursor() as cur:
-        for p in points:
-            date = p.get("date")
-            value = p.get("value")
-            if not date or value is None:
-                continue
-            confidence_val = p.get("confidence") if p.get("confidence") is not None else confidence
-            cur.execute(
-                """
-                INSERT INTO signal_points (signal_key, date, value, source, confidence, metadata, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, NOW())
-                ON CONFLICT (signal_key, date) DO UPDATE SET
-                    value = EXCLUDED.value,
-                    source = EXCLUDED.source,
-                    confidence = EXCLUDED.confidence,
-                    metadata = EXCLUDED.metadata,
-                    updated_at = NOW()
-                """,
-                (signal_key, date, value, source, confidence_val, meta_json),
-            )
-            count += 1
+    for attempt in range(2):
+        try:
+            with cursor() as cur:
+                for p in points:
+                    date = p.get("date")
+                    value = p.get("value")
+                    if not date or value is None:
+                        continue
+                    confidence_val = p.get("confidence") if p.get("confidence") is not None else confidence
+                    cur.execute(
+                        """
+                        INSERT INTO public.signal_points (signal_key, date, value, source, confidence, metadata, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                        ON CONFLICT (signal_key, date) DO UPDATE SET
+                            value = EXCLUDED.value,
+                            source = EXCLUDED.source,
+                            confidence = EXCLUDED.confidence,
+                            metadata = EXCLUDED.metadata,
+                            updated_at = NOW()
+                        """,
+                        (signal_key, date, value, source, confidence_val, meta_json),
+                    )
+                    count += 1
+            break
+        except Exception as e:
+            if attempt == 1 or not _is_missing_signal_points_error(e):
+                raise
+            _ensure_signal_points_table()
     return count
