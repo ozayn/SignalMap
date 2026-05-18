@@ -57,24 +57,39 @@ def fetch_gdp_current_usd_series_for_country(iso3: str, start_year: int, end_yea
     return rows_to_gdp_points(cd_rows, start_year, end_year)
 
 
+def fetch_gdp_constant_2015_usd_series_for_country(iso3: str, start_year: int, end_year: int) -> list[dict[str, float | str]]:
+    kd_rows = fetch_wdi_annual_indicator(iso3, WDI_GDP_CONST_USD)
+    return rows_to_gdp_points(kd_rows, start_year, end_year)
+
+
 def _fetch_country_bundle_safe(
     iso3: str,
     key: str,
     start_year: int,
     end_year: int,
-) -> tuple[str, list[dict[str, float | str]], list[dict[str, float | str]], str, str, str | None]:
+) -> tuple[
+    str,
+    list[dict[str, float | str]],
+    list[dict[str, float | str]],
+    list[dict[str, float | str]],
+    str,
+    str,
+    str | None,
+]:
     try:
         pts, basis, ind_id = fetch_gdp_total_series_for_country(iso3, start_year, end_year)
         pts_current = fetch_gdp_current_usd_series_for_country(iso3, start_year, end_year)
-        return key, pts, pts_current, basis, ind_id, None
+        pts_constant = fetch_gdp_constant_2015_usd_series_for_country(iso3, start_year, end_year)
+        return key, pts, pts_current, pts_constant, basis, ind_id, None
     except Exception as e:
         _logger.warning("GDP comparison fetch failed %s: %s", iso3, e)
-        return key, [], [], "unavailable", WDI_GDP_CURRENT_USD, str(e)
+        return key, [], [], [], "unavailable", WDI_GDP_CURRENT_USD, str(e)
 
 
 def fetch_gdp_global_comparison_bundle(start_year: int, end_year: int) -> dict[str, Any]:
     series: dict[str, list[dict[str, float | str]]] = {}
     series_current_usd: dict[str, list[dict[str, float | str]]] = {}
+    series_constant_2015_usd: dict[str, list[dict[str, float | str]]] = {}
     price_basis: dict[str, str] = {}
     indicator_ids: dict[str, str] = {}
     warnings: dict[str, str] = {}
@@ -85,9 +100,10 @@ def fetch_gdp_global_comparison_bundle(start_year: int, end_year: int) -> dict[s
             for iso3, key in GDP_COMPARISON_ISO3_TO_KEY.items()
         ]
         for fut in futures:
-            key, pts, pts_current, basis, ind_id, err = fut.result()
+            key, pts, pts_current, pts_constant, basis, ind_id, err = fut.result()
             series[key] = pts
             series_current_usd[key] = pts_current
+            series_constant_2015_usd[key] = pts_constant
             price_basis[key] = basis
             indicator_ids[key] = ind_id
             if err:
@@ -96,6 +112,7 @@ def fetch_gdp_global_comparison_bundle(start_year: int, end_year: int) -> dict[s
     out: dict[str, Any] = {
         "series": series,
         "series_current_usd": series_current_usd,
+        "series_constant_2015_usd": series_constant_2015_usd,
         "per_country_price_basis": price_basis,
         "per_country_indicator_id": indicator_ids,
     }

@@ -495,6 +495,19 @@ type TimelineChartProps = {
   tooltipDateOverride?: (dateStr: string, dataIndex: number) => string | null | undefined;
   /** Optional per-date tooltip extras appended after series values. */
   tooltipExtraLines?: (dateStr: string) => string[] | null | undefined;
+  /**
+   * Optional residual-share recomputation for stacked-share charts.
+   * Example: ``other_share = 100 - sum(visible named shares)``.
+   */
+  dynamicResidualShare?: {
+    residualSeriesKey: string;
+    /** Exclude keys like world aggregate and residual itself from contributor sum. */
+    excludeSeriesKeys?: string[];
+    /** ``percent_100`` => residual = 100 - sum(visible); ``difference_to_total`` => residual = total - sum(visible). */
+    mode?: "percent_100" | "difference_to_total";
+    /** Required when ``mode`` is ``difference_to_total``. */
+    totalSeriesPoints?: { date: string; value: number }[];
+  };
 };
 
 type GroupedLegendCell = {
@@ -983,6 +996,7 @@ export function TimelineChart({
   tooltipValueBasisNote,
   tooltipDateOverride,
   tooltipExtraLines,
+  dynamicResidualShare,
 }: TimelineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
@@ -1122,6 +1136,11 @@ export function TimelineChart({
   }, [groupedLegendSourceKey, multiSeries, multiSeriesLegendGroupedVariant]);
 
   const [groupedLegendSelected, setGroupedLegendSelected] = useState<Record<string, boolean> | null>(null);
+  const [multiSeriesLegendSelected, setMultiSeriesLegendSelected] = useState<Record<string, boolean> | null>(null);
+  const defaultLegendSourceKey = useMemo(() => {
+    if (multiSeriesLegendLayout === "grouped" || !multiSeries?.length) return "";
+    return multiSeries.map((s) => `${s.key}|${s.label}`).join("\u0001");
+  }, [multiSeriesLegendLayout, multiSeries]);
 
   useEffect(() => {
     if (!groupedLegendSourceKey || !multiSeries?.length) {
@@ -1130,6 +1149,14 @@ export function TimelineChart({
     }
     setGroupedLegendSelected(Object.fromEntries(multiSeries.map((s) => [s.label, true])));
   }, [groupedLegendSourceKey]);
+
+  useEffect(() => {
+    if (!defaultLegendSourceKey || !multiSeries?.length) {
+      setMultiSeriesLegendSelected(null);
+      return;
+    }
+    setMultiSeriesLegendSelected(Object.fromEntries(multiSeries.map((s) => [s.label, true])));
+  }, [defaultLegendSourceKey, multiSeries]);
 
   const handleGroupedLegendToggle = useCallback((name: string) => {
     setGroupedLegendSelected((prev) => {
@@ -1936,9 +1963,58 @@ export function TimelineChart({
       : mutedBands || (hasMultiSeries && useUnionDates) || (hasMultiSeries && timeRange)
         ? valueAtDateOrNearest
         : valueAtDate;
-    const multiSeriesValues = hasMultiSeries && multiSeriesEffective
+    const multiSeriesValuesRaw = hasMultiSeries && multiSeriesEffective
       ? multiSeriesEffective.map((s) => dates.map((d) => valueFn(s.points, d)))
       : null;
+    const multiSeriesValues =
+      hasMultiSeries && multiSeriesEffective && multiSeriesValuesRaw && dynamicResidualShare
+        ? (() => {
+            const residualIdx = multiSeriesEffective.findIndex(
+              (s) => s.key === dynamicResidualShare.residualSeriesKey
+            );
+            if (residualIdx < 0) return multiSeriesValuesRaw;
+            const excluded = new Set<string>([
+              dynamicResidualShare.residualSeriesKey,
+              ...(dynamicResidualShare.excludeSeriesKeys ?? []),
+            ]);
+            const selectedMap =
+              useGroupedMultiSeriesLegend && groupedLegendSelected
+                ? groupedLegendSelected
+                : !useGroupedMultiSeriesLegend && multiSeriesLegendSelected
+                  ? multiSeriesLegendSelected
+                  : null;
+            const contributorIndices = multiSeriesEffective
+              .map((s, i) => ({ s, i }))
+              .filter(({ s }) => !excluded.has(s.key))
+              .map(({ i }) => i);
+            const residualValues = dates.map((_, di) => {
+              let sumVisible = 0;
+              let hasVisible = false;
+              for (const ci of contributorIndices) {
+                const contributor = multiSeriesEffective[ci]!;
+                if (selectedMap && selectedMap[contributor.label] === false) continue;
+                const val = multiSeriesValuesRaw[ci]?.[di];
+                if (typeof val === "number" && Number.isFinite(val)) {
+                  sumVisible += val;
+                  hasVisible = true;
+                }
+              }
+              const mode = dynamicResidualShare.mode ?? "percent_100";
+              if (mode === "difference_to_total") {
+                const totalVal = valueFn(dynamicResidualShare.totalSeriesPoints ?? [], dates[di]!);
+                if (typeof totalVal !== "number" || !Number.isFinite(totalVal)) return null;
+                const rawResidual = totalVal - sumVisible;
+                if (!hasVisible) return totalVal;
+                if (rawResidual >= 0) return rawResidual;
+                if (rawResidual < 0 && rawResidual >= -1e-6) return 0;
+                return null;
+              }
+              if (!hasVisible) return 100;
+              return Math.max(0, Math.min(100, 100 - sumVisible));
+            });
+            return multiSeriesValuesRaw.map((vals, i) => (i === residualIdx ? residualValues : vals));
+          })()
+        : multiSeriesValuesRaw;
     /** Gaps for sparse yearly lines (Gini, poverty); keep ``connectNulls`` on stacked GDP areas. */
     const yearlyMultiSparseDisconnectNulls =
       useYearlyMultiSeries &&
@@ -2689,6 +2765,9 @@ export function TimelineChart({
                     textStyle: { color: mutedFg, fontSize: legendTextFontSize },
                     ...legendNarrowFormatter,
                     data: multiSeriesLegendData,
+                    selected:
+                      multiSeriesLegendSelected ??
+                      Object.fromEntries(multiSeries.map((s) => [s.label, true])),
                   },
             }
           : hasOil && secondSeries && !comparatorResolved
@@ -3903,6 +3982,15 @@ export function TimelineChart({
       });
     }
     chartInstanceRef.current = chart;
+    const handleLegendSelectChanged = (evt: unknown) => {
+      const selected =
+        evt && typeof evt === "object" && "selected" in evt
+          ? (evt as { selected?: Record<string, boolean> }).selected
+          : undefined;
+      if (!selected || typeof selected !== "object") return;
+      if (useGroupedMultiSeriesLegend) setGroupedLegendSelected(selected);
+      else setMultiSeriesLegendSelected(selected);
+    };
     const handleSeriesMouseOver = (evt: unknown) => {
       if (!evt || typeof evt !== "object") return;
       const candidate = evt as { componentType?: unknown; seriesName?: unknown };
@@ -3913,8 +4001,10 @@ export function TimelineChart({
     const handleGlobalOut = () => {
       hoveredSeriesNameRef.current = null;
     };
+    chart.off("legendselectchanged", handleLegendSelectChanged);
     chart.off("mouseover", handleSeriesMouseOver);
     chart.off("globalout", handleGlobalOut);
+    chart.on("legendselectchanged", handleLegendSelectChanged);
     chart.on("mouseover", handleSeriesMouseOver);
     chart.on("globalout", handleGlobalOut);
 
@@ -3936,6 +4026,7 @@ export function TimelineChart({
 
     return () => {
       cancelled = true;
+      chart.off("legendselectchanged", handleLegendSelectChanged);
       chart.off("mouseover", handleSeriesMouseOver);
       chart.off("globalout", handleGlobalOut);
       cancelAnimationFrame(rafId);
@@ -3995,8 +4086,10 @@ export function TimelineChart({
     chartLocale,
     tooltipDateOverride,
     tooltipExtraLines,
+    dynamicResidualShare,
     groupedLegendModel,
     groupedLegendSelected,
+    multiSeriesLegendSelected,
     multiSeriesLegendGroupedVariant,
     chartLayoutRevision,
     isCompact,
