@@ -1194,9 +1194,9 @@ export function buildPresentationEchartsPatch(
       10
     : EXPORT_AUX_LEGEND_SOURCE_RESERVE_MIN;
   const emphasizeOverlayContrast = ctx.emphasizeOverlayContrast === true;
-  const exportOverlayFill = "rgba(90,90,90,0.32)";
-  const exportOverlayLabelColor = "rgba(70,70,70,0.9)";
-  const exportOverlayLabelWeight = 600;
+  const exportOverlayFill = "rgba(90,90,90,0.35)";
+  const exportOverlayLabelColor = "rgba(55,55,55,0.95)";
+  const exportOverlayLabelWeight = 700;
   const exportAxisTextColor = "#444444";
   const exportGridLineColor = "rgba(120,120,120,0.18)";
 
@@ -1315,20 +1315,31 @@ export function buildPresentationEchartsPatch(
   });
 
   const patchOverlayLabelStyle = (
-    label: Record<string, unknown> | undefined
+    label: Record<string, unknown> | undefined,
+    isPeriodBoundary: boolean = false
   ): Record<string, unknown> | undefined => {
     if (!label || label.show === false) return label;
+    const boundaryFontSize = Math.max(12, fonts.markLineLabel - 6);
     if (!emphasizeOverlayContrast) {
-      return { ...label, fontSize: Math.max(fonts.markLineLabel, typeof label.fontSize === "number" ? label.fontSize : 0) };
+      return {
+        ...label,
+        fontSize: isPeriodBoundary
+          ? Math.max(boundaryFontSize, typeof label.fontSize === "number" ? label.fontSize : 0)
+          : Math.max(fonts.markLineLabel, typeof label.fontSize === "number" ? label.fontSize : 0),
+      };
     }
     return {
       ...label,
-      fontSize: Math.max(fonts.markLineLabel, typeof label.fontSize === "number" ? label.fontSize : 0),
+      fontSize: isPeriodBoundary
+        ? Math.max(boundaryFontSize, typeof label.fontSize === "number" ? label.fontSize : 0)
+        : Math.max(fonts.markLineLabel, typeof label.fontSize === "number" ? label.fontSize : 0),
       color: exportOverlayLabelColor,
       fontWeight:
         typeof label.fontWeight === "number"
           ? Math.max(label.fontWeight, exportOverlayLabelWeight)
           : exportOverlayLabelWeight,
+      textBorderColor: "rgba(255,255,255,0.82)",
+      textBorderWidth: 1.8,
     };
   };
 
@@ -1336,11 +1347,25 @@ export function buildPresentationEchartsPatch(
     if (Array.isArray(item)) return item.map(patchMarkLineEntry);
     if (!item || typeof item !== "object") return item;
     const row = item as Record<string, unknown>;
+    const isPeriodBoundary = row.periodBoundary === true;
     const label = row.label as Record<string, unknown> | undefined;
-    const patchedLabel = patchOverlayLabelStyle(label);
+    const patchedLabel = patchOverlayLabelStyle(label, isPeriodBoundary);
     if (!patchedLabel) return item;
+    const lineStyle = row.lineStyle as Record<string, unknown> | undefined;
     return {
       ...row,
+      ...(emphasizeOverlayContrast && isPeriodBoundary
+        ? {
+            lineStyle: {
+              ...(lineStyle ?? {}),
+              color: "rgba(80,80,80,0.8)",
+              width:
+                typeof lineStyle?.width === "number"
+                  ? Math.max(2, lineStyle.width)
+                  : 2,
+            },
+          }
+        : {}),
       label: patchedLabel,
     };
   };
@@ -1415,11 +1440,12 @@ export function buildPresentationEchartsPatch(
     let next: Record<string, unknown> = patchSeriesTextLabels({ ...sRec });
     if (ml) {
       const mlLabel = ml.label as Record<string, unknown> | undefined;
+      const mlIsBoundary = ml.periodBoundary === true;
       next = {
         ...next,
         markLine: {
           ...ml,
-          ...(mlLabel ? { label: patchOverlayLabelStyle(mlLabel) } : {}),
+          ...(mlLabel ? { label: patchOverlayLabelStyle(mlLabel, mlIsBoundary) } : {}),
           ...(Array.isArray(ml.data) ? { data: (ml.data as unknown[]).map(patchMarkLineEntry) } : {}),
         },
       };

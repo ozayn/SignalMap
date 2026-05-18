@@ -1984,10 +1984,10 @@ export function TimelineChart({
                     show: true,
                     position: "insideBottom" as const,
                     formatter: labelText,
-                    color: withAlphaHsl(mutedFg, 0.9),
-                    fontSize: 10,
+                    color: "rgba(70,70,70,0.9)",
+                    fontSize: 12,
                     distance: 3,
-                    lineHeight: 12,
+                    lineHeight: 14,
                     align: "center" as const,
                   },
                 }
@@ -1998,6 +1998,56 @@ export function TimelineChart({
       }
     }
     const hasPeriodOverlayMarkAreas = periodOverlayMarkAreaRegions.length > 0;
+    const PERIOD_BOUNDARY_LINE_COLOR = "rgba(90,90,90,0.55)";
+    const PERIOD_BOUNDARY_LINE_WIDTH = 1.7;
+    const periodBoundaryMarkLineExtras: Array<{
+      xAxis: number | string;
+      periodBoundary: true;
+      label: {
+        show: true;
+        formatter: string;
+        color: string;
+        fontSize: number;
+        fontWeight: 500;
+        position: "insideEndTop";
+        rotate: 90;
+        distance: number;
+      };
+      lineStyle: {
+        color: string;
+        width: number;
+        type: "solid";
+        opacity: number;
+      };
+    }> = [];
+    const periodBoundarySeen = new Set<string>();
+    const pushPeriodBoundary = (xResolved: number | string | null, year: number) => {
+      if (xResolved == null || !Number.isFinite(year)) return;
+      const yearLabel = localizeChartNumericDisplayString(String(year), chartNumeralLocale);
+      const key = `${String(xResolved)}|${yearLabel}`;
+      if (periodBoundarySeen.has(key)) return;
+      periodBoundarySeen.add(key);
+      periodBoundaryMarkLineExtras.push({
+        xAxis: xResolved,
+        periodBoundary: true,
+        label: {
+          show: true,
+          formatter: yearLabel,
+          color: "#4b5563",
+          fontSize: 10,
+          fontWeight: 500,
+          position: "insideEndTop",
+          rotate: 90,
+          distance: 5,
+        },
+        lineStyle: {
+          color: PERIOD_BOUNDARY_LINE_COLOR,
+          width: PERIOD_BOUNDARY_LINE_WIDTH,
+          type: "solid",
+          opacity: 0.9,
+        },
+      });
+    };
 
     const shockMarkPointData =
       oilShockDates.length > 0
@@ -2286,6 +2336,32 @@ export function TimelineChart({
       rangeBandData.push(band);
       if (isPresidentialEvent(ev)) presidentialBandData.push(band);
     }
+    for (const p of presidentialBandData) {
+      const y0 = parseInt(p.event.date_start?.slice(0, 4) ?? "", 10);
+      const y1 = parseInt(p.event.date_end?.slice(0, 4) ?? "", 10);
+      pushPeriodBoundary(p.xStart, y0);
+      pushPeriodBoundary(p.xEnd, y1);
+    }
+    for (const b of chartPeriodOverlayBands ?? []) {
+      const r = findTimeSeriesEventRangeCategoryIndices(
+        dates,
+        `${b.startYear}-01-01`,
+        `${b.endYear}-12-31`,
+        alignToCalendarYearBucket
+      );
+      if (r == null) continue;
+      const xStart = dates[r.startIdx]!;
+      const xEnd = dates[r.endIdx]!;
+      pushPeriodBoundary(xStart, b.startYear);
+      pushPeriodBoundary(xEnd, b.endYear);
+    }
+    if (regimeArea) {
+      const focusYears = regimeFocusGregorianYearBounds(regimeArea, focusGregorianYearRange);
+      if (focusYears) {
+        pushPeriodBoundary(regimeArea.xStart, focusYears.startYear);
+        pushPeriodBoundary(regimeArea.xEnd, focusYears.endYear);
+      }
+    }
     const regularBandData = rangeBandData.filter((r) => !isPresidentialEvent(r.event));
     const PresidentialBandOpacity = 0.04;
 
@@ -2541,11 +2617,11 @@ export function TimelineChart({
                   formatter: displayText,
                   position: "top",
                   distance: 4,
-                  color: "#9ca3af",
-                  fontSize: 12,
-                  lineHeight: 14,
+                  color: "rgba(70,70,70,0.9)",
+                  fontSize: 13,
+                  lineHeight: 15,
                   align: "center",
-                  fontWeight: 400,
+                  fontWeight: 600,
                 },
               };
             }
@@ -3352,6 +3428,7 @@ export function TimelineChart({
                         data: [
                           ...markLineSeriesItems,
                           ...dataCoverageMarkLineExtras,
+                          ...periodBoundaryMarkLineExtras,
                           ...revolution1979MarkLineExtras,
                           ...(referenceLine
                             ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: localizeChartNumericDisplayString(referenceLine.label ?? "", chartNumeralLocale) }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
@@ -3584,6 +3661,7 @@ export function TimelineChart({
                         data: [
                           ...markLineSeriesItems,
                           ...dataCoverageMarkLineExtras,
+                          ...periodBoundaryMarkLineExtras,
                           ...revolution1979MarkLineExtras,
                           ...(referenceLine
                             ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: localizeChartNumericDisplayString(referenceLine.label ?? "", chartNumeralLocale) }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
@@ -3622,6 +3700,7 @@ export function TimelineChart({
                         data: [
                           ...markLineSeriesItems,
                           ...dataCoverageMarkLineExtras,
+                          ...periodBoundaryMarkLineExtras,
                           ...revolution1979MarkLineExtras,
                           ...(referenceLine
                             ? [{ yAxis: referenceLine.value, label: { show: !!referenceLine.label, formatter: localizeChartNumericDisplayString(referenceLine.label ?? "", chartNumeralLocale) }, lineStyle: { color: withAlphaHsl(muted, 0.55), width: 1.5, type: "solid" as const } }]
