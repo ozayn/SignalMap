@@ -1,3 +1,5 @@
+import { isAnalyticsEnabledOnCurrentHost } from "@/lib/analytics-env";
+
 declare global {
   interface Window {
     gtag?: (...args: unknown[]) => void;
@@ -14,7 +16,12 @@ export function trackEvent(
   eventName: string,
   params?: Record<string, unknown>
 ): void {
-  if (typeof window === "undefined" || typeof window.gtag !== "function" || !GA_ID) {
+  if (
+    typeof window === "undefined" ||
+    !isAnalyticsEnabledOnCurrentHost() ||
+    typeof window.gtag !== "function" ||
+    !GA_ID
+  ) {
     return;
   }
   const eventParams = { ...params, send_to: GA_ID };

@@ -64,21 +64,6 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/favicon.png" type="image/png" sizes="32x32" />
         <link rel="shortcut icon" href="/favicon.png" type="image/png" />
-        {gaId && (
-          <>
-            <script async src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`} />
-            <script
-              dangerouslySetInnerHTML={{
-                __html: `
-                  window.dataLayer = window.dataLayer || [];
-                  function gtag(){dataLayer.push(arguments);}
-                  gtag('js', new Date());
-                  gtag('config', '${gaId}', { debug_mode: ${process.env.NEXT_PUBLIC_GA_DEBUG === "true" ? "true" : "false"} });
-                `,
-              }}
-            />
-          </>
-        )}
       </head>
       <body className={`${inter.variable} font-sans antialiased min-h-screen`} suppressHydrationWarning>
         <ThemeProvider>
