@@ -994,7 +994,6 @@ export function TimelineChart({
   const [clipStart, setClipStart] = useState("");
   const [clipEnd, setClipEnd] = useState("");
   const [exportModalOpen, setExportModalOpen] = useState(false);
-  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [sharedLinkHighlight, setSharedLinkHighlight] = useState(false);
   const [exportModalDefaults, setExportModalDefaults] = useState<{
     title: string;
@@ -1289,13 +1288,9 @@ export function TimelineChart({
         document.execCommand("copy");
         document.body.removeChild(ta);
       }
-      setCopyStatus("copied");
-      window.setTimeout(() => setCopyStatus("idle"), 1400);
-    } catch {
-      setCopyStatus("error");
-      window.setTimeout(() => setCopyStatus("idle"), 1800);
-    }
+    } catch {}
   }, [chartRange, pathname, resolvedShareChartId, shareQueryState]);
+  const showCopyLiveChartLink = false;
 
   const openExportModal = useCallback(() => {
     const visibleTitle = localizeChartNumericDisplayString(label.trim(), (chartLocale ?? "en") === "fa" ? "fa" : "en");
@@ -3964,25 +3959,7 @@ export function TimelineChart({
           onStartChange={setClipStart}
           onEndChange={setClipEnd}
           onExportPng={openExportModal}
-          onCopyLiveChartLink={copyLiveChartLink}
-          copyLinkLabel={
-            copyStatus === "copied"
-              ? chartLocaleResolved === "fa"
-                ? "لینک کپی شد"
-                : "Link copied"
-              : copyStatus === "error"
-                ? chartLocaleResolved === "fa"
-                  ? "کپی ناموفق"
-                  : "Copy failed"
-                : chartLocaleResolved === "fa"
-                  ? "کپی لینک زنده نمودار"
-                  : "Copy live chart link"
-          }
-          helperText={
-            chartLocaleResolved === "fa"
-              ? "برای اسلاید از PNG استفاده کنید، یا لینک زنده نمودار تعاملی را به‌اشتراک بگذارید."
-              : "Use PNG for slides, or share the live interactive chart link."
-          }
+          onCopyLiveChartLink={showCopyLiveChartLink ? copyLiveChartLink : undefined}
           mode="full"
           startYearLabel={chartLocaleResolved === "fa" ? "سال شروع" : "Start Year"}
           endYearLabel={chartLocaleResolved === "fa" ? "سال پایان" : "End Year"}
@@ -3996,25 +3973,7 @@ export function TimelineChart({
           onStartChange={setClipStart}
           onEndChange={setClipEnd}
           onExportPng={openExportModal}
-          onCopyLiveChartLink={copyLiveChartLink}
-          copyLinkLabel={
-            copyStatus === "copied"
-              ? chartLocaleResolved === "fa"
-                ? "لینک کپی شد"
-                : "Link copied"
-              : copyStatus === "error"
-                ? chartLocaleResolved === "fa"
-                  ? "کپی ناموفق"
-                  : "Copy failed"
-                : chartLocaleResolved === "fa"
-                  ? "کپی لینک زنده نمودار"
-                  : "Copy live chart link"
-          }
-          helperText={
-            chartLocaleResolved === "fa"
-              ? "برای اسلاید از PNG استفاده کنید، یا لینک زنده نمودار تعاملی را به‌اشتراک بگذارید."
-              : "Use PNG for slides, or share the live interactive chart link."
-          }
+          onCopyLiveChartLink={showCopyLiveChartLink ? copyLiveChartLink : undefined}
           mode="exportOnly"
           startYearLabel={chartLocaleResolved === "fa" ? "سال شروع" : "Start Year"}
           endYearLabel={chartLocaleResolved === "fa" ? "سال پایان" : "End Year"}

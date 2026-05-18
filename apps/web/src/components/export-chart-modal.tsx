@@ -11,20 +11,20 @@ import {
 const FONT_MIN = 8;
 const FONT_MAX = 56;
 
-const FONT_PRESET_SMALL: ExportChartFontSizes = {
-  title: 28,
-  axisName: 20,
-  axisTick: 18,
-  legend: 17,
-  source: 15,
+const FONT_PRESET_PAPER: ExportChartFontSizes = {
+  title: 24,
+  axisName: 16,
+  axisTick: 14,
+  legend: 14,
+  source: 11,
 };
 
-const FONT_PRESET_LARGE: ExportChartFontSizes = {
-  title: 38,
-  axisName: 27,
-  axisTick: 25,
-  legend: 24,
-  source: 20,
+const FONT_PRESET_PRESENTATION: ExportChartFontSizes = {
+  title: 32,
+  axisName: 23,
+  axisTick: 21,
+  legend: 20,
+  source: 17,
 };
 
 function clampFont(n: number): number {
@@ -40,6 +40,16 @@ function clampFontSizes(s: ExportChartFontSizes): ExportChartFontSizes {
     legend: clampFont(s.legend),
     source: clampFont(s.source),
   };
+}
+
+function sameFontPreset(a: ExportChartFontSizes, b: ExportChartFontSizes): boolean {
+  return (
+    a.title === b.title &&
+    a.axisName === b.axisName &&
+    a.axisTick === b.axisTick &&
+    a.legend === b.legend &&
+    a.source === b.source
+  );
 }
 
 export type ExportChartModalProps = {
@@ -65,12 +75,13 @@ export function ExportChartModal({
   titleDir = "ltr",
 }: ExportChartModalProps) {
   const [titleText, setTitleText] = useState(defaultTitle);
-  const [fontSizes, setFontSizes] = useState<ExportChartFontSizes>(defaultFontSizes);
+  const [fontSizes, setFontSizes] = useState<ExportChartFontSizes>(FONT_PRESET_PRESENTATION);
 
   useEffect(() => {
     if (!open) return;
     setTitleText(defaultTitle);
-    setFontSizes({ ...defaultFontSizes });
+    // Export dialog defaults to presentation-friendly sizing.
+    setFontSizes({ ...FONT_PRESET_PRESENTATION });
   }, [open, defaultTitle, defaultFontSizes]);
 
   useEffect(() => {
@@ -84,7 +95,8 @@ export function ExportChartModal({
 
   const resetDefaults = useCallback(() => {
     setTitleText(defaultTitle);
-    setFontSizes({ ...defaultFontSizes });
+    // Reset always returns to the presentation preset.
+    setFontSizes({ ...FONT_PRESET_PRESENTATION });
   }, [defaultTitle, defaultFontSizes]);
 
   const applyPreset = useCallback((preset: ExportChartFontSizes) => {
@@ -113,6 +125,8 @@ export function ExportChartModal({
 
   const row = "flex items-center justify-between gap-3";
   const rowLabel = "min-w-0 text-sm text-foreground";
+  const paperActive = sameFontPreset(fontSizes, FONT_PRESET_PAPER);
+  const presentationActive = sameFontPreset(fontSizes, FONT_PRESET_PRESENTATION);
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" role="presentation">
@@ -159,30 +173,21 @@ export function ExportChartModal({
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               <Button
                 type="button"
-                variant="outline"
+                variant={paperActive ? "default" : "outline"}
                 size="sm"
                 className="h-8 px-2.5 text-xs font-normal"
-                onClick={() => applyPreset(FONT_PRESET_SMALL)}
+                onClick={() => applyPreset(FONT_PRESET_PAPER)}
               >
-                Small
+                Paper
               </Button>
               <Button
                 type="button"
-                variant="outline"
+                variant={presentationActive ? "default" : "outline"}
                 size="sm"
                 className="h-8 px-2.5 text-xs font-normal"
-                onClick={() => applyPreset({ ...DEFAULT_EXPORT_CHART_FONT_SIZES })}
+                onClick={() => applyPreset(FONT_PRESET_PRESENTATION)}
               >
-                Default
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 px-2.5 text-xs font-normal"
-                onClick={() => applyPreset(FONT_PRESET_LARGE)}
-              >
-                Large
+                Presentation
               </Button>
             </div>
           </div>
