@@ -566,7 +566,7 @@ def get_wdi_gdp_global_comparison_signal(
     start: str | None = Query(None, description="Start date YYYY-MM-DD"),
     end: str | None = Query(None, description="End date YYYY-MM-DD"),
 ):
-    """Return World Bank annual GDP (levels) for US, China, Iran, Turkey, Saudi Arabia, and world (WLD)."""
+    """Return World Bank annual GDP (levels) for US, China, Iran, Turkey, Saudi Arabia, Russia, and world (WLD)."""
     if start is None:
         start = "1960-01-01"
     if end is None:

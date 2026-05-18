@@ -45,7 +45,11 @@ type IranElectionParticipationPoint = {
   topCandidates: [IranElectionTopCandidate, IranElectionTopCandidate];
   runoff?: {
     firstRoundDate: string;
+    firstRoundTurnoutPct: number;
+    firstRoundVotesCastMillions: number;
     runoffDate: string;
+    runoffTurnoutPct: number;
+    runoffVotesCastMillions: number;
     runoffCandidates: [IranElectionTopCandidate, IranElectionTopCandidate];
   };
 };
@@ -124,15 +128,19 @@ const IRAN_PRESIDENTIAL_ELECTION_PARTICIPATION: IranElectionParticipationPoint[]
   {
     year: 2005,
     electionDate: "2005-06-24",
-    turnoutPct: 62.84,
-    votesCastMillions: 29.32,
+    turnoutPct: 59.76,
+    votesCastMillions: 27.96,
     topCandidates: [
       { name: "Mahmoud Ahmadinejad", nameFa: "محمود احمدی‌نژاد", votes: 17284000, percent: 61.7 },
       { name: "Akbar Hashemi Rafsanjani", nameFa: "اکبر هاشمی رفسنجانی", votes: 10346566, percent: 35.9 },
     ],
     runoff: {
       firstRoundDate: "2005-06-17",
+      firstRoundTurnoutPct: 62.84,
+      firstRoundVotesCastMillions: 29.32,
       runoffDate: "2005-06-24",
+      runoffTurnoutPct: 59.76,
+      runoffVotesCastMillions: 27.96,
       runoffCandidates: [
         { name: "Mahmoud Ahmadinejad", nameFa: "محمود احمدی‌نژاد", votes: 17284000, percent: 61.7 },
         { name: "Akbar Hashemi Rafsanjani", nameFa: "اکبر هاشمی رفسنجانی", votes: 10346566, percent: 35.9 },
@@ -182,15 +190,19 @@ const IRAN_PRESIDENTIAL_ELECTION_PARTICIPATION: IranElectionParticipationPoint[]
   {
     year: 2024,
     electionDate: "2024-07-05",
-    turnoutPct: 39.93,
-    votesCastMillions: 24.54,
+    turnoutPct: 49.80,
+    votesCastMillions: 30.53,
     topCandidates: [
       { name: "Masoud Pezeshkian", nameFa: "مسعود پزشکیان", votes: 16384603, percent: 53.7 },
       { name: "Saeed Jalili", nameFa: "سعید جلیلی", votes: 13538179, percent: 44.3 },
     ],
     runoff: {
       firstRoundDate: "2024-06-28",
+      firstRoundTurnoutPct: 39.93,
+      firstRoundVotesCastMillions: 24.54,
       runoffDate: "2024-07-05",
+      runoffTurnoutPct: 49.80,
+      runoffVotesCastMillions: 30.53,
       runoffCandidates: [
         { name: "Masoud Pezeshkian", nameFa: "مسعود پزشکیان", votes: 16384603, percent: 53.7 },
         { name: "Saeed Jalili", nameFa: "سعید جلیلی", votes: 13538179, percent: 44.3 },
@@ -481,10 +493,38 @@ export function IranEconomyPeriodComparisonPanels({
     () =>
       IRAN_PRESIDENTIAL_ELECTION_PARTICIPATION.map((p) => ({
         date: p.electionDate ?? `${p.year}-01-01`,
-        value: p.votesCastMillions,
+        value: p.runoff?.runoffVotesCastMillions ?? p.votesCastMillions,
       })),
     []
   );
+  const politicalParticipationFirstRoundVotesCastPoints = useMemo<Point[]>(
+    () =>
+      IRAN_PRESIDENTIAL_ELECTION_PARTICIPATION.filter((p) => Boolean(p.runoff)).map((p) => ({
+        date: p.runoff?.firstRoundDate ?? `${p.year}-01-01`,
+        value: p.runoff?.firstRoundVotesCastMillions ?? p.votesCastMillions,
+      })),
+    []
+  );
+  const politicalParticipationPointByDate = useMemo(() => {
+    const out = new Map<
+      string,
+      {
+        point: IranElectionParticipationPoint;
+        stage: "single_round" | "first_round" | "runoff";
+      }
+    >();
+    for (const point of IRAN_PRESIDENTIAL_ELECTION_PARTICIPATION) {
+      const electionDate = point.electionDate ?? `${point.year}-01-01`;
+      if (!point.runoff) {
+        out.set(electionDate, { point, stage: "single_round" });
+        continue;
+      }
+      out.set(point.runoff.firstRoundDate, { point, stage: "first_round" });
+      out.set(point.runoff.runoffDate, { point, stage: "runoff" });
+      out.set(electionDate, { point, stage: "runoff" });
+    }
+    return out;
+  }, []);
   const politicalParticipationByDate = useMemo(
     () =>
       new Map(
@@ -500,9 +540,8 @@ export function IranEconomyPeriodComparisonPanels({
     () => (dateStr: string) => {
       const dateKey = dateStr.slice(0, 10);
       const year = Number.parseInt(dateStr.slice(0, 4), 10);
-      const point =
-        politicalParticipationByDate.get(dateKey) ??
-        (Number.isFinite(year) ? politicalParticipationByYear.get(year) : undefined);
+      const dateContext = politicalParticipationPointByDate.get(dateKey);
+      const point = dateContext?.point ?? politicalParticipationByDate.get(dateKey) ?? (Number.isFinite(year) ? politicalParticipationByYear.get(year) : undefined);
       if (!point) return null;
       const runoff = point.runoff;
       const lines: string[] = [
@@ -523,7 +562,23 @@ export function IranEconomyPeriodComparisonPanels({
         lines.push(
           `- ${L(isFa, "First round", "دور اول")}: ${formatElectionTooltipDate(runoff.firstRoundDate, isFa)}`
         );
+        lines.push(
+          `  ${L(isFa, "Votes cast", "آرای مأخوذه")}: ${runoff.firstRoundVotesCastMillions.toFixed(2)} ${L(
+            isFa,
+            "million",
+            "میلیون"
+          )}`
+        );
+        lines.push(`  ${L(isFa, "Turnout", "نرخ مشارکت")}: ${runoff.firstRoundTurnoutPct.toFixed(2)}%`);
         lines.push(`- ${L(isFa, "Runoff", "مرحله دوم")}: ${formatElectionTooltipDate(runoff.runoffDate, isFa)}`);
+        lines.push(
+          `  ${L(isFa, "Votes cast", "آرای مأخوذه")}: ${runoff.runoffVotesCastMillions.toFixed(2)} ${L(
+            isFa,
+            "million",
+            "میلیون"
+          )}`
+        );
+        lines.push(`  ${L(isFa, "Turnout", "نرخ مشارکت")}: ${runoff.runoffTurnoutPct.toFixed(2)}%`);
         lines.push(
           `<span style="font-size:10px;color:#888">${L(
             isFa,
@@ -557,12 +612,13 @@ export function IranEconomyPeriodComparisonPanels({
     () => (dateStr: string) => {
       const dateKey = dateStr.slice(0, 10);
       const year = Number.parseInt(dateStr.slice(0, 4), 10);
-      const point =
-        politicalParticipationByDate.get(dateKey) ??
-        (Number.isFinite(year) ? politicalParticipationByYear.get(year) : undefined);
-      return point?.electionDate ?? dateStr;
+      const dateContext = politicalParticipationPointByDate.get(dateKey);
+      const point = dateContext?.point ?? politicalParticipationByDate.get(dateKey) ?? (Number.isFinite(year) ? politicalParticipationByYear.get(year) : undefined);
+      if (!point) return dateStr;
+      if (dateContext?.stage === "first_round" && point.runoff) return point.runoff.firstRoundDate;
+      return point.electionDate ?? dateStr;
     },
-    [politicalParticipationByDate, politicalParticipationByYear]
+    [politicalParticipationPointByDate, politicalParticipationByDate, politicalParticipationByYear]
   );
   const politicalParticipationEvents = useMemo<TimelineEvent[]>(
     () => [
@@ -2317,8 +2373,20 @@ export function IranEconomyPeriodComparisonPanels({
                     smooth: false,
                   },
                   {
+                    key: "presidential_votes_cast_first_round_mn",
+                    label: L(isFa, "First round votes", "آرای دور اول"),
+                    renderAs: "bar",
+                    yAxisIndex: 1,
+                    unit: L(isFa, "million votes", "میلیون رأی"),
+                    points: politicalParticipationFirstRoundVotesCastPoints,
+                    color: "rgba(140, 140, 140, 0.58)",
+                    symbol: "diamond",
+                    symbolSize: CHART_LINE_SYMBOL_SIZE,
+                    smooth: false,
+                  },
+                  {
                     key: "presidential_votes_cast_mn",
-                    label: L(isFa, "Votes cast", "آرای مأخوذه"),
+                    label: L(isFa, "Final/runoff votes", "آرای نهایی/مرحله دوم"),
                     renderAs: "bar",
                     yAxisIndex: 1,
                     unit: L(isFa, "million votes", "میلیون رأی"),

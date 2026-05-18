@@ -104,7 +104,7 @@ const GDP_GLOBAL_COMPARISON_EN: LearningNoteSection[] = [
   {
     heading: "What this shows",
     bullets: [
-      "Gross domestic product (GDP) is the total value of finished goods and services produced in an economy over a period. Here it is shown as World Bank WDI totals for six geographies: the United States, China, Iran, Turkey, Saudi Arabia, and the published world aggregate (WLD).",
+      "Gross domestic product (GDP) is the total value of finished goods and services produced in an economy over a period. Here it is shown as World Bank WDI totals for seven geographies: the United States, China, Iran, Turkey, Saudi Arabia, Russia, and the published world aggregate (WLD).",
       "Default view is indexed so lines show relative change from a common base style (100 in calendar year 2000 when available for that series). Absolute levels use the Bank’s preferred constant-price series where present, with current US$ as a fallback per economy when needed.",
     ],
   },
@@ -120,7 +120,7 @@ const GDP_GLOBAL_COMPARISON_EN: LearningNoteSection[] = [
     heading: "Why comparisons need care",
     bullets: [
       "Population, prices, and measurement revisions differ; dollar totals reflect exchange rates and definitions, not welfare per person.",
-      "The WLD aggregate follows World Bank methodology; it is not the sum of the five countries on the chart.",
+      "The WLD aggregate follows World Bank methodology; it is not the sum of only the displayed countries on the chart.",
     ],
   },
 ];
@@ -129,7 +129,7 @@ const GDP_GLOBAL_COMPARISON_FA: LearningNoteSection[] = [
   {
     heading: "What this shows",
     bullets: [
-      "تولید ناخالص داخلی (GDP) جمع ارزش کالاها و خدمات نهایی تولیدشده در یک اقتصاد در یک دوره است. اینجا از WDI بانک جهانی برای ایالات متحده، چین، ایران، ترکیه، عربستان سعودی و مجموع جهانی منتشرشده (WLD) نمایش داده می‌شود.",
+      "تولید ناخالص داخلی (GDP) جمع ارزش کالاها و خدمات نهایی تولیدشده در یک اقتصاد در یک دوره است. اینجا از WDI بانک جهانی برای ایالات متحده، چین، ایران، ترکیه، عربستان سعودی، روسیه و مجموع جهانی منتشرشده (WLD) نمایش داده می‌شود.",
       "نمای پیش‌فرض شاخص‌شده است تا تغییر نسبی نسبت به سال پایه (۱۰۰ در سال ۲۰۰۰ میلادی هر جا برای آن سری موجود باشد) خوانا بماند. سطح مطلق ترجیحاً به دلار ثابت ۲۰۱۵ و در صورت نبود داده به دلار جاری برای هر اقتصاد است.",
     ],
   },
@@ -145,7 +145,7 @@ const GDP_GLOBAL_COMPARISON_FA: LearningNoteSection[] = [
     heading: "Why comparisons need care",
     bullets: [
       "جمعیت، قیمت‌ها و تجدیدنظرها فرق می‌کنند؛ جمع دلاری نرخ ارز و تعاریف را منعکس می‌کند، نه رفاه به ازای هر نفر.",
-      "مجموع WLD طبق روش بانک جهانی است؛ جمع پنج کشور نمودار نیست.",
+      "مجموع WLD طبق روش بانک جهانی است؛ جمع صرفاً کشورهایی که روی نمودار نمایش داده شده‌اند نیست.",
     ],
   },
 ];

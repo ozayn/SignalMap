@@ -16,6 +16,7 @@ export type CountryComparatorSeriesKey =
   | "turkey"
   | "china"
   | "saudi_arabia"
+  | "russia"
   | "brazil"
   | "argentina"
   | "india";
@@ -34,6 +35,7 @@ export const COUNTRY_COMPARATOR_STYLES: Record<CountryComparatorSeriesKey, Count
   turkey: { color: SIGNAL_COUNTRY.turkey, symbol: "diamond", legendIcon: "diamond" },
   china: { color: SIGNAL_COUNTRY.china, symbol: "roundRect", legendIcon: "roundRect" },
   saudi_arabia: { color: SIGNAL_COUNTRY.saudi_arabia, symbol: "arrow", legendIcon: "arrow" },
+  russia: { color: SIGNAL_COUNTRY.russia, symbol: "circle", legendIcon: "circle" },
   brazil: { color: SIGNAL_COUNTRY.brazil, symbol: "circle", legendIcon: "circle" },
   argentina: { color: SIGNAL_COUNTRY.argentina, symbol: "rect", legendIcon: "rect" },
   india: { color: SIGNAL_COUNTRY.india, symbol: "roundRect", legendIcon: "roundRect" },
@@ -56,6 +58,7 @@ export const COUNTRY_COMPARATOR_SERIES_COLORS: Record<CountryComparatorSeriesKey
   turkey: COUNTRY_COMPARATOR_STYLES.turkey.color,
   china: COUNTRY_COMPARATOR_STYLES.china.color,
   saudi_arabia: COUNTRY_COMPARATOR_STYLES.saudi_arabia.color,
+  russia: COUNTRY_COMPARATOR_STYLES.russia.color,
   brazil: COUNTRY_COMPARATOR_STYLES.brazil.color,
   argentina: COUNTRY_COMPARATOR_STYLES.argentina.color,
   india: COUNTRY_COMPARATOR_STYLES.india.color,

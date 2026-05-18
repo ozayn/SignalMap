@@ -14,13 +14,14 @@ from signalmap.sources.world_bank_national_accounts import (
 
 _logger = logging.getLogger(__name__)
 
-# Order matches study chart legend preference (US, China, Iran, Turkey, Saudi, World).
+# Order matches study chart legend preference (US, China, Iran, Turkey, Saudi, Russia, World).
 GDP_COMPARISON_ISO3_TO_KEY: dict[str, str] = {
     "USA": "united_states",
     "CHN": "china",
     "IRN": "iran",
     "TUR": "turkey",
     "SAU": "saudi_arabia",
+    "RUS": "russia",
     "WLD": "world",
 }
 
