@@ -7,12 +7,12 @@ export default function HomePage() {
       <div className="home-hero">
         <h1>SignalMap</h1>
         <p className="hero-subtitle">
-          Longitudinal studies of emotion, language, and interaction in public discourse.
+          Interactive studies of macroeconomic signals, historical periods, and public discourse.
         </p>
 
         <p className="hero-description">
-          SignalMap privileges discovery over hypothesis testing. The platform surfaces
-          temporal patterns in public discourse before formal hypotheses are formulated.
+          SignalMap surfaces long-run patterns across economies, events, and social data
+          without forcing causal claims.
         </p>
 
         <Link href="/studies" className="hero-button">

@@ -19,4 +19,10 @@ export const HOME_PREVIEW_CARDS_META = [
     href: "/studies/iran",
     subtitle: "Nominal Brent crude benchmark.",
   },
+  {
+    id: "world-gdp-decomposition",
+    title: "World GDP decomposition",
+    href: "/studies/global-gdp-comparison",
+    subtitle: "Major economies and their changing share of world output.",
+  },
 ] as const;
