@@ -37,6 +37,7 @@ import { TimelineChart, type ChartSeries, type TimelineEvent as ChartTimelineEve
 import { StudyChartHeaderControlsShell } from "@/components/study-chart-header-controls-shell";
 import { StudyChartExportFilenameProvider } from "@/components/study-chart-export-filename-context";
 import { COUNTRY_COMPARATOR_STYLES } from "@/lib/chart-country-series-styles";
+import { RollingStatsControls, useRollingStats, useRollingOverlays } from "@/components/rolling-stats-controls";
 import { SourceInfo } from "@/components/source-info";
 import { RealOilDescription } from "@/components/real-oil-description";
 import { OilPppIranDescription } from "@/components/oil-ppp-iran-description";
@@ -892,6 +893,11 @@ export default function StudyDetailPage() {
   } | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+
+  const [rsYear, rsYearAct] = useRollingStats("year");
+  const [rsMonth, rsMonthAct] = useRollingStats("month");
+  const [rsDay, rsDayAct] = useRollingStats("day");
+
   useEffect(() => {
     if (studyId) {
       trackEvent("study_viewed", { study_id: studyId });
@@ -2859,6 +2865,64 @@ export default function StudyDetailPage() {
     () => enrichOilPointsWithVolatility(oilPointsUsdDisplay),
     [oilPointsUsdDisplay]
   );
+
+  const inflationYoyUnit = useMemo(
+    () => L(isFa, "% YoY", "٪ نسبت به سال قبل"),
+    [isFa]
+  );
+  const iranLabel = useMemo(() => L(isFa, "Iran", "ایران"), [isFa]);
+  const openMarketLabel = useMemo(() => L(isFa, "Open market", "بازار آزاد"), [isFa]);
+  const tomanPerUsdUnit = useMemo(() => L(isFa, "toman/USD", "تومان/دلار"), [isFa]);
+  const brentLabel = isOilGlobalLong ? "Oil price" : "Brent oil";
+
+  const inflationIranOverlays = useRollingOverlays({
+    primaryKey: "iran",
+    primaryLabel: iranLabel,
+    primaryColor: COUNTRY_COMPARATOR_STYLES.iran.color,
+    primaryPoints: inflationIranPoints,
+    primaryUnit: inflationYoyUnit,
+    primaryYAxisIndex: 0,
+    config: rsYear,
+    granularity: "year",
+  });
+
+  const fxOpenOverlays = useRollingOverlays({
+    primaryKey: "open",
+    primaryLabel: openMarketLabel,
+    primaryColor: SIGNAL_CONCEPT.fx_open,
+    primaryPoints: fxDualOpenPoints,
+    primaryUnit: tomanPerUsdUnit,
+    primaryYAxisIndex: 0,
+    config: rsMonth,
+    granularity: "month",
+  });
+
+  const brentOilOverlays = useRollingOverlays({
+    primaryKey: "oil",
+    primaryLabel: brentLabel,
+    primaryColor: SIGNAL_CONCEPT.oil_price,
+    primaryPoints: oilPointsWithVolatility as { date: string; value: number }[],
+    primaryUnit: "USD/barrel",
+    primaryYAxisIndex: 0,
+    config: rsDay,
+    granularity: "day",
+  });
+
+  const iranIsiGdpEntry = useMemo(
+    () => isiGdpGrowthMultiSeries.find((s) => s.key.startsWith("iran")),
+    [isiGdpGrowthMultiSeries]
+  );
+  const isiGdpIranOverlays = useRollingOverlays({
+    primaryKey: iranIsiGdpEntry?.key ?? "iran_gdp_growth",
+    primaryLabel: iranIsiGdpEntry?.label ?? iranLabel,
+    primaryColor: iranIsiGdpEntry?.color ?? COUNTRY_COMPARATOR_STYLES.iran.color,
+    primaryPoints: iranIsiGdpEntry?.points ?? [],
+    primaryUnit: "%",
+    primaryYAxisIndex: 0,
+    config: rsYear,
+    granularity: "year",
+  });
+
   const latestBrentObservation = useMemo(() => {
     if (!isOilBrent || oilPointsUsdDisplay.length === 0) return null;
     const sorted = [...oilPointsUsdDisplay].sort((a, b) => a.date.localeCompare(b.date));
@@ -10513,6 +10577,12 @@ export default function StudyDetailPage() {
                 ]}
                 timeRange={inflationTimeRange ?? undefined}
               />
+              <RollingStatsControls
+                state={rsYear}
+                actions={rsYearAct}
+                granularity="year"
+                computing={inflationIranOverlays.isComputing}
+              />
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
                 exportPresentationStudyHeading={displayStudy.title}
@@ -10527,14 +10597,15 @@ export default function StudyDetailPage() {
                 multiSeries={[
                   {
                     key: "iran",
-                    label: L(isFa, "Iran", "ایران"),
+                    label: iranLabel,
                     yAxisIndex: 0,
-                    unit: L(isFa, "% YoY", "٪ نسبت به سال قبل"),
+                    unit: inflationYoyUnit,
                     points: inflationIranPoints,
                     color: COUNTRY_COMPARATOR_STYLES.iran.color,
                     symbol: COUNTRY_COMPARATOR_STYLES.iran.symbol,
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   },
+                  ...inflationIranOverlays.overlays,
                   {
                     key: "us",
                     label: L(isFa, "United States", "ایالات متحده"),
@@ -11416,6 +11487,12 @@ export default function StudyDetailPage() {
                   <h3 className="text-sm font-semibold text-foreground">
                     {L(isFa, "3. Outcome — Real GDP growth (annual %)", `۳. پیامد — ${faEconomic.realGdpGrowth} (٪ سالانه)`)}
                   </h3>
+                  <RollingStatsControls
+                    state={rsYear}
+                    actions={rsYearAct}
+                    granularity="year"
+                    computing={isiGdpIranOverlays.isComputing}
+                  />
                   <TimelineChart
                     chartLocale={chartLocaleForCharts}
                     exportPresentationStudyHeading={displayStudy.title}
@@ -11432,10 +11509,13 @@ export default function StudyDetailPage() {
                     label={L(isFa, "Real GDP growth (annual %)", `${faEconomic.realGdpGrowth} (٪ سالانه)`)}
                     events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, isiFilteredEvents)}
                     anchorEventId={anchorEventId || undefined}
-                    multiSeries={isiGdpGrowthMultiSeries.map((s) => ({
-                      ...s,
-                      symbolSize: CHART_LINE_SYMBOL_SIZE,
-                    }))}
+                    multiSeries={[
+                      ...isiGdpGrowthMultiSeries.map((s) => ({
+                        ...s,
+                        symbolSize: CHART_LINE_SYMBOL_SIZE,
+                      })),
+                      ...isiGdpIranOverlays.overlays,
+                    ]}
                     timeRange={isiTimeRange ?? study.timeRange}
                     chartRangeGranularity="year"
                     xAxisYearLabel={chartYearAxisLabel}
@@ -14419,6 +14499,12 @@ export default function StudyDetailPage() {
                     Data (all point events)
                   </label>
                 </div>
+                <RollingStatsControls
+                  state={rsDay}
+                  actions={rsDayAct}
+                  granularity="day"
+                  computing={brentOilOverlays.isComputing}
+                />
                 <TimelineChart
                 chartLocale={chartLocaleForCharts}
                 exportPresentationStudyHeading={displayStudy.title}
@@ -14430,7 +14516,7 @@ export default function StudyDetailPage() {
                   label={isOilGlobalLong ? "Oil price" : "Brent oil"}
                   events={withTimeSeriesEventOverlay(showTimeSeriesEventOverlay, events)}
                   anchorEventId={anchorEventId || undefined}
-                  secondSeries={{
+                  secondSeries={(rsDay.showAvg || rsDay.showVol) ? undefined : {
                     label: isOilGlobalLong ? "Oil price" : "Brent oil",
                     unit: "USD/barrel",
                     points: oilPointsWithVolatility,
@@ -14438,8 +14524,22 @@ export default function StudyDetailPage() {
                     symbol: "circle",
                     symbolSize: CHART_LINE_SYMBOL_SIZE,
                   }}
+                  multiSeries={(rsDay.showAvg || rsDay.showVol) ? [
+                    {
+                      key: "oil",
+                      label: brentLabel,
+                      yAxisIndex: 0,
+                      unit: "USD/barrel",
+                      points: oilPointsWithVolatility as { date: string; value: number }[],
+                      color: SIGNAL_CONCEPT.oil_price,
+                      symbol: "circle",
+                      symbolSize: CHART_LINE_SYMBOL_SIZE,
+                      showSymbol: false,
+                    },
+                    ...brentOilOverlays.overlays,
+                  ] : undefined}
                   oilShockDates={oilShockDates}
-                  showOilShocks={showShocks}
+                  showOilShocks={showShocks && !(rsDay.showAvg || rsDay.showVol)}
                   timeRange={oilTimeRange ?? study.timeRange}
                   mutedBands={isOilGlobalLong}
                   highlightLatestPoint
@@ -14754,6 +14854,12 @@ export default function StudyDetailPage() {
                 ]}
                 timeRange={fxIranRegimeTimeRange ?? undefined}
               />
+              <RollingStatsControls
+                state={rsMonth}
+                actions={rsMonthAct}
+                granularity="month"
+                computing={fxOpenOverlays.isComputing}
+              />
               <TimelineChart
                 chartLocale={chartLocaleForCharts}
                 exportPresentationStudyHeading={displayStudy.title}
@@ -14799,6 +14905,7 @@ export default function StudyDetailPage() {
                     lineWidth: 2.25,
                     linePattern: "solid",
                   },
+                  ...fxOpenOverlays.overlays,
                   ...(fxRegimeShowOfficial && fxDualOfficialPoints.length > 0
                     ? [
                         {

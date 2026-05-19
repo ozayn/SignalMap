@@ -1691,7 +1691,10 @@ export function TimelineChart({
           }).sort()
         : [];
     const multiSeriesUnionDateCap =
-      forceTimeAxis && chartRangeGranularityProp !== "year" ? 25000 : 3000;
+      (forceTimeAxis || chartRangeGranularityProp === "day" || chartRangeGranularityProp === "month") &&
+      chartRangeGranularityProp !== "year"
+        ? 25000
+        : 3000;
     const useUnionDates =
       hasMultiSeries &&
       allMultiSeriesDates.length > 100 &&
@@ -1888,8 +1891,10 @@ export function TimelineChart({
      * Sub-year or ~one calendar year (e.g. 2024–2025 ~366d): allow month/day granularity.
      */
     const timeAxisPreferYearLabels = spanYears >= 2 || spanDays >= 400;
+    const isDenseGranularity =
+      chartRangeGranularityProp === "day" || chartRangeGranularityProp === "month";
     const useTimeAxis =
-      forceTimeAxis || spanYears > 40 || (spanDays > 0 && spanDays < 400);
+      forceTimeAxis || spanYears > 40 || (spanDays > 0 && spanDays < 400) || isDenseGranularity;
 
     const axisYearMode: ChartAxisYearMode = xAxisYearLabel ?? "gregorian";
     const chartNumeralLocale = chartLocale ?? "en";
@@ -3133,17 +3138,17 @@ export function TimelineChart({
       xAxis: useTimeAxis
         ? (() => {
             const dayMs = 86400000;
-            /** ~one Gregorian year: prevents multiple time ticks in the same year with a year-only label (USD→Toman, long spans). */
             const approxYearMs = 365 * dayMs;
+            const yearStep = spanYears > 20 ? 5 : spanYears > 10 ? 2 : 1;
             const minIntervalMs = timeAxisPreferYearLabels
-              ? approxYearMs
+              ? yearStep * approxYearMs
               : Math.max(dayMs, Math.ceil(spanDays / 6) * dayMs);
             return {
               type: "time",
               min: dateMin,
               max: dateMax,
               minInterval: minIntervalMs,
-              ...(compact ? { splitNumber: isLandscapeCompact ? 6 : 4 } : {}),
+              splitNumber: compact ? (isLandscapeCompact ? 6 : 4) : 8,
               axisLine: { lineStyle: { color: borderColor } },
               axisLabel: {
                 hideOverlap: true,

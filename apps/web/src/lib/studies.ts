@@ -148,7 +148,7 @@ export const STUDIES: StudyMeta[] = [
     id: "iran",
     number: 2,
     title: "Brent oil price as an exogenous context signal",
-    timeRange: ["2021-01-15", new Date().toISOString().slice(0, 10)],
+    timeRange: ["1987-05-20", new Date().toISOString().slice(0, 10)],
     description: "Brent crude in USD: event-anchored windows, optional context markers.",
     socialDescription: "Track Brent oil prices over time with contextual event overlays and source notes.",
     status: "active",
