@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { StudyLanguageToggle } from "@/components/study-language-toggle";
+import { StudyShareButton } from "@/components/study-share-button";
 import {
   mergeIranStudyDisplay,
   supportsIranStudyFa,
@@ -5959,6 +5960,27 @@ export default function StudyDetailPage() {
                 <span aria-hidden>→</span>
               </Link>
             ) : null}
+            {(prevStudy || nextStudy) ? (
+              <span className="study-header-meta opacity-50">|</span>
+            ) : null}
+            <StudyShareButton
+              title={displayStudy.title}
+              text={displayStudy.subtitle ?? displayStudy.description ?? undefined}
+              buildUrl={() => {
+                if (typeof window === "undefined") return `/studies/${study.id}`;
+                const origin = window.location.origin;
+                const path = pathname ?? `/studies/${study.id}`;
+                const query = searchParams?.toString() ?? "";
+                const hash = window.location.hash ?? "";
+                return `${origin}${path}${query ? `?${query}` : ""}${hash}`;
+              }}
+              label={L(isFa, "Share", "اشتراک‌گذاری")}
+              copiedLabel={L(isFa, "Link copied", "لینک کپی شد")}
+              sharedLabel={L(isFa, "Shared", "اشتراک‌گذاری شد")}
+              errorLabel={L(isFa, "Share failed", "اشتراک‌گذاری ناموفق بود")}
+              ariaLabel={L(isFa, `Share study: ${displayStudy.title}`, `اشتراک‌گذاری مطالعه: ${displayStudy.title}`)}
+              dir={isFa ? "rtl" : "ltr"}
+            />
           </div>
         </div>
         {displayStudy.subtitle ? (
