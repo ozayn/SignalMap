@@ -25,6 +25,44 @@ export default function MethodsPage() {
       </section>
 
       <section>
+        <h2>Data science workflow</h2>
+        <p>
+          SignalMap uses a lightweight exploratory data science workflow that
+          keeps methods visible without turning the interface into a technical dashboard.
+        </p>
+        <ul className="max-w-[780px] list-disc space-y-2 pl-5 text-[15px] leading-[1.65] text-[#4b5563] dark:text-[#9ca3af]">
+          <li>
+            <strong>Data sources:</strong> public statistical databases, market data,
+            and archival snapshots with source notes attached to studies.
+          </li>
+          <li>
+            <strong>Data cleaning:</strong> date normalization, unit checks, and schema
+            harmonization across series before charting.
+          </li>
+          <li>
+            <strong>Caching and reproducibility:</strong> versioned API routes, cached fetch
+            windows, and deterministic transformations for stable reruns.
+          </li>
+          <li>
+            <strong>Derived metrics:</strong> comparable indexes, real-vs-nominal adjustments,
+            shares, spreads, and residual decompositions when meaningful.
+          </li>
+          <li>
+            <strong>Missing-data handling:</strong> explicit gaps and omissions instead of
+            silent interpolation when observations are unavailable.
+          </li>
+          <li>
+            <strong>Visualization choices:</strong> minimal interactive charts, restrained
+            annotations, and scale choices aligned with the data frequency.
+          </li>
+          <li>
+            <strong>Interpretation limits:</strong> descriptive pattern reading over causal claims,
+            with uncertainty and source limits treated as first-class context.
+          </li>
+        </ul>
+      </section>
+
+      <section>
         <h2>Time-window anchoring</h2>
         <p>
           All analyses are anchored to explicit time windows. Data are

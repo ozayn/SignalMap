@@ -116,11 +116,11 @@ function MiniChart({
   }, [points, lineColor]);
 
   if (points.length < 2) {
-    return <div className="h-[96px] w-full rounded-md bg-muted/25 dark:bg-muted/15" />;
+    return <div className="h-full w-full rounded-md bg-muted/25 dark:bg-muted/15" />;
   }
 
   /* Avoid min-w-0 here — it lets flex/grid shrink width to 0 and breaks ECharts sizing. */
-  return <div ref={ref} className="h-[96px] w-full min-w-[2px]" />;
+  return <div ref={ref} className="h-full w-full min-w-[2px]" />;
 }
 
 function StackedMiniChart({
@@ -225,9 +225,9 @@ function StackedMiniChart({
   }, [points, colors]);
 
   if (points.length < 2) {
-    return <div className="h-[96px] w-full rounded-md bg-muted/25 dark:bg-muted/15" />;
+    return <div className="h-full w-full rounded-md bg-muted/25 dark:bg-muted/15" />;
   }
-  return <div ref={ref} className="h-[96px] w-full min-w-[2px]" />;
+  return <div ref={ref} className="h-full w-full min-w-[2px]" />;
 }
 
 function PreviewCard({
@@ -257,7 +257,7 @@ function PreviewCard({
       <h3 className="text-[15px] font-semibold leading-snug tracking-tight text-[#111827] dark:text-[#e5e7eb]">
         {title}
       </h3>
-      <div className="mt-3 min-h-[96px] flex-1">
+      <div className="mt-3 w-full max-w-[320px] sm:max-w-[280px] md:max-w-[240px] aspect-[4/3] self-center">
         {chartKind === "stacked_area" ? (
           <StackedMiniChart points={stackedPoints ?? []} colors={stackedColors} />
         ) : (

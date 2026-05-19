@@ -59,6 +59,16 @@ export default function AboutPage() {
         </p>
       </section>
 
+      <section>
+        <h2>Data science approach</h2>
+        <p>
+          SignalMap is built as an exploratory data science project: collecting
+          public data, cleaning and caching time series, deriving comparable
+          metrics, visualizing uncertainty and missingness, and interpreting
+          patterns carefully.
+        </p>
+      </section>
+
       <section lang="en">
         <h2>Support</h2>
         <p>

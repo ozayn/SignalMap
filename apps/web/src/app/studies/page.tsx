@@ -93,7 +93,7 @@ export default function StudiesPage() {
           Studies
         </h1>
         <p className="mt-1 max-w-xl text-[13px] leading-snug text-[#9ca3af] dark:text-[#94a3b8]">
-          Explore SignalMap studies by theme, country, or signal.
+          Browse exploratory data science studies by country, theme, or signal.
         </p>
       </header>
 
