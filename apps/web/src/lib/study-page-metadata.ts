@@ -33,6 +33,9 @@ const STUDY_METADATA_OVERRIDES: Record<string, StudyMetadataOverride> = {
   "china-economy": {
     title: "China Economy Study | SignalMap",
   },
+  "south-korea-economy": {
+    title: "South Korea Economy Study | SignalMap",
+  },
 };
 
 function resolveSiteUrl(): string {

@@ -36,7 +36,7 @@ export type PrimarySignal =
 import type { StudyConceptId } from "./signalmap-concepts";
 
 /** Browse / filter: geographic emphasis (a study may span several). */
-export type StudyCountry = "iran" | "us" | "russia" | "turkey" | "saudi" | "tajik" | "china" | "global";
+export type StudyCountry = "iran" | "us" | "russia" | "turkey" | "saudi" | "tajik" | "china" | "south_korea" | "global";
 
 /** Browse / filter: coarse theme. */
 export type StudyTheme = "macro" | "oil" | "fx" | "inequality" | "social" | "dashboard";
@@ -995,6 +995,23 @@ export const STUDIES: StudyMeta[] = [
     countries: ["china", "global"],
     themes: ["macro", "fx", "dashboard"],
     tags: ["China", "WDI", "reform era", "macro dashboard", "country dashboard"],
+  },
+  {
+    id: "south-korea-economy",
+    number: 49,
+    title: "South Korea economy",
+    subtitle: "Export-led growth, industrialization, financial crises, tech era",
+    timeRange: ["1960-01-01", "today"],
+    description:
+      "South Korea macro profile across rapid industrialization, export-led growth, the 1997 IMF crisis, post-IMF restructuring, and the globalized technology economy with demographic-aging pressure.",
+    socialDescription:
+      "Explore South Korea's inflation, growth, GDP per capita, demand composition, trade openness, manufacturing share, FX, current account, external debt, and welfare indicators across major political and economic eras.",
+    status: "active",
+    groupPlacements: [{ group: "country", order: 8 }],
+    primarySignal: { kind: "iran_economy_period_comparison" },
+    countries: ["south_korea", "global"],
+    themes: ["macro", "fx", "dashboard"],
+    tags: ["South Korea", "WDI", "export-led growth", "macro dashboard", "country dashboard"],
   },
 ];
 

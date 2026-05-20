@@ -95,8 +95,18 @@ const MULTI_SERIES_FALLBACK_LEGEND_ICONS: Array<"circle" | "diamond" | "triangle
   "rect",
 ];
 
-/** Focus-period `markArea` fill — visible above grid but under line/area (single-series uses a null carrier series). */
-const REGIME_FOCUS_MARK_AREA_FILL = "rgba(107, 114, 128, 0.08)";
+/** Focus-period (regimeArea) shaded band fill. Slightly more visible than
+ * other context bands because it represents the user's actively selected
+ * focus window; it must remain readable even when layered above stacked-area
+ * fills (FOCUS_MARK_AREA_Z below). */
+const REGIME_FOCUS_MARK_AREA_FILL = "rgba(107, 114, 128, 0.12)";
+
+/** All focus / overlay markAreas use this z value so they consistently render
+ * ABOVE data series (default z ≈ 2 for line/area). This is required because
+ * stacked-area fills are otherwise semi-opaque enough to wash out the band,
+ * leaving boundary lines visible without the shaded region (the symptom that
+ * motivated this constant). */
+const FOCUS_MARK_AREA_Z = 3;
 
 /**
  * `convertToPixel` on a category x-axis needs a category value; markArea still draws for off-bucket dates
@@ -2448,6 +2458,26 @@ export function TimelineChart({
     const regularBandData = rangeBandData.filter((r) => !isPresidentialEvent(r.event));
     const PresidentialBandOpacity = 0.04;
 
+    /** Resolved regimeArea endpoints used by every markArea branch.
+     *
+     * On a category axis ECharts requires the markArea xAxis value to match a
+     * category string exactly. Sparse-yearly category axes bucket dates as
+     * `YYYY-07-01` while focus presets come in as `YYYY-01-01`, which would
+     * cause the band to silently disappear (boundary lines still render).
+     * Snapping to the nearest existing category preserves the band on those
+     * charts (e.g. money vs inflation) without affecting time-axis charts. */
+    const resolvedRegimeArea = regimeArea
+      ? (() => {
+          if (useTimeAxis || dates.length === 0) {
+            return { xStart: regimeArea.xStart, xEnd: regimeArea.xEnd };
+          }
+          return {
+            xStart: nearestAxisCategoryForRegimeDate(regimeArea.xStart, dates),
+            xEnd: nearestAxisCategoryForRegimeDate(regimeArea.xEnd, dates),
+          };
+        })()
+      : null;
+
     /** Single-series charts stack `areaStyle` on the line, which paints over `markArea` on the same series. Use a null carrier line for bands (same pattern as multi-series “events”). */
     const singleSeriesMarkAreaPayload =
       hasData &&
@@ -2458,7 +2488,7 @@ export function TimelineChart({
         hasPeriodOverlayMarkAreas)
         ? {
             silent: true,
-            z: 0,
+            z: FOCUS_MARK_AREA_Z,
             itemStyle: {
               color: withAlphaHsl(muted, RangeBandOpacity),
               borderColor: withAlphaHsl(muted, regimeArea ? 0.12 : 0.2),
@@ -2474,14 +2504,14 @@ export function TimelineChart({
                   { xAxis: r.xEnd },
                 ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }]
               ),
-              ...(regimeArea
+              ...(resolvedRegimeArea
                 ? [
                     [
                       {
-                        xAxis: regimeArea.xStart,
+                        xAxis: resolvedRegimeArea.xStart,
                         itemStyle: { color: REGIME_FOCUS_MARK_AREA_FILL, borderColor: "transparent" },
                       },
-                      { xAxis: regimeArea.xEnd },
+                      { xAxis: resolvedRegimeArea.xEnd },
                     ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }],
                   ]
                 : []),
@@ -3534,8 +3564,21 @@ export function TimelineChart({
               {
                 name: "events",
                 type: "line" as const,
+                // Explicit yAxisIndex: 0 so the carrier (and its markArea) always
+                // inherits a real, displayed y-axis range — without it, ECharts
+                // can give the carrier a degenerate vertical extent when the
+                // chart has more than one y-axis (e.g. money vs inflation, FX
+                // with log scale, dual-axis comparators).
+                yAxisIndex: 0,
+                z: 1,
                 data: useTimeAxis ? toTimeData(dates.map(() => null)) : dates.map(() => null),
                 symbol: "none",
+                showSymbol: false,
+                // Force the carrier itself to be invisible (lineStyle width 0)
+                // so the only thing it contributes is the markArea + markLine
+                // overlays. This matches the dedicated __focus_bands carrier
+                // used on the single-series branch.
+                lineStyle: { width: 0, opacity: 0 },
                 emphasis: { focus: "none" as const },
                 markLine:
                   markLineDataForRender.length > 0 ||
@@ -3565,7 +3608,7 @@ export function TimelineChart({
                   hasPeriodOverlayMarkAreas
                     ? {
                         silent: true,
-                        z: 0,
+                        z: FOCUS_MARK_AREA_Z,
                         itemStyle: {
                           color: withAlphaHsl(muted, RangeBandOpacity),
                           borderColor: withAlphaHsl(muted, regimeArea ? 0.12 : 0.2),
@@ -3599,14 +3642,14 @@ export function TimelineChart({
                               ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }];
                             })
                             .filter((x): x is [{ xAxis: string; itemStyle?: object }, { xAxis: string }] => x != null),
-                          ...(regimeArea
+                          ...(resolvedRegimeArea
                             ? [
                                 [
                                   {
-                                    xAxis: regimeArea.xStart,
+                                    xAxis: resolvedRegimeArea.xStart,
                                     itemStyle: { color: REGIME_FOCUS_MARK_AREA_FILL, borderColor: "transparent" },
                                   },
-                                  { xAxis: regimeArea.xEnd },
+                                  { xAxis: resolvedRegimeArea.xEnd },
                                 ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }],
                               ]
                             : []),
@@ -3724,7 +3767,10 @@ export function TimelineChart({
                 type: "line" as const,
                 z: 2,
                 data: useTimeAxis ? toTimeData(values) : values,
-                smooth: useYearlyCategoryAxisForSparseSingleSeries ? false : true,
+                // No smoothing on primary series so sparse data and abrupt steps
+                // stay visible. Consumers cannot override this for raw signals
+                // because Fix #6 mandates raw values without visual interpolation.
+                smooth: false,
                 connectNulls: false,
                 symbol: "circle",
                 showSymbol: true,
@@ -3812,8 +3858,11 @@ export function TimelineChart({
                 name: "events",
                 type: "line" as const,
                 yAxisIndex: hasOil ? 1 : 0,
+                z: 1,
                 data: useTimeAxis ? toTimeData(dates.map(() => null)) : dates.map(() => null),
                 symbol: "none",
+                showSymbol: false,
+                lineStyle: { width: 0, opacity: 0 },
                 emphasis: { focus: "none" as const },
                 markLine:
                   !hasOil &&
@@ -3842,7 +3891,7 @@ export function TimelineChart({
                   hasPeriodOverlayMarkAreas
                     ? {
                         silent: true,
-                        z: 0,
+                        z: FOCUS_MARK_AREA_Z,
                         itemStyle: {
                           color: withAlphaHsl(muted, RangeBandOpacity),
                           borderColor: withAlphaHsl(muted, regimeArea ? 0.12 : 0.2),
@@ -3858,14 +3907,14 @@ export function TimelineChart({
                               { xAxis: r.xEnd },
                             ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }]
                           ),
-                          ...(regimeArea
+                          ...(resolvedRegimeArea
                             ? [
                                 [
                                   {
-                                    xAxis: regimeArea.xStart,
+                                    xAxis: resolvedRegimeArea.xStart,
                                     itemStyle: { color: REGIME_FOCUS_MARK_AREA_FILL, borderColor: "transparent" },
                                   },
-                                  { xAxis: regimeArea.xEnd },
+                                  { xAxis: resolvedRegimeArea.xEnd },
                                 ] as [{ xAxis: string; itemStyle?: object }, { xAxis: string }],
                               ]
                             : []),
@@ -3883,8 +3932,8 @@ export function TimelineChart({
                 type: "line" as const,
                 yAxisIndex: 1,
                 data: useTimeAxis ? toTimeData(oilValuesForChart) : oilValuesForChart,
-                smooth: true,
-                connectNulls: true,
+                smooth: false,
+                connectNulls: false,
                 symbol: oilOverlayLineSymbol,
                 symbolSize: oilPrimarySymbolSize,
                 lineStyle: {
@@ -3954,8 +4003,8 @@ export function TimelineChart({
                 type: "line" as const,
                 yAxisIndex: 1,
                 data: useTimeAxis ? toTimeData(comparatorValuesForChart) : comparatorValuesForChart,
-                smooth: true,
-                connectNulls: true,
+                smooth: false,
+                connectNulls: false,
                 symbol: comparatorLineSymbol,
                 symbolSize: comparatorLineSymbolSize,
                 lineStyle: { color: comparatorColor, width: 1.25, opacity: 1 },

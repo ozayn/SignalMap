@@ -26,7 +26,7 @@ export type CountryContextMarker = {
 };
 
 export type CountryContextMapData = {
-  countryCode: "IRN" | "USA" | "TUR" | "RUS" | "SAU" | "TJK" | "CHN";
+  countryCode: "IRN" | "USA" | "TUR" | "RUS" | "SAU" | "TJK" | "CHN" | "KOR";
   bbox: { minLat: number; maxLat: number; minLon: number; maxLon: number };
   outline: GeoPoint[];
   cities: CountryContextCity[];
@@ -314,6 +314,42 @@ export const COUNTRY_CONTEXT_MAPS: Record<string, CountryContextMapData> = {
       { name: "Russia", point: { lat: 50.5, lon: 124.0 } },
       { name: "India", point: { lat: 30.0, lon: 80.0 } },
       { name: "Vietnam", point: { lat: 21.5, lon: 106.0 } },
+    ],
+  },
+  KOR: {
+    countryCode: "KOR",
+    bbox: { minLat: 33.0, maxLat: 39.0, minLon: 125.0, maxLon: 131.5 },
+    outline: [
+      { lat: 38.6, lon: 128.4 },
+      { lat: 38.3, lon: 128.6 },
+      { lat: 37.6, lon: 129.1 },
+      { lat: 36.0, lon: 129.6 },
+      { lat: 35.1, lon: 129.4 },
+      { lat: 34.5, lon: 128.4 },
+      { lat: 34.7, lon: 127.5 },
+      { lat: 34.3, lon: 126.5 },
+      { lat: 35.0, lon: 126.4 },
+      { lat: 36.0, lon: 126.6 },
+      { lat: 37.0, lon: 126.5 },
+      { lat: 37.7, lon: 126.4 },
+      { lat: 37.9, lon: 126.7 },
+      { lat: 38.3, lon: 127.6 },
+      { lat: 38.6, lon: 128.4 },
+    ],
+    cities: [
+      { id: "seoul", name: "Seoul", point: { lat: 37.5665, lon: 126.9780 }, isCapital: true },
+      { id: "busan", name: "Busan", point: { lat: 35.1796, lon: 129.0756 } },
+      { id: "incheon", name: "Incheon", point: { lat: 37.4563, lon: 126.7052 } },
+      { id: "daegu", name: "Daegu", point: { lat: 35.8714, lon: 128.6014 } },
+      { id: "daejeon", name: "Daejeon", point: { lat: 36.3504, lon: 127.3845 } },
+    ],
+    regions: [],
+    overlays: [],
+    markers: [],
+    neighboringLabels: [
+      { name: "North Korea", point: { lat: 39.5, lon: 127.5 } },
+      { name: "Japan (Sea of Japan)", point: { lat: 37.0, lon: 131.0 } },
+      { name: "Yellow Sea", point: { lat: 36.0, lon: 125.3 } },
     ],
   },
 };

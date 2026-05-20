@@ -16,6 +16,7 @@ import { StudyYearDisplayToggle } from "@/components/study-year-display-toggle";
 import type { ChartAxisYearMode } from "@/lib/chart-axis-year";
 import { SIGNAL_CONCEPT } from "@/lib/signalmap-chart-colors";
 import { CountryContextMap } from "@/components/studies/country-context-map";
+import { MonthlyClimatologyChart, type MonthlySeries } from "@/components/monthly-climatology-chart";
 
 type Point = { date: string; value: number };
 type DemandMode = "nominal" | "real";
@@ -36,21 +37,6 @@ type TajikCityContext = {
   monthlyTempC: number[];
   monthlyPrecipMm: number[];
 };
-
-const MONTH_KEYS = [
-  "2024-01-01",
-  "2024-02-01",
-  "2024-03-01",
-  "2024-04-01",
-  "2024-05-01",
-  "2024-06-01",
-  "2024-07-01",
-  "2024-08-01",
-  "2024-09-01",
-  "2024-10-01",
-  "2024-11-01",
-  "2024-12-01",
-];
 
 const TAJIK_CITY_CONTEXT: TajikCityContext[] = [
   {
@@ -225,6 +211,7 @@ export function CountryEconomyStudy({
   const isSaudi = countryCode.toUpperCase() === "SAU";
   const isTajikistan = countryCode.toUpperCase() === "TJK";
   const isChina = countryCode.toUpperCase() === "CHN";
+  const isSouthKorea = countryCode.toUpperCase() === "KOR";
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<CountryEconomyBundle | null>(null);
@@ -445,7 +432,11 @@ export function CountryEconomyStudy({
     () => deriveGdpOilGasSplit(gdpReal, oilRents, gasRents),
     [gdpReal, oilRents, gasRents]
   );
-  const gdpSplitRaw = isSaudi
+  // Russia, like Saudi, gets the oil + gas + remainder decomposition because both
+  // economies have material natural-gas rents in WDI. Other resource exporters fall
+  // back to the simpler oil / non-oil view until their gas-rent data is wired in.
+  const useOilGasDecomposition = isSaudi || isRussia;
+  const gdpSplitRaw = useOilGasDecomposition
     ? gdpMode === "real"
       ? gdpOilGasSplitReal
       : gdpOilGasSplitNominal
@@ -458,12 +449,12 @@ export function CountryEconomyStudy({
   const gasRentsStartYear = useMemo(() => firstAvailableYear(gasRents), [gasRents]);
   const decompositionEffectiveStartYear = useMemo(() => {
     if (gdpStartYearForSplit == null || oilRentsStartYear == null) return null;
-    if (isSaudi) {
+    if (useOilGasDecomposition) {
       if (gasRentsStartYear == null) return null;
       return Math.max(gdpStartYearForSplit, oilRentsStartYear, gasRentsStartYear);
     }
     return Math.max(gdpStartYearForSplit, oilRentsStartYear);
-  }, [gdpStartYearForSplit, oilRentsStartYear, gasRentsStartYear, isSaudi]);
+  }, [gdpStartYearForSplit, oilRentsStartYear, gasRentsStartYear, useOilGasDecomposition]);
   const gdpSplit = useMemo(
     () => ({
       oil: trimSeriesFromYear(gdpSplitRaw.oil, decompositionEffectiveStartYear),
@@ -486,7 +477,7 @@ export function CountryEconomyStudy({
     () => [
       {
         key: "non_oil",
-        label: isSaudi ? "Remainder of GDP proxy" : "Non-oil GDP proxy",
+        label: useOilGasDecomposition ? "Remainder of GDP proxy" : "Non-oil GDP proxy",
         unit: decompositionUnitLabel,
         yAxisIndex: 0 as const,
         points: gdpSplit.nonOil,
@@ -504,7 +495,7 @@ export function CountryEconomyStudy({
         stack: "gdp_decomp",
         stackedArea: true,
       },
-      ...(isSaudi
+      ...(useOilGasDecomposition
         ? [
             {
               key: "gas",
@@ -528,10 +519,10 @@ export function CountryEconomyStudy({
         lineStyleType: "dashed" as const,
       },
     ],
-    [decompositionUnitLabel, gdpSplit.nonOil, gdpSplit.oil, gdpSplit.gas, gdpTotalForDecomposition, isSaudi]
+    [decompositionUnitLabel, gdpSplit.nonOil, gdpSplit.oil, gdpSplit.gas, gdpTotalForDecomposition, useOilGasDecomposition]
   );
   const decompositionOilRentsCoverageNote =
-    isSaudi && gasRentsStartYear != null && decompositionEffectiveStartYear != null
+    useOilGasDecomposition && gasRentsStartYear != null && decompositionEffectiveStartYear != null
       ? `Oil-and-gas decomposition begins where both oil-rents and gas-rents series overlap the selected GDP mode (start year ${decompositionEffectiveStartYear}).`
       : oilRentsStartYear != null &&
           gdpStartYearForSplit != null &&
@@ -611,39 +602,60 @@ export function CountryEconomyStudy({
     });
   }, [isTurkey, demandMode, demandSeriesByKey]);
 
-  const tajikClimateTempSeries = useMemo(
-    () =>
-      TAJIK_CITY_CONTEXT.map((city) => ({
-        key: `temp_${city.id}`,
-        label: `${city.displayName} temperature`,
-        unit: "°C",
-        yAxisIndex: 0 as const,
-        points: MONTH_KEYS.map((date, i) => ({ date, value: city.monthlyTempC[i] ?? 0 })),
-      })),
+  /** City color palette used by the monthly climate + daylight charts. Each city has
+   *  one canonical color used across its temp line, precip bar, and daylight line so
+   *  the legend reads as three city groups, not six unrelated series. */
+  const tajikCityColors: Record<TajikCityContext["id"], string> = {
+    dushanbe: "#2563eb",
+    bokhtar: "#dc2626",
+    kulob: "#16a34a",
+  };
+  /** Short legend names — `Bokhtar` instead of `Bokhtar (formerly Qurghonteppa)`. The
+   *  alternate name is surfaced once in the section text, not in every legend item. */
+  const tajikCityLegendName: Record<TajikCityContext["id"], string> = {
+    dushanbe: "Dushanbe",
+    bokhtar: "Bokhtar",
+    kulob: "Kulob",
+  };
+  const tajikClimateSeries = useMemo<MonthlySeries[]>(
+    () => [
+      ...TAJIK_CITY_CONTEXT.map(
+        (city): MonthlySeries => ({
+          key: `temp_${city.id}`,
+          label: `${tajikCityLegendName[city.id]} temp`,
+          unit: "°C",
+          yAxisIndex: 0,
+          kind: "line",
+          color: tajikCityColors[city.id],
+          values: city.monthlyTempC.slice(0, 12),
+        })
+      ),
+      ...TAJIK_CITY_CONTEXT.map(
+        (city): MonthlySeries => ({
+          key: `precip_${city.id}`,
+          label: `${tajikCityLegendName[city.id]} precip`,
+          unit: "mm",
+          yAxisIndex: 1,
+          kind: "bar",
+          color: tajikCityColors[city.id],
+          values: city.monthlyPrecipMm.slice(0, 12),
+        })
+      ),
+    ],
     []
   );
-  const tajikClimatePrecipSeries = useMemo(
-    () =>
-      TAJIK_CITY_CONTEXT.map((city) => ({
-        key: `precip_${city.id}`,
-        label: `${city.displayName} precipitation`,
-        unit: "mm",
-        yAxisIndex: 1 as const,
-        points: MONTH_KEYS.map((date, i) => ({ date, value: city.monthlyPrecipMm[i] ?? 0 })),
-      })),
-    []
-  );
-  const tajikDaylightSeries = useMemo(
+  const tajikDaylightChartSeries = useMemo<MonthlySeries[]>(
     () =>
       TAJIK_CITY_CONTEXT.map((city) => ({
         key: `daylight_${city.id}`,
-        label: `${city.displayName} daylight`,
+        label: tajikCityLegendName[city.id],
         unit: "hours",
-        yAxisIndex: 0 as const,
-        points: MONTH_KEYS.map((date, i) => ({
-          date,
-          value: Number(estimateDaylightHoursAtMonthMid(city.lat, i).toFixed(2)),
-        })),
+        yAxisIndex: 0,
+        kind: "line",
+        color: tajikCityColors[city.id],
+        values: Array.from({ length: 12 }, (_, i) =>
+          Number(estimateDaylightHoursAtMonthMid(city.lat, i).toFixed(2))
+        ),
       })),
     []
   );
@@ -724,7 +736,7 @@ export function CountryEconomyStudy({
       : isRussia
         ? [
             `This page combines Russia macro and social indicators in ${selectedRange?.label ?? "the selected range"}, with shaded focus windows (${focusSummaryLabel || "selected presets"}) for period comparison.`,
-            "Series include inflation, GDP growth, oil/non-oil GDP proxy, consumption, investment, oil and gas rents, official FX, trade, industry, money growth, inequality, and poverty coverage where available.",
+            "Series include inflation, GDP growth, oil and gas / remainder GDP proxy decomposition, consumption, investment, oil and gas rents, official FX, trade, industry, money growth, inequality, and poverty coverage where available.",
             "Each chart is one signal; interpretation is stronger when related signals are compared across the same years rather than read in isolation.",
             "Event overlays and focus windows are context markers only and should not be read as causal proof.",
           ]
@@ -743,7 +755,14 @@ export function CountryEconomyStudy({
                 "Overlays mark reform opening, WTO accession, post-2008 stimulus, 2015 market turbulence, COVID shock, and recent property-sector stress as timing anchors.",
                 "China's transition from planned-economy institutions toward market-oriented growth is treated as historical context, not a single-cause narrative.",
               ]
-            : [
+            : isSouthKorea
+              ? [
+                  `This page combines South Korea macro and social indicators in ${selectedRange?.label ?? "the selected range"}, with focus windows (${focusSummaryLabel || "selected presets"}) covering industrialization, the IMF crisis, and the tech era.`,
+                  "Trade openness, manufacturing/industry share, current account, exchange rate, and GDP per capita are emphasized as core signals of an export-led growth model.",
+                  "Overlays mark the 1961 coup, 1973 Heavy & Chemical Industry drive, 1987 democratization, 1997 Asian crisis / IMF bailout, 2008 GFC, and 2020 COVID shock as timing anchors only.",
+                  "Demographic and aging pressures, plus external vulnerability through trade and currency cycles, are interpretive context rather than directly plotted indicators here.",
+                ]
+              : [
             `The charts use an outer window of ${selectedRange?.label ?? "the selected range"} and shaded focus periods of ${focusSummaryLabel || "the selected presets"}.`,
             "CPI inflation (red), GDP growth (blue), and resource-rent shares are plotted as annual WDI observations; gaps are left as gaps.",
             isUsa
@@ -765,6 +784,7 @@ export function CountryEconomyStudy({
     isRussia,
     isTajikistan,
     isChina,
+    isSouthKorea,
     gini.length,
     povertyExtreme.length,
     povertyLmic.length,
@@ -860,7 +880,7 @@ export function CountryEconomyStudy({
                 bullets: [
                   "CPI inflation: annual change in consumer prices.",
                   "GDP growth: annual real-output change.",
-                  "GDP decomposition: contextual split between oil-linked proxy and non-oil proxy, not full national accounting.",
+                  "GDP decomposition: contextual split between oil-linked proxy, natural-gas-linked proxy, and remainder of GDP, not full national accounting.",
                   "Oil and natural gas rents: resource-income context relative to GDP, not total energy-sector output or fiscal revenue.",
                   "Exchange-rate depreciation: more local currency units per USD over time.",
                   "Trade and industry shares: openness and sector-weight context as % of GDP.",
@@ -928,7 +948,36 @@ export function CountryEconomyStudy({
                     ],
                   },
                 ]
-              : [
+              : isSouthKorea
+                ? [
+                    {
+                      heading: "How to read these charts",
+                      bullets: [
+                        "Read each panel as one signal: trade openness, manufacturing share, current account, FX, and GDP per capita tell related but distinct stories.",
+                        "Use focus periods as broad policy/era windows (Park, Chun/Roh, IMF crisis, Post-IMF, Tech era), not causal labels.",
+                        "Overlays mark the 1961 coup, 1973 HCI drive, 1987 democratization, 1997 Asian crisis, 2008 GFC, and 2020 COVID as timing context only.",
+                      ],
+                    },
+                    {
+                      heading: "Units and comparability",
+                      bullets: [
+                        "Annual %: inflation, GDP growth, money growth, trade shares, manufacturing/industry shares, current account, and external debt.",
+                        "Current US$ vs constant 2015 US$: nominal and real demand toggles answer different questions and should not be mixed.",
+                        "Official KRW per USD is presented on a log scale to make multi-decade proportional moves comparable.",
+                      ],
+                    },
+                    {
+                      heading: "Concept guide used in this study",
+                      bullets: [
+                        "Export-led growth: high trade ratio combined with strong manufacturing share as a structural growth pattern.",
+                        "Industrialization and tech transition: shift from heavy industry toward globally integrated technology and services.",
+                        "1997 IMF crisis: sharp FX move, current-account swing, and growth contraction followed by structural reforms.",
+                        "External vulnerability: current account, external debt, and FX as joint context for cycles and stress.",
+                        "Demographic/aging context: long-run pressure on labor force and growth, interpreted from the side rather than plotted here.",
+                      ],
+                    },
+                  ]
+                : [
             {
               heading: "How to read these charts",
               bullets: [
@@ -949,73 +998,180 @@ export function CountryEconomyStudy({
               ],
             },
           ],
-    [hasFX, isTurkey, isSaudi, isRussia, isTajikistan, isChina]
+    [hasFX, isTurkey, isSaudi, isRussia, isTajikistan, isChina, isSouthKorea]
+  );
+
+  const baseSourceName = source?.name ?? "World Bank World Development Indicators";
+  const baseSourcePublisher = source?.publisher ?? "World Bank";
+  const baseCountryDetail = `${countryName} (${countryCode}) — ${baseSourcePublisher}`;
+
+  /** Compact one-line export footer: ``WDI — Russia (RUS) — NY.GDP.PETR.RT.ZS``. */
+  const wdiExportFooter = (codes: string | string[], derivedNote?: string): string => {
+    const codeStr = Array.isArray(codes) ? codes.join(", ") : codes;
+    const tail = derivedNote ? `${codeStr}; ${derivedNote}` : codeStr;
+    return `World Bank WDI — ${countryName} (${countryCode}) — ${tail}`;
+  };
+
+  /** Per-chart export footers (PNG export source line, also used to centralize WDI codes). */
+  const exportFooters = useMemo(
+    () => ({
+      cpi: wdiExportFooter(indicatorIds.cpi_inflation_yoy_pct ?? "FP.CPI.TOTL.ZG"),
+      gdpGrowth: wdiExportFooter(indicatorIds.gdp_growth_yoy_pct ?? "NY.GDP.MKTP.KD.ZG"),
+      gdpDecomposition: wdiExportFooter(
+        gdpMode === "real"
+          ? useOilGasDecomposition
+            ? [
+                indicatorIds.gdp_constant_2015_usd ?? "NY.GDP.MKTP.KD",
+                indicatorIds.oil_rents_pct_gdp ?? "NY.GDP.PETR.RT.ZS",
+                indicatorIds.natural_gas_rents_pct_gdp ?? "NY.GDP.NGAS.RT.ZS",
+              ]
+            : [indicatorIds.gdp_constant_2015_usd ?? "NY.GDP.MKTP.KD", indicatorIds.oil_rents_pct_gdp ?? "NY.GDP.PETR.RT.ZS"]
+          : useOilGasDecomposition
+            ? [
+                indicatorIds.gdp_current_usd ?? "NY.GDP.MKTP.CD",
+                indicatorIds.oil_rents_pct_gdp ?? "NY.GDP.PETR.RT.ZS",
+                indicatorIds.natural_gas_rents_pct_gdp ?? "NY.GDP.NGAS.RT.ZS",
+              ]
+            : [indicatorIds.gdp_current_usd ?? "NY.GDP.MKTP.CD", indicatorIds.oil_rents_pct_gdp ?? "NY.GDP.PETR.RT.ZS"],
+        useOilGasDecomposition ? "derived oil & gas / remainder GDP proxy" : "derived oil / non-oil proxy"
+      ),
+      demand: wdiExportFooter(
+        demandMode === "real"
+          ? ["NE.CON.TOTL.KD", "NE.GDI.TOTL.KD", indicatorIds.gdp_constant_2015_usd ?? "NY.GDP.MKTP.KD"]
+          : ["NE.CON.TOTL.CD", "NE.GDI.TOTL.CD", indicatorIds.gdp_current_usd ?? "NY.GDP.MKTP.CD"]
+      ),
+      oilRents: wdiExportFooter(indicatorIds.oil_rents_pct_gdp ?? "NY.GDP.PETR.RT.ZS"),
+      gasRents: wdiExportFooter(indicatorIds.natural_gas_rents_pct_gdp ?? "NY.GDP.NGAS.RT.ZS"),
+      fx: wdiExportFooter(indicatorIds.fx_official_lcu_per_usd ?? "PA.NUS.FCRF"),
+      trade: wdiExportFooter([
+        indicatorIds.exports_pct_gdp ?? "NE.EXP.GNFS.ZS",
+        indicatorIds.imports_pct_gdp ?? "NE.IMP.GNFS.ZS",
+      ]),
+      industry: wdiExportFooter([
+        indicatorIds.industry_pct_gdp ?? "NV.IND.TOTL.ZS",
+        indicatorIds.manufacturing_pct_gdp ?? "NV.IND.MANF.ZS",
+      ]),
+      money: wdiExportFooter([
+        indicatorIds.broad_money_growth_pct ?? "FM.LBL.BMNY.ZG",
+        indicatorIds.cpi_inflation_yoy_pct ?? "FP.CPI.TOTL.ZG",
+      ]),
+      gini: wdiExportFooter(indicatorIds.gini ?? "SI.POV.GINI"),
+      poverty: wdiExportFooter([
+        indicatorIds.poverty_extreme ?? "SI.POV.DDAY",
+        indicatorIds.poverty_lmic ?? "SI.POV.LMIC",
+      ]),
+      gdpPerCapita: wdiExportFooter(indicatorIds.gdp_per_capita_current_usd ?? "NY.GDP.PCAP.CD"),
+      urbanization: wdiExportFooter(indicatorIds.urban_population_pct ?? "SP.URB.TOTL.IN.ZS"),
+      remittances: wdiExportFooter(indicatorIds.remittances_pct_gdp ?? "BX.TRF.PWKR.DT.GD.ZS"),
+      currentAccount: wdiExportFooter(indicatorIds.current_account_pct_gdp ?? "BN.CAB.XOKA.GD.ZS"),
+      externalDebt: wdiExportFooter(
+        indicatorIds.external_debt_stocks_usd ?? "DT.DOD.DECT.CD",
+        "%GDP derived from DT.DOD.DECT.CD / NY.GDP.MKTP.CD"
+      ),
+      policyRate: wdiExportFooter(turkeyPolicyRateIndicatorId ?? "FR.INR.RINR"),
+      unemployment: wdiExportFooter(indicatorIds.unemployment_rate_pct ?? "SL.UEM.TOTL.ZS"),
+      governmentDebt: wdiExportFooter(indicatorIds.government_debt_pct_gdp ?? "GC.DOD.TOTL.GD.ZS"),
+      governmentDebtUsd: `${wdiExportFooter(indicatorIds.government_debt_pct_gdp ?? "GC.DOD.TOTL.GD.ZS")}; USD level derived from %GDP × NY.GDP.MKTP.CD`,
+      fiscalBalance: wdiExportFooter(indicatorIds.fiscal_balance_pct_gdp ?? "GC.NLD.TOTL.GD.ZS"),
+      brent: `FRED — Brent crude oil prices (DCOILBRENTEU)`,
+      fedFunds: `FRED — Federal funds rate (FEDFUNDS, annual average)`,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [countryName, countryCode, gdpMode, demandMode, turkeyPolicyRateIndicatorId, JSON.stringify(indicatorIds)]
   );
 
   const sourceItems = useMemo<SourceInfoItem[]>(() => {
-    const baseName = source?.name ?? "World Bank World Development Indicators";
-    const basePublisher = source?.publisher ?? "World Bank";
-    const baseCountryDetail = `${countryName} (${countryCode}) — ${basePublisher}`;
+    const baseName = baseSourceName;
     const items: SourceInfoItem[] = [
       {
         label: "CPI inflation",
         sourceName: baseName,
         sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.cpi_inflation_yoy_pct ?? "FP.CPI.TOTL.ZG"}`,
         sourceDetail: baseCountryDetail,
-        unitLabel: "Annual %",
+        unitLabel: `Annual % — ${indicatorIds.cpi_inflation_yoy_pct ?? "FP.CPI.TOTL.ZG"}`,
       },
       {
         label: "GDP growth",
         sourceName: baseName,
         sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.gdp_growth_yoy_pct ?? "NY.GDP.MKTP.KD.ZG"}`,
         sourceDetail: baseCountryDetail,
-        unitLabel: "Annual %",
+        unitLabel: `Annual % — ${indicatorIds.gdp_growth_yoy_pct ?? "NY.GDP.MKTP.KD.ZG"}`,
       },
-      {
-        label: "Nominal and real GDP / demand aggregates",
+    ];
+    // GDP decomposition (proxy) — only rendered for non-USA / non-Turkey / non-Tajikistan country dashboards.
+    if (!isUsa && !isTurkey && !isTajikistan) {
+      const usesOilGas = isSaudi || isRussia;
+      items.push({
+        label: "GDP decomposition (proxy)",
         sourceName: baseName,
         sourceUrl: source?.url ?? "https://data.worldbank.org",
-        sourceDetail: `${baseCountryDetail}; NE.CON.TOTL.CD/KD, NE.GDI.TOTL.CD/KD, NY.GDP.MKTP.CD/KD`,
-        unitLabel: "Current US$ or constant 2015 US$ (as selected)",
-      },
+        sourceDetail: baseCountryDetail,
+        unitLabel: usesOilGas
+          ? "Current US$ or constant 2015 US$ — NY.GDP.MKTP.CD/KD, NY.GDP.PETR.RT.ZS, NY.GDP.NGAS.RT.ZS; derived oil & gas / remainder GDP proxy"
+          : "Current US$ or constant 2015 US$ — NY.GDP.MKTP.CD/KD, NY.GDP.PETR.RT.ZS; derived oil / non-oil proxy",
+      });
+    }
+    items.push(
       {
-        label: "Trade and industry",
+        label: "Consumption, investment, and GDP (demand aggregates)",
         sourceName: baseName,
         sourceUrl: source?.url ?? "https://data.worldbank.org",
-        sourceDetail: `${baseCountryDetail}; NE.IMP.GNFS.ZS, NE.EXP.GNFS.ZS, NV.IND.MANF.ZS, NV.IND.TOTL.ZS, NV.AGR.TOTL.ZS, NV.SRV.TOTL.ZS`,
-        unitLabel: "% of GDP",
+        sourceDetail: baseCountryDetail,
+        unitLabel:
+          "Current US$ or constant 2015 US$ — NE.CON.TOTL.CD/KD, NE.GDI.TOTL.CD/KD, NY.GDP.MKTP.CD/KD",
       },
       {
-        label: "Money and inflation comparison",
+        label: "Trade (% of GDP)",
+        sourceName: baseName,
+        sourceUrl: source?.url ?? "https://data.worldbank.org",
+        sourceDetail: baseCountryDetail,
+        unitLabel: "% of GDP — NE.EXP.GNFS.ZS, NE.IMP.GNFS.ZS",
+      },
+      {
+        label: "Industry (% of GDP)",
+        sourceName: baseName,
+        sourceUrl: source?.url ?? "https://data.worldbank.org",
+        sourceDetail: baseCountryDetail,
+        unitLabel: "% of GDP — NV.IND.TOTL.ZS, NV.IND.MANF.ZS",
+      },
+      {
+        label: "Broad money growth vs inflation",
         sourceName: baseName,
         sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.broad_money_growth_pct ?? "FM.LBL.BMNY.ZG"}`,
         sourceDetail: baseCountryDetail,
-        unitLabel: "Annual %",
+        unitLabel: `Annual % — ${indicatorIds.broad_money_growth_pct ?? "FM.LBL.BMNY.ZG"} (M2 growth), ${indicatorIds.cpi_inflation_yoy_pct ?? "FP.CPI.TOTL.ZG"} (inflation)`,
       },
       {
-        label: "Inequality and poverty",
+        label: "Gini index",
         sourceName: baseName,
         sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.gini ?? "SI.POV.GINI"}`,
-        sourceDetail: `${baseCountryDetail}; SI.POV.GINI, SI.POV.DDAY, SI.POV.LMIC`,
-        unitLabel: "Index (Gini) or % of population (poverty)",
+        sourceDetail: baseCountryDetail,
+        unitLabel: `Index 0–100 — ${indicatorIds.gini ?? "SI.POV.GINI"}`,
       },
-    ];
+      {
+        label: "Poverty headcount",
+        sourceName: baseName,
+        sourceUrl: source?.url ?? "https://data.worldbank.org",
+        sourceDetail: baseCountryDetail,
+        unitLabel: "% of population — SI.POV.DDAY (extreme $2.15 PPP), SI.POV.LMIC (LMIC line)",
+      }
+    );
     if (oilRents.length > 0) {
       items.push({
-        label: "Oil rents",
+        label: "Oil rents (% of GDP)",
         sourceName: baseName,
         sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.oil_rents_pct_gdp ?? "NY.GDP.PETR.RT.ZS"}`,
         sourceDetail: baseCountryDetail,
-        unitLabel: "% of GDP",
+        unitLabel: `% of GDP — ${indicatorIds.oil_rents_pct_gdp ?? "NY.GDP.PETR.RT.ZS"}`,
       });
     }
     if (gasRents.length > 0) {
       items.push({
-        label: "Natural gas rents",
+        label: "Natural gas rents (% of GDP)",
         sourceName: baseName,
         sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.natural_gas_rents_pct_gdp ?? "NY.GDP.NGAS.RT.ZS"}`,
         sourceDetail: baseCountryDetail,
-        unitLabel: "% of GDP",
+        unitLabel: `% of GDP — ${indicatorIds.natural_gas_rents_pct_gdp ?? "NY.GDP.NGAS.RT.ZS"}`,
       });
     }
     if (hasFX) {
@@ -1024,7 +1180,7 @@ export function CountryEconomyStudy({
         sourceName: baseName,
         sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.fx_official_lcu_per_usd ?? "PA.NUS.FCRF"}`,
         sourceDetail: baseCountryDetail,
-        unitLabel: "LCU per US$",
+        unitLabel: `LCU per US$ (annual average) — ${indicatorIds.fx_official_lcu_per_usd ?? "PA.NUS.FCRF"}`,
       });
     }
     if (isUsa) {
@@ -1177,6 +1333,40 @@ export function CountryEconomyStudy({
         });
       }
     }
+    if (isSouthKorea) {
+      items.push({
+        label: "GDP per capita",
+        sourceName: baseName,
+        sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.gdp_per_capita_current_usd ?? "NY.GDP.PCAP.CD"}`,
+        sourceDetail: baseCountryDetail,
+        unitLabel: "Current US$",
+      });
+      items.push({
+        label: "Current account balance",
+        sourceName: baseName,
+        sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.current_account_pct_gdp ?? "BN.CAB.XOKA.GD.ZS"}`,
+        sourceDetail: baseCountryDetail,
+        unitLabel: "% of GDP",
+      });
+      if (externalDebtPctGdp.length > 0) {
+        items.push({
+          label: "External debt",
+          sourceName: baseName,
+          sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.external_debt_stocks_usd ?? "DT.DOD.DECT.CD"}`,
+          sourceDetail: `${baseCountryDetail}; %GDP derived from DT.DOD.DECT.CD / NY.GDP.MKTP.CD`,
+          unitLabel: "% of GDP (derived)",
+        });
+      }
+      if (hasFX) {
+        items.push({
+          label: "Exchange rate (USD → KRW)",
+          sourceName: baseName,
+          sourceUrl: `https://data.worldbank.org/indicator/${indicatorIds.fx_official_lcu_per_usd ?? "PA.NUS.FCRF"}`,
+          sourceDetail: baseCountryDetail,
+          unitLabel: "KRW per USD (official annual average)",
+        });
+      }
+    }
     return items;
   }, [
     source,
@@ -1195,6 +1385,7 @@ export function CountryEconomyStudy({
     brentPoints.length,
     isTajikistan,
     isChina,
+    isSouthKorea,
     hasFX,
     externalDebtPctGdp.length,
     urbanPopulationPct.length,
@@ -1218,6 +1409,8 @@ export function CountryEconomyStudy({
         ? "Primary source family is World Bank WDI country series. Focus indicators include remittances (%GDP), GDP per capita, official exchange rate (somoni/USD), poverty and inequality where available, and external debt burden."
       : isChina
         ? "Primary source family is World Bank WDI country series. Focus indicators include demand composition (nominal/real), trade and industry shares, broad money growth, GDP per capita, official CNY/USD exchange rate context, and external-balance indicators where available."
+      : isSouthKorea
+        ? "Primary source family is World Bank WDI country series. Focus indicators include demand composition (nominal/real), trade and manufacturing/industry shares, broad money growth, GDP per capita, official KRW/USD exchange rate, and external-balance indicators where available."
       : "Series are annual WDI observations. Missing years remain missing; no interpolation is applied.";
 
   const aiParagraphs = useMemo(() => {
@@ -1230,6 +1423,7 @@ export function CountryEconomyStudy({
     if (isTurkey && policyRate.length === 0) sparseNotes.push("policy-rate proxy is unavailable in this window");
     if (isTajikistan && remittancesPctGdp.length === 0) sparseNotes.push("remittance series is unavailable in this window");
     if (isChina && gdpPerCapita.length === 0) sparseNotes.push("GDP per capita series is unavailable in this window");
+    if (isSouthKorea && gdpPerCapita.length === 0) sparseNotes.push("GDP per capita series is unavailable in this window");
     return isTurkey
       ? [
           `Within ${focusRange}, compare inflation, lira depreciation, growth, external-balance signals, and distribution indicators as descriptive co-movements rather than causal effects.`,
@@ -1280,6 +1474,17 @@ export function CountryEconomyStudy({
                   ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
                   : "Data caveat: annual published observations can show step changes around policy and cycle shifts; interpret with source notes and period context.",
               ]
+          : isSouthKorea
+            ? [
+                `Within ${focusRange}, compare trade openness, manufacturing/industry share, current account, FX, and GDP per capita as descriptive co-movements rather than causal proof.`,
+                "Use 1961, 1973, 1987, 1997, 2008, and 2020 overlays as timing anchors for industrialization, democratization, the IMF crisis, the GFC, and COVID context.",
+                "Nominal and real demand toggles are complementary: nominal captures current-price scale, while real better tracks volume over time.",
+                "Official USD→KRW is shown on a log scale to make multi-decade proportional moves comparable; sharp 1997 dynamics are visible but should be read alongside current account and growth panels.",
+                "Demographic and aging pressure is interpretive background rather than a chart on this page; long-run growth and savings patterns are partly shaped by it.",
+                sparseNotes.length
+                  ? `Data caveat: ${sparseNotes.join("; ")}. Missing years are intentionally left blank instead of being interpolated.`
+                  : "Data caveat: annual published observations can show step changes around crises and reforms; interpret with source notes and period context.",
+              ]
           : [
             `Within ${focusRange}, compare inflation, growth, demand composition, and distribution indicators as descriptive co-movements rather than causal effects.`,
             `Selected focus periods are clipped to the active range (${selectedRange?.label ?? "selected range"}) so shaded years always match the visible window.`,
@@ -1303,10 +1508,18 @@ export function CountryEconomyStudy({
     isRussia,
     isTajikistan,
     isChina,
+    isSouthKorea,
     policyRate.length,
     remittancesPctGdp.length,
     gdpPerCapita.length,
   ]);
+
+  /** First / last year with a usable FX observation. Used by the dedicated Turkey
+   *  FX section to clip the x-axis to the data extent (no blank pre-data area)
+   *  and to clamp focus-period overlays so a 1960-start preset doesn't expand
+   *  the visible range past where the WDI series actually begins. */
+  const fxFirstYear = useMemo(() => firstAvailableYear(fx), [fx]);
+  const fxLastYear = useMemo(() => lastAvailableYear(fx), [fx]);
 
   const commonProps = {
     chartRangeGranularity: "year" as const,
@@ -1366,7 +1579,7 @@ export function CountryEconomyStudy({
 
   return (
     <section className="space-y-4">
-      {isTurkey || isRussia || isSaudi || isTajikistan || isChina ? (
+      {isTurkey || isRussia || isSaudi || isTajikistan || isChina || isSouthKorea ? (
         <>
           <Card className="border-border bg-muted/20">
             <CardHeader className="pb-2">
@@ -1374,9 +1587,14 @@ export function CountryEconomyStudy({
             </CardHeader>
             <CardContent className="pt-0 text-sm text-muted-foreground space-y-2">
               {isTurkey ? (
-                <p>
-                  This study explores Turkey&apos;s economy across major political and macroeconomic periods, using indicators such as inflation, exchange rates, GDP growth, trade, debt, inequality, and poverty.
-                </p>
+                <>
+                  <p>
+                    This study explores Turkey&apos;s economy across major political and macroeconomic periods, using indicators such as inflation, exchange rates, GDP growth, trade, debt, inequality, and poverty.
+                  </p>
+                  <p>
+                    The focus eras span the 1980s liberalization under Özal, the 1990s coalition-era instability that culminated in the 2001 banking crisis, the AKP era of growth and disinflation under Erdoğan, and the post-2018 currency and inflation stress. The 2005 lira redenomination is marked as an event, not as a separate era.
+                  </p>
+                </>
               ) : isSaudi ? (
                 <p>
                   This study explores Saudi Arabia&apos;s economy across leadership and policy eras, emphasizing oil-rent dependence, diversification under Vision 2030, and macro sensitivity to oil cycles.
@@ -1389,6 +1607,18 @@ export function CountryEconomyStudy({
                 <p>
                   This study explores China&apos;s transition from planned-economy institutions toward market-oriented growth, emphasizing investment/export-led expansion, manufacturing and trade integration, post-2008 credit expansion, and recent property/debt-risk context.
                 </p>
+              ) : isSouthKorea ? (
+                <>
+                  <p>
+                    This study explores South Korea&apos;s shift from a low-income agrarian economy in the 1960s to a globally integrated industrial and technology economy today, emphasizing rapid industrialization, export-led growth, and the role of manufacturing and technology.
+                  </p>
+                  <p>
+                    The 1997 Asian financial crisis and IMF program is a structural break: it shows up as a sharp FX move, current-account swing, and growth contraction, followed by post-IMF restructuring of corporate and financial sectors.
+                  </p>
+                  <p>
+                    External vulnerability through trade and currency cycles, alongside demographic slowdown and aging pressure, is the long-run interpretive backdrop for the indicators on this page.
+                  </p>
+                </>
               ) : (
                 <p>
                   This study explores Russia&apos;s economy across major political and macroeconomic periods, using indicators such as inflation, GDP growth, exchange rates, oil and gas rents, trade, industry, inequality, and poverty.
@@ -1410,9 +1640,9 @@ export function CountryEconomyStudy({
               <ul className="list-inside list-disc space-y-1 text-sm text-muted-foreground">
                 {isTurkey ? (
                   <>
-                    <li>Inflation is high and volatile before the early 2000s, moderates for a period, and rises sharply again after the late 2010s.</li>
-                    <li>The Turkish lira depreciation is easier to read on a log scale because proportional moves are more comparable across decades.</li>
-                    <li>Current account deficits, external debt, and exchange-rate pressure can be read together as external vulnerability signals.</li>
+                    <li>Inflation is high during the Özal-era liberalization and the 1990s coalition years, falls under AKP-era disinflation in the early 2000s, and rises sharply again after 2018.</li>
+                    <li>The Turkish lira depreciation is easier to read on a log scale because proportional moves are more comparable across decades; the 2005 redenomination is a units change, not a regime break.</li>
+                    <li>The 2001 banking crisis and the 2018 / 2021 FX shocks are useful timing anchors when reading inflation, FX, current account, and external debt together as external-vulnerability signals.</li>
                     <li>Poverty falls strongly in available observations, while inequality tends to move more gradually.</li>
                   </>
                 ) : isSaudi ? (
@@ -1437,6 +1667,14 @@ export function CountryEconomyStudy({
                     <li>Trade openness, official USD→CNY context, and current-account patterns are best interpreted together.</li>
                     <li>Post-2008 money/credit expansion and later property-sector stress are timing anchors, not standalone causal proof.</li>
                     <li>GDP per capita and urbanization trends provide long-run development context alongside growth and distribution indicators.</li>
+                  </>
+                ) : isSouthKorea ? (
+                  <>
+                    <li>Read trade openness, manufacturing/industry share, and GDP growth together as core signals of an export-led growth model.</li>
+                    <li>The 1997 IMF crisis is visible as a sharp KRW depreciation, current-account swing, and growth contraction; subsequent years show structural reform context.</li>
+                    <li>USD→KRW is shown on a log scale to make multi-decade proportional moves comparable; FX, current account, and external debt are best interpreted jointly.</li>
+                    <li>GDP per capita rises strongly across decades, reflecting industrialization and tech-era productivity, while distribution indicators (Gini, poverty) are sparse and should be read cautiously.</li>
+                    <li>Long-run demographic slowdown and aging are interpretive context for growth and savings trends rather than a plotted indicator on this page.</li>
                   </>
                 ) : (
                   <>
@@ -1463,7 +1701,7 @@ export function CountryEconomyStudy({
           </CardHeader>
           <CardContent className="pt-0 space-y-4">
             <p className="text-xs text-muted-foreground">
-              City cards and climate values below are contextual orientation aids (approximate city-profile summaries and monthly normals), not official city-economy accounts.
+              City cards and climate values below are contextual orientation aids (approximate city-profile summaries and monthly normals), not official city-economy accounts. <span className="text-foreground">Bokhtar</span> appears in legends below; it is the same city formerly known as <span className="text-foreground">Qurghonteppa</span>.
             </p>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               {TAJIK_CITY_CONTEXT.map((city) => (
@@ -1486,43 +1724,32 @@ export function CountryEconomyStudy({
               <Card className="border-border/80 bg-background/70">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">Monthly climate context</CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Approximate monthly normals across the three southern cities — temperature as lines (left axis), precipitation as bars (right axis).
+                  </p>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <TimelineChart
-                    data={[]}
-                    valueKey="value"
-                    label="Monthly climate"
-                    multiSeries={[...tajikClimateTempSeries, ...tajikClimatePrecipSeries]}
-                    timeRange={["2024-01-01", "2024-12-31"]}
-                    chartRangeGranularity="year"
-                    showChartControls
-                    forceTimeAxis
-                    xAxisYearLabel="gregorian"
-                    multiSeriesYAxisNameOverrides={{
-                      0: "Temperature (°C)",
-                      1: "Precipitation (mm)",
-                    }}
-                    chartHeight="h-56"
+                  <MonthlyClimatologyChart
+                    series={tajikClimateSeries}
+                    yAxisNames={{ 0: "Temperature (°C)", 1: "Precipitation (mm)" }}
+                    heightClassName="h-80"
+                    ariaLabel="Monthly temperature and precipitation normals for Dushanbe, Bokhtar, and Kulob"
                   />
                 </CardContent>
               </Card>
               <Card className="border-border/80 bg-background/70">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">Daylight hours by month (photo timing context)</CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Estimated daylight hours from solar geometry at each city&apos;s latitude — useful for travel and photo timing.
+                  </p>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <TimelineChart
-                    data={[]}
-                    valueKey="value"
-                    label="Daylight hours"
-                    multiSeries={tajikDaylightSeries}
-                    timeRange={["2024-01-01", "2024-12-31"]}
-                    chartRangeGranularity="year"
-                    showChartControls
-                    forceTimeAxis
-                    xAxisYearLabel="gregorian"
-                    multiSeriesYAxisNameOverrides={{ 0: "Hours of daylight" }}
-                    chartHeight="h-56"
+                  <MonthlyClimatologyChart
+                    series={tajikDaylightChartSeries}
+                    yAxisNames={{ 0: "Hours of daylight" }}
+                    heightClassName="h-64"
+                    ariaLabel="Estimated daylight hours by month for Dushanbe, Bokhtar, and Kulob"
                   />
                 </CardContent>
               </Card>
@@ -1644,11 +1871,13 @@ export function CountryEconomyStudy({
                       ? "Focus periods are broad historical context windows, not presidency labels and not strict causal claims."
                     : isChina
                       ? "Focus periods are broad policy-era comparison windows (reform, integration, stimulus, slowdown), not strict causal labels."
+                    : isSouthKorea
+                      ? "Focus periods are broad political/economic eras (industrialization, transition, IMF crisis, post-IMF restructuring, tech era), not strict causal labels."
                       : russiaFocusClarification}
               </p>
               {isTurkey ? (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Pre-2003 (1960-2002) · Erdogan I (2003-2013) · Erdogan II (2013-2018) · Erdogan III (2018-present)
+                  Özal (1983-1993) · Coalition era (1993-2002) · Erdoğan I (2003-2013) · Erdoğan II (2013-2018) · Erdoğan III (2018-present) · 1980 transition (1980-1983, optional)
                 </p>
               ) : isSaudi ? (
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -1661,6 +1890,10 @@ export function CountryEconomyStudy({
               ) : isChina ? (
                 <p className="mt-1 text-xs text-muted-foreground">
                   Mao/pre-reform context · Reform and opening (1978-1992) · Jiang/Zhu (1993-2002) · Hu/Wen (2003-2012) · Xi era (2012-present)
+                </p>
+              ) : isSouthKorea ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Park (1961-1979) · Chun/Roh (1980-1992) · IMF crisis (1993-1998) · Post-IMF (1998-2008) · Tech era (2008-present)
                 </p>
               ) : (
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -1686,6 +1919,185 @@ export function CountryEconomyStudy({
       {loading ? <p className="text-sm text-muted-foreground">Loading data...</p> : null}
       {loadError ? <p className="text-sm text-destructive">Failed to load data: {loadError}</p> : null}
 
+      {!loading && !loadError && isTurkey && fx.length > 0 ? (
+        <Card className="border-border">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-semibold">Exchange rate regime / lira depreciation</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Official annual USD&nbsp;→&nbsp;TRY series. Log scale is on by default so multi-decade proportional moves
+              (including the 2018 currency crisis and the 2021 FX shock) remain comparable.
+            </p>
+          </CardHeader>
+          <CardContent className="pt-0 space-y-3">
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              <label className="inline-flex items-center gap-2 text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={fxLog}
+                  onChange={(e) => setFxLog(e.target.checked)}
+                  className="rounded border-border"
+                />
+                Log scale
+              </label>
+              <span className="text-muted-foreground">
+                <span className="text-foreground">Unit:</span> TRY per USD
+              </span>
+              {fxFirstYear != null && fxLastYear != null ? (
+                <span className="text-muted-foreground">
+                  <span className="text-foreground">Coverage:</span> {fxFirstYear}-{fxLastYear} ({fx.length} obs)
+                </span>
+              ) : null}
+            </div>
+            <TimelineChart
+              data={[]}
+              valueKey="value"
+              label="USD → TRY"
+              multiSeries={[
+                {
+                  key: "usd_try",
+                  label: "USD → TRY",
+                  unit: "TRY per USD",
+                  yAxisIndex: 0,
+                  points: fx,
+                  color: "#16a34a",
+                  smooth: false,
+                },
+              ]}
+              yAxisLog={fxLog}
+              forceTimeAxis
+              exportSourceFooter={exportFooters.fx}
+              {...commonProps}
+              chartHeight="h-72 md:h-96"
+              timeRange={
+                fxFirstYear != null && fxLastYear != null
+                  ? [`${fxFirstYear}-01-01`, `${fxLastYear}-12-31`]
+                  : undefined
+              }
+              regimeArea={
+                selectedPrimaryFocus && fxFirstYear != null && fxLastYear != null
+                  ? (() => {
+                      const startYear = Math.max(selectedPrimaryFocus.startYear, rangeStartYear, fxFirstYear);
+                      const endYear = Math.min(
+                        resolvePresetEndYear(selectedPrimaryFocus.endYear),
+                        rangeEndYear,
+                        fxLastYear
+                      );
+                      if (endYear < startYear) return undefined;
+                      return {
+                        xStart: `${startYear}-01-01`,
+                        xEnd: `${endYear}-12-31`,
+                        label: selectedPrimaryFocus.shortLabel ?? selectedPrimaryFocus.label,
+                      };
+                    })()
+                  : undefined
+              }
+              focusGregorianYearRange={
+                selectedPrimaryFocus && fxFirstYear != null && fxLastYear != null
+                  ? (() => {
+                      const startYear = Math.max(selectedPrimaryFocus.startYear, rangeStartYear, fxFirstYear);
+                      const endYear = Math.min(
+                        resolvePresetEndYear(selectedPrimaryFocus.endYear),
+                        rangeEndYear,
+                        fxLastYear
+                      );
+                      if (endYear < startYear) return undefined;
+                      return { startYear, endYear };
+                    })()
+                  : undefined
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              Turkey&apos;s chart uses the official annual exchange-rate series from World Bank WDI. It is not an
+              official/open-market dual-rate comparison like Iran. Pre-2005 values reflect the redenomination of the lira
+              (1 new lira = 1,000,000 old lira); log scale keeps proportional moves readable across that break.
+            </p>
+            {/* Optional compact context strip. Same WDI series shown again below in the
+                main grid in regular size; here they sit alongside the FX chart so the
+                regime story is readable without scrolling. Kept intentionally small
+                (h-32) and headerless to avoid overcrowding. */}
+            {(inflation.length > 0 || hasTurkeyPolicyRateData || currentAccountPctGdp.length > 0) ? (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3 pt-1">
+                {inflation.length > 0 ? (
+                  <div className="rounded-md border border-border/70 bg-background/40 p-2">
+                    <div className="flex items-baseline justify-between gap-2 pb-1">
+                      <span className="text-xs font-medium">CPI inflation (YoY)</span>
+                      <span className="text-[10px] text-muted-foreground">%</span>
+                    </div>
+                    <TimelineChart
+                      data={inflation}
+                      valueKey="value"
+                      label="Inflation"
+                      seriesColor="#dc2626"
+                      unit="%"
+                      forceTimeAxis
+                      chartHeight="h-32"
+                      showChartControls={false}
+                      showPngExportWhenRangeHidden={false}
+                      chartRangeGranularity="year"
+                      timeRange={
+                        fxFirstYear != null && fxLastYear != null
+                          ? [`${fxFirstYear}-01-01`, `${fxLastYear}-12-31`]
+                          : undefined
+                      }
+                    />
+                  </div>
+                ) : null}
+                {hasTurkeyPolicyRateData ? (
+                  <div className="rounded-md border border-border/70 bg-background/40 p-2">
+                    <div className="flex items-baseline justify-between gap-2 pb-1">
+                      <span className="text-xs font-medium">Policy interest rate</span>
+                      <span className="text-[10px] text-muted-foreground">%</span>
+                    </div>
+                    <TimelineChart
+                      data={policyRate}
+                      valueKey="value"
+                      label="Policy interest rate"
+                      seriesColor="#7c3aed"
+                      unit="%"
+                      forceTimeAxis
+                      chartHeight="h-32"
+                      showChartControls={false}
+                      showPngExportWhenRangeHidden={false}
+                      chartRangeGranularity="year"
+                      timeRange={
+                        fxFirstYear != null && fxLastYear != null
+                          ? [`${fxFirstYear}-01-01`, `${fxLastYear}-12-31`]
+                          : undefined
+                      }
+                    />
+                  </div>
+                ) : null}
+                {currentAccountPctGdp.length > 0 ? (
+                  <div className="rounded-md border border-border/70 bg-background/40 p-2">
+                    <div className="flex items-baseline justify-between gap-2 pb-1">
+                      <span className="text-xs font-medium">Current account</span>
+                      <span className="text-[10px] text-muted-foreground">% of GDP</span>
+                    </div>
+                    <TimelineChart
+                      data={currentAccountPctGdp}
+                      valueKey="value"
+                      label="Current account balance"
+                      seriesColor="#0ea5e9"
+                      unit="% of GDP"
+                      forceTimeAxis
+                      chartHeight="h-32"
+                      showChartControls={false}
+                      showPngExportWhenRangeHidden={false}
+                      chartRangeGranularity="year"
+                      timeRange={
+                        fxFirstYear != null && fxLastYear != null
+                          ? [`${fxFirstYear}-01-01`, `${fxLastYear}-12-31`]
+                          : undefined
+                      }
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
       {!loading && !loadError ? (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1699,6 +2111,7 @@ export function CountryEconomyStudy({
                   label="Inflation"
                   seriesColor="#dc2626"
                   unit="%"
+                  exportSourceFooter={exportFooters.cpi}
                   {...commonProps}
                 />
               ) : (
@@ -1714,51 +2127,28 @@ export function CountryEconomyStudy({
             </CardContent>
           </Card>
 
-          {isTurkey ? (
+          {/* Turkey FX is rendered above in the dedicated "Exchange rate regime / lira
+              depreciation" section. If the FX series is genuinely empty we still surface
+              a small placeholder card here so the user knows the data was attempted. */}
+          {isTurkey && fx.length === 0 ? (
             <Card className="border-border">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">2. Exchange rate (USD → TRY)</CardTitle>
+                <CardTitle className="text-base">Exchange rate (USD → TRY)</CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
-                <label className="mb-2 inline-flex items-center gap-2 text-xs text-muted-foreground">
-                  <input type="checkbox" checked={fxLog} onChange={(e) => setFxLog(e.target.checked)} />
-                  Log scale
-                </label>
-                {fx.length > 0 ? (
-                  <TimelineChart
-                    data={[]}
-                    valueKey="value"
-                    label="USD → TRY"
-                    multiSeries={[
-                      {
-                        key: "usd_try",
-                        label: "USD → TRY",
-                        unit: "TRY per USD",
-                        yAxisIndex: 0,
-                        points: fx,
-                        color: "#16a34a",
-                        smooth: false,
-                      },
-                    ]}
-                    yAxisLog={fxLog}
-                    forceTimeAxis
-                    {...commonProps}
-                  />
-                ) : (
-                  <p className="text-xs text-muted-foreground py-6">
-                    {unavailableTextFor(
-                      ["fx_official_lcu_per_usd"],
-                      "Data unavailable for this window (PA.NUS.FCRF / USD→TRY annual series)."
-                    )}
-                  </p>
-                )}
+                <p className="text-xs text-muted-foreground py-6">
+                  {unavailableTextFor(
+                    ["fx_official_lcu_per_usd"],
+                    "Data unavailable for this window (PA.NUS.FCRF / USD→TRY annual series)."
+                  )}
+                </p>
               </CardContent>
             </Card>
           ) : null}
 
           <Card className="border-border">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">{isTurkey ? "3. GDP growth (YoY)" : "2. GDP growth (YoY)"}</CardTitle>
+              <CardTitle className="text-base">2. GDP growth (YoY)</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
               {gdpGrowth.length > 0 ? (
@@ -1768,6 +2158,7 @@ export function CountryEconomyStudy({
                   label="GDP growth"
                   seriesColor="#2563eb"
                   unit="%"
+                  exportSourceFooter={exportFooters.gdpGrowth}
                   {...commonProps}
                 />
               ) : (
@@ -1778,7 +2169,7 @@ export function CountryEconomyStudy({
             </CardContent>
           </Card>
 
-          {isChina ? (
+          {isChina || isSouthKorea ? (
             <>
               <Card className="border-border">
                 <CardHeader className="pb-2">
@@ -1794,6 +2185,7 @@ export function CountryEconomyStudy({
                       seriesColor="#0ea5e9"
                       multiSeriesValueFormat="gdp_absolute"
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.gdpPerCapita}
                       {...commonProps}
                     />
                   ) : (
@@ -1803,7 +2195,7 @@ export function CountryEconomyStudy({
                   )}
                 </CardContent>
               </Card>
-              {urbanPopulationPct.length > 0 ? (
+              {isChina && urbanPopulationPct.length > 0 ? (
                 <Card className="border-border">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">4. Urbanization rate (% of population)</CardTitle>
@@ -1816,6 +2208,7 @@ export function CountryEconomyStudy({
                       unit="% of population"
                       seriesColor="#6366f1"
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.urbanization}
                       {...commonProps}
                     />
                   </CardContent>
@@ -1839,6 +2232,7 @@ export function CountryEconomyStudy({
                       unit="% of GDP"
                       seriesColor="#7c3aed"
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.remittances}
                       {...commonProps}
                     />
                   ) : (
@@ -1862,6 +2256,7 @@ export function CountryEconomyStudy({
                       seriesColor="#0ea5e9"
                       multiSeriesValueFormat="gdp_absolute"
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.gdpPerCapita}
                       {...commonProps}
                     />
                   ) : (
@@ -1889,6 +2284,7 @@ export function CountryEconomyStudy({
                       seriesColor="#16a34a"
                       yAxisLog={fxLog}
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.fx}
                       {...commonProps}
                     />
                   ) : (
@@ -1933,6 +2329,11 @@ export function CountryEconomyStudy({
                         },
                       ]}
                       forceTimeAxis
+                      exportSourceFooter={wdiExportFooter([
+                        indicatorIds.poverty_extreme ?? "SI.POV.DDAY",
+                        indicatorIds.poverty_lmic ?? "SI.POV.LMIC",
+                        indicatorIds.gini ?? "SI.POV.GINI",
+                      ])}
                       {...commonProps}
                     />
                   ) : (
@@ -1952,6 +2353,7 @@ export function CountryEconomyStudy({
                       label="External debt"
                       unit="% of GDP"
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.externalDebt}
                       {...commonProps}
                     />
                   ) : (
@@ -1977,6 +2379,7 @@ export function CountryEconomyStudy({
                       unit="% of GDP"
                       seriesColor={SIGNAL_CONCEPT.oil_rents}
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.oilRents}
                       {...commonProps}
                     />
                   ) : (
@@ -1997,6 +2400,7 @@ export function CountryEconomyStudy({
                       unit="% of GDP"
                       seriesColor={SIGNAL_CONCEPT.natural_gas_rents}
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.gasRents}
                       {...commonProps}
                     />
                   ) : (
@@ -2026,6 +2430,7 @@ export function CountryEconomyStudy({
                       label="Brent"
                       unit="US$ per barrel"
                       seriesColor="#b45309"
+                      exportSourceFooter={exportFooters.brent}
                       {...commonProps}
                     />
                   </CardContent>
@@ -2042,9 +2447,13 @@ export function CountryEconomyStudy({
                   ? gdpMode === "real"
                     ? "5. GDP decomposition (real) — oil & gas vs remainder"
                     : "5. GDP decomposition (nominal) — oil & gas vs remainder"
-                  : gdpMode === "real"
-                    ? "3. GDP decomposition (real)"
-                    : "3. GDP decomposition (nominal)"}
+                  : isRussia
+                    ? gdpMode === "real"
+                      ? "3. GDP decomposition (real) — oil & gas vs remainder"
+                      : "3. GDP decomposition (nominal) — oil & gas vs remainder"
+                    : gdpMode === "real"
+                      ? "3. GDP decomposition (real)"
+                      : "3. GDP decomposition (nominal)"}
               </CardTitle>
               {isSaudi ? (
                 <p className="text-xs text-muted-foreground">
@@ -2053,11 +2462,13 @@ export function CountryEconomyStudy({
               ) : null}
               {isRussia ? (
                 <>
-                  <p className="text-xs text-muted-foreground">Oil rents proxy vs non-oil GDP proxy</p>
+                  <p className="text-xs text-muted-foreground">
+                    Oil and natural gas rent proxies versus remainder of GDP (contextual approximation).
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {gdpMode === "real"
-                      ? "WDI NY.GDP.MKTP.KD with NY.GDP.PETR.RT.ZS-derived proxy components (constant 2015 US$)."
-                      : "WDI NY.GDP.MKTP.CD with NY.GDP.PETR.RT.ZS-derived proxy components (current US$)."}
+                      ? "WDI NY.GDP.MKTP.KD with NY.GDP.PETR.RT.ZS and NY.GDP.NGAS.RT.ZS-derived proxy components (constant 2015 US$)."
+                      : "WDI NY.GDP.MKTP.CD with NY.GDP.PETR.RT.ZS and NY.GDP.NGAS.RT.ZS-derived proxy components (current US$)."}
                   </p>
                 </>
               ) : null}
@@ -2101,6 +2512,7 @@ export function CountryEconomyStudy({
                     multiSeriesYAxisNameOverrides={{
                       0: `GDP (${decompositionUnitLabel})`,
                     }}
+                    exportSourceFooter={exportFooters.gdpDecomposition}
                     {...commonProps}
                   />
                   {decompositionOilRentsCoverageNote ? (
@@ -2112,14 +2524,14 @@ export function CountryEconomyStudy({
                     </p>
                   ) : null}
                   {isRussia ? (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      The oil GDP proxy is an approximation and should be read as a contextual signal, not a complete accounting of Russia&apos;s energy sector.
-                    </p>
-                  ) : null}
-                  {isRussia ? (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Oil GDP proxy and non-oil GDP proxy are contextual approximations. They help compare the relative scale of resource-linked activity and the broader economy, not produce a full national-accounts decomposition.
-                    </p>
+                    <>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        This is a proxy decomposition using WDI oil and natural gas rents as shares of GDP. It is not an official non-resource GDP series.
+                      </p>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Oil, natural gas, and remainder GDP proxies are contextual approximations. They help compare the relative scale of resource-linked activity and the broader economy, not produce a full national-accounts decomposition of Russia&apos;s energy sector.
+                      </p>
+                    </>
                   ) : null}
                 </>
               ) : (
@@ -2164,6 +2576,7 @@ export function CountryEconomyStudy({
                   multiSeries={demandSeries.map((s) => ({ ...s, symbol: s.points.length < 3 ? "circle" : undefined }))}
                   multiSeriesValueFormat="gdp_absolute"
                   multiSeriesYAxisNameOverrides={{ 0: demandUnitLabel }}
+                  exportSourceFooter={exportFooters.demand}
                   {...commonProps}
                 />
               ) : (
@@ -2196,6 +2609,7 @@ export function CountryEconomyStudy({
                         },
                       ]}
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.governmentDebt}
                       {...commonProps}
                     />
                   ) : (
@@ -2224,6 +2638,7 @@ export function CountryEconomyStudy({
                         },
                       ]}
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.fiscalBalance}
                       {...commonProps}
                     />
                   ) : (
@@ -2252,6 +2667,7 @@ export function CountryEconomyStudy({
                         },
                       ]}
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.fedFunds}
                       {...commonProps}
                     />
                   ) : (
@@ -2281,6 +2697,7 @@ export function CountryEconomyStudy({
                       ]}
                       multiSeriesValueFormat="gdp_absolute"
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.governmentDebtUsd}
                       {...commonProps}
                     />
                   </CardContent>
@@ -2289,7 +2706,7 @@ export function CountryEconomyStudy({
             </>
           ) : null}
 
-          {!isUsa && !isTurkey && !isSaudi && !isTajikistan && !isChina ? (
+          {!isUsa && !isTurkey && !isSaudi && !isTajikistan && !isChina && !isSouthKorea ? (
           <Card className="border-border">
             <CardHeader className="pb-2"><CardTitle className="text-base">5. Oil rents (% of GDP)</CardTitle></CardHeader>
             <CardContent className="pt-0">
@@ -2301,6 +2718,7 @@ export function CountryEconomyStudy({
                   unit="% of GDP"
                   seriesColor={SIGNAL_CONCEPT.oil_rents}
                   forceTimeAxis
+                  exportSourceFooter={exportFooters.oilRents}
                   {...commonProps}
                 />
               ) : (
@@ -2315,7 +2733,7 @@ export function CountryEconomyStudy({
           </Card>
           ) : null}
 
-          {!isUsa && !isTurkey && !isSaudi && !isTajikistan && !isChina ? (
+          {!isUsa && !isTurkey && !isSaudi && !isTajikistan && !isChina && !isSouthKorea ? (
           <Card className="border-border">
             <CardHeader className="pb-2"><CardTitle className="text-base">6. Natural gas rents (% of GDP)</CardTitle></CardHeader>
             <CardContent className="pt-0">
@@ -2327,6 +2745,7 @@ export function CountryEconomyStudy({
                   unit="% of GDP"
                   seriesColor={SIGNAL_CONCEPT.natural_gas_rents}
                   forceTimeAxis
+                  exportSourceFooter={exportFooters.gasRents}
                   {...commonProps}
                 />
               ) : (
@@ -2345,7 +2764,13 @@ export function CountryEconomyStudy({
             <Card className="border-border md:col-span-2">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">
-                  {isChina ? "Official exchange rate context (USD → CNY)" : isTurkey ? "Exchange rate (USD → TRY)" : "7. FX (official LCU per US$)"}
+                  {isChina
+                    ? "Official exchange rate context (USD → CNY)"
+                    : isSouthKorea
+                      ? "Exchange rate (USD → KRW)"
+                      : isTurkey
+                        ? "Exchange rate (USD → TRY)"
+                        : "7. FX (official LCU per US$)"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
@@ -2357,10 +2782,27 @@ export function CountryEconomyStudy({
                   <TimelineChart
                     data={fx}
                     valueKey="value"
-                    label={isChina ? "USD → CNY (official)" : isTurkey ? "USD → TRY" : "Official FX"}
-                    unit={isChina ? "CNY per USD" : isTurkey ? "TRY per USD" : "LCU per US$"}
+                    label={
+                      isChina
+                        ? "USD → CNY (official)"
+                        : isSouthKorea
+                          ? "USD → KRW (official)"
+                          : isTurkey
+                            ? "USD → TRY"
+                            : "Official FX"
+                    }
+                    unit={
+                      isChina
+                        ? "CNY per USD"
+                        : isSouthKorea
+                          ? "KRW per USD"
+                          : isTurkey
+                            ? "TRY per USD"
+                            : "LCU per US$"
+                    }
                     seriesColor={isTurkey ? "#16a34a" : undefined}
                     yAxisLog={fxLog}
+                    exportSourceFooter={exportFooters.fx}
                     {...commonProps}
                   />
                 ) : (
@@ -2369,6 +2811,11 @@ export function CountryEconomyStudy({
                 {isChina ? (
                   <p className="mt-2 text-xs text-muted-foreground">
                     Official USD→CNY is shown as policy/external context, not a crisis-style floating FX stress signal.
+                  </p>
+                ) : null}
+                {isSouthKorea ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Official USD→KRW is shown on a log scale to make multi-decade proportional moves comparable; sharp 1997 IMF-crisis dynamics are visible but should be read alongside the current account panel.
                   </p>
                 ) : null}
               </CardContent>
@@ -2393,6 +2840,7 @@ export function CountryEconomyStudy({
                       label="Policy interest rate"
                       unit="%"
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.policyRate}
                       {...commonProps}
                     />
                   </CardContent>
@@ -2410,6 +2858,7 @@ export function CountryEconomyStudy({
                       label="Current account balance"
                       unit="% of GDP"
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.currentAccount}
                       {...commonProps}
                     />
                   ) : (
@@ -2429,6 +2878,7 @@ export function CountryEconomyStudy({
                       label="External debt"
                       unit="% of GDP"
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.externalDebt}
                       {...commonProps}
                     />
                   ) : (
@@ -2438,46 +2888,44 @@ export function CountryEconomyStudy({
               </Card>
             </>
           ) : null}
-          {isChina ? (
+          {isChina || isSouthKorea ? (
             <>
-              <Card className="border-border">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Current account (% GDP)</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  {currentAccountPctGdp.length > 0 ? (
+              {currentAccountPctGdp.length > 0 ? (
+                <Card className="border-border">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Current account (% GDP)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
                     <TimelineChart
                       data={currentAccountPctGdp}
                       valueKey="value"
                       label="Current account balance"
                       unit="% of GDP"
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.currentAccount}
                       {...commonProps}
                     />
-                  ) : (
-                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
-                  )}
-                </CardContent>
-              </Card>
-              <Card className="border-border">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">External debt (% GDP)</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  {externalDebtPctGdp.length > 0 ? (
+                  </CardContent>
+                </Card>
+              ) : null}
+              {externalDebtPctGdp.length > 0 ? (
+                <Card className="border-border">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">External debt (% GDP)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
                     <TimelineChart
                       data={externalDebtPctGdp}
                       valueKey="value"
                       label="External debt"
                       unit="% of GDP"
                       forceTimeAxis
+                      exportSourceFooter={exportFooters.externalDebt}
                       {...commonProps}
                     />
-                  ) : (
-                    <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
-                  )}
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              ) : null}
             </>
           ) : null}
 
@@ -2494,6 +2942,7 @@ export function CountryEconomyStudy({
                     { key: "imports", label: "Imports", unit: "% of GDP", yAxisIndex: 0, points: imports },
                   ]}
                   forceTimeAxis
+                  exportSourceFooter={exportFooters.trade}
                   {...commonProps}
                 />
               ) : (
@@ -2529,6 +2978,7 @@ export function CountryEconomyStudy({
                         ]
                   }
                   forceTimeAxis
+                  exportSourceFooter={exportFooters.industry}
                   {...commonProps}
                 />
               ) : (
@@ -2550,6 +3000,7 @@ export function CountryEconomyStudy({
                     { key: "inflation", label: "Inflation", unit: "%", yAxisIndex: 0, points: inflation },
                   ]}
                   forceTimeAxis
+                  exportSourceFooter={exportFooters.money}
                   {...commonProps}
                 />
               ) : (
@@ -2568,7 +3019,14 @@ export function CountryEconomyStudy({
             <CardHeader className="pb-2"><CardTitle className="text-base">11. Gini index</CardTitle></CardHeader>
             <CardContent className="pt-0">
               {gini.length > 0 ? (
-                <TimelineChart data={gini} valueKey="value" label="Gini" forceTimeAxis {...commonProps} />
+                <TimelineChart
+                  data={gini}
+                  valueKey="value"
+                  label="Gini"
+                  forceTimeAxis
+                  exportSourceFooter={exportFooters.gini}
+                  {...commonProps}
+                />
               ) : (
                 <p className="text-xs text-muted-foreground py-6">Data unavailable for this window.</p>
               )}
@@ -2602,6 +3060,7 @@ export function CountryEconomyStudy({
                     },
                   ]}
                   forceTimeAxis
+                  exportSourceFooter={exportFooters.poverty}
                   {...commonProps}
                 />
               ) : (
@@ -2634,6 +3093,7 @@ export function CountryEconomyStudy({
                         unit="% of GDP"
                         seriesColor={SIGNAL_CONCEPT.oil_rents}
                         forceTimeAxis
+                        exportSourceFooter={exportFooters.oilRents}
                         {...commonProps}
                       />
                     ) : (
@@ -2647,6 +3107,7 @@ export function CountryEconomyStudy({
                         unit="% of GDP"
                         seriesColor={SIGNAL_CONCEPT.natural_gas_rents}
                         forceTimeAxis
+                        exportSourceFooter={exportFooters.gasRents}
                         {...commonProps}
                       />
                     ) : (
@@ -2677,6 +3138,7 @@ export function CountryEconomyStudy({
                             },
                           ]}
                           multiSeriesValueFormat="gdp_absolute"
+                          exportSourceFooter={exportFooters.gdpDecomposition}
                           {...commonProps}
                         />
                         {decompositionOilRentsCoverageNote ? (
@@ -2734,6 +3196,18 @@ export function CountryEconomyStudy({
                 </p>
                 <p>
                   The period overlays anchor post-Soviet transition history (independence, civil war, stabilization, migration/remittance era, COVID). They are context markers, not proof of causality.
+                </p>
+              </>
+            ) : isSouthKorea ? (
+              <>
+                <p>
+                  This page is a descriptive snapshot of South Korea&apos;s economic transformation from a low-income agrarian economy in the 1960s to a globally integrated industrial and technology economy. It compares trade openness, manufacturing share, GDP per capita, current account, and exchange rate over the same periods.
+                </p>
+                <p>
+                  Focus windows and overlays mark major anchors like the 1961 coup, the 1973 heavy-industry drive, 1987 democratization, the 1997 IMF crisis, the 2008 global financial crisis, and the 2020 COVID shock. They are context markers, not proof that any single event caused a specific outcome.
+                </p>
+                <p>
+                  Demographic slowdown and aging are interpretive background; they help explain long-run growth and savings patterns but are not directly plotted here.
                 </p>
               </>
             ) : (

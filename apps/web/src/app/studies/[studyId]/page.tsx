@@ -1003,11 +1003,8 @@ export default function StudyDetailPage() {
     setMonetarySeriesMode("real");
   }, [studyId]);
 
-  useEffect(() => {
-    if (studyId === "iran-economy-1368-1376" || studyId === "iran-economy-period-comparison") {
-      setShowTimeSeriesEventOverlay(true);
-    }
-  }, [studyId, setShowTimeSeriesEventOverlay]);
+  // Event overlays default OFF for all studies, including Iran economy studies.
+  // Users can still turn them on via the visible "Show overlays" toggle or URL state.
 
   useEffect(() => {
     if (!shouldFetchUsCpiMonthly) {

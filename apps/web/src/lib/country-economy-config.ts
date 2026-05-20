@@ -23,7 +23,8 @@ export type CountryEconomyConfig = {
     | "turkey-economy"
     | "saudi-arabia-economy"
     | "china-economy"
-    | "tajikistan-economy";
+    | "tajikistan-economy"
+    | "south-korea-economy";
   countryCode: string;
   countryName: string;
   hasFX: boolean;
@@ -133,10 +134,10 @@ export const COUNTRY_ECONOMY_CONFIGS: CountryEconomyConfig[] = [
     hasFX: true,
     defaultFxLog: true,
     focusPresets: [
-      { id: "yeltsin", label: "Yeltsin (1991-1999)", startYear: 1991, endYear: 1999 },
-      { id: "putin1", label: "Putin I (2000-2008)", startYear: 2000, endYear: 2008 },
-      { id: "medvedev", label: "Medvedev (2008-2012)", startYear: 2008, endYear: 2012 },
-      { id: "putin2", label: "Putin II (2012-present)", startYear: 2012, endYear: null },
+      { id: "yeltsin", label: "Yeltsin (1991-1999)", shortLabel: "Yeltsin", startYear: 1991, endYear: 1999 },
+      { id: "putin1", label: "Putin I (2000-2008)", shortLabel: "Putin I", startYear: 2000, endYear: 2008 },
+      { id: "medvedev", label: "Medvedev (2008-2012)", shortLabel: "Medvedev", startYear: 2008, endYear: 2012 },
+      { id: "putin2", label: "Putin II (2012-present)", shortLabel: "Putin II", startYear: 2012, endYear: null },
     ],
     rangePresets: [
       { id: "full", label: "Full history", startYear: 1960, endYear: null },
@@ -155,11 +156,53 @@ export const COUNTRY_ECONOMY_CONFIGS: CountryEconomyConfig[] = [
     countryName: "Turkey",
     hasFX: true,
     defaultFxLog: true,
+    // Focus presets are political/economic eras, listed in chronological order.
+    // The default selection is the first preset (`ozal`) because the 1980 military/
+    // transition window is short (3 years) and works better as a supplementary marker
+    // than as the initial focus band.
     focusPresets: [
-      { id: "pre-2003", label: "Pre-2003 (1960-2002)", shortLabel: "Pre-2003", startYear: 1960, endYear: 2002 },
-      { id: "erdogan-1", label: "Erdogan I: 2003-2013", shortLabel: "Erdogan I", startYear: 2003, endYear: 2013 },
-      { id: "erdogan-2", label: "Erdogan II: 2013-2018", shortLabel: "Erdogan II", startYear: 2013, endYear: 2018 },
-      { id: "erdogan-3", label: "Erdogan III: 2018-present", shortLabel: "Erdogan III", startYear: 2018, endYear: null },
+      {
+        id: "ozal",
+        label: "Özal / liberalization (1983-1993)",
+        shortLabel: "Özal",
+        startYear: 1983,
+        endYear: 1993,
+      },
+      {
+        id: "coalition-era",
+        label: "Coalition era / 1990s crisis (1993-2002)",
+        shortLabel: "Coalition era",
+        startYear: 1993,
+        endYear: 2002,
+      },
+      {
+        id: "erdogan-1",
+        label: "Erdoğan I / AKP growth (2003-2013)",
+        shortLabel: "Erdoğan I",
+        startYear: 2003,
+        endYear: 2013,
+      },
+      {
+        id: "erdogan-2",
+        label: "Erdoğan II / post-2013 instability (2013-2018)",
+        shortLabel: "Erdoğan II",
+        startYear: 2013,
+        endYear: 2018,
+      },
+      {
+        id: "erdogan-3",
+        label: "Erdoğan III / FX-inflation era (2018-present)",
+        shortLabel: "Erdoğan III",
+        startYear: 2018,
+        endYear: null,
+      },
+      {
+        id: "mil-transition-1980",
+        label: "Military / transition era (1980-1983)",
+        shortLabel: "1980 transition",
+        startYear: 1980,
+        endYear: 1983,
+      },
     ],
     rangePresets: [
       { id: "full", label: "Full history", startYear: 1960, endYear: null },
@@ -167,11 +210,25 @@ export const COUNTRY_ECONOMY_CONFIGS: CountryEconomyConfig[] = [
     ],
     overlayEvents: [
       {
+        id: "tur-1980-coup",
+        layer: "world_core",
+        date: "1980-09-12",
+        title: "1980 military coup",
+        title_fa: "کودتای نظامی ۱۹۸۰",
+      },
+      {
         id: "tur-2001-crisis",
         layer: "world_core",
         date: "2001-02-01",
         title: "2001 financial crisis",
         title_fa: "بحران مالی ۲۰۰۱",
+      },
+      {
+        id: "tur-2005-redenomination",
+        layer: "world_core",
+        date: "2005-01-01",
+        title: "2005 lira redenomination",
+        title_fa: "تجدید نام‌گذاری لیر (۲۰۰۵)",
       },
       {
         id: "tur-2018-crisis",
@@ -351,7 +408,7 @@ export const COUNTRY_ECONOMY_CONFIGS: CountryEconomyConfig[] = [
       {
         id: "reform-opening",
         label: "Reform and opening (1978-1992)",
-        shortLabel: "1978-1992",
+        shortLabel: "Reform opening",
         startYear: 1978,
         endYear: 1992,
       },
@@ -486,28 +543,28 @@ export const COUNTRY_ECONOMY_CONFIGS: CountryEconomyConfig[] = [
       {
         id: "independence-civil-war",
         label: "Independence and civil war (1991-1997)",
-        shortLabel: "1991-1997",
+        shortLabel: "Civil war",
         startYear: 1991,
         endYear: 1997,
       },
       {
         id: "post-war-stabilization",
         label: "Post-war stabilization (1997-2005)",
-        shortLabel: "1997-2005",
+        shortLabel: "Post-war",
         startYear: 1997,
         endYear: 2005,
       },
       {
         id: "remittance-led-growth",
         label: "Remittance-led growth period (2005-2014)",
-        shortLabel: "2005-2014",
+        shortLabel: "Remittance era",
         startYear: 2005,
         endYear: 2014,
       },
       {
         id: "recent-period",
         label: "Recent period (2015-present)",
-        shortLabel: "2015-present",
+        shortLabel: "Recent period",
         startYear: 2015,
         endYear: null,
       },
@@ -575,6 +632,121 @@ export const COUNTRY_ECONOMY_CONFIGS: CountryEconomyConfig[] = [
         endYear: 2021,
         fill: "rgba(148, 163, 184, 0.10)",
         markAreaLabel: "COVID period",
+      },
+    ],
+  },
+  {
+    routeSlug: "south-korea-economy",
+    countryCode: "KOR",
+    countryName: "South Korea",
+    hasFX: true,
+    defaultFxLog: true,
+    focusPresets: [
+      {
+        id: "park",
+        label: "Park Chung Hee industrialization (1961-1979)",
+        shortLabel: "Park",
+        startYear: 1961,
+        endYear: 1979,
+      },
+      {
+        id: "chun-roh",
+        label: "Chun / Roh transition (1980-1992)",
+        shortLabel: "Chun/Roh",
+        startYear: 1980,
+        endYear: 1992,
+      },
+      {
+        id: "imf-crisis",
+        label: "Kim Young-sam / IMF crisis (1993-1998)",
+        shortLabel: "IMF crisis",
+        startYear: 1993,
+        endYear: 1998,
+      },
+      {
+        id: "post-imf",
+        label: "Post-IMF restructuring (1998-2008)",
+        shortLabel: "Post-IMF",
+        startYear: 1998,
+        endYear: 2008,
+      },
+      {
+        id: "tech-era",
+        label: "Globalized tech economy (2008-present)",
+        shortLabel: "Tech era",
+        startYear: 2008,
+        endYear: null,
+      },
+    ],
+    rangePresets: [
+      { id: "full", label: "Full history", startYear: 1960, endYear: null },
+      { id: "post-imf", label: "Post-IMF (1998-)", startYear: 1998, endYear: null },
+      { id: "post-2000", label: "Post-2000", startYear: 2000, endYear: null },
+    ],
+    overlayEvents: [
+      {
+        id: "kor-coup-1961",
+        layer: "world_core",
+        date: "1961-05-16",
+        title: "1961 military coup",
+        title_fa: "کودتای ۱۹۶۱",
+      },
+      {
+        id: "kor-hci-1973",
+        layer: "world_core",
+        date: "1973-01-01",
+        title: "Heavy & Chemical Industry drive",
+        title_fa: "صنایع سنگین و شیمیایی ۱۹۷۳",
+      },
+      {
+        id: "kor-democratization-1987",
+        layer: "world_core",
+        date: "1987-06-29",
+        title: "1987 democratization",
+        title_fa: "دموکراسی‌خواهی ۱۹۸۷",
+      },
+      {
+        id: "kor-imf-1997",
+        layer: "world_core",
+        date: "1997-12-03",
+        title: "1997 Asian financial crisis / IMF bailout",
+        title_fa: "بحران مالی آسیا / IMF ۱۹۹۷",
+      },
+      {
+        id: "kor-gfc-2008",
+        layer: "world_core",
+        date: "2008-09-15",
+        title: "2008 global financial crisis",
+        title_fa: "بحران مالی جهانی ۲۰۰۸",
+      },
+      {
+        id: "kor-covid-2020",
+        layer: "world_core",
+        date: "2020-03-01",
+        title: "COVID shock",
+        title_fa: "شوک کووید",
+      },
+    ],
+    overlayBands: [
+      {
+        id: "kor-imf-band",
+        startYear: 1997,
+        endYear: 1998,
+        fill: "rgba(148, 163, 184, 0.14)",
+        markAreaLabel: "IMF crisis",
+      },
+      {
+        id: "kor-gfc-band",
+        startYear: 2008,
+        endYear: 2009,
+        fill: "rgba(148, 163, 184, 0.12)",
+        markAreaLabel: "2008 GFC",
+      },
+      {
+        id: "kor-covid-band",
+        startYear: 2020,
+        endYear: 2020,
+        fill: "rgba(148, 163, 184, 0.10)",
       },
     ],
   },
