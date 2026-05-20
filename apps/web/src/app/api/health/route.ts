@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+// Touch file to trigger Railway redeploy after platform outages.
 const API_BASE = process.env.API_URL ?? "http://localhost:8000";
 
 export async function GET() {
