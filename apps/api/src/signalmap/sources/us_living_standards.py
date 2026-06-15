@@ -93,6 +93,23 @@ def _deflate_with_cpi(
     return out
 
 
+def _resolve_common_index_base_year(
+    series_list: list[list[dict[str, float | str]]], preferred_year: int = 2000
+) -> int | None:
+    maps = [_points_by_year(s) for s in series_list if s]
+    if not maps:
+        return None
+    years = sorted({y for mp in maps for y in mp})
+    try_order = [preferred_year, *[y for y in years if y != preferred_year]] if preferred_year in years else years
+    for y in try_order:
+        if all(
+            (v := mp.get(y)) is not None and v != 0 and v == v  # finite, non-zero
+            for mp in maps
+        ):
+            return y
+    return None
+
+
 def _reindex(points: list[dict[str, float | str]], base_year: int) -> list[dict[str, float | str]]:
     by_year = _points_by_year(points)
     base = by_year.get(base_year)
@@ -153,7 +170,11 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
         series["public_tuition_annual_usd"], series["median_household_income_real_usd"]
     )
 
-    prod_base = 1979
+    prod_base = _resolve_common_index_base_year(
+        [series["productivity_index"], series["hourly_compensation_index"]], preferred_year=2000
+    )
+    if prod_base is None:
+        prod_base = 1979
     series["productivity_reindexed"] = _reindex(series["productivity_index"], prod_base)
     series["compensation_reindexed"] = _reindex(series["hourly_compensation_index"], prod_base)
 

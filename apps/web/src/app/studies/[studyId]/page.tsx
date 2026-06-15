@@ -108,7 +108,6 @@ import {
 } from "@/lib/isi-diagnostics-charts";
 import {
   baseYearToIsoDate,
-  indexGdpComparisonTo100Base2000,
   indexSeriesAtBaseYear,
   resolveIndexedBaseYear,
 } from "@/lib/gdp-levels-indexed";
@@ -117,6 +116,14 @@ import {
   indexSeriesTo100,
   resolveCommonIndexBaseYear,
 } from "@/lib/dutch-disease-overview-index";
+import {
+  DEFAULT_INDEX_PREFERRED_YEAR,
+  formatIndexEquals100Label,
+  formatIndexedToEquals100Phrase,
+  formatIndexedToEquals100Subtitle,
+  formatSharedIndexBaseNote,
+  indexMultiSeriesTo100SharedBase,
+} from "@/lib/indexed-chart-base";
 import {
   buildOilEconomyIndexedMultiSeries,
   OIL_ECONOMY_COLOR_PRICE,
@@ -1547,26 +1554,74 @@ export default function StudyDetailPage() {
     gdpGlobalPerCountryBasis,
   ]);
 
+  const gdpGlobalIndexedPack = useMemo(() => {
+    if (!isGdpGlobalComparison || !gdpGlobalAbsoluteDisplayed || gdpGlobalDisplayMode !== "indexed") {
+      return null;
+    }
+    const raw = gdpGlobalAbsoluteDisplayed;
+    return indexMultiSeriesTo100SharedBase(
+      [
+        { key: "us", points: raw.us },
+        { key: "china", points: raw.china },
+        { key: "japan", points: raw.japan },
+        { key: "germany", points: raw.germany },
+        { key: "india", points: raw.india },
+        { key: "russia", points: raw.russia },
+        { key: "world", points: raw.world },
+      ],
+      DEFAULT_INDEX_PREFERRED_YEAR
+    );
+  }, [isGdpGlobalComparison, gdpGlobalAbsoluteDisplayed, gdpGlobalDisplayMode]);
+
+  const gdpGlobalIndexBaseYear = gdpGlobalIndexedPack?.baseYear ?? null;
+
   const gdpGlobalDisplayed = useMemo(() => {
     if (!isGdpGlobalComparison || !gdpGlobalAbsoluteDisplayed) return null;
-    const raw = gdpGlobalAbsoluteDisplayed;
     if (gdpGlobalDisplayMode === "indexed") {
+      const byKey = gdpGlobalIndexedPack?.byKey ?? {};
+      const pick = (key: string) => byKey[key] ?? [];
       return {
-        us: indexGdpComparisonTo100Base2000(raw.us),
-        china: indexGdpComparisonTo100Base2000(raw.china),
-        japan: indexGdpComparisonTo100Base2000(raw.japan),
-        germany: indexGdpComparisonTo100Base2000(raw.germany),
-        india: indexGdpComparisonTo100Base2000(raw.india),
-        russia: indexGdpComparisonTo100Base2000(raw.russia),
-        world: indexGdpComparisonTo100Base2000(raw.world),
+        us: pick("us"),
+        china: pick("china"),
+        japan: pick("japan"),
+        germany: pick("germany"),
+        india: pick("india"),
+        russia: pick("russia"),
+        world: pick("world"),
       };
     }
-    return raw;
+    return gdpGlobalAbsoluteDisplayed;
   }, [
     isGdpGlobalComparison,
     gdpGlobalAbsoluteDisplayed,
     gdpGlobalDisplayMode,
+    gdpGlobalIndexedPack,
   ]);
+
+  const gdpGlobalIndexChartLocale = isFa ? ("fa" as const) : ("en" as const);
+  const gdpGlobalIndexUnitLabel = formatIndexEquals100Label(
+    gdpGlobalIndexBaseYear ?? DEFAULT_INDEX_PREFERRED_YEAR,
+    gdpGlobalIndexChartLocale
+  );
+  const gdpGlobalIndexToggleLabel = formatIndexedToEquals100Phrase(
+    DEFAULT_INDEX_PREFERRED_YEAR,
+    gdpGlobalIndexChartLocale
+  );
+  const gdpGlobalIndexExportTitle = formatIndexedToEquals100Phrase(
+    gdpGlobalIndexBaseYear ?? DEFAULT_INDEX_PREFERRED_YEAR,
+    gdpGlobalIndexChartLocale
+  );
+  const gdpGlobalIndexAxisLabel = isFa
+    ? `شاخص ${faEconomic.gdp} (${localizeChartNumericDisplayString(String(gdpGlobalIndexBaseYear ?? DEFAULT_INDEX_PREFERRED_YEAR), "fa")} = ۱۰۰)`
+    : `GDP index (${gdpGlobalIndexBaseYear ?? DEFAULT_INDEX_PREFERRED_YEAR} = 100)`;
+  const gdpGlobalIndexFallbackNote =
+    gdpGlobalIndexBaseYear != null
+      ? formatSharedIndexBaseNote(
+          gdpGlobalIndexBaseYear,
+          DEFAULT_INDEX_PREFERRED_YEAR,
+          gdpGlobalIndexChartLocale
+        )
+      : null;
 
   const gdpGlobalShareSeries = useMemo(() => {
     if (!gdpGlobalCurrentUsdSeries) return null;
@@ -7471,8 +7526,8 @@ export default function StudyDetailPage() {
               : isGdpGlobalComparison
                 ? L(
                     isFa,
-                    "World Bank WDI total GDP (NY.GDP.MKTP.KD preferred; NY.GDP.MKTP.CD per economy when KD is missing). Default: indexed to 100 in 2000 (or earliest usable base year). Toggle absolute for dollar levels; optional log scale in absolute view. Toggle event layers below.",
-                    "GDP کل WDI بانک جهانی (ترجیح NY.GDP.MKTP.KD؛ در صورت نبود KD برای هر اقتصار NY.GDP.MKTP.CD). پیش‌فرض: شاخص ۱۰۰ در ۲۰۰۰ میلادی (یا نزدیک‌ترین سال پایهٔ معتبر). برای سطح دلاری «مطلق» را بزنید؛ در نمای مطلق می‌توان مقیاس لگاریتمی را روشن کرد. لایه‌های رویداد را پایین تنظیم کنید."
+                    "World Bank WDI total GDP (NY.GDP.MKTP.KD preferred; NY.GDP.MKTP.CD per economy when KD is missing). Default: all countries indexed to 100 in one shared calendar year (2000 when every series has data; otherwise the earliest year valid for all displayed lines). Toggle absolute for dollar levels; optional log scale in absolute view. Toggle event layers below.",
+                    "GDP کل WDI بانک جهانی (ترجیح NY.GDP.MKTP.KD؛ در صورت نبود KD برای هر اقتصار NY.GDP.MKTP.CD). پیش‌فرض: همهٔ کشورها در یک سال میلادی مشترک به ۱۰۰ شاخص می‌شوند (۲۰۰۰ وقتی همهٔ سری‌ها داده دارند؛ وگرنه نزدیک‌ترین سالی که برای همهٔ خطوط معتبر است). برای سطح دلاری «مطلق» را بزنید؛ در نمای مطلق می‌توان مقیاس لگاریتمی را روشن کرد. لایه‌های رویداد را پایین تنظیم کنید."
                   )
                 : isIsiDiagnostics
                   ? L(
@@ -7546,7 +7601,7 @@ export default function StudyDetailPage() {
                       : "bg-transparent text-muted-foreground hover:bg-muted/60"
                   }`}
                 >
-                  {L(isFa, "Indexed (2000 = 100)", "شاخص‌شده (۲۰۰۰ = ۱۰۰)")}
+                  {gdpGlobalIndexToggleLabel}
                 </button>
                 <button
                   type="button"
@@ -9947,13 +10002,23 @@ export default function StudyDetailPage() {
                       isFa,
                       (() => {
                         const b = String(oilEconomyIndexed.baseYear);
+                        const note = formatSharedIndexBaseNote(
+                          oilEconomyIndexed.baseYear,
+                          DEFAULT_INDEX_PREFERRED_YEAR,
+                          "en"
+                        );
                         if (oilEconomyRealUsdActive) {
-                          return `Each series is set to 100 in ${b}. Price and revenue are in constant ${oilCpiBaseYear} USD (US CPI, FRED CPIAUCSL). Compares relative change, not levels.`;
+                          return `Each series is set to 100 in ${b}. Price and revenue are in constant ${oilCpiBaseYear} USD (US CPI, FRED CPIAUCSL). Compares relative change, not levels.${note ? ` ${note}` : ""}`;
                         }
-                        return `Each series is set to 100 in ${b} (or the earliest year where all three have values). Compares relative change, not levels.`;
+                        return `Each series is set to 100 in ${b}. Compares relative change, not levels.${note ? ` ${note}` : ""}`;
                       })(),
                       (() => {
                         const b = String(oilEconomyIndexed.baseYear);
+                        const note = formatSharedIndexBaseNote(
+                          oilEconomyIndexed.baseYear,
+                          DEFAULT_INDEX_PREFERRED_YEAR,
+                          "fa"
+                        );
                         if (oilEconomyRealUsdActive) {
                           return `هر سری در ${localizeChartNumericDisplayString(
                             b,
@@ -9961,9 +10026,9 @@ export default function StudyDetailPage() {
                           )} بر شاخص ۱۰۰ نرمال می‌شود؛ قیمت و درآمد به دلار ثابت ${localizeChartNumericDisplayString(
                             String(oilCpiBaseYear),
                             "fa"
-                          )} (CPIAUCSL، FRED) می‌باشد؛ تغییر نسبی را می‌سنجد نه سطح مطلق.`;
+                          )} (CPIAUCSL، FRED) می‌باشد؛ تغییر نسبی را می‌سنجد نه سطح مطلق.${note ? ` ${note}` : ""}`;
                         }
-                        return `هر سری به شاخص ۱۰۰ در سال ${localizeChartNumericDisplayString(b, "fa")} (یا نزدیک‌ترین سالی که هر سه مقدار دارند) نرمال شده است؛ تغییر نسبی را می‌سنجد نه سطح مطلق.`;
+                        return `هر سری به شاخص ۱۰۰ در سال ${localizeChartNumericDisplayString(b, "fa")} نرمال شده است؛ تغییر نسبی را می‌سنجد نه سطح مطلق.${note ? ` ${note}` : ""}`;
                       })()
                     )}
                   </p>
@@ -10760,7 +10825,7 @@ export default function StudyDetailPage() {
                     label: L(isFa, "United States", "ایالات متحده"),
                     unit:
                       gdpGlobalDisplayMode === "indexed"
-                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        ? gdpGlobalIndexUnitLabel
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
                     points: gdpGlobalDisplayed.us,
                   },
@@ -10768,7 +10833,7 @@ export default function StudyDetailPage() {
                     label: L(isFa, "China", "چین"),
                     unit:
                       gdpGlobalDisplayMode === "indexed"
-                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        ? gdpGlobalIndexUnitLabel
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
                     points: gdpGlobalDisplayed.china,
                   },
@@ -10776,7 +10841,7 @@ export default function StudyDetailPage() {
                     label: L(isFa, "Japan", "ژاپن"),
                     unit:
                       gdpGlobalDisplayMode === "indexed"
-                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        ? gdpGlobalIndexUnitLabel
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
                     points: gdpGlobalDisplayed.japan,
                   },
@@ -10784,7 +10849,7 @@ export default function StudyDetailPage() {
                     label: L(isFa, "Germany", "آلمان"),
                     unit:
                       gdpGlobalDisplayMode === "indexed"
-                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        ? gdpGlobalIndexUnitLabel
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
                     points: gdpGlobalDisplayed.germany,
                   },
@@ -10792,7 +10857,7 @@ export default function StudyDetailPage() {
                     label: L(isFa, "India", "هند"),
                     unit:
                       gdpGlobalDisplayMode === "indexed"
-                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        ? gdpGlobalIndexUnitLabel
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
                     points: gdpGlobalDisplayed.india,
                   },
@@ -10800,7 +10865,7 @@ export default function StudyDetailPage() {
                     label: L(isFa, "Russia", "روسیه"),
                     unit:
                       gdpGlobalDisplayMode === "indexed"
-                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        ? gdpGlobalIndexUnitLabel
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
                     points: gdpGlobalDisplayed.russia,
                   },
@@ -10808,7 +10873,7 @@ export default function StudyDetailPage() {
                     label: L(isFa, "World", "جهان"),
                     unit:
                       gdpGlobalDisplayMode === "indexed"
-                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        ? gdpGlobalIndexUnitLabel
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
                     points: gdpGlobalDisplayed.world,
                   },
@@ -10820,7 +10885,11 @@ export default function StudyDetailPage() {
                 exportPresentationStudyHeading={displayStudy.title}
                 exportPresentationTitle={
                   gdpGlobalDisplayMode === "indexed"
-                    ? L(isFa, "GDP — indexed (2000 = 100)", `${faEconomic.gdp} — شاخص‌شده (۲۰۰۰ = ۱۰۰)`)
+                    ? L(
+                        isFa,
+                        `GDP — ${gdpGlobalIndexExportTitle}`,
+                        `${faEconomic.gdp} — ${gdpGlobalIndexExportTitle}`
+                      )
                     : L(isFa, "GDP — levels (US$)", `${faEconomic.gdp} — سطح (دلار)`)
                 }
                 exportSourceFooter={studyChartExportSource(isFa, [
@@ -10849,7 +10918,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit:
                       gdpGlobalDisplayMode === "indexed"
-                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        ? gdpGlobalIndexUnitLabel
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
                     points: gdpGlobalDisplayed.us,
                     color: COUNTRY_COMPARATOR_STYLES.us.color,
@@ -10862,7 +10931,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit:
                       gdpGlobalDisplayMode === "indexed"
-                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        ? gdpGlobalIndexUnitLabel
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
                     points: gdpGlobalDisplayed.china,
                     color: COUNTRY_COMPARATOR_STYLES.china.color,
@@ -10875,7 +10944,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit:
                       gdpGlobalDisplayMode === "indexed"
-                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        ? gdpGlobalIndexUnitLabel
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
                     points: gdpGlobalDisplayed.japan,
                     color: COUNTRY_COMPARATOR_STYLES.japan.color,
@@ -10888,7 +10957,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit:
                       gdpGlobalDisplayMode === "indexed"
-                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        ? gdpGlobalIndexUnitLabel
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
                     points: gdpGlobalDisplayed.germany,
                     color: COUNTRY_COMPARATOR_STYLES.germany.color,
@@ -10901,7 +10970,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit:
                       gdpGlobalDisplayMode === "indexed"
-                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        ? gdpGlobalIndexUnitLabel
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
                     points: gdpGlobalDisplayed.india,
                     color: COUNTRY_COMPARATOR_STYLES.india.color,
@@ -10914,7 +10983,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit:
                       gdpGlobalDisplayMode === "indexed"
-                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        ? gdpGlobalIndexUnitLabel
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
                     points: gdpGlobalDisplayed.russia,
                     color: COUNTRY_COMPARATOR_STYLES.russia.color,
@@ -10927,7 +10996,7 @@ export default function StudyDetailPage() {
                     yAxisIndex: 0,
                     unit:
                       gdpGlobalDisplayMode === "indexed"
-                        ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                        ? gdpGlobalIndexUnitLabel
                         : L(isFa, "US$ (WDI)", "دلار (WDI)"),
                     points: gdpGlobalDisplayed.world,
                     color: SIGNAL_COUNTRY.world,
@@ -10943,7 +11012,7 @@ export default function StudyDetailPage() {
                 multiSeriesYAxisNameOverrides={{
                   0:
                     gdpGlobalDisplayMode === "indexed"
-                      ? L(isFa, "GDP index (2000 = 100 when available)", `شاخص ${faEconomic.gdp} (۲۰۰۰ = ۱۰۰ در صورت وجود)`)
+                      ? gdpGlobalIndexAxisLabel
                       : L(isFa, "GDP (US$)", `${faEconomic.gdp} (دلار)`),
                 }}
               />
@@ -10953,6 +11022,12 @@ export default function StudyDetailPage() {
                   "World GDP is the World Bank WLD aggregate, not the sum of only the displayed countries.",
                   "GDP جهان مجموع منتشرشدهٔ WLD بانک جهانی است، نه جمعِ صرفاً کشورهایی که نمایش داده شده‌اند."
                 )}
+                {gdpGlobalDisplayMode === "indexed" && gdpGlobalIndexFallbackNote ? (
+                  <>
+                    {" "}
+                    {gdpGlobalIndexFallbackNote}
+                  </>
+                ) : null}
               </p>
               {gdpGlobalShareSeries ? (
                 <div className="pt-6 mt-6 border-t border-border space-y-2">
@@ -11293,7 +11368,7 @@ export default function StudyDetailPage() {
                       sourceDetail: gdpGlobalSource.publisher ?? "World Bank",
                       unitLabel:
                         gdpGlobalDisplayMode === "indexed"
-                          ? L(isFa, "Index (2000 = 100)", "شاخص (۲۰۰۰ = ۱۰۰)")
+                          ? gdpGlobalIndexUnitLabel
                           : L(isFa, "US$ total GDP", `${faEconomic.gdp} کل به دلار`),
                       unitNote: L(
                         isFa,
@@ -11323,9 +11398,11 @@ export default function StudyDetailPage() {
                       smaller ones on one axis.
                     </p>
                     <p>
-                      The default indexed view sets each country to 100 in calendar year 2000 when that year exists in WDI
-                      for that series (otherwise an early usable base year), so you can compare relative expansion. The world
-                      line is the Bank’s WLD aggregate—not the sum of only the displayed countries.
+                      The default indexed view sets every displayed country to 100 in one shared calendar year
+                      (2000 when all series have valid data; otherwise the earliest year valid for every line shown).
+                      Absolute levels use the Bank’s preferred constant-price series where present, with current US$
+                      as a fallback per economy when needed. The world line is the Bank’s WLD aggregate—not the sum
+                      of only the displayed countries.
                     </p>
                   </>
                 )}
@@ -11388,8 +11465,24 @@ export default function StudyDetailPage() {
                   <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
                     {L(
                       isFa,
-                      `Each series is indexed to 100 in calendar year ${isiOverviewIndexed.baseYear} when that year has valid data for every line shown (otherwise the earliest common year with valid values for all four). The chart compares co-movement of structure, not absolute levels.`,
-                      `هر سری به شاخص ۱۰۰ در سال ${localizeChartNumericDisplayString(String(isiOverviewIndexed.baseYear), "fa")} نرمال می‌شود (اگر آن سال برای همهٔ خطوط معتبر نباشد، نزدیک‌ترین سال مشترک با مقادیر معتبر). این نما هم‌حرکتی ساختار را نشان می‌دهد، نه سطح مطلق.`
+                      (() => {
+                        const sub = formatIndexedToEquals100Subtitle(isiOverviewIndexed.baseYear, "en");
+                        const note = formatSharedIndexBaseNote(
+                          isiOverviewIndexed.baseYear,
+                          DEFAULT_INDEX_PREFERRED_YEAR,
+                          "en"
+                        );
+                        return `${sub}. The chart compares co-movement of structure, not absolute levels.${note ? ` ${note}` : ""}`;
+                      })(),
+                      (() => {
+                        const sub = formatIndexedToEquals100Subtitle(isiOverviewIndexed.baseYear, "fa");
+                        const note = formatSharedIndexBaseNote(
+                          isiOverviewIndexed.baseYear,
+                          DEFAULT_INDEX_PREFERRED_YEAR,
+                          "fa"
+                        );
+                        return `${sub}. این نما هم‌حرکتی ساختار را نشان می‌دهد، نه سطح مطلق.${note ? ` ${note}` : ""}`;
+                      })()
                     )}
                   </p>
                   <TimelineChart
@@ -13797,8 +13890,24 @@ export default function StudyDetailPage() {
                   <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
                     {L(
                       isFa,
-                      `Each series is indexed to 100 in ${dutchOverviewIndexed.baseYear} (or the earliest calendar year where every line shown here has a valid value, if ${dutchOverviewIndexed.baseYear} is unavailable). Units differ (% of GDP vs toman/USD); this view is for visual pattern comparison only, not direct level comparison.`,
-                      `هر سری به شاخص ۱۰۰ در سال ${localizeChartNumericDisplayString(String(dutchOverviewIndexed.baseYear), "fa")} نرمال شده است (اگر آن سال داده نباشد، نزدیک‌ترین سالی که همهٔ خطوط مقدار معتبر دارند). واحدها متفاوت‌اند (${faEconomic.gdpPctUnit} در برابر تومان/دلار)؛ این نما فقط برای مقایسهٔ الگوی بصری است، نه سطح مطلق.`
+                      (() => {
+                        const sub = formatIndexedToEquals100Subtitle(dutchOverviewIndexed.baseYear, "en");
+                        const note = formatSharedIndexBaseNote(
+                          dutchOverviewIndexed.baseYear,
+                          DEFAULT_INDEX_PREFERRED_YEAR,
+                          "en"
+                        );
+                        return `${sub}. Units differ (% of GDP vs toman/USD); this view is for visual pattern comparison only, not direct level comparison.${note ? ` ${note}` : ""}`;
+                      })(),
+                      (() => {
+                        const sub = formatIndexedToEquals100Subtitle(dutchOverviewIndexed.baseYear, "fa");
+                        const note = formatSharedIndexBaseNote(
+                          dutchOverviewIndexed.baseYear,
+                          DEFAULT_INDEX_PREFERRED_YEAR,
+                          "fa"
+                        );
+                        return `${sub}. واحدها متفاوت‌اند (${faEconomic.gdpPctUnit} در برابر تومان/دلار)؛ این نما فقط برای مقایسهٔ الگوی بصری است، نه سطح مطلق.${note ? ` ${note}` : ""}`;
+                      })()
                     )}
                   </p>
                   <TimelineChart

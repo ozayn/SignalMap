@@ -105,14 +105,14 @@ const GDP_GLOBAL_COMPARISON_EN: LearningNoteSection[] = [
     heading: "What this shows",
     bullets: [
       "Gross domestic product (GDP) is the total value of finished goods and services produced in an economy over a period. Here it is shown as World Bank WDI totals for seven geographies: the United States, China, Japan, Germany, India, Russia, and the published world aggregate (WLD).",
-      "Default view is indexed so lines show relative change from a common base style (100 in calendar year 2000 when available for that series). Absolute levels use the Bank’s preferred constant-price series where present, with current US$ as a fallback per economy when needed.",
+      "Default view is indexed so every line uses 100 in one shared calendar year (2000 when all displayed series have valid data; otherwise the earliest year valid for every line shown). Absolute levels use the Bank’s preferred constant-price series where present, with current US$ as a fallback per economy when needed.",
     ],
   },
   {
     heading: "How to read",
     bullets: [
       "Horizontal axis: year (Gregorian calendar; optional Solar Hijri / both labels when Persian UI is on). Vertical axis: index (100 = base year) or GDP in US dollars, depending on the toggle.",
-      "Indexed lines answer “how much larger or smaller is GDP versus the base year?” for each country separately; they do not rank total dollar size on one scale.",
+      "Indexed lines answer “how much larger or smaller is GDP versus the shared base year?” All displayed countries use the same base year (= 100); they do not rank total dollar size on one scale.",
       "Log scale (absolute view only) compresses very large gaps—useful when one economy’s dollar total would otherwise flatten the rest.",
     ],
   },
@@ -130,14 +130,14 @@ const GDP_GLOBAL_COMPARISON_FA: LearningNoteSection[] = [
     heading: "What this shows",
     bullets: [
       "تولید ناخالص داخلی (GDP) جمع ارزش کالاها و خدمات نهایی تولیدشده در یک اقتصاد در یک دوره است. اینجا از WDI بانک جهانی برای ایالات متحده، چین، ژاپن، آلمان، هند، روسیه و مجموع جهانی منتشرشده (WLD) نمایش داده می‌شود.",
-      "نمای پیش‌فرض شاخص‌شده است تا تغییر نسبی نسبت به سال پایه (۱۰۰ در سال ۲۰۰۰ میلادی هر جا برای آن سری موجود باشد) خوانا بماند. سطح مطلق ترجیحاً به دلار ثابت ۲۰۱۵ و در صورت نبود داده به دلار جاری برای هر اقتصاد است.",
+      "نمای پیش‌فرض شاخص‌شده است: هر خط در یک سال میلادی مشترک به ۱۰۰ نرمال می‌شود (۲۰۰۰ وقتی همهٔ سری‌های نمایش‌داده‌شده داده دارند؛ وگرنه نزدیک‌ترین سالی که برای همهٔ خطوط معتبر است). سطح مطلق ترجیحاً به دلار ثابت ۲۰۱۵ و در صورت نبود داده به دلار جاری برای هر اقتصاد است.",
     ],
   },
   {
     heading: "How to read",
     bullets: [
       "محور افقی: سال (میلادی؛ در رابط فارسی می‌توان برچسب شمسی یا هر دو را دید). محور عمودی: شاخص (۱۰۰ = سال پایه) یا GDP به دلار بسته به حالت نمایش.",
-      "خطوط شاخص‌شده برای هر کشور جدا پاسخ می‌دهند GDP نسبت به سال پایه چقدر بزرگ‌تر یا کوچک‌تر شده؛ رتبه‌بندی مطلق دلاری روی یک مقیاس نیست.",
+      "خطوط شاخص‌شده نشان می‌دهند GDP نسبت به سال پایهٔ مشترک چقدر بزرگ‌تر یا کوچک‌تر شده؛ همهٔ کشورهای نمایش‌داده‌شده همان سال پایه (= ۱۰۰) را دارند؛ رتبه‌بندی مطلق دلاری روی یک مقیاس نیست.",
       "مقیاس لگاریتمی فقط در نمای مطلق است و فاصلهٔ بسیار بزرگ دلاری را فشرده می‌کند.",
     ],
   },

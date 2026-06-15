@@ -12,6 +12,12 @@ import { SourceInfo, type SourceInfoItem } from "@/components/source-info";
 import { InSimpleTerms } from "@/components/in-simple-terms";
 import { trackEvent } from "@/lib/analytics";
 import { getStudyById } from "@/lib/studies";
+import {
+  DEFAULT_INDEX_PREFERRED_YEAR,
+  formatIndexEquals100Label,
+  formatIndexedToEquals100Subtitle,
+  formatSharedIndexBaseNote,
+} from "@/lib/indexed-chart-base";
 import { SIGNAL_CONCEPT, SIGNAL_COUNTRY } from "@/lib/signalmap-chart-colors";
 
 type Point = { date: string; value: number };
@@ -81,7 +87,9 @@ export function UsLivingStandardsStudy() {
   const s = bundle?.series ?? {};
   const fred = bundle?.fred_series ?? {};
   const realBaseYear = bundle?.real_base_year ?? 2022;
-  const prodBaseYear = bundle?.productivity_compensation_base_year ?? 1979;
+  const prodBaseYear = bundle?.productivity_compensation_base_year ?? DEFAULT_INDEX_PREFERRED_YEAR;
+  const prodIndexUnit = formatIndexEquals100Label(prodBaseYear);
+  const prodIndexFallbackNote = formatSharedIndexBaseNote(prodBaseYear, DEFAULT_INDEX_PREFERRED_YEAR);
 
   const commonChartProps = {
     chartRangeGranularity: "year" as const,
@@ -175,8 +183,8 @@ export function UsLivingStandardsStudy() {
         label: "Productivity vs compensation",
         sourceName: "FRED",
         sourceUrl: "https://fred.stlouisfed.org",
-        sourceDetail: `Nonfarm business sector indexes reindexed to ${prodBaseYear}=100`,
-        unitLabel: `Index (${prodBaseYear}=100) — ${fred.productivity_index ?? "OPHNFB"} vs ${fred.hourly_compensation_index ?? "COMPNFB"}`,
+        sourceDetail: `Nonfarm business sector indexes; ${formatIndexedToEquals100Subtitle(prodBaseYear)}`,
+        unitLabel: `${formatIndexedToEquals100Subtitle(prodBaseYear)} — ${fred.productivity_index ?? "OPHNFB"} vs ${fred.hourly_compensation_index ?? "COMPNFB"}`,
       },
       {
         label: "Average hourly earnings",
@@ -460,7 +468,8 @@ export function UsLivingStandardsStudy() {
             <CardHeader className="space-y-1 pb-2">
               <CardTitle className="text-base">4. Productivity vs compensation</CardTitle>
               <p className="text-xs text-muted-foreground">
-                Nonfarm business sector indexes reindexed to {prodBaseYear}=100
+                {formatIndexedToEquals100Subtitle(prodBaseYear)}
+                {prodIndexFallbackNote ? ` — ${prodIndexFallbackNote}` : null}
               </p>
             </CardHeader>
             <CardContent className="pt-0">
@@ -474,7 +483,7 @@ export function UsLivingStandardsStudy() {
                       {
                         key: "productivity",
                         label: "Labor productivity (real output per hour)",
-                        unit: `Index (${prodBaseYear}=100)`,
+                        unit: prodIndexUnit,
                         yAxisIndex: 0 as const,
                         points: s.productivity_reindexed ?? [],
                         color: SIGNAL_COUNTRY.us,
@@ -483,7 +492,7 @@ export function UsLivingStandardsStudy() {
                       {
                         key: "compensation",
                         label: "Hourly compensation",
-                        unit: `Index (${prodBaseYear}=100)`,
+                        unit: prodIndexUnit,
                         yAxisIndex: 0 as const,
                         points: s.compensation_reindexed ?? [],
                         color: SIGNAL_CONCEPT.hourly_compensation,
@@ -492,7 +501,7 @@ export function UsLivingStandardsStudy() {
                     ]}
                     exportSourceFooter={wdiFredFooter(
                       [fred.productivity_index ?? "OPHNFB", fred.hourly_compensation_index ?? "COMPNFB"],
-                      `reindexed to ${prodBaseYear}=100`
+                      `${formatIndexedToEquals100Subtitle(prodBaseYear)}${prodIndexFallbackNote ? `; ${prodIndexFallbackNote}` : ""}`
                     )}
                     exportFileStem="us-living-standards-productivity-compensation"
                     {...commonChartProps}

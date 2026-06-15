@@ -744,10 +744,10 @@ export const STUDIES: StudyMeta[] = [
     primarySignal: { kind: "gdp_global_comparison" },
     eventLayers: ["iran_core", "world_core", "sanctions"],
     concepts: ["gdp", "measurement_vs_reality", "indexing", "event_overlay"],
-    unitLabel: "Indexed (2000 = 100) or US$ levels",
+    unitLabel: "Indexed (shared base year = 100) or US$ levels",
     observations: [
       "Each economy uses WDI total GDP; the app prefers constant 2015 US$ and falls back to current US$ only when the constant-price series is empty for that country.",
-      "Indexed view rescales each country independently (100 × value ÷ value in the base year); lines are comparable for relative growth, not for ranking absolute dollar totals.",
+      "Indexed view rescales every displayed country to 100 in one shared calendar year (2000 when all series have data; otherwise the earliest year valid for all lines); lines are comparable for relative growth, not for ranking absolute dollar totals.",
       "World GDP is the World Bank WLD aggregate, not the sum of only the displayed countries.",
       "Share chart uses nominal GDP (current US$) unless a separate real/PPP share mode is added later.",
       "Annual data; revisions can shift recent levels slightly.",
