@@ -777,7 +777,7 @@ def get_us_living_standards_bundle_signal(
         return get_us_living_standards_bundle(start, end)
     except Exception as e:
         log.exception("us_living_standards_bundle failed start=%s end=%s", start, end)
-        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}") from e
 
 
 @app.get("/api/signals/oil/production-exporters")

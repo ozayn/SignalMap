@@ -2,20 +2,28 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
 import httpx
 
 from signalmap.sources.world_bank_country_economy import (
-    _fetch_fred_graph_csv_rows,
+    FRED_GRAPH_CSV,
     _fred_rows_to_points,
 )
 
 _logger = logging.getLogger(__name__)
+
+STUDY_ID = "us-living-standards"
+FRED_GRAPH_TIMEOUT = 12.0
+FRED_API_TIMEOUT = 15.0
+FRED_MAX_WORKERS = 10
 
 FRED_OBSERVATIONS_URL = "https://api.stlouisfed.org/fred/series/observations"
 FRED_USER_AGENT = "SignalMap/1.0 (research; +https://github.com/ozayn/SignalMap)"
@@ -38,6 +46,40 @@ def _load_reference() -> dict[str, Any]:
         return json.load(f)
 
 
+def _log_series_warning(section: str, indicator: str, source: str, err: str) -> None:
+    _logger.warning(
+        "us_living_standards fetch failed study=%s section=%s indicator=%s source=%s err=%s",
+        STUDY_ID,
+        section,
+        indicator,
+        source,
+        err,
+    )
+
+
+def _fetch_fred_graph_csv_rows_timed(series_id: str, timeout: float = FRED_GRAPH_TIMEOUT) -> list[tuple[int, float]]:
+    try:
+        with httpx.Client(timeout=timeout, headers={"User-Agent": FRED_USER_AGENT}) as client:
+            r = client.get(FRED_GRAPH_CSV, params={"id": series_id})
+            r.raise_for_status()
+    except Exception as e:
+        raise ValueError(f"FRED {series_id} graph fetch failed: {e}") from e
+
+    rows: list[tuple[int, float]] = []
+    reader = csv.DictReader(StringIO(r.text))
+    value_col = series_id
+    for rec in reader:
+        ds = (rec.get("DATE") or rec.get("date") or rec.get("observation_date") or "").strip()
+        vs = (rec.get(value_col) or rec.get("VALUE") or "").strip()
+        if not ds or vs in ("", ".", "NaN"):
+            continue
+        try:
+            rows.append((int(ds[:4]), float(vs)))
+        except ValueError:
+            continue
+    return rows
+
+
 def _fetch_fred_api_rows(series_id: str, observation_start: str = "1940-01-01") -> list[tuple[int, float]]:
     api_key = (os.getenv("FRED_API_KEY") or "").strip()
     if not api_key:
@@ -48,7 +90,7 @@ def _fetch_fred_api_rows(series_id: str, observation_start: str = "1940-01-01") 
         "file_type": "json",
         "observation_start": observation_start,
     }
-    with httpx.Client(timeout=30.0, headers={"User-Agent": FRED_USER_AGENT}) as client:
+    with httpx.Client(timeout=FRED_API_TIMEOUT, headers={"User-Agent": FRED_USER_AGENT}) as client:
         r = client.get(FRED_OBSERVATIONS_URL, params=params)
         r.raise_for_status()
         data = r.json()
@@ -67,20 +109,95 @@ def _fetch_fred_api_rows(series_id: str, observation_start: str = "1940-01-01") 
     return rows
 
 
-def _fetch_fred_annual_points(
-    series_id: str, start_year: int, end_year: int, mode: str = "monthly_mean"
-) -> list[dict[str, float | str]]:
-    rows: list[tuple[int, float]] | None = None
+def _fetch_fred_raw_rows(series_id: str) -> tuple[list[tuple[int, float]] | None, str | None]:
     try:
-        rows = _fetch_fred_graph_csv_rows(series_id)
+        return _fetch_fred_graph_csv_rows_timed(series_id), None
     except Exception as graph_err:
+        api_key = (os.getenv("FRED_API_KEY") or "").strip()
+        if not api_key:
+            return None, f"FRED {series_id} graph failed ({graph_err}); FRED_API_KEY not configured"
         try:
-            rows = _fetch_fred_api_rows(series_id)
+            return _fetch_fred_api_rows(series_id), None
         except Exception as api_err:
-            raise ValueError(
-                f"FRED {series_id} unavailable (graph: {graph_err}; api: {api_err})"
-            ) from api_err
-    return _fred_rows_to_points(rows, start_year, end_year, mode)
+            return None, f"FRED {series_id} unavailable (graph: {graph_err}; api: {api_err})"
+
+
+def _fetch_fred_annual_points_safe(
+    series_id: str, start_year: int, end_year: int, mode: str = "monthly_mean"
+) -> tuple[list[dict[str, float | str]], str | None]:
+    rows, err = _fetch_fred_raw_rows(series_id)
+    if err or rows is None:
+        return [], err
+    return _fred_rows_to_points(rows, start_year, end_year, mode), None
+
+
+def _fetch_fred_series_parallel(
+    start_year: int, end_year: int, series_warnings: dict[str, str]
+) -> dict[str, list[dict[str, float | str]]]:
+    series: dict[str, list[dict[str, float | str]]] = {}
+
+    def _worker(key: str, series_id: str, mode: str) -> tuple[str, list[dict[str, float | str]], str | None]:
+        rows, err = _fetch_fred_raw_rows(series_id)
+        if err or rows is None:
+            _log_series_warning("fred", key, "FRED", err or "unknown")
+            return key, [], err
+        return key, _fred_rows_to_points(rows, start_year, end_year, mode), None
+
+    with ThreadPoolExecutor(max_workers=FRED_MAX_WORKERS) as pool:
+        futures = [
+            pool.submit(_worker, key, series_id, mode)
+            for key, (series_id, mode) in FRED_SERIES.items()
+        ]
+        for fut in as_completed(futures):
+            key, points, err = fut.result()
+            series[key] = points
+            if err:
+                series_warnings[key] = err
+    return series
+
+
+def _collect_household_goods_cpi_requests(
+    reference: dict[str, Any], start_year: int
+) -> dict[str, int]:
+    requests: dict[str, int] = {}
+    items_cfg: dict[str, Any] = reference.get("household_goods", {}).get("items", {})
+    for item_cfg in items_cfg.values():
+        cpi_id = str(item_cfg["cpi_fred_series"])
+        cpi_start = int(item_cfg.get("cpi_start_year", start_year))
+        requests[cpi_id] = min(requests.get(cpi_id, cpi_start), cpi_start)
+        continuation_id = item_cfg.get("cpi_continuation_series")
+        continuation_from = item_cfg.get("cpi_continuation_from_year")
+        if continuation_id and continuation_from:
+            cont_id = str(continuation_id)
+            cont_start = int(continuation_from) - 1
+            requests[cont_id] = min(requests.get(cont_id, cont_start), cont_start)
+    return requests
+
+
+def _prefetch_household_goods_cpi_parallel(
+    cpi_requests: dict[str, int],
+    end_year: int,
+    series_warnings: dict[str, str],
+) -> dict[str, list[dict[str, float | str]]]:
+    cpi_cache: dict[str, list[dict[str, float | str]]] = {}
+
+    def _worker(series_id: str, cpi_start: int) -> tuple[str, list[dict[str, float | str]], str | None]:
+        points, err = _fetch_fred_annual_points_safe(series_id, cpi_start, end_year)
+        if err:
+            _log_series_warning("household_goods", series_id, "FRED", err)
+        return series_id, points, err
+
+    with ThreadPoolExecutor(max_workers=FRED_MAX_WORKERS) as pool:
+        futures = {
+            pool.submit(_worker, series_id, cpi_start): series_id
+            for series_id, cpi_start in cpi_requests.items()
+        }
+        for fut in as_completed(futures):
+            series_id, points, err = fut.result()
+            cpi_cache[series_id] = points
+            if err:
+                series_warnings[f"cpi_{series_id}"] = err
+    return cpi_cache
 
 
 def _interpolate_annual(anchors: list[dict[str, float | int]], start_year: int, end_year: int) -> list[dict[str, float | str]]:
@@ -244,19 +361,11 @@ def _build_household_good_price_series(
     start_year: int,
     end_year: int,
     cpi_cache: dict[str, list[dict[str, float | str]]],
-    series_warnings: dict[str, str],
 ) -> list[dict[str, float | str]]:
     cpi_series_id = str(item_cfg["cpi_fred_series"])
     benchmark_year = int(item_cfg["benchmark_year"])
     benchmark_price = float(item_cfg["benchmark_price_usd"])
     cpi_start = int(item_cfg.get("cpi_start_year", start_year))
-
-    if cpi_series_id not in cpi_cache:
-        try:
-            cpi_cache[cpi_series_id] = _fetch_fred_annual_points(cpi_series_id, cpi_start, end_year)
-        except Exception as e:
-            cpi_cache[cpi_series_id] = []
-            series_warnings[f"cpi_{cpi_series_id}"] = str(e)
 
     cpi_points = cpi_cache.get(cpi_series_id, [])
     price = _cpi_anchored_price_series(cpi_points, benchmark_year, benchmark_price, cpi_start, end_year)
@@ -265,12 +374,6 @@ def _build_household_good_price_series(
     continuation_from = item_cfg.get("cpi_continuation_from_year")
     if continuation_id and continuation_from:
         cont_id = str(continuation_id)
-        if cont_id not in cpi_cache:
-            try:
-                cpi_cache[cont_id] = _fetch_fred_annual_points(cont_id, int(continuation_from) - 1, end_year)
-            except Exception as e:
-                cpi_cache[cont_id] = []
-                series_warnings[f"cpi_{cont_id}"] = str(e)
         splice_year = int(continuation_from) - 1
         price = _splice_ppi_price_series(price, cpi_cache.get(cont_id, []), splice_year)
 
@@ -285,10 +388,43 @@ def _build_household_good_price_series(
     return price
 
 
-def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str, Any]:
-    series: dict[str, list[dict[str, float | str]]] = {}
-    series_warnings: dict[str, str] = {}
+def _empty_bundle_skeleton(start_year: int, end_year: int) -> dict[str, Any]:
     reference = _load_reference()
+    household_goods_cfg = reference.get("household_goods", {})
+    hours_of_work_cfg = reference.get("hours_of_work", {})
+    return {
+        "series": {},
+        "reference_sources": dict(reference.get("sources", {})),
+        "fred_series": {k: v[0] for k, v in FRED_SERIES.items()},
+        "real_base_year": 2022,
+        "productivity_compensation_base_year": 1979,
+        "household_goods": {
+            "methodology_note": household_goods_cfg.get("methodology_note", ""),
+            "wage_fred_series": household_goods_cfg.get("wage_fred_series", "AHETPI"),
+            "items": {},
+        },
+        "hours_of_work": {
+            "methodology_note": hours_of_work_cfg.get("methodology_note", ""),
+            "wage_fred_series": hours_of_work_cfg.get("wage_fred_series", "AHETPI"),
+            "wage_source": hours_of_work_cfg.get("wage_source", ""),
+            "wage_tradeoffs": hours_of_work_cfg.get("wage_tradeoffs", ""),
+        },
+        "country_iso3": "USA",
+        "partial": True,
+    }
+
+
+def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str, Any]:
+    series_warnings: dict[str, str] = {}
+    try:
+        reference = _load_reference()
+    except Exception as e:
+        _logger.exception("us_living_standards reference load failed study=%s", STUDY_ID)
+        out = _empty_bundle_skeleton(start_year, end_year)
+        out["series_warnings"] = {"reference": str(e)}
+        out["fetch_error"] = str(e)
+        return out
+
     reference_sources = dict(reference.get("sources", {}))
     household_goods_cfg = reference.get("household_goods", {})
     hours_of_work_cfg = reference.get("hours_of_work", {})
@@ -304,13 +440,7 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
         "wage_tradeoffs": hours_of_work_cfg.get("wage_tradeoffs", ""),
     }
 
-    for key, (series_id, mode) in FRED_SERIES.items():
-        try:
-            fred_rows = _fetch_fred_graph_csv_rows(series_id)
-            series[key] = _fred_rows_to_points(fred_rows, start_year, end_year, mode)
-        except Exception as e:
-            series[key] = []
-            series_warnings[key] = str(e)
+    series = _fetch_fred_series_parallel(start_year, end_year, series_warnings)
 
     for ref_key in (
         "public_tuition_annual_usd",
@@ -321,7 +451,8 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
     ):
         series[ref_key] = _interpolate_annual(reference.get(ref_key, []), start_year, end_year)
 
-    cpi_cache: dict[str, list[dict[str, float | str]]] = {}
+    cpi_requests = _collect_household_goods_cpi_requests(reference, start_year)
+    cpi_cache = _prefetch_household_goods_cpi_parallel(cpi_requests, end_year, series_warnings)
     items_cfg: dict[str, Any] = household_goods_cfg.get("items", {})
     hours_key_by_item = {
         "refrigerator": "hours_for_refrigerator",
@@ -334,7 +465,7 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
 
     for item_key, item_cfg in items_cfg.items():
         price_series = _build_household_good_price_series(
-            item_cfg, reference, start_year, end_year, cpi_cache, series_warnings
+            item_cfg, reference, start_year, end_year, cpi_cache
         )
         price_series_key = f"{item_key}_estimated_price_usd"
         series[price_series_key] = price_series
@@ -355,31 +486,32 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
 
     real_base_year = 2022
     series["median_home_price_real_usd"] = _deflate_with_cpi(
-        series["median_home_price_usd"], series["cpi_all_items_index"], real_base_year
+        series.get("median_home_price_usd", []), series.get("cpi_all_items_index", []), real_base_year
     )
     series["public_tuition_real_usd"] = _deflate_with_cpi(
-        series["public_tuition_annual_usd"], series["cpi_all_items_index"], real_base_year
+        series.get("public_tuition_annual_usd", []), series.get("cpi_all_items_index", []), real_base_year
     )
     series["house_price_to_income_ratio"] = _derive_ratio(
-        series["median_home_price_usd"], series["median_household_income_real_usd"]
+        series.get("median_home_price_usd", []), series.get("median_household_income_real_usd", [])
     )
     series["tuition_to_income_ratio"] = _derive_ratio(
-        series["public_tuition_annual_usd"], series["median_household_income_real_usd"]
+        series.get("public_tuition_annual_usd", []), series.get("median_household_income_real_usd", [])
     )
 
     prod_base = _resolve_common_index_base_year(
-        [series["productivity_index"], series["hourly_compensation_index"]], preferred_year=2000
+        [series.get("productivity_index", []), series.get("hourly_compensation_index", [])],
+        preferred_year=2000,
     )
     if prod_base is None:
         prod_base = 1979
-    series["productivity_reindexed"] = _reindex(series["productivity_index"], prod_base)
-    series["compensation_reindexed"] = _reindex(series["hourly_compensation_index"], prod_base)
+    series["productivity_reindexed"] = _reindex(series.get("productivity_index", []), prod_base)
+    series["compensation_reindexed"] = _reindex(series.get("hourly_compensation_index", []), prod_base)
 
     series["hours_for_month_rent"] = _hours_to_afford(
-        series["median_gross_rent_monthly_usd"], wage_hours
+        series.get("median_gross_rent_monthly_usd", []), wage_hours
     )
     series["hours_for_year_tuition"] = _hours_to_afford(
-        series["public_tuition_annual_usd"], wage_hours
+        series.get("public_tuition_annual_usd", []), wage_hours
     )
 
     for meta_key, hours_key in (

@@ -1516,11 +1516,14 @@ US_LIVING_STANDARDS_SOURCE = {
 
 def get_us_living_standards_bundle(start: str, end: str) -> dict:
     """US living standards bundle: income, housing, tuition, productivity, hours-of-work proxies."""
-    from signalmap.sources.us_living_standards import fetch_us_living_standards_bundle
+    from signalmap.sources.us_living_standards import (
+        _empty_bundle_skeleton,
+        fetch_us_living_standards_bundle,
+    )
 
     start_year = int(start[:4])
     end_year = int(end[:4])
-    ck = f"signal:us_living_standards_bundle:v5:{start_year}:{end_year}"
+    ck = f"signal:us_living_standards_bundle:v6:{start_year}:{end_year}"
     cached = cache_get(ck)
     if cached is not None:
         return cached
@@ -1533,10 +1536,14 @@ def get_us_living_standards_bundle(start: str, end: str) -> dict:
             "source": US_LIVING_STANDARDS_SOURCE,
             "resolution": "annual",
         }
-        if not result.get("partial"):
-            cache_set(ck, result, CACHE_TTL)
+        cache_set(ck, result, CACHE_TTL)
         return result
-    except Exception:
+    except Exception as e:
+        logger.exception(
+            "us_living_standards_bundle fetch failed start_year=%d end_year=%d",
+            start_year,
+            end_year,
+        )
         if stale_cached is not None:
             logger.warning(
                 "us_living_standards_bundle stale cache fallback used start_year=%d end_year=%d",
@@ -1544,7 +1551,14 @@ def get_us_living_standards_bundle(start: str, end: str) -> dict:
                 end_year,
             )
             return stale_cached
-        raise
+        fallback = {
+            **_empty_bundle_skeleton(start_year, end_year),
+            "fetch_error": str(e),
+            "source": US_LIVING_STANDARDS_SOURCE,
+            "resolution": "annual",
+        }
+        cache_set(ck, fallback, 300)
+        return fallback
 
 
 def _filter_indicator_points_by_year(

@@ -58,6 +58,7 @@ type LivingStandardsBundle = {
   source?: { name?: string; url?: string };
   partial?: boolean;
   series_warnings?: Record<string, string>;
+  fetch_error?: string;
 };
 
 const STUDY_ID = "us-living-standards";
@@ -428,6 +429,23 @@ export function UsLivingStandardsStudy() {
       ) : loadError ? (
         <p className="py-8 text-sm text-destructive">Failed to load study data: {loadError}</p>
       ) : (
+        <>
+          {(bundle?.partial || bundle?.fetch_error) && (
+            <Card className="border-amber-500/40 bg-amber-500/5">
+              <CardContent className="py-3 text-sm text-muted-foreground">
+                {bundle?.fetch_error ? (
+                  <p>Some study data could not be loaded ({bundle.fetch_error}). Charts below may be incomplete.</p>
+                ) : (
+                  <p>Some data sources were temporarily unavailable. Charts below may show gaps or &ldquo;Data unavailable&rdquo; where series failed to load.</p>
+                )}
+                {bundle?.series_warnings && Object.keys(bundle.series_warnings).length > 0 && (
+                  <p className="mt-1 text-xs">
+                    Affected indicators: {Object.keys(bundle.series_warnings).join(", ")}.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {/* 1. Income */}
           <Card className="border-border md:col-span-2">
@@ -749,6 +767,7 @@ export function UsLivingStandardsStudy() {
             </CardContent>
           </Card>
         </div>
+        </>
       )}
 
       {study?.observations?.length ? <DataObservations observations={[...study.observations]} /> : null}
