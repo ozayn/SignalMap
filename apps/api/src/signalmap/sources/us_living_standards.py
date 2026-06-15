@@ -291,10 +291,17 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
     reference = _load_reference()
     reference_sources = dict(reference.get("sources", {}))
     household_goods_cfg = reference.get("household_goods", {})
+    hours_of_work_cfg = reference.get("hours_of_work", {})
     household_goods_meta: dict[str, Any] = {
         "methodology_note": household_goods_cfg.get("methodology_note", ""),
         "wage_fred_series": household_goods_cfg.get("wage_fred_series", "AHETPI"),
         "items": {},
+    }
+    hours_of_work_meta: dict[str, Any] = {
+        "methodology_note": hours_of_work_cfg.get("methodology_note", ""),
+        "wage_fred_series": hours_of_work_cfg.get("wage_fred_series", "AHETPI"),
+        "wage_source": hours_of_work_cfg.get("wage_source", ""),
+        "wage_tradeoffs": hours_of_work_cfg.get("wage_tradeoffs", ""),
     }
 
     for key, (series_id, mode) in FRED_SERIES.items():
@@ -323,6 +330,7 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
         "vacuum_cleaner": "hours_for_vacuum_cleaner",
     }
     wage_household = series.get("average_hourly_earnings_household_goods_usd", [])
+    wage_hours = wage_household
 
     for item_key, item_cfg in items_cfg.items():
         price_series = _build_household_good_price_series(
@@ -331,7 +339,7 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
         price_series_key = f"{item_key}_estimated_price_usd"
         series[price_series_key] = price_series
         hours_key = hours_key_by_item.get(item_key, f"hours_for_{item_key}")
-        series[hours_key] = _hours_to_afford(price_series, wage_household)
+        series[hours_key] = _hours_to_afford(price_series, wage_hours)
         start_years = [int(str(p["date"])[:4]) for p in series[hours_key]]
         household_goods_meta["items"][item_key] = {
             "label": item_cfg.get("label", item_key.replace("_", " ").title()),
@@ -368,11 +376,20 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
     series["compensation_reindexed"] = _reindex(series["hourly_compensation_index"], prod_base)
 
     series["hours_for_month_rent"] = _hours_to_afford(
-        series["median_gross_rent_monthly_usd"], series["average_hourly_earnings_usd"]
+        series["median_gross_rent_monthly_usd"], wage_hours
     )
     series["hours_for_year_tuition"] = _hours_to_afford(
-        series["public_tuition_annual_usd"], series["average_hourly_earnings_usd"]
+        series["public_tuition_annual_usd"], wage_hours
     )
+
+    for meta_key, hours_key in (
+        ("rent", "hours_for_month_rent"),
+        ("tuition", "hours_for_year_tuition"),
+    ):
+        pts = series.get(hours_key, [])
+        years = [int(str(p["date"])[:4]) for p in pts]
+        hours_of_work_meta[f"{meta_key}_hours_start_year"] = min(years) if years else None
+        hours_of_work_meta[f"{meta_key}_hours_end_year"] = max(years) if years else None
 
     out: dict[str, Any] = {
         "series": series,
@@ -381,6 +398,7 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
         "real_base_year": real_base_year,
         "productivity_compensation_base_year": prod_base,
         "household_goods": household_goods_meta,
+        "hours_of_work": hours_of_work_meta,
         "country_iso3": "USA",
     }
     if series_warnings:

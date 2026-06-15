@@ -1520,7 +1520,7 @@ def get_us_living_standards_bundle(start: str, end: str) -> dict:
 
     start_year = int(start[:4])
     end_year = int(end[:4])
-    ck = f"signal:us_living_standards_bundle:v4:{start_year}:{end_year}"
+    ck = f"signal:us_living_standards_bundle:v5:{start_year}:{end_year}"
     cached = cache_get(ck)
     if cached is not None:
         return cached

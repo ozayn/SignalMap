@@ -40,6 +40,16 @@ type LivingStandardsBundle = {
   reference_sources: Record<string, string>;
   real_base_year: number;
   productivity_compensation_base_year: number;
+  hours_of_work?: {
+    methodology_note?: string;
+    wage_fred_series?: string;
+    wage_source?: string;
+    wage_tradeoffs?: string;
+    rent_hours_start_year?: number | null;
+    tuition_hours_start_year?: number | null;
+    rent_hours_end_year?: number | null;
+    tuition_hours_end_year?: number | null;
+  };
   household_goods?: {
     methodology_note?: string;
     wage_fred_series?: string;
@@ -85,6 +95,9 @@ const HOURS_CHART_TUITION_METHOD =
   "Estimated as published in-state public tuition divided by the average hourly wage.";
 const HOURS_CHART_HOUSEHOLD_METHOD =
   "Estimated as representative prices divided by the average hourly wage.";
+
+const HOURS_OF_WORK_METHODOLOGY_NOTE =
+  "Hours-of-work estimates use historical wage proxies to approximate how many hours an average worker would need to work to cover the selected expense. The series are intended as contextual affordability signals rather than precise household budget calculations.";
 
 /** Household goods hours chart — distinct color + line pattern per good. */
 const HOUSEHOLD_GOODS_SERIES_STYLE = {
@@ -188,6 +201,19 @@ export function UsLivingStandardsStudy() {
     };
   }, [fred, realBaseYear, s, tuitionMode]);
 
+  const refSources = bundle?.reference_sources ?? {};
+  const hoursOfWorkMeta = bundle?.hours_of_work;
+  const householdGoodsMeta = bundle?.household_goods;
+  const hoursOfWorkWageSeriesId =
+    fred.average_hourly_earnings_household_goods_usd ??
+    hoursOfWorkMeta?.wage_fred_series ??
+    householdGoodsMeta?.wage_fred_series ??
+    "AHETPI";
+  const hoursOfWorkMethodologyNote =
+    hoursOfWorkMeta?.methodology_note ??
+    refSources.hours_of_work_methodology ??
+    HOURS_OF_WORK_METHODOLOGY_NOTE;
+
   const sourceItems: SourceInfoItem[] = useMemo(
     () => [
       {
@@ -240,17 +266,11 @@ export function UsLivingStandardsStudy() {
         unitLabel: `${formatIndexedToEquals100Subtitle(prodBaseYear)} — ${fred.productivity_index ?? "OPHNFB"} vs ${fred.hourly_compensation_index ?? "COMPNFB"}`,
       },
       {
-        label: "Average hourly earnings (rent and tuition hours)",
-        sourceName: "FRED",
-        sourceUrl: `https://fred.stlouisfed.org/series/${fred.average_hourly_earnings_usd ?? "CES0500000003"}`,
-        sourceDetail: "Total private production and nonsupervisory employees; annual mean",
-        unitLabel: "Nominal US$ per hour",
-      },
-      {
-        label: "Average hourly earnings (household goods hours)",
+        label: "Average hourly earnings (hours-of-work charts)",
         sourceName: "FRED",
         sourceUrl: `https://fred.stlouisfed.org/series/${fred.average_hourly_earnings_household_goods_usd ?? "AHETPI"}`,
-        sourceDetail: "Production and nonsupervisory employees, total private; annual mean (1964+)",
+        sourceDetail:
+          "Production and nonsupervisory employees, total private; annual mean (1964+). CES0500000003 (all employees) begins 2006 — AHETPI used here for longer history.",
         unitLabel: "Nominal US$ per hour",
       },
       {
@@ -263,14 +283,18 @@ export function UsLivingStandardsStudy() {
       {
         label: HOURS_CHART_RENT_LABEL,
         sourceName: "SignalMap derived",
-        sourceDetail: `Median gross rent (Census reference anchors) ÷ FRED ${fred.average_hourly_earnings_usd ?? "CES0500000003"}`,
+        sourceDetail:
+          refSources.hours_for_month_rent ??
+          `Median gross rent (Census reference anchors) ÷ FRED ${fred.average_hourly_earnings_household_goods_usd ?? "AHETPI"}`,
         unitLabel: HOURS_Y_AXIS_LABEL,
         unitNote: HOURS_CHART_RENT_METHOD,
       },
       {
         label: HOURS_CHART_TUITION_LABEL,
         sourceName: "SignalMap derived",
-        sourceDetail: `College Board tuition anchors ÷ FRED ${fred.average_hourly_earnings_usd ?? "CES0500000003"}`,
+        sourceDetail:
+          refSources.hours_for_year_tuition ??
+          `College Board tuition anchors ÷ FRED ${fred.average_hourly_earnings_household_goods_usd ?? "AHETPI"}`,
         unitLabel: HOURS_Y_AXIS_LABEL,
         unitNote: HOURS_CHART_TUITION_METHOD,
       },
@@ -282,14 +306,8 @@ export function UsLivingStandardsStudy() {
         unitNote: `${HOURS_CHART_HOUSEHOLD_METHOD} Refrigerator (CUSR0000SAH3 proxy), washing machine (WPU12410220/WPU1241), television (CUSR0000SERA + retail anchors), vacuum cleaner (CUSR0000SAH3 proxy). Each series starts when its price and wage data overlap.`,
       },
     ],
-    [fred, prodBaseYear, realBaseYear]
+    [fred, prodBaseYear, realBaseYear, refSources]
   );
-
-  const wageSeriesId = fred.average_hourly_earnings_usd ?? "CES0500000003";
-  const householdGoodsWageSeriesId =
-    fred.average_hourly_earnings_household_goods_usd ?? bundle?.household_goods?.wage_fred_series ?? "AHETPI";
-  const householdGoodsMeta = bundle?.household_goods;
-  const refSources = bundle?.reference_sources ?? {};
 
   const hoursRentPoints = s.hours_for_month_rent ?? [];
   const hoursTuitionPoints = s.hours_for_year_tuition ?? [];
@@ -345,8 +363,8 @@ export function UsLivingStandardsStudy() {
           ]
             .filter(Boolean)
             .join("; ");
-    return hoursWorkChartFooter(householdGoodsWageSeriesId, expenseSource);
-  }, [householdGoodsMeta?.items, householdGoodsWageSeriesId, refSources]);
+    return hoursWorkChartFooter(hoursOfWorkWageSeriesId, expenseSource);
+  }, [householdGoodsMeta?.items, hoursOfWorkWageSeriesId, refSources]);
 
   const hoursChartBaseProps = {
     chartRangeGranularity: "year" as const,
@@ -625,8 +643,7 @@ export function UsLivingStandardsStudy() {
             <CardHeader className="space-y-2 pb-2">
               <CardTitle className="text-base">5. Affordability in hours of work</CardTitle>
               <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
-                Values indicate approximately how many hours an average worker would need to work to cover the
-                corresponding expense. These charts are descriptive approximations, not household-budget models.
+                {hoursOfWorkMethodologyNote} Each chart begins when both its expense and wage data are available.
               </p>
             </CardHeader>
             <CardContent className="space-y-8 pt-0">
@@ -645,8 +662,9 @@ export function UsLivingStandardsStudy() {
                           unit={HOURS_Y_AXIS_LABEL}
                           seriesColor={SIGNAL_COUNTRY.us}
                           exportSourceFooter={hoursWorkChartFooter(
-                            wageSeriesId,
-                            refSources.median_gross_rent_monthly_usd ??
+                            hoursOfWorkWageSeriesId,
+                            refSources.hours_for_month_rent ??
+                              refSources.median_gross_rent_monthly_usd ??
                               "U.S. Census Bureau median gross rent (reference anchors)"
                           )}
                           exportFileStem="us-living-standards-hours-rent"
@@ -671,8 +689,9 @@ export function UsLivingStandardsStudy() {
                           unit={HOURS_Y_AXIS_LABEL}
                           seriesColor="#9333ea"
                           exportSourceFooter={hoursWorkChartFooter(
-                            wageSeriesId,
-                            refSources.public_tuition_annual_usd ??
+                            hoursOfWorkWageSeriesId,
+                            refSources.hours_for_year_tuition ??
+                              refSources.public_tuition_annual_usd ??
                               "College Board public tuition (reference anchors)"
                           )}
                           exportFileStem="us-living-standards-hours-tuition"
@@ -708,7 +727,7 @@ export function UsLivingStandardsStudy() {
                           {householdGoodsMeta?.methodology_note ??
                             refSources.household_goods_methodology ??
                             "Historical prices for some durable goods are estimated using official price indices anchored to benchmark price observations. Comparisons should be interpreted as approximate indicators of changing affordability."}{" "}
-                          Wage denominator: FRED {householdGoodsWageSeriesId} (1964+). Each good uses its own price
+                          Wage denominator: FRED {hoursOfWorkWageSeriesId} (1964+). Each good uses its own price
                           index and may start in a different year.
                         </p>
                       </>
@@ -718,11 +737,12 @@ export function UsLivingStandardsStudy() {
                   </div>
 
                   <p className="text-xs text-muted-foreground border-t border-border pt-4">
-                    Rent and tuition hours use FRED average hourly earnings ({wageSeriesId}, from 2006). Household
-                    goods use the longer AHETPI wage series ({householdGoodsWageSeriesId}, from 1964) with CPI- or
-                    PPI-anchored estimated prices; each good begins when its own price and wage data overlap. Rent and
-                    tuition price anchors use published reference years with linear interpolation between anchors
-                    (documented in Sources &amp; units).
+                    Wage denominator for all hours charts: FRED {hoursOfWorkWageSeriesId} (production and
+                    nonsupervisory employees, 1964+).{" "}
+                    {hoursOfWorkMeta?.wage_tradeoffs ??
+                      "CES0500000003 (all private employees) begins in 2006; AHETPI is used for longer history."}{" "}
+                    Rent and tuition price anchors use published reference years with linear interpolation between
+                    anchors (documented in Sources &amp; units).
                   </p>
                 </>
               )}
