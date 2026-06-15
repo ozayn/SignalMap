@@ -233,12 +233,42 @@ function shortStudyLegendName(text: string, collapseLegend: boolean, maxLen = 24
 
 type LegendEndShape = ComparatorLineSymbol;
 
+function multiSeriesLegendLineSegmentPath(linePattern?: "solid" | "dashed" | "dotted"): string {
+  const y0 = 5.45;
+  const y1 = 6.65;
+  const xStart = 0.3;
+  const xEnd = 12.8;
+  if (linePattern === "dashed") {
+    const segments: string[] = [];
+    let x = xStart;
+    while (x < xEnd - 0.4) {
+      const w = Math.min(2.1, xEnd - x);
+      segments.push(`M${x},${y0}L${x + w},${y0}L${x + w},${y1}L${x},${y1}Z`);
+      x += w + 1.35;
+    }
+    return segments.join(" ");
+  }
+  if (linePattern === "dotted") {
+    const dots: string[] = [];
+    for (let x = xStart + 0.75; x <= xEnd - 0.4; x += 1.85) {
+      dots.push(
+        `M${x - 0.32},${(y0 + y1) / 2}m0.32,0a0.32,0.32,0,1,1,-0.64,0a0.32,0.32,0,1,1,0.64,0`
+      );
+    }
+    return dots.join(" ");
+  }
+  return `M${xStart},${y0}L${xEnd},${y0}L${xEnd},${y1}L${xStart},${y1}Z`;
+}
+
 /**
  * Legend entry icon: short line segment + small end marker (same geometry as series symbol),
  * instead of a large filled-only shape. Coordinates ~0–22 × 0–12; ECharts scales to ``itemWidth`` / ``itemHeight``.
  */
-function multiSeriesLegendLineMarkerPathD(shape: LegendEndShape): string {
-  const line = "M0.3,5.45L12.8,5.45L12.8,6.65L0.3,6.65Z";
+function multiSeriesLegendLineMarkerPathD(
+  shape: LegendEndShape,
+  linePattern?: "solid" | "dashed" | "dotted"
+): string {
+  const line = multiSeriesLegendLineSegmentPath(linePattern);
   let glyph = "";
   switch (shape) {
     case "circle":
@@ -266,8 +296,11 @@ function multiSeriesLegendLineMarkerPathD(shape: LegendEndShape): string {
   return `${line}${glyph}`;
 }
 
-function multiSeriesLegendLineMarkerPath(shape: LegendEndShape): string {
-  return `path://${multiSeriesLegendLineMarkerPathD(shape)}`;
+function multiSeriesLegendLineMarkerPath(
+  shape: LegendEndShape,
+  linePattern?: "solid" | "dashed" | "dotted"
+): string {
+  return `path://${multiSeriesLegendLineMarkerPathD(shape, linePattern)}`;
 }
 
 /** GDP study: compact absolute values, indexed ratios, or nominal; `gdp_levels` kept as alias. */
@@ -2531,7 +2564,7 @@ export function TimelineChart({
             const lineColor = multiSeriesLineColors[i] ?? mutedFg;
             return {
               name: s.label,
-              icon: multiSeriesLegendLineMarkerPath(shape),
+              icon: multiSeriesLegendLineMarkerPath(shape, s.linePattern),
               itemStyle: { color: lineColor },
             };
           })

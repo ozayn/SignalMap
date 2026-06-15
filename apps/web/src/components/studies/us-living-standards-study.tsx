@@ -22,12 +22,29 @@ import { SIGNAL_CONCEPT, SIGNAL_COUNTRY } from "@/lib/signalmap-chart-colors";
 
 type Point = { date: string; value: number };
 
+type HouseholdGoodsItemMeta = {
+  label: string;
+  benchmark_year?: number;
+  benchmark_price_usd?: number;
+  cpi_fred_series?: string;
+  cpi_continuation_series?: string;
+  cpi_source?: string;
+  cpi_start_year?: number;
+  hours_start_year?: number | null;
+  hours_end_year?: number | null;
+};
+
 type LivingStandardsBundle = {
   series: Record<string, Point[]>;
   fred_series: Record<string, string>;
   reference_sources: Record<string, string>;
   real_base_year: number;
   productivity_compensation_base_year: number;
+  household_goods?: {
+    methodology_note?: string;
+    wage_fred_series?: string;
+    items?: Record<string, HouseholdGoodsItemMeta>;
+  };
   source?: { name?: string; url?: string };
   partial?: boolean;
   series_warnings?: Record<string, string>;
@@ -40,6 +57,42 @@ function wdiFredFooter(codes: string | string[], note?: string): string {
   const list = Array.isArray(codes) ? codes.join(", ") : codes;
   return `Source: FRED — United States — ${list}${note ? `; ${note}` : ""}`;
 }
+
+function seriesTimeRange(points: Point[]): [string, string] | undefined {
+  if (points.length === 0) return undefined;
+  let lo = points[0]!.date;
+  let hi = points[0]!.date;
+  for (const p of points) {
+    if (p.date < lo) lo = p.date;
+    if (p.date > hi) hi = p.date;
+  }
+  return [lo.slice(0, 10), hi.slice(0, 10)];
+}
+
+function hoursWorkChartFooter(wageCode: string, expenseSource: string): string {
+  return `Source: FRED ${wageCode} (average hourly wage); ${expenseSource}; method: price ÷ average hourly wage`;
+}
+
+const HOURS_Y_AXIS_LABEL = "Hours at average hourly wage";
+
+const HOURS_CHART_RENT_LABEL = "Hours of work to afford one month of median rent";
+const HOURS_CHART_TUITION_LABEL = "Hours of work to afford one year of public tuition";
+const HOURS_CHART_HOUSEHOLD_LABEL = "Hours of work to afford household goods";
+
+const HOURS_CHART_RENT_METHOD =
+  "Estimated as median monthly rent divided by the average hourly wage.";
+const HOURS_CHART_TUITION_METHOD =
+  "Estimated as published in-state public tuition divided by the average hourly wage.";
+const HOURS_CHART_HOUSEHOLD_METHOD =
+  "Estimated as representative prices divided by the average hourly wage.";
+
+/** Household goods hours chart — distinct color + line pattern per good. */
+const HOUSEHOLD_GOODS_SERIES_STYLE = {
+  refrigerator: { color: "#2563eb", linePattern: "solid" as const, symbol: "circle" as const },
+  washing_machine: { color: "#0d9488", linePattern: "dashed" as const, symbol: "rect" as const },
+  television: { color: "#f97316", linePattern: "dotted" as const, symbol: "triangle" as const },
+  vacuum_cleaner: { color: "#7c3aed", linePattern: "solid" as const, symbol: "diamond" as const },
+};
 
 type MonetaryDisplayMode = "nominal" | "real";
 
@@ -187,10 +240,17 @@ export function UsLivingStandardsStudy() {
         unitLabel: `${formatIndexedToEquals100Subtitle(prodBaseYear)} — ${fred.productivity_index ?? "OPHNFB"} vs ${fred.hourly_compensation_index ?? "COMPNFB"}`,
       },
       {
-        label: "Average hourly earnings",
+        label: "Average hourly earnings (rent and tuition hours)",
         sourceName: "FRED",
         sourceUrl: `https://fred.stlouisfed.org/series/${fred.average_hourly_earnings_usd ?? "CES0500000003"}`,
         sourceDetail: "Total private production and nonsupervisory employees; annual mean",
+        unitLabel: "Nominal US$ per hour",
+      },
+      {
+        label: "Average hourly earnings (household goods hours)",
+        sourceName: "FRED",
+        sourceUrl: `https://fred.stlouisfed.org/series/${fred.average_hourly_earnings_household_goods_usd ?? "AHETPI"}`,
+        sourceDetail: "Production and nonsupervisory employees, total private; annual mean (1964+)",
         unitLabel: "Nominal US$ per hour",
       },
       {
@@ -201,41 +261,47 @@ export function UsLivingStandardsStudy() {
         unitLabel: "Nominal US$ per month",
       },
       {
-        label: "Hours-of-work affordability",
+        label: HOURS_CHART_RENT_LABEL,
         sourceName: "SignalMap derived",
-        sourceDetail: "Item price ÷ average hourly earnings (CES0500000003 annual mean)",
-        unitLabel: "Hours of work at average hourly wage",
-        unitNote: "Uses representative prices for appliances and interpolated reference anchors for rent and tuition.",
+        sourceDetail: `Median gross rent (Census reference anchors) ÷ FRED ${fred.average_hourly_earnings_usd ?? "CES0500000003"}`,
+        unitLabel: HOURS_Y_AXIS_LABEL,
+        unitNote: HOURS_CHART_RENT_METHOD,
+      },
+      {
+        label: HOURS_CHART_TUITION_LABEL,
+        sourceName: "SignalMap derived",
+        sourceDetail: `College Board tuition anchors ÷ FRED ${fred.average_hourly_earnings_usd ?? "CES0500000003"}`,
+        unitLabel: HOURS_Y_AXIS_LABEL,
+        unitNote: HOURS_CHART_TUITION_METHOD,
+      },
+      {
+        label: HOURS_CHART_HOUSEHOLD_LABEL,
+        sourceName: "SignalMap derived",
+        sourceDetail: `CPI- or PPI-anchored estimated prices ÷ FRED ${fred.average_hourly_earnings_household_goods_usd ?? "AHETPI"}`,
+        unitLabel: HOURS_Y_AXIS_LABEL,
+        unitNote: `${HOURS_CHART_HOUSEHOLD_METHOD} Refrigerator (CUSR0000SAH3 proxy), washing machine (WPU12410220/WPU1241), television (CUSR0000SERA + retail anchors), vacuum cleaner (CUSR0000SAH3 proxy). Each series starts when its price and wage data overlap.`,
       },
     ],
     [fred, prodBaseYear, realBaseYear]
   );
 
-  const hoursMultiSeries = useMemo(
+  const wageSeriesId = fred.average_hourly_earnings_usd ?? "CES0500000003";
+  const householdGoodsWageSeriesId =
+    fred.average_hourly_earnings_household_goods_usd ?? bundle?.household_goods?.wage_fred_series ?? "AHETPI";
+  const householdGoodsMeta = bundle?.household_goods;
+  const refSources = bundle?.reference_sources ?? {};
+
+  const hoursRentPoints = s.hours_for_month_rent ?? [];
+  const hoursTuitionPoints = s.hours_for_year_tuition ?? [];
+  const householdGoodsMultiSeries = useMemo(
     () => [
-      {
-        key: "rent_month",
-        label: "One month of median rent",
-        unit: "hours",
-        yAxisIndex: 0 as const,
-        points: s.hours_for_month_rent ?? [],
-        color: SIGNAL_COUNTRY.us,
-      },
-      {
-        key: "tuition_year",
-        label: "One year of public tuition",
-        unit: "hours",
-        yAxisIndex: 0 as const,
-        points: s.hours_for_year_tuition ?? [],
-        color: "#9333ea",
-      },
       {
         key: "refrigerator",
         label: "Refrigerator",
         unit: "hours",
         yAxisIndex: 0 as const,
         points: s.hours_for_refrigerator ?? [],
-        color: SIGNAL_CONCEPT.investment,
+        ...HOUSEHOLD_GOODS_SERIES_STYLE.refrigerator,
       },
       {
         key: "washing_machine",
@@ -243,7 +309,7 @@ export function UsLivingStandardsStudy() {
         unit: "hours",
         yAxisIndex: 0 as const,
         points: s.hours_for_washing_machine ?? [],
-        color: "#0d9488",
+        ...HOUSEHOLD_GOODS_SERIES_STYLE.washing_machine,
       },
       {
         key: "television",
@@ -251,11 +317,47 @@ export function UsLivingStandardsStudy() {
         unit: "hours",
         yAxisIndex: 0 as const,
         points: s.hours_for_television ?? [],
-        color: "#64748b",
+        ...HOUSEHOLD_GOODS_SERIES_STYLE.television,
+      },
+      {
+        key: "vacuum_cleaner",
+        label: "Vacuum cleaner",
+        unit: "hours",
+        yAxisIndex: 0 as const,
+        points: s.hours_for_vacuum_cleaner ?? [],
+        ...HOUSEHOLD_GOODS_SERIES_STYLE.vacuum_cleaner,
       },
     ],
     [s]
   );
+
+  const householdGoodsSourceFooter = useMemo(() => {
+    const itemSources = Object.entries(householdGoodsMeta?.items ?? {})
+      .filter(([, meta]) => meta.cpi_source)
+      .map(([key, meta]) => `${meta.label ?? key}: ${meta.cpi_source}`);
+    const expenseSource =
+      itemSources.length > 0
+        ? itemSources.join("; ")
+        : [
+            refSources.hours_for_refrigerator,
+            refSources.hours_for_washing_machine,
+            refSources.hours_for_television,
+          ]
+            .filter(Boolean)
+            .join("; ");
+    return hoursWorkChartFooter(householdGoodsWageSeriesId, expenseSource);
+  }, [householdGoodsMeta?.items, householdGoodsWageSeriesId, refSources]);
+
+  const hoursChartBaseProps = {
+    chartRangeGranularity: "year" as const,
+    showChartControls: true,
+    chartHeight: "h-56 md:h-64",
+  };
+
+  const hasAnyHoursChart =
+    hoursRentPoints.length > 0 ||
+    hoursTuitionPoints.length > 0 ||
+    householdGoodsMultiSeries.some((row) => row.points.length > 0);
 
   return (
     <section className="space-y-4">
@@ -518,44 +620,111 @@ export function UsLivingStandardsStudy() {
             </CardContent>
           </Card>
 
-          {/* 5. Hours of work */}
+          {/* 5. Affordability in hours of work */}
           <Card className="border-border md:col-span-2">
-            <CardHeader className="space-y-1 pb-2">
-              <CardTitle className="text-base">5. Hours of work required to purchase</CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Item price ÷ average hourly earnings ({fred.average_hourly_earnings_usd ?? "CES0500000003"})
+            <CardHeader className="space-y-2 pb-2">
+              <CardTitle className="text-base">5. Affordability in hours of work</CardTitle>
+              <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
+                Values indicate approximately how many hours an average worker would need to work to cover the
+                corresponding expense. These charts are descriptive approximations, not household-budget models.
               </p>
             </CardHeader>
-            <CardContent className="pt-0">
-              {hoursMultiSeries.some((row) => row.points.length > 0) ? (
+            <CardContent className="space-y-8 pt-0">
+              {!hasAnyHoursChart ? (
+                <p className="py-6 text-xs text-muted-foreground">Data unavailable for this window.</p>
+              ) : (
                 <>
-                  <TimelineChart
-                    data={[]}
-                    valueKey="value"
-                    label="Hours of work to afford"
-                    multiSeries={hoursMultiSeries}
-                    multiSeriesYAxisNameOverrides={{ 0: "Hours at average hourly wage" }}
-                    exportSourceFooter={wdiFredFooter(
-                      fred.average_hourly_earnings_usd ?? "CES0500000003",
-                      "derived hours-of-work affordability"
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium text-foreground">{HOURS_CHART_RENT_LABEL}</h3>
+                    {hoursRentPoints.length > 0 ? (
+                      <>
+                        <TimelineChart
+                          data={hoursRentPoints}
+                          valueKey="value"
+                          label={HOURS_CHART_RENT_LABEL}
+                          unit={HOURS_Y_AXIS_LABEL}
+                          seriesColor={SIGNAL_COUNTRY.us}
+                          exportSourceFooter={hoursWorkChartFooter(
+                            wageSeriesId,
+                            refSources.median_gross_rent_monthly_usd ??
+                              "U.S. Census Bureau median gross rent (reference anchors)"
+                          )}
+                          exportFileStem="us-living-standards-hours-rent"
+                          timeRange={seriesTimeRange(hoursRentPoints)}
+                          {...hoursChartBaseProps}
+                        />
+                        <p className="text-xs text-muted-foreground">{HOURS_CHART_RENT_METHOD}</p>
+                      </>
+                    ) : (
+                      <p className="py-4 text-xs text-muted-foreground">Data unavailable.</p>
                     )}
-                    exportFileStem="us-living-standards-hours-of-work"
-                    {...commonChartProps}
-                  />
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Hours = price ÷ average hourly earnings. Rent uses one month of median gross rent; tuition uses
-                    one academic year of published in-state public tuition; appliances use representative retail price
-                    anchors. Earnings series begins in 2006, so earlier hours estimates are unavailable.
-                  </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {bundle?.reference_sources?.median_gross_rent_monthly_usd}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {bundle?.reference_sources?.refrigerator_usd}
+                  </div>
+
+                  <div className="space-y-2 border-t border-border pt-6">
+                    <h3 className="text-sm font-medium text-foreground">{HOURS_CHART_TUITION_LABEL}</h3>
+                    {hoursTuitionPoints.length > 0 ? (
+                      <>
+                        <TimelineChart
+                          data={hoursTuitionPoints}
+                          valueKey="value"
+                          label={HOURS_CHART_TUITION_LABEL}
+                          unit={HOURS_Y_AXIS_LABEL}
+                          seriesColor="#9333ea"
+                          exportSourceFooter={hoursWorkChartFooter(
+                            wageSeriesId,
+                            refSources.public_tuition_annual_usd ??
+                              "College Board public tuition (reference anchors)"
+                          )}
+                          exportFileStem="us-living-standards-hours-tuition"
+                          timeRange={seriesTimeRange(hoursTuitionPoints)}
+                          {...hoursChartBaseProps}
+                        />
+                        <p className="text-xs text-muted-foreground">{HOURS_CHART_TUITION_METHOD}</p>
+                      </>
+                    ) : (
+                      <p className="py-4 text-xs text-muted-foreground">Data unavailable.</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 border-t border-border pt-6">
+                    <h3 className="text-sm font-medium text-foreground">{HOURS_CHART_HOUSEHOLD_LABEL}</h3>
+                    {householdGoodsMultiSeries.some((row) => row.points.length > 0) ? (
+                      <>
+                        <TimelineChart
+                          data={[]}
+                          valueKey="value"
+                          label={HOURS_CHART_HOUSEHOLD_LABEL}
+                          multiSeries={householdGoodsMultiSeries}
+                          multiSeriesYAxisNameOverrides={{ 0: HOURS_Y_AXIS_LABEL }}
+                          exportSourceFooter={householdGoodsSourceFooter}
+                          exportFileStem="us-living-standards-hours-household-goods"
+                          timeRange={seriesTimeRange(
+                            householdGoodsMultiSeries.flatMap((row) => row.points)
+                          )}
+                          {...hoursChartBaseProps}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {HOURS_CHART_HOUSEHOLD_METHOD}{" "}
+                          {householdGoodsMeta?.methodology_note ??
+                            refSources.household_goods_methodology ??
+                            "Historical prices for some durable goods are estimated using official price indices anchored to benchmark price observations. Comparisons should be interpreted as approximate indicators of changing affordability."}{" "}
+                          Wage denominator: FRED {householdGoodsWageSeriesId} (1964+). Each good uses its own price
+                          index and may start in a different year.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="py-4 text-xs text-muted-foreground">Data unavailable.</p>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-muted-foreground border-t border-border pt-4">
+                    Rent and tuition hours use FRED average hourly earnings ({wageSeriesId}, from 2006). Household
+                    goods use the longer AHETPI wage series ({householdGoodsWageSeriesId}, from 1964) with CPI- or
+                    PPI-anchored estimated prices; each good begins when its own price and wage data overlap. Rent and
+                    tuition price anchors use published reference years with linear interpolation between anchors
+                    (documented in Sources &amp; units).
                   </p>
                 </>
-              ) : (
-                <p className="py-6 text-xs text-muted-foreground">Data unavailable for this window.</p>
               )}
             </CardContent>
           </Card>
@@ -578,9 +747,9 @@ export function UsLivingStandardsStudy() {
           {
             heading: "Reference anchors and interpolation",
             bullets: [
-              "Tuition, rent, and appliance prices use published anchor years with linear interpolation between them.",
-              "They approximate broad trends, not a single standardized product basket over time.",
-              "FRED average hourly earnings begins in 2006, limiting the hours-of-work panel before that year.",
+              "Tuition and rent use published anchor years with linear interpolation between them.",
+              "Household goods use official BLS price indices anchored to benchmark retail prices; television also uses retail anchors before 1994.",
+              "Hours-of-work affordability charts are split by domain (rent, tuition, household goods) in actual hours at average wages; each chart uses its own y-axis scale.",
             ],
           },
           {
@@ -598,7 +767,7 @@ export function UsLivingStandardsStudy() {
 
       <SourceInfo
         items={sourceItems}
-        note="Primary macro series from FRED; tuition, rent, and appliance anchors from published reference tables with interpolation. Derived ratios and hours-of-work metrics are computed in the API bundle."
+        note="Primary macro series from FRED; tuition and rent anchors from published reference tables with interpolation. Household goods prices are CPI- or PPI-anchored estimates (see Sources & units). Derived ratios and hours-of-work metrics are computed in the API bundle."
       />
 
       <InSimpleTerms>

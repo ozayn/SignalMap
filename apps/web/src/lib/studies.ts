@@ -1055,7 +1055,7 @@ export const STUDIES: StudyMeta[] = [
     observations: [
       "Real median household income, nominal home prices, and tuition can move in different directions in the same decade.",
       "House-price-to-income and tuition-to-income ratios summarize relative burden without replacing formal affordability indices.",
-      "Hours-of-work charts compare item prices to average hourly earnings; the earnings series limits pre-2006 coverage.",
+      "Hours-of-work charts are split by domain (rent, tuition, appliances) in actual hours at average wages; each chart uses its own y-axis scale.",
       "Reference anchors for tuition, rent, and appliances are interpolated between published years and should be read as contextual trends.",
       "Productivity and compensation indexes are reindexed for comparison; the gap is not a direct dollar measure of lost pay.",
     ],

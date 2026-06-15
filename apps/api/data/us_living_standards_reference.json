@@ -4,7 +4,55 @@
     "median_gross_rent_monthly_usd": "U.S. Census Bureau historical median gross rent tables (nominal US$ per month). Sparse annual anchors; intermediate years are linearly interpolated in the API.",
     "refrigerator_usd": "Representative retail price anchors for a standard refrigerator (nominal US$). Contextual reference prices for affordability hours, not a single SKU time series.",
     "washing_machine_usd": "Representative retail price anchors for a standard clothes washer (nominal US$). Contextual reference prices for affordability hours, not a single SKU time series.",
-    "television_usd": "Representative retail price anchors for a color television (nominal US$). Contextual reference prices for affordability hours, not a single SKU time series."
+    "television_usd": "Representative retail price anchors for a color television (nominal US$). Contextual reference prices for affordability hours, not a single SKU time series.",
+    "household_goods_methodology": "Historical prices for some durable goods are estimated using official price indices anchored to benchmark price observations. Comparisons should be interpreted as approximate indicators of changing affordability.",
+    "household_goods_wage": "FRED AHETPI — BLS average hourly earnings of production and nonsupervisory employees, total private (nominal US$/hour, 1964+). Used for household-goods hours only.",
+    "hours_for_refrigerator": "Estimated refrigerator price (CPI household furnishings proxy, FRED CUSR0000SAH3, anchored to 2000 = US$825) ÷ FRED AHETPI.",
+    "hours_for_washing_machine": "Estimated washing-machine price (PPI household laundry equipment, FRED WPU12410220 through 2016 then WPU1241 major appliances, anchored to 2000 = US$650) ÷ FRED AHETPI.",
+    "hours_for_television": "Estimated television price (CPI video and audio, FRED CUSR0000SERA from 1994, anchored to 2000 = US$450; 1970–1993 from published retail price anchors with linear interpolation) ÷ FRED AHETPI.",
+    "hours_for_vacuum_cleaner": "Estimated vacuum-cleaner price (CPI household furnishings proxy, FRED CUSR0000SAH3, anchored to 2000 = US$120) ÷ FRED AHETPI."
+  },
+  "household_goods": {
+    "methodology_note": "Historical prices for some durable goods are estimated using official price indices anchored to benchmark price observations. Comparisons should be interpreted as approximate indicators of changing affordability.",
+    "wage_fred_series": "AHETPI",
+    "items": {
+      "refrigerator": {
+        "label": "Refrigerator",
+        "benchmark_year": 2000,
+        "benchmark_price_usd": 825,
+        "cpi_fred_series": "CUSR0000SAH3",
+        "cpi_source": "BLS CPI household furnishings and operations (FRED CUSR0000SAH3); used as proxy for major-appliance retail prices before item-level CPI history is available.",
+        "cpi_start_year": 1967
+      },
+      "washing_machine": {
+        "label": "Washing machine",
+        "benchmark_year": 2000,
+        "benchmark_price_usd": 650,
+        "cpi_fred_series": "WPU12410220",
+        "cpi_continuation_series": "WPU1241",
+        "cpi_continuation_from_year": 2017,
+        "cpi_source": "BLS PPI household laundry equipment (FRED WPU12410220, 1947–2016); continued with PPI major appliances (FRED WPU1241) from 2017.",
+        "cpi_start_year": 1947
+      },
+      "television": {
+        "label": "Television",
+        "benchmark_year": 2000,
+        "benchmark_price_usd": 450,
+        "cpi_fred_series": "CUSR0000SERA",
+        "cpi_source": "BLS CPI video and audio (FRED CUSR0000SERA, 1994+), anchored to benchmark retail price.",
+        "cpi_start_year": 1994,
+        "historical_anchor_key": "television_usd",
+        "historical_end_year": 1993
+      },
+      "vacuum_cleaner": {
+        "label": "Vacuum cleaner",
+        "benchmark_year": 2000,
+        "benchmark_price_usd": 120,
+        "cpi_fred_series": "CUSR0000SAH3",
+        "cpi_source": "BLS CPI household furnishings and operations (FRED CUSR0000SAH3); used as proxy for small-appliance retail prices.",
+        "cpi_start_year": 1967
+      }
+    }
   },
   "public_tuition_annual_usd": [
     { "year": 1971, "value": 428 },
