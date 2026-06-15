@@ -53,6 +53,8 @@ export const SIGNAL_CONCEPT: Record<string, string> = {
   broad_money_m2: "#7c3aed",
   /** Wage / labour */
   wage_nominal: "#2563eb",
+  /** Nonfarm hourly compensation index (productivity comparison overlays) */
+  hourly_compensation: "#c2410c",
   wage_real: "#16a34a",
   wage_index: "#a855f7",
   /** Dutch / ISI index overlays (indexed shares) */

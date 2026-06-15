@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { NominalRealToggle } from "@/components/nominal-real-toggle";
 import { TimelineChart } from "@/components/timeline-chart";
 import { DataObservations } from "@/components/data-observations";
 import { LearningNote } from "@/components/learning-note";
@@ -34,10 +35,14 @@ function wdiFredFooter(codes: string | string[], note?: string): string {
   return `Source: FRED — United States — ${list}${note ? `; ${note}` : ""}`;
 }
 
+type MonetaryDisplayMode = "nominal" | "real";
+
 export function UsLivingStandardsStudy() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<LivingStandardsBundle | null>(null);
+  const [homePriceMode, setHomePriceMode] = useState<MonetaryDisplayMode>("nominal");
+  const [tuitionMode, setTuitionMode] = useState<MonetaryDisplayMode>("real");
 
   const timeRange = useMemo(() => {
     const end = new Date().toISOString().slice(0, 10);
@@ -84,6 +89,43 @@ export function UsLivingStandardsStudy() {
     chartHeight: "h-56 md:h-64",
     timeRange: [timeRange.start, timeRange.end] as [string, string],
   };
+
+  const realToggleLabel = `Real (${realBaseYear} US$)`;
+
+  const homePriceChart = useMemo(() => {
+    const isReal = homePriceMode === "real";
+    const mspus = fred.median_home_price_usd ?? "MSPUS";
+    const cpi = fred.cpi_all_items_index ?? "CPIAUCSL";
+    return {
+      data: isReal ? (s.median_home_price_real_usd ?? []) : (s.median_home_price_usd ?? []),
+      label: isReal ? `Median home price (real, ${realBaseYear} US$)` : "Median home price",
+      unit: isReal ? `Constant ${realBaseYear} US$` : "Nominal US$",
+      exportSourceFooter: isReal
+        ? wdiFredFooter([mspus, cpi], `MSPUS deflated to ${realBaseYear} dollars with CPI-U`)
+        : wdiFredFooter(mspus, "annual mean of quarterly MSPUS"),
+      exportFileStem: isReal ? "us-living-standards-median-home-price-real" : "us-living-standards-median-home-price",
+      sectionTitle: isReal
+        ? `2. Housing — median home price (real, ${realBaseYear} US$)`
+        : "2. Housing — median home price",
+    };
+  }, [fred, homePriceMode, realBaseYear, s]);
+
+  const tuitionChart = useMemo(() => {
+    const isReal = tuitionMode === "real";
+    const cpi = fred.cpi_all_items_index ?? "CPIAUCSL";
+    return {
+      data: isReal ? (s.public_tuition_real_usd ?? []) : (s.public_tuition_annual_usd ?? []),
+      label: isReal ? `Public tuition (real, ${realBaseYear} US$)` : "Public university tuition",
+      unit: isReal ? `Constant ${realBaseYear} US$` : "Nominal US$ per academic year",
+      exportSourceFooter: isReal
+        ? wdiFredFooter(cpi, `College Board anchors deflated to ${realBaseYear} dollars`)
+        : "Source: College Board (reference anchors) — published in-state public four-year tuition; interpolated between anchor years",
+      exportFileStem: isReal ? "us-living-standards-tuition-real" : "us-living-standards-tuition-nominal",
+      sectionTitle: isReal
+        ? `3. Education — public university tuition (real, ${realBaseYear} US$)`
+        : "3. Education — public university tuition",
+    };
+  }, [fred, realBaseYear, s, tuitionMode]);
 
   const sourceItems: SourceInfoItem[] = useMemo(
     () => [
@@ -291,19 +333,26 @@ export function UsLivingStandardsStudy() {
 
           {/* 2. Housing */}
           <Card className="border-border">
-            <CardHeader className="space-y-1 pb-2">
-              <CardTitle className="text-base">2. Housing — median home price</CardTitle>
+            <CardHeader className="space-y-2 pb-2">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <CardTitle className="text-base">{homePriceChart.sectionTitle}</CardTitle>
+                <NominalRealToggle
+                  mode={homePriceMode}
+                  onChange={setHomePriceMode}
+                  realLabel={realToggleLabel}
+                />
+              </div>
             </CardHeader>
             <CardContent className="pt-0">
-              {(s.median_home_price_usd ?? []).length > 0 ? (
+              {homePriceChart.data.length > 0 ? (
                 <TimelineChart
-                  data={s.median_home_price_usd ?? []}
+                  data={homePriceChart.data}
                   valueKey="value"
-                  label="Median home price"
-                  unit="Nominal US$"
+                  label={homePriceChart.label}
+                  unit={homePriceChart.unit}
                   seriesColor={SIGNAL_CONCEPT.gdp}
-                  exportSourceFooter={wdiFredFooter(fred.median_home_price_usd ?? "MSPUS", "annual mean of quarterly MSPUS")}
-                  exportFileStem="us-living-standards-median-home-price"
+                  exportSourceFooter={homePriceChart.exportSourceFooter}
+                  exportFileStem={homePriceChart.exportFileStem}
                   {...commonChartProps}
                 />
               ) : (
@@ -345,23 +394,27 @@ export function UsLivingStandardsStudy() {
 
           {/* 3. Education */}
           <Card className="border-border">
-            <CardHeader className="space-y-1 pb-2">
-              <CardTitle className="text-base">3. Education — public university tuition (real)</CardTitle>
+            <CardHeader className="space-y-2 pb-2">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <CardTitle className="text-base">{tuitionChart.sectionTitle}</CardTitle>
+                <NominalRealToggle
+                  mode={tuitionMode}
+                  onChange={setTuitionMode}
+                  realLabel={realToggleLabel}
+                />
+              </div>
             </CardHeader>
             <CardContent className="pt-0">
-              {(s.public_tuition_real_usd ?? []).length > 0 ? (
+              {tuitionChart.data.length > 0 ? (
                 <>
                   <TimelineChart
-                    data={s.public_tuition_real_usd ?? []}
+                    data={tuitionChart.data}
                     valueKey="value"
-                    label={`Public tuition (real, ${realBaseYear} US$)`}
-                    unit={`Constant ${realBaseYear} US$`}
+                    label={tuitionChart.label}
+                    unit={tuitionChart.unit}
                     seriesColor={SIGNAL_CONCEPT.wage_real}
-                    exportSourceFooter={wdiFredFooter(
-                      fred.cpi_all_items_index ?? "CPIAUCSL",
-                      `College Board anchors deflated to ${realBaseYear} dollars`
-                    )}
-                    exportFileStem="us-living-standards-tuition-real"
+                    exportSourceFooter={tuitionChart.exportSourceFooter}
+                    exportFileStem={tuitionChart.exportFileStem}
                     {...commonChartProps}
                   />
                   <p className="mt-2 text-xs text-muted-foreground">
@@ -425,6 +478,7 @@ export function UsLivingStandardsStudy() {
                         yAxisIndex: 0 as const,
                         points: s.productivity_reindexed ?? [],
                         color: SIGNAL_COUNTRY.us,
+                        linePattern: "solid",
                       },
                       {
                         key: "compensation",
@@ -432,7 +486,8 @@ export function UsLivingStandardsStudy() {
                         unit: `Index (${prodBaseYear}=100)`,
                         yAxisIndex: 0 as const,
                         points: s.compensation_reindexed ?? [],
-                        color: SIGNAL_CONCEPT.wage_nominal,
+                        color: SIGNAL_CONCEPT.hourly_compensation,
+                        linePattern: "dashed",
                       },
                     ]}
                     exportSourceFooter={wdiFredFooter(

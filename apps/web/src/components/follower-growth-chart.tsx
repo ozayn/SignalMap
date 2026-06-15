@@ -32,9 +32,9 @@ import {
   formatYAxisNameMultiline,
 } from "@/lib/chart-axis-label";
 import { CHART_LINE_SYMBOL_ITEM_OPACITY, CHART_LINE_SYMBOL_SIZE } from "@/lib/chart-series-markers";
+import { ChartSourceFooter } from "@/components/chart-source-footer";
 import {
   STUDY_CHART_LEGEND_FONT_PX,
-  STUDY_CHART_SOURCE_WRAP_CLASS,
   STUDY_CHART_STACK_GAP_CLASS,
   STUDY_CHART_TITLE_WRAP_CLASS,
 } from "@/lib/chart-study-typography";
@@ -417,9 +417,7 @@ export function FollowerGrowthChart({
       </p>
       <div ref={chartRef} className="h-72 w-full min-w-0" />
       {sourceText ? (
-        <p className={STUDY_CHART_SOURCE_WRAP_CLASS} dir="ltr">
-          {localizeChartNumericDisplayStringSafe(sourceText, chartLocaleResolved === "fa" ? "fa" : "en")}
-        </p>
+        <ChartSourceFooter line={sourceText} locale={chartLocaleResolved} />
       ) : null}
     </div>
     </>

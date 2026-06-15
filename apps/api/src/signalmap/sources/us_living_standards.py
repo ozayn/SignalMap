@@ -140,6 +140,9 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
         series[ref_key] = _interpolate_annual(reference.get(ref_key, []), start_year, end_year)
 
     real_base_year = 2022
+    series["median_home_price_real_usd"] = _deflate_with_cpi(
+        series["median_home_price_usd"], series["cpi_all_items_index"], real_base_year
+    )
     series["public_tuition_real_usd"] = _deflate_with_cpi(
         series["public_tuition_annual_usd"], series["cpi_all_items_index"], real_base_year
     )

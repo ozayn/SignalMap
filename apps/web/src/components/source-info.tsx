@@ -1,3 +1,5 @@
+import { SourceTextWithLinks } from "@/components/chart-source-footer";
+
 export type SourceInfoItem = {
   label: string;
   sourceName: string;
@@ -29,7 +31,9 @@ export function SourceInfo({
       </summary>
       <div className="study-interpretation-body">
         <div className="grid gap-4 sm:grid-cols-2 min-w-0">
-          {items.map((item) => (
+          {items.map((item) => {
+            const linkContext = [item.sourceDetail, item.sourceName].filter(Boolean).join(" ");
+            return (
             <div key={item.label} className="space-y-0.5 min-w-0 break-words">
               <p className="text-sm font-medium text-foreground/90">{item.label}</p>
               <p className="text-sm text-muted-foreground">
@@ -45,24 +49,34 @@ export function SourceInfo({
                 ) : (
                   item.sourceName
                 )}
-                {item.sourceDetail && (
-                  <span className="text-muted-foreground/90"> ({item.sourceDetail})</span>
-                )}
+                {item.sourceDetail ? (
+                  <span className="text-muted-foreground/90">
+                    {" "}
+                    (<SourceTextWithLinks text={item.sourceDetail} contextText={linkContext} />)
+                  </span>
+                ) : null}
               </p>
-              {item.unitLabel && (
+              {item.unitLabel ? (
                 <p className="text-sm text-muted-foreground">
-                  <span className="snapshot-style-title">Unit</span>: {item.unitLabel}
-                  {item.unitNote && (
-                    <span className="text-muted-foreground/80"> — {item.unitNote}</span>
-                  )}
+                  <span className="snapshot-style-title">Unit</span>:{" "}
+                  <SourceTextWithLinks text={item.unitLabel} contextText={linkContext} />
+                  {item.unitNote ? (
+                    <span className="text-muted-foreground/80">
+                      {" "}
+                      — <SourceTextWithLinks text={item.unitNote} contextText={linkContext} />
+                    </span>
+                  ) : null}
                 </p>
-              )}
+              ) : null}
             </div>
-          ))}
+            );
+          })}
         </div>
-        {note && (
-          <p className="mt-3 text-xs text-muted-foreground/80 break-words">{note}</p>
-        )}
+        {note ? (
+          <p className="mt-3 text-xs text-muted-foreground/80 break-words">
+            <SourceTextWithLinks text={note} />
+          </p>
+        ) : null}
       </div>
     </details>
   );

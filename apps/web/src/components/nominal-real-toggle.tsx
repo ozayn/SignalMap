@@ -8,14 +8,16 @@ export type NominalRealToggleProps = {
   /** FA layout: parent should set `dir="rtl"` on a wrapper when true. */
   isFa?: boolean;
   className?: string;
+  /** Override the real-mode button label (default: inflation-adjusted wording). */
+  realLabel?: string;
 };
 
 /**
  * Segmented control: nominal vs US-CPI–deflated “real” USD (base year fixed in app logic).
  */
-export function NominalRealToggle({ mode, onChange, isFa, className }: NominalRealToggleProps) {
+export function NominalRealToggle({ mode, onChange, isFa, className, realLabel }: NominalRealToggleProps) {
   const nominal = isFa ? "اسمی" : "Nominal";
-  const real = isFa ? "واقعی (تعدیل‌شده با تورم)" : "Real (inflation-adjusted)";
+  const real = realLabel ?? (isFa ? "واقعی (تعدیل‌شده با تورم)" : "Real (inflation-adjusted)");
   return (
     <div className={`inline-flex overflow-hidden rounded-md border border-border ${className ?? ""}`}>
       <button

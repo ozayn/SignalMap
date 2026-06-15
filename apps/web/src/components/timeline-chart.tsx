@@ -71,6 +71,7 @@ import {
   SIGNAL_CONCEPT,
 } from "@/lib/signalmap-chart-colors";
 import { downsampleFxOpenForDisplay } from "@/lib/time-series-lttb";
+import { ChartSourceFooter } from "@/components/chart-source-footer";
 import { localizeChartNumericDisplayString, localizeChartNumericDisplayStringSafe } from "@/lib/chart-numerals-fa";
 import {
   CHART_LINE_SYMBOL_ITEM_OPACITY,
@@ -80,7 +81,6 @@ import {
 } from "@/lib/chart-series-markers";
 import {
   STUDY_CHART_LEGEND_FONT_PX,
-  STUDY_CHART_SOURCE_WRAP_CLASS,
   STUDY_CHART_STACK_GAP_CLASS,
   STUDY_CHART_TITLE_WRAP_CLASS,
   TIMELINE_CHART_DEFAULT_HEIGHT_CLASS,
@@ -4316,9 +4316,7 @@ export function TimelineChart({
         </p>
       ) : null}
       {sourceLine ? (
-        <p className={STUDY_CHART_SOURCE_WRAP_CLASS} dir="ltr">
-          {localizeChartNumericDisplayStringSafe(sourceLine, chartLocaleResolved === "fa" ? "fa" : "en")}
-        </p>
+        <ChartSourceFooter line={sourceLine} locale={chartLocaleResolved} />
       ) : null}
     </div>
   );
