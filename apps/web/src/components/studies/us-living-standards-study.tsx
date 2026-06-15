@@ -188,6 +188,11 @@ const HOURS_CHART_HOUSEHOLD_METHOD =
 const HOURS_OF_WORK_METHODOLOGY_NOTE =
   "Hours-of-work estimates use historical wage proxies to approximate how many hours an average worker would need to work to cover the selected expense. The series are intended as contextual affordability signals rather than precise household budget calculations.";
 
+const AFFORDABILITY_BURDEN_METHOD_NOTE =
+  "Both series divide a major cost by median household income. Lower values generally indicate greater affordability. The axes differ because housing and tuition have different magnitudes.";
+
+const AFFORDABILITY_BURDEN_CHART_LABEL = "Affordability burden: housing vs public university";
+
 /** Household goods hours chart — distinct color + line pattern per good. */
 const HOUSEHOLD_GOODS_SERIES_STYLE = {
   refrigerator: { color: "#2563eb", linePattern: "solid" as const, symbol: "circle" as const },
@@ -270,6 +275,13 @@ export function UsLivingStandardsStudy() {
     ...chartBaseProps,
     chartHeight: CHART_HEIGHT_DENSE,
     gridLeft: CHART_GRID_LEFT_WIDE,
+  };
+
+  const dualAxisChartProps = {
+    ...chartBaseProps,
+    chartHeight: CHART_HEIGHT_STANDARD,
+    gridLeft: CHART_GRID_LEFT_WIDE,
+    gridRight: "10%",
   };
 
   const realToggleLabel = `Real (${realBaseYear} US$)`;
@@ -359,6 +371,13 @@ export function UsLivingStandardsStudy() {
         sourceUrl: `https://fred.stlouisfed.org/series/${fred.median_home_price_usd ?? "MSPUS"}`,
         sourceDetail: "United States; annual mean of quarterly observations",
         unitLabel: "Nominal US$",
+      },
+      {
+        label: AFFORDABILITY_BURDEN_CHART_LABEL,
+        sourceName: "SignalMap derived",
+        sourceDetail: "MSPUS / MEHOINUSA672N and College Board public-university anchors / MEHOINUSA672N",
+        unitLabel: "Ratio (left: house price / income; right: tuition / income)",
+        unitNote: AFFORDABILITY_BURDEN_METHOD_NOTE,
       },
       {
         label: "House-price-to-income ratio",
@@ -587,23 +606,17 @@ export function UsLivingStandardsStudy() {
     [s.fertility_rate_births_per_woman, s.homeownership_rate_pct]
   );
 
-  const housingSharedTimeRange = useMemo(
-    () =>
-      sharedSectionTimeRange([
-        homePriceChart.data,
-        s.house_price_to_income_ratio ?? [],
-      ]),
-    [homePriceChart.data, s.house_price_to_income_ratio]
-  );
+  const housePriceToIncomePoints = s.house_price_to_income_ratio ?? [];
+  const tuitionToIncomePoints = s.tuition_to_income_ratio ?? [];
 
-  const educationSharedTimeRange = useMemo(
-    () =>
-      sharedSectionTimeRange([
-        tuitionChart.data,
-        s.tuition_to_income_ratio ?? [],
-      ]),
-    [tuitionChart.data, s.tuition_to_income_ratio]
-  );
+  const affordabilityBurdenTimeRange = useMemo(() => {
+    const shared = sharedSectionTimeRange([housePriceToIncomePoints, tuitionToIncomePoints]);
+    const allPoints = [...housePriceToIncomePoints, ...tuitionToIncomePoints];
+    return shared ?? seriesTimeRange(allPoints) ?? studyWindow;
+  }, [housePriceToIncomePoints, tuitionToIncomePoints, studyWindow]);
+
+  const hasAffordabilityBurdenChart =
+    housePriceToIncomePoints.length > 0 || tuitionToIncomePoints.length > 0;
 
   const hoursSharedTimeRange = useMemo(
     () =>
@@ -752,7 +765,7 @@ export function UsLivingStandardsStudy() {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="space-y-1">
                   <CardTitle className="text-base">2. Housing</CardTitle>
-                  <p className="text-xs text-muted-foreground">Median home price and price-to-income ratio</p>
+                  <p className="text-xs text-muted-foreground">Median home price</p>
                 </div>
                 <NominalRealToggle
                   mode={homePriceMode}
@@ -762,68 +775,27 @@ export function UsLivingStandardsStudy() {
               </div>
             </CardHeader>
             <CardContent className="pt-0">
-              <StudyComparisonGroup paired={Boolean(housingSharedTimeRange)}>
-                <StudyChartCell title={homePriceChart.label}>
-                  {homePriceChart.data.length > 0 ? (
-                    <>
-                      <TimelineChart
-                        data={homePriceChart.data}
-                        valueKey="value"
-                        label={homePriceChart.label}
-                        unit={homePriceChart.unit}
-                        seriesColor={SIGNAL_CONCEPT.gdp}
-                        exportSourceFooter={homePriceChart.exportSourceFooter}
-                        exportFileStem={homePriceChart.exportFileStem}
-                        timeRange={resolveChartTimeRange(
-                          homePriceChart.data,
-                          housingSharedTimeRange,
-                          studyWindow
-                        )}
-                        {...standardChartProps}
-                      />
-                    </>
-                  ) : (
-                    <p className="py-6 text-xs text-muted-foreground">Data unavailable.</p>
-                  )}
-                </StudyChartCell>
-                <StudyChartCell title="House price / median income">
-                  {(s.house_price_to_income_ratio ?? []).length > 0 ? (
-                    <>
-                      <TimelineChart
-                        data={s.house_price_to_income_ratio ?? []}
-                        valueKey="value"
-                        label="House price / median income"
-                        unit="Ratio"
-                        seriesColor="#9333ea"
-                        exportSourceFooter={exportFooterWithDirection(
-                          wdiFredFooter(
-                            [fred.median_home_price_usd ?? "MSPUS", fred.median_household_income_real_usd ?? "MEHOINUSA672N"],
-                            "derived ratio"
-                          ),
-                          US_LS_CHART_DIRECTION.priceToIncome
-                        )}
-                        exportFileStem="us-living-standards-price-to-income"
-                        timeRange={resolveChartTimeRange(
-                          s.house_price_to_income_ratio ?? [],
-                          housingSharedTimeRange,
-                          studyWindow
-                        )}
-                        {...standardChartProps}
-                      />
-                      <ChartDirectionCue
-                        meta={US_LS_CHART_DIRECTION.priceToIncome}
-                        points={s.house_price_to_income_ratio ?? []}
-                        className="mt-2"
-                      />
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Nominal median home price divided by real median household income.
-                      </p>
-                    </>
-                  ) : (
-                    <p className="py-6 text-xs text-muted-foreground">Data unavailable.</p>
-                  )}
-                </StudyChartCell>
-              </StudyComparisonGroup>
+              {homePriceChart.data.length > 0 ? (
+                <>
+                  <TimelineChart
+                    data={homePriceChart.data}
+                    valueKey="value"
+                    label={homePriceChart.label}
+                    unit={homePriceChart.unit}
+                    seriesColor={SIGNAL_CONCEPT.gdp}
+                    exportSourceFooter={homePriceChart.exportSourceFooter}
+                    exportFileStem={homePriceChart.exportFileStem}
+                    timeRange={resolveChartTimeRange(
+                      homePriceChart.data,
+                      undefined,
+                      studyWindow
+                    )}
+                    {...standardChartProps}
+                  />
+                </>
+              ) : (
+                <p className="py-6 text-xs text-muted-foreground">Data unavailable.</p>
+              )}
             </CardContent>
           </Card>
 
@@ -833,7 +805,7 @@ export function UsLivingStandardsStudy() {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="space-y-1">
                   <CardTitle className="text-base">3. Higher education</CardTitle>
-                  <p className="text-xs text-muted-foreground">Public university tuition and tuition relative to income</p>
+                  <p className="text-xs text-muted-foreground">Public university tuition</p>
                 </div>
                 <NominalRealToggle
                   mode={tuitionMode}
@@ -843,68 +815,96 @@ export function UsLivingStandardsStudy() {
               </div>
             </CardHeader>
             <CardContent className="pt-0">
-              <StudyComparisonGroup paired={Boolean(educationSharedTimeRange)}>
-                <StudyChartCell title={tuitionChart.label}>
-                  {tuitionChart.data.length > 0 ? (
-                    <>
-                      <TimelineChart
-                        data={tuitionChart.data}
-                        valueKey="value"
-                        label={tuitionChart.label}
-                        unit={tuitionChart.unit}
-                        seriesColor={SIGNAL_CONCEPT.wage_real}
-                        exportSourceFooter={tuitionChart.exportSourceFooter}
-                        exportFileStem={tuitionChart.exportFileStem}
-                        timeRange={resolveChartTimeRange(
-                          tuitionChart.data,
-                          educationSharedTimeRange,
-                          studyWindow
-                        )}
-                        {...standardChartProps}
-                      />
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {PUBLIC_UNIVERSITY_K12_NOTE}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="py-6 text-xs text-muted-foreground">Data unavailable.</p>
-                  )}
-                </StudyChartCell>
-                <StudyChartCell title="Public university tuition / median income">
-                  {(s.tuition_to_income_ratio ?? []).length > 0 ? (
-                    <>
-                      <TimelineChart
-                        data={s.tuition_to_income_ratio ?? []}
-                        valueKey="value"
-                        label="Public university tuition / median income"
-                        unit="Ratio"
-                        seriesColor="#0d9488"
-                        exportSourceFooter={exportFooterWithDirection(
-                          "Source: College Board public-university anchors + FRED MEHOINUSA672N; derived ratio",
-                          US_LS_CHART_DIRECTION.universityTuitionToIncome
-                        )}
-                        exportFileStem="us-living-standards-tuition-to-income"
-                        timeRange={resolveChartTimeRange(
-                          s.tuition_to_income_ratio ?? [],
-                          educationSharedTimeRange,
-                          studyWindow
-                        )}
-                        {...standardChartProps}
-                      />
-                      <ChartDirectionCue
-                        meta={US_LS_CHART_DIRECTION.universityTuitionToIncome}
-                        points={s.tuition_to_income_ratio ?? []}
-                        className="mt-2"
-                      />
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        One year of tuition as a share of real median household income.
-                      </p>
-                    </>
-                  ) : (
-                    <p className="py-6 text-xs text-muted-foreground">Data unavailable.</p>
-                  )}
-                </StudyChartCell>
-              </StudyComparisonGroup>
+              {tuitionChart.data.length > 0 ? (
+                <>
+                  <TimelineChart
+                    data={tuitionChart.data}
+                    valueKey="value"
+                    label={tuitionChart.label}
+                    unit={tuitionChart.unit}
+                    seriesColor={SIGNAL_CONCEPT.wage_real}
+                    exportSourceFooter={tuitionChart.exportSourceFooter}
+                    exportFileStem={tuitionChart.exportFileStem}
+                    timeRange={resolveChartTimeRange(
+                      tuitionChart.data,
+                      undefined,
+                      studyWindow
+                    )}
+                    {...standardChartProps}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {PUBLIC_UNIVERSITY_K12_NOTE}
+                  </p>
+                </>
+              ) : (
+                <p className="py-6 text-xs text-muted-foreground">Data unavailable.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader className="space-y-1 pb-2">
+              <CardTitle className="text-base">{AFFORDABILITY_BURDEN_CHART_LABEL}</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                House price / median income (left) and public university tuition / median income (right)
+              </p>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {hasAffordabilityBurdenChart ? (
+                <>
+                  <TimelineChart
+                    data={[]}
+                    valueKey="value"
+                    label={AFFORDABILITY_BURDEN_CHART_LABEL}
+                    multiSeries={[
+                      {
+                        key: "house_price_to_income",
+                        label: "House price / median income",
+                        unit: "Ratio",
+                        yAxisIndex: 0 as const,
+                        points: housePriceToIncomePoints,
+                        color: "#9333ea",
+                        linePattern: "solid",
+                        symbol: "circle",
+                        showSymbol: false,
+                      },
+                      {
+                        key: "tuition_to_income",
+                        label: "Public university tuition / median income",
+                        unit: "Ratio",
+                        yAxisIndex: 1 as const,
+                        points: tuitionToIncomePoints,
+                        color: "#0d9488",
+                        linePattern: "dashed",
+                        symbol: "triangle",
+                        showSymbol: false,
+                      },
+                    ]}
+                    multiSeriesYAxisNameOverrides={{
+                      0: "House price / median income",
+                      1: "Public university tuition / median income",
+                    }}
+                    exportSourceFooter={`${exportFooterWithDirection(
+                      wdiFredFooter(
+                        [
+                          fred.median_home_price_usd ?? "MSPUS",
+                          fred.median_household_income_real_usd ?? "MEHOINUSA672N",
+                          "College Board public-university anchors",
+                        ],
+                        "derived ratios; dual y-axes"
+                      ),
+                      US_LS_CHART_DIRECTION.priceToIncome
+                    )} ${AFFORDABILITY_BURDEN_METHOD_NOTE}`}
+                    exportFileStem="us-living-standards-affordability-burden-housing-vs-tuition"
+                    timeRange={affordabilityBurdenTimeRange}
+                    {...dualAxisChartProps}
+                  />
+                  <ChartDirectionCue meta={US_LS_CHART_DIRECTION.priceToIncome} className="mt-2" />
+                  <p className="mt-1 text-xs text-muted-foreground">{AFFORDABILITY_BURDEN_METHOD_NOTE}</p>
+                </>
+              ) : (
+                <p className="py-6 text-xs text-muted-foreground">Data unavailable.</p>
+              )}
             </CardContent>
           </Card>
 
