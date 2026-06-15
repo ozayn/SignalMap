@@ -19,6 +19,7 @@ import {
   formatSharedIndexBaseNote,
 } from "@/lib/indexed-chart-base";
 import { SIGNAL_CONCEPT, SIGNAL_COUNTRY } from "@/lib/signalmap-chart-colors";
+import { TIMELINE_CHART_MOBILE_HEIGHT_PREFIX } from "@/lib/chart-study-typography";
 
 type Point = { date: string; value: number };
 
@@ -59,6 +60,21 @@ type LivingStandardsBundle = {
   partial?: boolean;
   series_warnings?: Record<string, string>;
   fetch_error?: string;
+  wdi_indicators?: Record<string, string>;
+  phase2?: {
+    health_insurance_note?: string;
+    childcare_note?: string;
+    new_vehicle?: {
+      benchmark_year?: number;
+      benchmark_price_usd?: number;
+      cpi_fred_series?: string;
+      cpi_source?: string;
+    };
+    health_expenditure_start_year?: number | null;
+    health_expenditure_end_year?: number | null;
+    vehicle_hours_start_year?: number | null;
+    vehicle_hours_end_year?: number | null;
+  };
 };
 
 const STUDY_ID = "us-living-standards";
@@ -78,6 +94,52 @@ function seriesTimeRange(points: Point[]): [string, string] | undefined {
     if (p.date > hi) hi = p.date;
   }
   return [lo.slice(0, 10), hi.slice(0, 10)];
+}
+
+/** Standard on-page chart height (~480px desktop). */
+const CHART_HEIGHT_STANDARD = `${TIMELINE_CHART_MOBILE_HEIGHT_PREFIX} md:h-[30rem]`;
+/** Taller canvas for multi-series or hours charts (~512px desktop). */
+const CHART_HEIGHT_DENSE = `${TIMELINE_CHART_MOBILE_HEIGHT_PREFIX} md:h-[32rem]`;
+const CHART_GRID_LEFT = 72;
+const CHART_GRID_LEFT_WIDE = 88;
+const CHART_GRID_RIGHT = "4%";
+const SECTION_START_GAP_YEARS = 3;
+
+function yearFromDate(date: string): number {
+  return parseInt(date.slice(0, 4), 10);
+}
+
+function yearSpanToRange(minYear: number, maxYear: number): [string, string] {
+  return [`${minYear}-01-01`, `${maxYear}-12-31`];
+}
+
+/** Shared x-domain when series start years are close enough to align plot areas. */
+function sharedSectionTimeRange(
+  seriesList: Point[][],
+  maxStartGapYears = SECTION_START_GAP_YEARS
+): [string, string] | undefined {
+  const nonEmpty = seriesList.filter((pts) => pts.length > 0);
+  if (nonEmpty.length < 2) return undefined;
+  const starts = nonEmpty.map((pts) => yearFromDate(seriesTimeRange(pts)![0]));
+  const ends = nonEmpty.map((pts) => yearFromDate(seriesTimeRange(pts)![1]));
+  const minStart = Math.min(...starts);
+  const maxStart = Math.max(...starts);
+  if (maxStart - minStart > maxStartGapYears) return undefined;
+  return yearSpanToRange(minStart, Math.max(...ends));
+}
+
+function resolveChartTimeRange(
+  points: Point[],
+  shared: [string, string] | undefined,
+  fallback: [string, string]
+): [string, string] {
+  const dataRange = seriesTimeRange(points);
+  if (!dataRange) return shared ?? fallback;
+  if (!shared) return dataRange;
+  const dataStart = yearFromDate(dataRange[0]);
+  const sharedStart = yearFromDate(shared[0]);
+  if (dataStart - sharedStart > SECTION_START_GAP_YEARS) return dataRange;
+  return shared;
 }
 
 function hoursWorkChartFooter(wageCode: string, expenseSource: string): string {
@@ -116,6 +178,7 @@ export function UsLivingStandardsStudy() {
   const [bundle, setBundle] = useState<LivingStandardsBundle | null>(null);
   const [homePriceMode, setHomePriceMode] = useState<MonetaryDisplayMode>("nominal");
   const [tuitionMode, setTuitionMode] = useState<MonetaryDisplayMode>("real");
+  const [gasPriceMode, setGasPriceMode] = useState<MonetaryDisplayMode>("real");
 
   const timeRange = useMemo(() => {
     const end = new Date().toISOString().slice(0, 10);
@@ -153,16 +216,34 @@ export function UsLivingStandardsStudy() {
 
   const s = bundle?.series ?? {};
   const fred = bundle?.fred_series ?? {};
+  const wdi = bundle?.wdi_indicators ?? {};
+  const phase2Meta = bundle?.phase2;
   const realBaseYear = bundle?.real_base_year ?? 2022;
   const prodBaseYear = bundle?.productivity_compensation_base_year ?? DEFAULT_INDEX_PREFERRED_YEAR;
   const prodIndexUnit = formatIndexEquals100Label(prodBaseYear);
   const prodIndexFallbackNote = formatSharedIndexBaseNote(prodBaseYear, DEFAULT_INDEX_PREFERRED_YEAR);
 
-  const commonChartProps = {
+  const studyWindow = useMemo(
+    (): [string, string] => [timeRange.start, timeRange.end],
+    [timeRange.end, timeRange.start]
+  );
+
+  const chartBaseProps = {
     chartRangeGranularity: "year" as const,
     showChartControls: true,
-    chartHeight: "h-56 md:h-64",
-    timeRange: [timeRange.start, timeRange.end] as [string, string],
+    gridLeft: CHART_GRID_LEFT,
+    gridRight: CHART_GRID_RIGHT,
+  };
+
+  const standardChartProps = {
+    ...chartBaseProps,
+    chartHeight: CHART_HEIGHT_STANDARD,
+  };
+
+  const denseChartProps = {
+    ...chartBaseProps,
+    chartHeight: CHART_HEIGHT_DENSE,
+    gridLeft: CHART_GRID_LEFT_WIDE,
   };
 
   const realToggleLabel = `Real (${realBaseYear} US$)`;
@@ -201,6 +282,28 @@ export function UsLivingStandardsStudy() {
         : "3. Education — public university tuition",
     };
   }, [fred, realBaseYear, s, tuitionMode]);
+
+  const gasPriceChart = useMemo(() => {
+    const isReal = gasPriceMode === "real";
+    const gasCode = fred.gasoline_price_usd_per_gallon ?? "GASREGW";
+    const cpi = fred.cpi_all_items_index ?? "CPIAUCSL";
+    return {
+      data: isReal
+        ? (s.gasoline_price_real_usd_per_gallon ?? [])
+        : (s.gasoline_price_usd_per_gallon ?? []),
+      label: isReal ? `Gasoline price (real, ${realBaseYear} US$/gal)` : "Gasoline price",
+      unit: isReal ? `Constant ${realBaseYear} US$/gallon` : "Nominal US$/gallon",
+      exportSourceFooter: isReal
+        ? wdiFredFooter([gasCode, cpi], `GASREGW deflated to ${realBaseYear} dollars with CPI-U`)
+        : wdiFredFooter(gasCode, "annual mean of weekly retail price"),
+      exportFileStem: isReal
+        ? "us-living-standards-gasoline-price-real"
+        : "us-living-standards-gasoline-price-nominal",
+      sectionTitle: isReal
+        ? `7. Transportation — gasoline price (real, ${realBaseYear} US$/gal)`
+        : "7. Transportation — gasoline price",
+    };
+  }, [fred, gasPriceMode, realBaseYear, s]);
 
   const refSources = bundle?.reference_sources ?? {};
   const hoursOfWorkMeta = bundle?.hours_of_work;
@@ -306,9 +409,82 @@ export function UsLivingStandardsStudy() {
         unitLabel: HOURS_Y_AXIS_LABEL,
         unitNote: `${HOURS_CHART_HOUSEHOLD_METHOD} Refrigerator (CUSR0000SAH3 proxy), washing machine (WPU12410220/WPU1241), television (CUSR0000SERA + retail anchors), vacuum cleaner (CUSR0000SAH3 proxy). Each series starts when its price and wage data overlap.`,
       },
+      {
+        label: "Health expenditure per capita (real)",
+        sourceName: "World Bank WDI + FRED CPI",
+        sourceUrl: "https://data.worldbank.org/indicator/SH.XPD.CHEX.PC.CD",
+        sourceDetail: `WDI SH.XPD.CHEX.PC.CD deflated with CPI-U to ${realBaseYear} dollars`,
+        unitLabel: `Constant ${realBaseYear} US$ per person`,
+        unitNote:
+          phase2Meta?.health_expenditure_start_year != null
+            ? `WDI health spending per capita begins ${phase2Meta.health_expenditure_start_year}; earlier years are not shown.`
+            : "World Bank current health expenditure per capita; annual coverage varies.",
+      },
+      {
+        label: "Life expectancy at birth",
+        sourceName: "World Bank WDI",
+        sourceUrl: "https://data.worldbank.org/indicator/SP.DYN.LE00.IN",
+        sourceDetail: "United States — outcome/context series, not an affordability measure",
+        unitLabel: "Years",
+      },
+      {
+        label: gasPriceChart.label,
+        sourceName: "FRED",
+        sourceUrl: `https://fred.stlouisfed.org/series/${fred.gasoline_price_usd_per_gallon ?? "GASREGW"}`,
+        sourceDetail: "U.S. regular gasoline; annual mean of weekly retail price",
+        unitLabel: gasPriceChart.unit,
+      },
+      {
+        label: "New vehicle price relative to income",
+        sourceName: "SignalMap derived",
+        sourceDetail:
+          refSources.new_vehicle_to_income_ratio ??
+          `CPI new vehicles (${fred.cpi_new_vehicles_index ?? "CUUR0000SETA01"}) anchored price ÷ real median household income`,
+        unitLabel: "Ratio",
+        unitNote: "Estimated retail price from CPI anchor; contextual signal, not a transaction-price index.",
+      },
+      {
+        label: "Hours of work to afford a new vehicle",
+        sourceName: "SignalMap derived",
+        sourceDetail:
+          refSources.hours_for_new_vehicle ??
+          `Estimated new-vehicle price ÷ FRED ${fred.average_hourly_earnings_household_goods_usd ?? "AHETPI"}`,
+        unitLabel: HOURS_Y_AXIS_LABEL,
+        unitNote: HOURS_OF_WORK_METHODOLOGY_NOTE,
+      },
+      {
+        label: "Homeownership rate",
+        sourceName: "FRED",
+        sourceUrl: `https://fred.stlouisfed.org/series/${fred.homeownership_rate_pct ?? "RHORUSQ156N"}`,
+        sourceDetail: "Census homeownership rate; annual mean of quarterly observations",
+        unitLabel: "Percent of occupied housing units",
+      },
+      {
+        label: "Median age at first marriage",
+        sourceName: "U.S. Census Bureau (reference anchors)",
+        sourceUrl: "https://www.census.gov",
+        sourceDetail: "Historical median age at first marriage, men and women; interpolated between anchor years",
+        unitLabel: "Years",
+      },
+      {
+        label: "Total fertility rate",
+        sourceName: "FRED",
+        sourceUrl: `https://fred.stlouisfed.org/series/${fred.fertility_rate_births_per_woman ?? "SPDYNTFRTINUSA"}`,
+        sourceDetail: "Births per woman — demographic context for family formation",
+        unitLabel: "Births per woman",
+      },
     ],
-    [fred, prodBaseYear, realBaseYear, refSources]
+    [fred, gasPriceChart.label, gasPriceChart.unit, phase2Meta?.health_expenditure_start_year, prodBaseYear, realBaseYear, refSources]
   );
+
+  const householdGoodsSourceFooter = useMemo(
+    () => hoursWorkChartFooter(hoursOfWorkWageSeriesId, "CPI/PPI-anchored goods (see Sources & units)"),
+    [hoursOfWorkWageSeriesId]
+  );
+
+  const hoursChartBaseProps = {
+    ...denseChartProps,
+  };
 
   const hoursRentPoints = s.hours_for_month_rent ?? [];
   const hoursTuitionPoints = s.hours_for_year_tuition ?? [];
@@ -350,28 +526,54 @@ export function UsLivingStandardsStudy() {
     [s]
   );
 
-  const householdGoodsSourceFooter = useMemo(() => {
-    const itemSources = Object.entries(householdGoodsMeta?.items ?? {})
-      .filter(([, meta]) => meta.cpi_source)
-      .map(([key, meta]) => `${meta.label ?? key}: ${meta.cpi_source}`);
-    const expenseSource =
-      itemSources.length > 0
-        ? itemSources.join("; ")
-        : [
-            refSources.hours_for_refrigerator,
-            refSources.hours_for_washing_machine,
-            refSources.hours_for_television,
-          ]
-            .filter(Boolean)
-            .join("; ");
-    return hoursWorkChartFooter(hoursOfWorkWageSeriesId, expenseSource);
-  }, [householdGoodsMeta?.items, hoursOfWorkWageSeriesId, refSources]);
+  const housingSharedTimeRange = useMemo(
+    () =>
+      sharedSectionTimeRange([
+        homePriceChart.data,
+        s.house_price_to_income_ratio ?? [],
+      ]),
+    [homePriceChart.data, s.house_price_to_income_ratio]
+  );
 
-  const hoursChartBaseProps = {
-    chartRangeGranularity: "year" as const,
-    showChartControls: true,
-    chartHeight: "h-56 md:h-64",
-  };
+  const educationSharedTimeRange = useMemo(
+    () =>
+      sharedSectionTimeRange([
+        tuitionChart.data,
+        s.tuition_to_income_ratio ?? [],
+      ]),
+    [tuitionChart.data, s.tuition_to_income_ratio]
+  );
+
+  const hoursSharedTimeRange = useMemo(
+    () =>
+      sharedSectionTimeRange(
+        [
+          hoursRentPoints,
+          hoursTuitionPoints,
+          ...householdGoodsMultiSeries.map((row) => row.points),
+        ],
+        5
+      ),
+    [hoursRentPoints, hoursTuitionPoints, householdGoodsMultiSeries]
+  );
+
+  const marriageSharedTimeRange = useMemo(
+    () =>
+      sharedSectionTimeRange([
+        s.median_age_first_marriage_male ?? [],
+        s.median_age_first_marriage_female ?? [],
+      ]),
+    [s.median_age_first_marriage_female, s.median_age_first_marriage_male]
+  );
+
+  const transportationSharedTimeRange = useMemo(
+    () =>
+      sharedSectionTimeRange([
+        s.new_vehicle_to_income_ratio ?? [],
+        s.hours_for_new_vehicle ?? [],
+      ]),
+    [s.hours_for_new_vehicle, s.new_vehicle_to_income_ratio]
+  );
 
   const hasAnyHoursChart =
     hoursRentPoints.length > 0 ||
@@ -420,6 +622,8 @@ export function UsLivingStandardsStudy() {
             <li>Public tuition and rent can outpace hourly earnings in some decades while appliances may take fewer hours of work as manufacturing productivity improves.</li>
             <li>Productivity and hourly compensation indexes can decouple — productivity growth does not automatically translate into proportional wage growth.</li>
             <li>Reference-price series for tuition, rent, and appliances use published anchors and interpolation; treat them as contextual signals, not precise retail transactions.</li>
+            <li>Healthcare spending (WDI) and gasoline prices can rise in nominal terms while life expectancy improves — different dimensions can diverge.</li>
+            <li>Family-formation indicators (homeownership, marriage age, fertility) describe social context; they are not direct affordability measures.</li>
           </ul>
         </CardContent>
       </Card>
@@ -446,9 +650,9 @@ export function UsLivingStandardsStudy() {
               </CardContent>
             </Card>
           )}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="flex flex-col gap-4">
           {/* 1. Income */}
-          <Card className="border-border md:col-span-2">
+          <Card className="border-border">
             <CardHeader className="space-y-1 pb-2">
               <CardTitle className="text-base">1. Income</CardTitle>
               <p className="text-xs text-muted-foreground">Median household income (real)</p>
@@ -464,7 +668,12 @@ export function UsLivingStandardsStudy() {
                     seriesColor={SIGNAL_COUNTRY.us}
                     exportSourceFooter={wdiFredFooter(fred.median_household_income_real_usd ?? "MEHOINUSA672N")}
                     exportFileStem="us-living-standards-median-income"
-                    {...commonChartProps}
+                    timeRange={resolveChartTimeRange(
+                      s.median_household_income_real_usd ?? [],
+                      undefined,
+                      studyWindow
+                    )}
+                    {...standardChartProps}
                   />
                   <p className="mt-2 text-xs text-muted-foreground">
                     FRED real median household income is CPI-U-adjusted in the source series. It describes the middle
@@ -499,7 +708,12 @@ export function UsLivingStandardsStudy() {
                   seriesColor={SIGNAL_CONCEPT.gdp}
                   exportSourceFooter={homePriceChart.exportSourceFooter}
                   exportFileStem={homePriceChart.exportFileStem}
-                  {...commonChartProps}
+                  timeRange={resolveChartTimeRange(
+                    homePriceChart.data,
+                    housingSharedTimeRange,
+                    studyWindow
+                  )}
+                  {...standardChartProps}
                 />
               ) : (
                 <p className="py-6 text-xs text-muted-foreground">Data unavailable.</p>
@@ -525,7 +739,12 @@ export function UsLivingStandardsStudy() {
                       "derived ratio"
                     )}
                     exportFileStem="us-living-standards-price-to-income"
-                    {...commonChartProps}
+                    timeRange={resolveChartTimeRange(
+                      s.house_price_to_income_ratio ?? [],
+                      housingSharedTimeRange,
+                      studyWindow
+                    )}
+                    {...standardChartProps}
                   />
                   <p className="mt-2 text-xs text-muted-foreground">
                     Nominal median home price divided by real median household income. Useful as a relative
@@ -561,7 +780,12 @@ export function UsLivingStandardsStudy() {
                     seriesColor={SIGNAL_CONCEPT.wage_real}
                     exportSourceFooter={tuitionChart.exportSourceFooter}
                     exportFileStem={tuitionChart.exportFileStem}
-                    {...commonChartProps}
+                    timeRange={resolveChartTimeRange(
+                      tuitionChart.data,
+                      educationSharedTimeRange,
+                      studyWindow
+                    )}
+                    {...standardChartProps}
                   />
                   <p className="mt-2 text-xs text-muted-foreground">
                     {bundle?.reference_sources?.public_tuition_annual_usd ??
@@ -589,7 +813,12 @@ export function UsLivingStandardsStudy() {
                     seriesColor="#0d9488"
                     exportSourceFooter="Source: College Board anchors + FRED MEHOINUSA672N; derived ratio"
                     exportFileStem="us-living-standards-tuition-to-income"
-                    {...commonChartProps}
+                    timeRange={resolveChartTimeRange(
+                      s.tuition_to_income_ratio ?? [],
+                      educationSharedTimeRange,
+                      studyWindow
+                    )}
+                    {...standardChartProps}
                   />
                   <p className="mt-2 text-xs text-muted-foreground">
                     One year of published in-state public tuition as a share of real median household income.
@@ -602,7 +831,7 @@ export function UsLivingStandardsStudy() {
           </Card>
 
           {/* 4. Productivity vs compensation */}
-          <Card className="border-border md:col-span-2">
+          <Card className="border-border">
             <CardHeader className="space-y-1 pb-2">
               <CardTitle className="text-base">4. Productivity vs compensation</CardTitle>
               <p className="text-xs text-muted-foreground">
@@ -642,7 +871,13 @@ export function UsLivingStandardsStudy() {
                       `${formatIndexedToEquals100Subtitle(prodBaseYear)}${prodIndexFallbackNote ? `; ${prodIndexFallbackNote}` : ""}`
                     )}
                     exportFileStem="us-living-standards-productivity-compensation"
-                    {...commonChartProps}
+                    timeRange={
+                      seriesTimeRange([
+                        ...(s.productivity_reindexed ?? []),
+                        ...(s.compensation_reindexed ?? []),
+                      ]) ?? studyWindow
+                    }
+                    {...denseChartProps}
                   />
                   <p className="mt-2 text-xs text-muted-foreground">
                     Productivity is real output per hour; compensation is the BLS hourly compensation index. Both are
@@ -657,7 +892,7 @@ export function UsLivingStandardsStudy() {
           </Card>
 
           {/* 5. Affordability in hours of work */}
-          <Card className="border-border md:col-span-2">
+          <Card className="border-border">
             <CardHeader className="space-y-2 pb-2">
               <CardTitle className="text-base">5. Affordability in hours of work</CardTitle>
               <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
@@ -681,12 +916,14 @@ export function UsLivingStandardsStudy() {
                           seriesColor={SIGNAL_COUNTRY.us}
                           exportSourceFooter={hoursWorkChartFooter(
                             hoursOfWorkWageSeriesId,
-                            refSources.hours_for_month_rent ??
-                              refSources.median_gross_rent_monthly_usd ??
-                              "U.S. Census Bureau median gross rent (reference anchors)"
+                            "Census median gross rent (see Sources & units)"
                           )}
                           exportFileStem="us-living-standards-hours-rent"
-                          timeRange={seriesTimeRange(hoursRentPoints)}
+                          timeRange={resolveChartTimeRange(
+                            hoursRentPoints,
+                            hoursSharedTimeRange,
+                            studyWindow
+                          )}
                           {...hoursChartBaseProps}
                         />
                         <p className="text-xs text-muted-foreground">{HOURS_CHART_RENT_METHOD}</p>
@@ -708,12 +945,14 @@ export function UsLivingStandardsStudy() {
                           seriesColor="#9333ea"
                           exportSourceFooter={hoursWorkChartFooter(
                             hoursOfWorkWageSeriesId,
-                            refSources.hours_for_year_tuition ??
-                              refSources.public_tuition_annual_usd ??
-                              "College Board public tuition (reference anchors)"
+                            "College Board tuition anchors (see Sources & units)"
                           )}
                           exportFileStem="us-living-standards-hours-tuition"
-                          timeRange={seriesTimeRange(hoursTuitionPoints)}
+                          timeRange={resolveChartTimeRange(
+                            hoursTuitionPoints,
+                            hoursSharedTimeRange,
+                            studyWindow
+                          )}
                           {...hoursChartBaseProps}
                         />
                         <p className="text-xs text-muted-foreground">{HOURS_CHART_TUITION_METHOD}</p>
@@ -735,8 +974,10 @@ export function UsLivingStandardsStudy() {
                           multiSeriesYAxisNameOverrides={{ 0: HOURS_Y_AXIS_LABEL }}
                           exportSourceFooter={householdGoodsSourceFooter}
                           exportFileStem="us-living-standards-hours-household-goods"
-                          timeRange={seriesTimeRange(
-                            householdGoodsMultiSeries.flatMap((row) => row.points)
+                          timeRange={resolveChartTimeRange(
+                            householdGoodsMultiSeries.flatMap((row) => row.points),
+                            hoursSharedTimeRange,
+                            studyWindow
                           )}
                           {...hoursChartBaseProps}
                         />
@@ -764,6 +1005,319 @@ export function UsLivingStandardsStudy() {
                   </p>
                 </>
               )}
+            </CardContent>
+          </Card>
+
+          {/* 6. Healthcare */}
+          <Card className="border-border">
+            <CardHeader className="space-y-1 pb-2">
+              <CardTitle className="text-base">6. Healthcare</CardTitle>
+              <p className="text-xs text-muted-foreground">Spending burden and health outcomes (context)</p>
+            </CardHeader>
+            <CardContent className="space-y-8 pt-0">
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-foreground">
+                  Health expenditure per capita (real, {realBaseYear} US$)
+                </h3>
+                {(s.health_expenditure_per_capita_real_usd ?? []).length > 0 ? (
+                  <>
+                    <TimelineChart
+                      data={s.health_expenditure_per_capita_real_usd ?? []}
+                      valueKey="value"
+                      label={`Health spending per capita (real, ${realBaseYear} US$)`}
+                      unit={`Constant ${realBaseYear} US$`}
+                      seriesColor="#dc2626"
+                      exportSourceFooter={wdiFredFooter(
+                        [wdi.health_expenditure_per_capita_usd ?? "SH.XPD.CHEX.PC.CD", fred.cpi_all_items_index ?? "CPIAUCSL"],
+                        `WDI deflated to ${realBaseYear} dollars`
+                      )}
+                      exportFileStem="us-living-standards-health-spending-per-capita-real"
+                      timeRange={resolveChartTimeRange(
+                        s.health_expenditure_per_capita_real_usd ?? [],
+                        undefined,
+                        studyWindow
+                      )}
+                      {...standardChartProps}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {refSources.health_expenditure_per_capita_real_usd ??
+                        "World Bank current health expenditure per capita, deflated with CPI-U."}{" "}
+                      {phase2Meta?.health_expenditure_start_year != null
+                        ? `Series begins ${phase2Meta.health_expenditure_start_year} (WDI coverage).`
+                        : null}
+                    </p>
+                  </>
+                ) : (
+                  <p className="py-4 text-xs text-muted-foreground">Data unavailable.</p>
+                )}
+              </div>
+
+              <div className="space-y-2 border-t border-border pt-6">
+                <h3 className="text-sm font-medium text-foreground">Life expectancy at birth (context)</h3>
+                {(s.life_expectancy_years ?? []).length > 0 ? (
+                  <>
+                    <TimelineChart
+                      data={s.life_expectancy_years ?? []}
+                      valueKey="value"
+                      label="Life expectancy at birth"
+                      unit="Years"
+                      seriesColor="#059669"
+                      exportSourceFooter={`Source: World Bank WDI — ${wdi.life_expectancy_years ?? "SP.DYN.LE00.IN"}; outcome/context series, not affordability`}
+                      exportFileStem="us-living-standards-life-expectancy"
+                      timeRange={resolveChartTimeRange(
+                        s.life_expectancy_years ?? [],
+                        undefined,
+                        studyWindow
+                      )}
+                      {...standardChartProps}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {refSources.life_expectancy_years ??
+                        "Life expectancy is shown as health outcome context. Rising spending and rising longevity can coexist and do not, by themselves, answer whether care is affordable."}
+                    </p>
+                  </>
+                ) : (
+                  <p className="py-4 text-xs text-muted-foreground">Data unavailable.</p>
+                )}
+              </div>
+
+              <p className="text-xs text-muted-foreground border-t border-border pt-4">
+                {phase2Meta?.health_insurance_note ??
+                  refSources.health_insurance_premiums ??
+                  "Health insurance premiums relative to income are not charted: consistent long-run premium series are not available without large gaps."}
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* 7. Transportation */}
+          <Card className="border-border">
+            <CardHeader className="space-y-2 pb-2">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <CardTitle className="text-base">{gasPriceChart.sectionTitle}</CardTitle>
+                <NominalRealToggle
+                  mode={gasPriceMode}
+                  onChange={setGasPriceMode}
+                  realLabel={`Real (${realBaseYear} US$/gal)`}
+                />
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {gasPriceChart.data.length > 0 ? (
+                <>
+                  <TimelineChart
+                    data={gasPriceChart.data}
+                    valueKey="value"
+                    label={gasPriceChart.label}
+                    unit={gasPriceChart.unit}
+                    seriesColor="#b45309"
+                    exportSourceFooter={gasPriceChart.exportSourceFooter}
+                    exportFileStem={gasPriceChart.exportFileStem}
+                    timeRange={resolveChartTimeRange(
+                      gasPriceChart.data,
+                      undefined,
+                      studyWindow
+                    )}
+                    {...standardChartProps}
+                  />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {refSources.gasoline_price_usd_per_gallon ??
+                      "FRED GASREGW — U.S. regular gasoline retail price; weekly series averaged to annual values."}{" "}
+                    Gasoline series begins 1990 on FRED.
+                  </p>
+                </>
+              ) : (
+                <p className="py-6 text-xs text-muted-foreground">Data unavailable.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader className="space-y-1 pb-2">
+              <CardTitle className="text-base">7. Transportation — new vehicle affordability</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6 pt-0">
+              {(s.new_vehicle_to_income_ratio ?? []).length > 0 ? (
+                <>
+                  <TimelineChart
+                    data={s.new_vehicle_to_income_ratio ?? []}
+                    valueKey="value"
+                    label="New vehicle price / median income"
+                    unit="Ratio"
+                    seriesColor="#0369a1"
+                    exportSourceFooter={wdiFredFooter(
+                      fred.cpi_new_vehicles_index ?? "CUUR0000SETA01",
+                      "CPI-anchored estimated price ÷ real median household income"
+                    )}
+                    exportFileStem="us-living-standards-new-vehicle-to-income"
+                    timeRange={resolveChartTimeRange(
+                      s.new_vehicle_to_income_ratio ?? [],
+                      transportationSharedTimeRange,
+                      studyWindow
+                    )}
+                    {...standardChartProps}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {phase2Meta?.new_vehicle?.cpi_source ??
+                      refSources.new_vehicle_estimated_price_usd ??
+                      "Estimated new-vehicle price from BLS CPI new vehicles, anchored to a benchmark retail price."}
+                  </p>
+                </>
+              ) : (
+                <p className="py-4 text-xs text-muted-foreground">Data unavailable.</p>
+              )}
+
+              <div className="space-y-2 border-t border-border pt-4">
+                <h3 className="text-sm font-medium text-foreground">Hours of work to afford a new vehicle</h3>
+                {(s.hours_for_new_vehicle ?? []).length > 0 ? (
+                  <>
+                    <TimelineChart
+                      data={s.hours_for_new_vehicle ?? []}
+                      valueKey="value"
+                      label="Hours of work to afford a new vehicle"
+                      unit={HOURS_Y_AXIS_LABEL}
+                      seriesColor="#0369a1"
+                      exportSourceFooter={hoursWorkChartFooter(
+                        hoursOfWorkWageSeriesId,
+                        "CPI-anchored new-vehicle price (see Sources & units)"
+                      )}
+                      exportFileStem="us-living-standards-hours-new-vehicle"
+                      timeRange={resolveChartTimeRange(
+                        s.hours_for_new_vehicle ?? [],
+                        transportationSharedTimeRange,
+                        studyWindow
+                      )}
+                      {...hoursChartBaseProps}
+                    />
+                    <p className="text-xs text-muted-foreground">{HOURS_OF_WORK_METHODOLOGY_NOTE}</p>
+                  </>
+                ) : (
+                  <p className="py-4 text-xs text-muted-foreground">Data unavailable.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 8. Family formation */}
+          <Card className="border-border">
+            <CardHeader className="space-y-1 pb-2">
+              <CardTitle className="text-base">8. Family formation — homeownership</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {(s.homeownership_rate_pct ?? []).length > 0 ? (
+                <>
+                  <TimelineChart
+                    data={s.homeownership_rate_pct ?? []}
+                    valueKey="value"
+                    label="Homeownership rate"
+                    unit="Percent"
+                    seriesColor={SIGNAL_CONCEPT.gdp}
+                    exportSourceFooter={wdiFredFooter(fred.homeownership_rate_pct ?? "RHORUSQ156N")}
+                    exportFileStem="us-living-standards-homeownership"
+                    timeRange={resolveChartTimeRange(
+                      s.homeownership_rate_pct ?? [],
+                      undefined,
+                      studyWindow
+                    )}
+                    {...standardChartProps}
+                  />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {refSources.homeownership_rate_pct ??
+                      "Share of occupied housing units owned by occupants; demographic and housing-market context."}
+                  </p>
+                </>
+              ) : (
+                <p className="py-6 text-xs text-muted-foreground">Data unavailable.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader className="space-y-1 pb-2">
+              <CardTitle className="text-base">8. Family formation — marriage age &amp; fertility</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6 pt-0">
+              {(s.median_age_first_marriage_male ?? []).length > 0 ||
+              (s.median_age_first_marriage_female ?? []).length > 0 ? (
+                <>
+                  <TimelineChart
+                    data={[]}
+                    valueKey="value"
+                    label="Median age at first marriage"
+                    multiSeries={[
+                      {
+                        key: "male",
+                        label: "Men",
+                        unit: "Years",
+                        yAxisIndex: 0 as const,
+                        points: s.median_age_first_marriage_male ?? [],
+                        color: "#2563eb",
+                        linePattern: "solid",
+                      },
+                      {
+                        key: "female",
+                        label: "Women",
+                        unit: "Years",
+                        yAxisIndex: 0 as const,
+                        points: s.median_age_first_marriage_female ?? [],
+                        color: "#db2777",
+                        linePattern: "dashed",
+                      },
+                    ]}
+                    exportSourceFooter="Source: U.S. Census Bureau — median age at first marriage (see Sources & units)"
+                    exportFileStem="us-living-standards-median-age-first-marriage"
+                    timeRange={resolveChartTimeRange(
+                      [
+                        ...(s.median_age_first_marriage_male ?? []),
+                        ...(s.median_age_first_marriage_female ?? []),
+                      ],
+                      marriageSharedTimeRange,
+                      studyWindow
+                    )}
+                    {...denseChartProps}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {refSources.median_age_first_marriage_male ??
+                      "Census historical tables; anchor years with linear interpolation."}
+                  </p>
+                </>
+              ) : (
+                <p className="py-4 text-xs text-muted-foreground">Data unavailable.</p>
+              )}
+
+              <div className="space-y-2 border-t border-border pt-4">
+                <h3 className="text-sm font-medium text-foreground">Total fertility rate</h3>
+                {(s.fertility_rate_births_per_woman ?? []).length > 0 ? (
+                  <>
+                    <TimelineChart
+                      data={s.fertility_rate_births_per_woman ?? []}
+                      valueKey="value"
+                      label="Total fertility rate"
+                      unit="Births per woman"
+                      seriesColor="#7c3aed"
+                      exportSourceFooter={wdiFredFooter(fred.fertility_rate_births_per_woman ?? "SPDYNTFRTINUSA")}
+                      exportFileStem="us-living-standards-fertility-rate"
+                      timeRange={resolveChartTimeRange(
+                        s.fertility_rate_births_per_woman ?? [],
+                        undefined,
+                        studyWindow
+                      )}
+                      {...standardChartProps}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {refSources.fertility_rate_births_per_woman ??
+                        "Average births per woman over a lifetime at current age-specific rates — demographic context."}
+                    </p>
+                  </>
+                ) : (
+                  <p className="py-4 text-xs text-muted-foreground">Data unavailable.</p>
+                )}
+              </div>
+
+              <p className="text-xs text-muted-foreground border-t border-border pt-4">
+                {phase2Meta?.childcare_note ??
+                  refSources.childcare_costs ??
+                  "Reliable long-run national childcare-cost series is not yet included."}
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -794,9 +1348,10 @@ export function UsLivingStandardsStudy() {
           {
             heading: "What this study does not claim",
             bullets: [
-              "It does not measure subjective well-being, health outcomes, or the full distribution of income and wealth.",
+              "It does not measure subjective well-being or the full distribution of income and wealth.",
               "It does not prove that a specific policy caused a given affordability shift.",
-              "Healthcare costs are noted in the study scope but are not yet charted in Phase 1.",
+              "Life expectancy, fertility, and marriage age are demographic context — not direct affordability measures.",
+              "Health insurance premiums and long-run childcare costs are omitted where reliable national series are unavailable.",
             ],
           },
         ]}
@@ -806,14 +1361,14 @@ export function UsLivingStandardsStudy() {
 
       <SourceInfo
         items={sourceItems}
-        note="Primary macro series from FRED; tuition and rent anchors from published reference tables with interpolation. Household goods prices are CPI- or PPI-anchored estimates (see Sources & units). Derived ratios and hours-of-work metrics are computed in the API bundle."
+        note="Primary macro series from FRED; health spending and life expectancy from World Bank WDI; tuition, rent, marriage age, and appliances from reference anchors with interpolation. Household goods and new-vehicle prices are CPI-anchored estimates (see Sources & units)."
       />
 
       <InSimpleTerms>
         <p>
           This page compares several ways to ask whether everyday economic life became easier or harder to afford over
-          time — not with a single verdict, but with separate charts for income, housing, education, productivity, and
-          hours of work.
+          time — not with a single verdict, but with separate charts for income, housing, education, healthcare,
+          transportation, family formation, productivity, and hours of work.
         </p>
         <p>
           When a line rises, that dimension became more costly in relative terms (or required more hours of work). When

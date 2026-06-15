@@ -17,6 +17,7 @@ from signalmap.sources.world_bank_country_economy import (
     FRED_GRAPH_CSV,
     _fred_rows_to_points,
 )
+from signalmap.sources.world_bank_national_accounts import fetch_wdi_annual_indicator_with_meta
 
 _logger = logging.getLogger(__name__)
 
@@ -36,6 +37,16 @@ FRED_SERIES: dict[str, tuple[str, str]] = {
     "average_hourly_earnings_usd": ("CES0500000003", "monthly_mean"),
     "average_hourly_earnings_household_goods_usd": ("AHETPI", "monthly_mean"),
     "cpi_all_items_index": ("CPIAUCSL", "monthly_mean"),
+    # Phase 2 — transportation & family formation
+    "gasoline_price_usd_per_gallon": ("GASREGW", "monthly_mean"),
+    "cpi_new_vehicles_index": ("CUUR0000SETA01", "monthly_mean"),
+    "homeownership_rate_pct": ("RHORUSQ156N", "quarterly_mean"),
+    "fertility_rate_births_per_woman": ("SPDYNTFRTINUSA", "annual_level"),
+}
+
+WDI_PHASE2_INDICATORS: dict[str, str] = {
+    "health_expenditure_per_capita_usd": "SH.XPD.CHEX.PC.CD",
+    "life_expectancy_years": "SP.DYN.LE00.IN",
 }
 
 REFERENCE_PATH = Path(__file__).resolve().parents[3] / "data" / "us_living_standards_reference.json"
@@ -198,6 +209,64 @@ def _prefetch_household_goods_cpi_parallel(
             if err:
                 series_warnings[f"cpi_{series_id}"] = err
     return cpi_cache
+
+
+def _wdi_rows_to_points(
+    rows: list[dict[str, Any]], start_year: int, end_year: int
+) -> list[dict[str, float | str]]:
+    out: list[dict[str, float | str]] = []
+    for r in rows:
+        y = int(r["year"])
+        if y < start_year or y > end_year:
+            continue
+        out.append({"date": f"{y}-01-01", "value": round(float(r["value"]), 3)})
+    return out
+
+
+def _fetch_wdi_phase2_parallel(
+    start_year: int, end_year: int, series_warnings: dict[str, str]
+) -> dict[str, list[dict[str, float | str]]]:
+    series: dict[str, list[dict[str, float | str]]] = {}
+
+    def _worker(key: str, indicator_id: str) -> tuple[str, list[dict[str, float | str]], str | None]:
+        try:
+            rows, stale = fetch_wdi_annual_indicator_with_meta("USA", indicator_id)
+            if stale:
+                _log_series_warning("wdi", key, "World Bank WDI", "stale cache fallback used")
+            return key, _wdi_rows_to_points(rows, start_year, end_year), None
+        except Exception as e:
+            _log_series_warning("wdi", key, "World Bank WDI", str(e))
+            return key, [], str(e)
+
+    with ThreadPoolExecutor(max_workers=len(WDI_PHASE2_INDICATORS)) as pool:
+        futures = [
+            pool.submit(_worker, key, indicator_id)
+            for key, indicator_id in WDI_PHASE2_INDICATORS.items()
+        ]
+        for fut in as_completed(futures):
+            key, points, err = fut.result()
+            series[key] = points
+            if err:
+                series_warnings[key] = err
+    return series
+
+
+def _build_new_vehicle_price_series(
+    reference: dict[str, Any],
+    start_year: int,
+    end_year: int,
+    cpi_points: list[dict[str, float | str]],
+) -> list[dict[str, float | str]]:
+    cfg = reference.get("phase2", {}).get("new_vehicle", {})
+    if not cfg:
+        return []
+    return _cpi_anchored_price_series(
+        cpi_points,
+        int(cfg["benchmark_year"]),
+        float(cfg["benchmark_price_usd"]),
+        int(cfg.get("cpi_start_year", start_year)),
+        end_year,
+    )
 
 
 def _interpolate_annual(anchors: list[dict[str, float | int]], start_year: int, end_year: int) -> list[dict[str, float | str]]:
@@ -392,10 +461,12 @@ def _empty_bundle_skeleton(start_year: int, end_year: int) -> dict[str, Any]:
     reference = _load_reference()
     household_goods_cfg = reference.get("household_goods", {})
     hours_of_work_cfg = reference.get("hours_of_work", {})
+    phase2_cfg = reference.get("phase2", {})
     return {
         "series": {},
         "reference_sources": dict(reference.get("sources", {})),
         "fred_series": {k: v[0] for k, v in FRED_SERIES.items()},
+        "wdi_indicators": dict(WDI_PHASE2_INDICATORS),
         "real_base_year": 2022,
         "productivity_compensation_base_year": 1979,
         "household_goods": {
@@ -408,6 +479,11 @@ def _empty_bundle_skeleton(start_year: int, end_year: int) -> dict[str, Any]:
             "wage_fred_series": hours_of_work_cfg.get("wage_fred_series", "AHETPI"),
             "wage_source": hours_of_work_cfg.get("wage_source", ""),
             "wage_tradeoffs": hours_of_work_cfg.get("wage_tradeoffs", ""),
+        },
+        "phase2": {
+            "health_insurance_note": phase2_cfg.get("health_insurance_note", ""),
+            "childcare_note": phase2_cfg.get("childcare_note", ""),
+            "new_vehicle": phase2_cfg.get("new_vehicle", {}),
         },
         "country_iso3": "USA",
         "partial": True,
@@ -428,6 +504,7 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
     reference_sources = dict(reference.get("sources", {}))
     household_goods_cfg = reference.get("household_goods", {})
     hours_of_work_cfg = reference.get("hours_of_work", {})
+    phase2_cfg = reference.get("phase2", {})
     household_goods_meta: dict[str, Any] = {
         "methodology_note": household_goods_cfg.get("methodology_note", ""),
         "wage_fred_series": household_goods_cfg.get("wage_fred_series", "AHETPI"),
@@ -441,6 +518,8 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
     }
 
     series = _fetch_fred_series_parallel(start_year, end_year, series_warnings)
+    wdi_series = _fetch_wdi_phase2_parallel(start_year, end_year, series_warnings)
+    series.update(wdi_series)
 
     for ref_key in (
         "public_tuition_annual_usd",
@@ -448,6 +527,8 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
         "refrigerator_usd",
         "washing_machine_usd",
         "television_usd",
+        "median_age_first_marriage_male",
+        "median_age_first_marriage_female",
     ):
         series[ref_key] = _interpolate_annual(reference.get(ref_key, []), start_year, end_year)
 
@@ -523,14 +604,56 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
         hours_of_work_meta[f"{meta_key}_hours_start_year"] = min(years) if years else None
         hours_of_work_meta[f"{meta_key}_hours_end_year"] = max(years) if years else None
 
+    # Phase 2 derived series
+    series["gasoline_price_real_usd_per_gallon"] = _deflate_with_cpi(
+        series.get("gasoline_price_usd_per_gallon", []),
+        series.get("cpi_all_items_index", []),
+        real_base_year,
+    )
+    new_vehicle_price = _build_new_vehicle_price_series(
+        reference,
+        start_year,
+        end_year,
+        series.get("cpi_new_vehicles_index", []),
+    )
+    series["new_vehicle_estimated_price_usd"] = new_vehicle_price
+    series["new_vehicle_to_income_ratio"] = _derive_ratio(
+        new_vehicle_price, series.get("median_household_income_real_usd", [])
+    )
+    series["hours_for_new_vehicle"] = _hours_to_afford(new_vehicle_price, wage_hours)
+    series["health_expenditure_per_capita_real_usd"] = _deflate_with_cpi(
+        series.get("health_expenditure_per_capita_usd", []),
+        series.get("cpi_all_items_index", []),
+        real_base_year,
+    )
+
+    vehicle_hours_years = [int(str(p["date"])[:4]) for p in series.get("hours_for_new_vehicle", [])]
+    phase2_meta: dict[str, Any] = {
+        "health_insurance_note": phase2_cfg.get("health_insurance_note", ""),
+        "childcare_note": phase2_cfg.get("childcare_note", ""),
+        "new_vehicle": phase2_cfg.get("new_vehicle", {}),
+        "health_expenditure_start_year": min(
+            (int(str(p["date"])[:4]) for p in series.get("health_expenditure_per_capita_usd", [])),
+            default=None,
+        ),
+        "health_expenditure_end_year": max(
+            (int(str(p["date"])[:4]) for p in series.get("health_expenditure_per_capita_usd", [])),
+            default=None,
+        ),
+        "vehicle_hours_start_year": min(vehicle_hours_years) if vehicle_hours_years else None,
+        "vehicle_hours_end_year": max(vehicle_hours_years) if vehicle_hours_years else None,
+    }
+
     out: dict[str, Any] = {
         "series": series,
         "reference_sources": reference_sources,
         "fred_series": {k: v[0] for k, v in FRED_SERIES.items()},
+        "wdi_indicators": dict(WDI_PHASE2_INDICATORS),
         "real_base_year": real_base_year,
         "productivity_compensation_base_year": prod_base,
         "household_goods": household_goods_meta,
         "hours_of_work": hours_of_work_meta,
+        "phase2": phase2_meta,
         "country_iso3": "USA",
     }
     if series_warnings:

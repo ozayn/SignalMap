@@ -14,7 +14,32 @@
     "hours_for_refrigerator": "Estimated refrigerator price (CPI household furnishings proxy, FRED CUSR0000SAH3, anchored to 2000 = US$825) ÷ FRED AHETPI.",
     "hours_for_washing_machine": "Estimated washing-machine price (PPI household laundry equipment, FRED WPU12410220 through 2016 then WPU1241 major appliances, anchored to 2000 = US$650) ÷ FRED AHETPI.",
     "hours_for_television": "Estimated television price (CPI video and audio, FRED CUSR0000SERA from 1994, anchored to 2000 = US$450; 1970–1993 from published retail price anchors with linear interpolation) ÷ FRED AHETPI.",
-    "hours_for_vacuum_cleaner": "Estimated vacuum-cleaner price (CPI household furnishings proxy, FRED CUSR0000SAH3, anchored to 2000 = US$120) ÷ FRED AHETPI."
+    "hours_for_vacuum_cleaner": "Estimated vacuum-cleaner price (CPI household furnishings proxy, FRED CUSR0000SAH3, anchored to 2000 = US$120) ÷ FRED AHETPI.",
+    "health_expenditure_per_capita_usd": "World Bank WDI SH.XPD.CHEX.PC.CD — current health expenditure per capita (current US$). Real series deflated to study base year with FRED CPI-U.",
+    "health_expenditure_per_capita_real_usd": "World Bank SH.XPD.CHEX.PC.CD deflated with FRED CPIAUCSL to constant study-base-year dollars.",
+    "life_expectancy_years": "World Bank WDI SP.DYN.LE00.IN — life expectancy at birth (years). Outcome/context series, not an affordability measure.",
+    "health_insurance_premiums": "Not charted: consistent long-run employer-sponsored premium series suitable for income ratios is not available on FRED without large gaps.",
+    "childcare_costs": "Reliable long-run national childcare-cost series is not yet included.",
+    "gasoline_price_usd_per_gallon": "FRED GASREGW — U.S. regular gasoline, annual mean of weekly retail price (nominal US$/gallon).",
+    "gasoline_price_real_usd_per_gallon": "FRED GASREGW deflated with CPI-U to constant study-base-year dollars per gallon.",
+    "new_vehicle_estimated_price_usd": "BLS CPI new vehicles (FRED CUUR0000SETA01) anchored to benchmark retail price; contextual estimate, not a transaction-price index.",
+    "new_vehicle_to_income_ratio": "Estimated new-vehicle price ÷ real median household income.",
+    "hours_for_new_vehicle": "Estimated new-vehicle price ÷ FRED AHETPI.",
+    "homeownership_rate_pct": "FRED RHORUSQ156N — Census homeownership rate (annual mean of quarterly observations, percent).",
+    "fertility_rate_births_per_woman": "FRED SPDYNTFRTINUSA — total fertility rate (births per woman).",
+    "median_age_first_marriage_male": "U.S. Census Bureau historical median age at first marriage, men (reference anchors; interpolated).",
+    "median_age_first_marriage_female": "U.S. Census Bureau historical median age at first marriage, women (reference anchors; interpolated)."
+  },
+  "phase2": {
+    "health_insurance_note": "Employer-sponsored health insurance premium series on FRED are too sparse or inconsistent for a reliable long-run chart relative to income. Premiums are omitted rather than interpolated.",
+    "childcare_note": "Reliable long-run national childcare-cost series is not yet included.",
+    "new_vehicle": {
+      "benchmark_year": 2000,
+      "benchmark_price_usd": 21500,
+      "cpi_fred_series": "CUUR0000SETA01",
+      "cpi_source": "BLS CPI new vehicles (FRED CUUR0000SETA01), anchored to representative retail price.",
+      "cpi_start_year": 1947
+    }
   },
   "hours_of_work": {
     "methodology_note": "Hours-of-work estimates use historical wage proxies to approximate how many hours an average worker would need to work to cover the selected expense. The series are intended as contextual affordability signals rather than precise household budget calculations.",
@@ -118,5 +143,33 @@
     { "year": 2010, "value": 550 },
     { "year": 2020, "value": 480 },
     { "year": 2023, "value": 430 }
+  ],
+  "median_age_first_marriage_male": [
+    { "year": 1970, "value": 23.2 },
+    { "year": 1975, "value": 23.6 },
+    { "year": 1980, "value": 24.7 },
+    { "year": 1985, "value": 25.5 },
+    { "year": 1990, "value": 26.1 },
+    { "year": 1995, "value": 26.9 },
+    { "year": 2000, "value": 26.8 },
+    { "year": 2005, "value": 27.2 },
+    { "year": 2010, "value": 28.2 },
+    { "year": 2015, "value": 29.2 },
+    { "year": 2020, "value": 30.5 },
+    { "year": 2023, "value": 30.2 }
+  ],
+  "median_age_first_marriage_female": [
+    { "year": 1970, "value": 20.8 },
+    { "year": 1975, "value": 21.1 },
+    { "year": 1980, "value": 22.0 },
+    { "year": 1985, "value": 22.8 },
+    { "year": 1990, "value": 23.9 },
+    { "year": 1995, "value": 24.5 },
+    { "year": 2000, "value": 25.1 },
+    { "year": 2005, "value": 25.5 },
+    { "year": 2010, "value": 26.1 },
+    { "year": 2015, "value": 27.1 },
+    { "year": 2020, "value": 28.1 },
+    { "year": 2023, "value": 28.4 }
   ]
 }

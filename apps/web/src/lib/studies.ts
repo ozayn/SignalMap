@@ -1023,7 +1023,7 @@ export const STUDIES: StudyMeta[] = [
     description:
       "Compare income, housing, education, productivity, and hours-of-work affordability in the United States using inflation-adjusted and relative measures — exploratory, not ideological.",
     socialDescription:
-      "Explore US living standards through real median income, home prices, tuition, productivity vs compensation, and hours of work required for rent, tuition, and everyday goods.",
+      "Explore US living standards through real median income, home prices, tuition, healthcare spending, gasoline, family formation, productivity vs compensation, and hours of work for rent, tuition, vehicles, and everyday goods.",
     status: "active",
     groupPlacements: [
       { group: "welfare", order: 3 },
@@ -1043,6 +1043,10 @@ export const STUDIES: StudyMeta[] = [
       "hours of work",
       "rent",
       "refrigerator",
+      "healthcare",
+      "gasoline",
+      "homeownership",
+      "fertility",
     ],
     concepts: [
       "nominal_vs_real",
@@ -1055,8 +1059,9 @@ export const STUDIES: StudyMeta[] = [
     observations: [
       "Real median household income, nominal home prices, and tuition can move in different directions in the same decade.",
       "House-price-to-income and tuition-to-income ratios summarize relative burden without replacing formal affordability indices.",
-      "Hours-of-work charts are split by domain (rent, tuition, appliances) in actual hours at average wages; each chart uses its own y-axis scale.",
-      "Reference anchors for tuition, rent, and appliances are interpolated between published years and should be read as contextual trends.",
+      "Hours-of-work charts are split by domain (rent, tuition, appliances, vehicles) in actual hours at average wages; each chart uses its own y-axis scale.",
+      "Reference anchors for tuition, rent, marriage age, and appliances are interpolated between published years and should be read as contextual trends.",
+      "Health spending per capita (WDI) begins around 2000; life expectancy and fertility provide demographic context alongside affordability charts.",
       "Productivity and compensation indexes are reindexed for comparison; the gap is not a direct dollar measure of lost pay.",
     ],
   },
