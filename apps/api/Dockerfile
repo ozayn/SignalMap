@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY main.py run.py db.py jobs.py cron_daily_update.py cron_oil_economy_brent_daily.py cron_oil_production_monthly.py .
 COPY connectors/ ./connectors/
 COPY src/ ./src/
+COPY data/us_living_standards_reference.json ./data/us_living_standards_reference.json
 
 EXPOSE 8080
 

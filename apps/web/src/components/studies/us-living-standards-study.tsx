@@ -149,13 +149,23 @@ function hoursWorkChartFooter(wageCode: string, expenseSource: string): string {
 const HOURS_Y_AXIS_LABEL = "Hours at average hourly wage";
 
 const HOURS_CHART_RENT_LABEL = "Hours of work to afford one month of median rent";
-const HOURS_CHART_TUITION_LABEL = "Hours of work to afford one year of public tuition";
+const HOURS_CHART_TUITION_LABEL = "Hours of work to afford one year of public university tuition";
+
+const PUBLIC_UNIVERSITY_TUITION_SOURCE =
+  "College Board Trends in College Pricing — average published in-state tuition and required fees at public four-year universities.";
+
+const PUBLIC_UNIVERSITY_METHODOLOGY =
+  "Published in-state tuition and required fees at public four-year universities.";
+
+const PUBLIC_UNIVERSITY_K12_NOTE =
+  "This measure refers to public universities (state universities) and does not include K–12 schooling, private universities, living expenses, books, or financial aid.";
+
 const HOURS_CHART_HOUSEHOLD_LABEL = "Hours of work to afford household goods";
 
 const HOURS_CHART_RENT_METHOD =
   "Estimated as median monthly rent divided by the average hourly wage.";
 const HOURS_CHART_TUITION_METHOD =
-  "Estimated as published in-state public tuition divided by the average hourly wage.";
+  `Estimated as ${PUBLIC_UNIVERSITY_METHODOLOGY.charAt(0).toLowerCase()}${PUBLIC_UNIVERSITY_METHODOLOGY.slice(1)} divided by the average hourly wage.`;
 const HOURS_CHART_HOUSEHOLD_METHOD =
   "Estimated as representative prices divided by the average hourly wage.";
 
@@ -271,15 +281,15 @@ export function UsLivingStandardsStudy() {
     const cpi = fred.cpi_all_items_index ?? "CPIAUCSL";
     return {
       data: isReal ? (s.public_tuition_real_usd ?? []) : (s.public_tuition_annual_usd ?? []),
-      label: isReal ? `Public tuition (real, ${realBaseYear} US$)` : "Public university tuition",
+      label: isReal ? `Public university tuition (real, ${realBaseYear} US$)` : "Public university tuition (nominal)",
       unit: isReal ? `Constant ${realBaseYear} US$` : "Nominal US$ per academic year",
       exportSourceFooter: isReal
         ? wdiFredFooter(cpi, `College Board anchors deflated to ${realBaseYear} dollars`)
-        : "Source: College Board (reference anchors) — published in-state public four-year tuition; interpolated between anchor years",
+        : `Source: ${PUBLIC_UNIVERSITY_TUITION_SOURCE} Reference anchors; interpolated between anchor years.`,
       exportFileStem: isReal ? "us-living-standards-tuition-real" : "us-living-standards-tuition-nominal",
       sectionTitle: isReal
-        ? `3. Education — public university tuition (real, ${realBaseYear} US$)`
-        : "3. Education — public university tuition",
+        ? `3. Higher education — public university tuition (real, ${realBaseYear} US$)`
+        : "3. Higher education — public university tuition (nominal)",
     };
   }, [fred, realBaseYear, s, tuitionMode]);
 
@@ -346,21 +356,24 @@ export function UsLivingStandardsStudy() {
         label: "Public university tuition (nominal)",
         sourceName: "College Board (reference anchors)",
         sourceUrl: "https://research.collegeboard.org/trends/college-pricing",
-        sourceDetail: "Published in-state public four-year averages; interpolated between anchor years",
+        sourceDetail: `${PUBLIC_UNIVERSITY_TUITION_SOURCE} Sparse annual anchors; interpolated between anchor years.`,
         unitLabel: "Nominal US$ per academic year",
+        unitNote: PUBLIC_UNIVERSITY_K12_NOTE,
       },
       {
         label: "Public university tuition (real)",
         sourceName: "SignalMap derived",
         sourceUrl: `https://fred.stlouisfed.org/series/${fred.cpi_all_items_index ?? "CPIAUCSL"}`,
-        sourceDetail: `College Board anchors deflated with CPI-U to ${realBaseYear} dollars`,
+        sourceDetail: `College Board public-university anchors deflated with CPI-U to ${realBaseYear} dollars`,
         unitLabel: `Constant ${realBaseYear} US$`,
+        unitNote: PUBLIC_UNIVERSITY_K12_NOTE,
       },
       {
-        label: "Tuition relative to household income",
+        label: "Public university tuition relative to household income",
         sourceName: "SignalMap derived",
-        sourceDetail: "Nominal tuition / real median household income",
+        sourceDetail: "Nominal public-university tuition / real median household income",
         unitLabel: "Ratio",
+        unitNote: PUBLIC_UNIVERSITY_K12_NOTE,
       },
       {
         label: "Productivity vs compensation",
@@ -398,9 +411,9 @@ export function UsLivingStandardsStudy() {
         sourceName: "SignalMap derived",
         sourceDetail:
           refSources.hours_for_year_tuition ??
-          `College Board tuition anchors ÷ FRED ${fred.average_hourly_earnings_household_goods_usd ?? "AHETPI"}`,
+          `College Board public-university tuition anchors ÷ FRED ${fred.average_hourly_earnings_household_goods_usd ?? "AHETPI"}`,
         unitLabel: HOURS_Y_AXIS_LABEL,
-        unitNote: HOURS_CHART_TUITION_METHOD,
+        unitNote: `${HOURS_CHART_TUITION_METHOD} ${PUBLIC_UNIVERSITY_K12_NOTE}`,
       },
       {
         label: HOURS_CHART_HOUSEHOLD_LABEL,
@@ -605,7 +618,7 @@ export function UsLivingStandardsStudy() {
             and relative measures of affordability.
           </p>
           <p>
-            Wages, housing, education, healthcare, and everyday goods can move in different directions at once.
+            Wages, housing, higher education, healthcare, and everyday goods can move in different directions at once.
             The charts below are meant for exploratory comparison — not to settle ideological debates about progress
             or decline.
           </p>
@@ -619,9 +632,9 @@ export function UsLivingStandardsStudy() {
         <CardContent className="pt-0">
           <ul className="list-inside list-disc space-y-1 text-sm text-muted-foreground">
             <li>Real median household income and nominal home prices often diverge, so price-to-income ratios can rise even when incomes grow.</li>
-            <li>Public tuition and rent can outpace hourly earnings in some decades while appliances may take fewer hours of work as manufacturing productivity improves.</li>
+            <li>Public university tuition and rent can outpace hourly earnings in some decades while appliances may take fewer hours of work as manufacturing productivity improves.</li>
             <li>Productivity and hourly compensation indexes can decouple — productivity growth does not automatically translate into proportional wage growth.</li>
-            <li>Reference-price series for tuition, rent, and appliances use published anchors and interpolation; treat them as contextual signals, not precise retail transactions.</li>
+            <li>Reference-price series for public-university tuition, rent, and appliances use published anchors and interpolation; treat them as contextual signals, not precise retail transactions.</li>
             <li>Healthcare spending (WDI) and gasoline prices can rise in nominal terms while life expectancy improves — different dimensions can diverge.</li>
             <li>Family-formation indicators (homeownership, marriage age, fertility) describe social context; they are not direct affordability measures.</li>
           </ul>
@@ -757,7 +770,7 @@ export function UsLivingStandardsStudy() {
             </CardContent>
           </Card>
 
-          {/* 3. Education */}
+          {/* 3. Higher education */}
           <Card className="border-border">
             <CardHeader className="space-y-2 pb-2">
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -789,7 +802,8 @@ export function UsLivingStandardsStudy() {
                   />
                   <p className="mt-2 text-xs text-muted-foreground">
                     {bundle?.reference_sources?.public_tuition_annual_usd ??
-                      "College Board published in-state public four-year tuition and required fees; interpolated between anchor years."}
+                      `${PUBLIC_UNIVERSITY_METHODOLOGY} Sparse annual anchors; interpolated between anchor years.`}{" "}
+                    {PUBLIC_UNIVERSITY_K12_NOTE}
                   </p>
                 </>
               ) : (
@@ -800,7 +814,7 @@ export function UsLivingStandardsStudy() {
 
           <Card className="border-border">
             <CardHeader className="space-y-1 pb-2">
-              <CardTitle className="text-base">3. Education — tuition relative to household income</CardTitle>
+              <CardTitle className="text-base">3. Higher education — public university tuition relative to household income</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
               {(s.tuition_to_income_ratio ?? []).length > 0 ? (
@@ -808,10 +822,10 @@ export function UsLivingStandardsStudy() {
                   <TimelineChart
                     data={s.tuition_to_income_ratio ?? []}
                     valueKey="value"
-                    label="Tuition / median income"
+                    label="Public university tuition / median income"
                     unit="Ratio"
                     seriesColor="#0d9488"
-                    exportSourceFooter="Source: College Board anchors + FRED MEHOINUSA672N; derived ratio"
+                    exportSourceFooter="Source: College Board public-university anchors + FRED MEHOINUSA672N; derived ratio"
                     exportFileStem="us-living-standards-tuition-to-income"
                     timeRange={resolveChartTimeRange(
                       s.tuition_to_income_ratio ?? [],
@@ -821,7 +835,9 @@ export function UsLivingStandardsStudy() {
                     {...standardChartProps}
                   />
                   <p className="mt-2 text-xs text-muted-foreground">
-                    One year of published in-state public tuition as a share of real median household income.
+                    One year of {PUBLIC_UNIVERSITY_METHODOLOGY.charAt(0).toLowerCase()}
+                    {PUBLIC_UNIVERSITY_METHODOLOGY.slice(1)} as a share of real median household income.{" "}
+                    {PUBLIC_UNIVERSITY_K12_NOTE}
                   </p>
                 </>
               ) : (
@@ -945,7 +961,7 @@ export function UsLivingStandardsStudy() {
                           seriesColor="#9333ea"
                           exportSourceFooter={hoursWorkChartFooter(
                             hoursOfWorkWageSeriesId,
-                            "College Board tuition anchors (see Sources & units)"
+                            "College Board public-university tuition anchors (see Sources & units)"
                           )}
                           exportFileStem="us-living-standards-hours-tuition"
                           timeRange={resolveChartTimeRange(
@@ -955,7 +971,9 @@ export function UsLivingStandardsStudy() {
                           )}
                           {...hoursChartBaseProps}
                         />
-                        <p className="text-xs text-muted-foreground">{HOURS_CHART_TUITION_METHOD}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {HOURS_CHART_TUITION_METHOD} {PUBLIC_UNIVERSITY_K12_NOTE}
+                        </p>
                       </>
                     ) : (
                       <p className="py-4 text-xs text-muted-foreground">Data unavailable.</p>
@@ -1000,7 +1018,7 @@ export function UsLivingStandardsStudy() {
                     nonsupervisory employees, 1964+).{" "}
                     {hoursOfWorkMeta?.wage_tradeoffs ??
                       "CES0500000003 (all private employees) begins in 2006; AHETPI is used for longer history."}{" "}
-                    Rent and tuition price anchors use published reference years with linear interpolation between
+                    Rent and public-university tuition price anchors use published reference years with linear interpolation between
                     anchors (documented in Sources &amp; units).
                   </p>
                 </>
@@ -1332,7 +1350,7 @@ export function UsLivingStandardsStudy() {
           {
             heading: "Exploratory comparison",
             bullets: [
-              "Each chart is one affordability dimension. Rising real income does not automatically mean housing or tuition became easier to afford.",
+              "Each chart is one affordability dimension. Rising real income does not automatically mean housing or public university tuition became easier to afford.",
               "Relative measures (ratios, hours of work) are often more informative than nominal dollar levels alone.",
               "Mixed nominal/real comparisons are labeled explicitly and should be read as contextual signals.",
             ],
@@ -1340,9 +1358,9 @@ export function UsLivingStandardsStudy() {
           {
             heading: "Reference anchors and interpolation",
             bullets: [
-              "Tuition and rent use published anchor years with linear interpolation between them.",
+              "Public-university tuition and rent use published anchor years with linear interpolation between them.",
               "Household goods use official BLS price indices anchored to benchmark retail prices; television also uses retail anchors before 1994.",
-              "Hours-of-work affordability charts are split by domain (rent, tuition, household goods) in actual hours at average wages; each chart uses its own y-axis scale.",
+              "Hours-of-work affordability charts are split by domain (rent, public-university tuition, household goods) in actual hours at average wages; each chart uses its own y-axis scale.",
             ],
           },
           {
@@ -1361,13 +1379,13 @@ export function UsLivingStandardsStudy() {
 
       <SourceInfo
         items={sourceItems}
-        note="Primary macro series from FRED; health spending and life expectancy from World Bank WDI; tuition, rent, marriage age, and appliances from reference anchors with interpolation. Household goods and new-vehicle prices are CPI-anchored estimates (see Sources & units)."
+        note="Primary macro series from FRED; health spending and life expectancy from World Bank WDI; public-university tuition, rent, marriage age, and appliances from reference anchors with interpolation. Household goods and new-vehicle prices are CPI-anchored estimates (see Sources & units)."
       />
 
       <InSimpleTerms>
         <p>
           This page compares several ways to ask whether everyday economic life became easier or harder to afford over
-          time — not with a single verdict, but with separate charts for income, housing, education, healthcare,
+          time — not with a single verdict, but with separate charts for income, housing, higher education, healthcare,
           transportation, family formation, productivity, and hours of work.
         </p>
         <p>

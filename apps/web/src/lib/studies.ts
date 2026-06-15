@@ -1018,12 +1018,12 @@ export const STUDIES: StudyMeta[] = [
     id: "us-living-standards",
     number: 50,
     title: "US living standards and affordability",
-    subtitle: "How wages, housing, education, healthcare, and everyday goods changed over time.",
+    subtitle: "How wages, housing, public university affordability, healthcare, and everyday goods changed over time.",
     timeRange: ["1970-01-01", "today"],
     description:
-      "Compare income, housing, education, productivity, and hours-of-work affordability in the United States using inflation-adjusted and relative measures — exploratory, not ideological.",
+      "Compare income, housing, public university affordability, productivity, and hours-of-work affordability in the United States using inflation-adjusted and relative measures — exploratory, not ideological.",
     socialDescription:
-      "Explore US living standards through real median income, home prices, tuition, healthcare spending, gasoline, family formation, productivity vs compensation, and hours of work for rent, tuition, vehicles, and everyday goods.",
+      "Explore US living standards through real median income, home prices, public university tuition, healthcare spending, gasoline, family formation, productivity vs compensation, and hours of work for rent, university tuition, vehicles, and everyday goods.",
     status: "active",
     groupPlacements: [
       { group: "welfare", order: 3 },
@@ -1057,10 +1057,10 @@ export const STUDIES: StudyMeta[] = [
       "derived_series",
     ],
     observations: [
-      "Real median household income, nominal home prices, and tuition can move in different directions in the same decade.",
-      "House-price-to-income and tuition-to-income ratios summarize relative burden without replacing formal affordability indices.",
-      "Hours-of-work charts are split by domain (rent, tuition, appliances, vehicles) in actual hours at average wages; each chart uses its own y-axis scale.",
-      "Reference anchors for tuition, rent, marriage age, and appliances are interpolated between published years and should be read as contextual trends.",
+      "Real median household income, nominal home prices, and public university tuition can move in different directions in the same decade.",
+      "House-price-to-income and public-university-tuition-to-income ratios summarize relative burden without replacing formal affordability indices.",
+      "Hours-of-work charts are split by domain (rent, public-university tuition, appliances, vehicles) in actual hours at average wages; each chart uses its own y-axis scale.",
+      "Reference anchors for public-university tuition, rent, marriage age, and appliances are interpolated between published years and should be read as contextual trends.",
       "Health spending per capita (WDI) begins around 2000; life expectancy and fertility provide demographic context alongside affordability charts.",
       "Productivity and compensation indexes are reindexed for comparison; the gap is not a direct dollar measure of lost pay.",
     ],

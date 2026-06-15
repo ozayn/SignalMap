@@ -49,12 +49,92 @@ WDI_PHASE2_INDICATORS: dict[str, str] = {
     "life_expectancy_years": "SP.DYN.LE00.IN",
 }
 
-REFERENCE_PATH = Path(__file__).resolve().parents[3] / "data" / "us_living_standards_reference.json"
+REFERENCE_FILENAME = "us_living_standards_reference.json"
+
+
+def _reference_path_candidates() -> list[Path]:
+    """Search api-root data/, then src/data/, then optional env override."""
+    module = Path(__file__).resolve()
+    candidates: list[Path] = [
+        module.parents[3] / "data" / REFERENCE_FILENAME,
+        module.parents[2] / "data" / REFERENCE_FILENAME,
+    ]
+    data_dir = (os.getenv("SIGNALMAP_API_DATA_DIR") or "").strip()
+    if data_dir:
+        candidates.insert(0, Path(data_dir) / REFERENCE_FILENAME)
+    return candidates
+
+
+def _find_reference_path() -> Path | None:
+    for path in _reference_path_candidates():
+        if path.is_file():
+            return path
+    return None
+
+
+def _default_reference() -> dict[str, Any]:
+    return {
+        "sources": {},
+        "hours_of_work": {
+            "methodology_note": (
+                "Hours-of-work estimates use historical wage proxies to approximate how many hours "
+                "an average worker would need to work to cover the selected expense. The series are "
+                "intended as contextual affordability signals rather than precise household budget calculations."
+            ),
+            "wage_fred_series": "AHETPI",
+            "wage_source": "FRED AHETPI — BLS average hourly earnings of production and nonsupervisory employees, total private (1964+).",
+            "wage_tradeoffs": (
+                "FRED CES0500000003 (average hourly earnings of all private employees) begins in 2006. "
+                "AHETPI extends to 1964 but covers production and nonsupervisory workers only."
+            ),
+        },
+        "household_goods": {
+            "methodology_note": (
+                "Historical prices for some durable goods are estimated using official price indices "
+                "anchored to benchmark price observations."
+            ),
+            "wage_fred_series": "AHETPI",
+            "items": {},
+        },
+        "phase2": {
+            "health_insurance_note": (
+                "Employer-sponsored health insurance premium series are omitted when reference metadata is unavailable."
+            ),
+            "childcare_note": "Reliable long-run national childcare-cost series is not yet included.",
+            "new_vehicle": {},
+        },
+        "public_tuition_annual_usd": [],
+        "median_gross_rent_monthly_usd": [],
+        "refrigerator_usd": [],
+        "washing_machine_usd": [],
+        "television_usd": [],
+        "median_age_first_marriage_male": [],
+        "median_age_first_marriage_female": [],
+    }
+
+
+def _try_load_reference() -> tuple[dict[str, Any], str | None]:
+    path = _find_reference_path()
+    if path is None:
+        tried = ", ".join(str(p) for p in _reference_path_candidates())
+        err = f"{REFERENCE_FILENAME} not found (tried: {tried})"
+        _logger.error("us_living_standards reference missing study=%s err=%s", STUDY_ID, err)
+        return _default_reference(), err
+    try:
+        with path.open(encoding="utf-8") as f:
+            return json.load(f), None
+    except Exception as e:
+        _logger.exception(
+            "us_living_standards reference read failed study=%s path=%s",
+            STUDY_ID,
+            path,
+        )
+        return _default_reference(), f"{path}: {e}"
 
 
 def _load_reference() -> dict[str, Any]:
-    with REFERENCE_PATH.open(encoding="utf-8") as f:
-        return json.load(f)
+    reference, _ = _try_load_reference()
+    return reference
 
 
 def _log_series_warning(section: str, indicator: str, source: str, err: str) -> None:
@@ -458,7 +538,7 @@ def _build_household_good_price_series(
 
 
 def _empty_bundle_skeleton(start_year: int, end_year: int) -> dict[str, Any]:
-    reference = _load_reference()
+    reference = _default_reference()
     household_goods_cfg = reference.get("household_goods", {})
     hours_of_work_cfg = reference.get("hours_of_work", {})
     phase2_cfg = reference.get("phase2", {})
@@ -492,14 +572,9 @@ def _empty_bundle_skeleton(start_year: int, end_year: int) -> dict[str, Any]:
 
 def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str, Any]:
     series_warnings: dict[str, str] = {}
-    try:
-        reference = _load_reference()
-    except Exception as e:
-        _logger.exception("us_living_standards reference load failed study=%s", STUDY_ID)
-        out = _empty_bundle_skeleton(start_year, end_year)
-        out["series_warnings"] = {"reference": str(e)}
-        out["fetch_error"] = str(e)
-        return out
+    reference, ref_err = _try_load_reference()
+    if ref_err:
+        series_warnings["reference"] = ref_err
 
     reference_sources = dict(reference.get("sources", {}))
     household_goods_cfg = reference.get("household_goods", {})
