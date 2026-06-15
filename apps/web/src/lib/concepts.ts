@@ -51,7 +51,12 @@ export type ConceptKey =
   | "industry_share"
   | "gini_index"
   | "poverty_headcount"
-  | "dutch_disease_pattern";
+  | "dutch_disease_pattern"
+  | "affordability_ratio"
+  | "hours_of_work_measure"
+  | "median_vs_average"
+  | "interpolation"
+  | "context_vs_affordability";
 
 export type ConceptLink = {
   label: string;
@@ -465,6 +470,31 @@ export const CONCEPTS: Record<ConceptKey, Concept> = {
     links: [
       { label: "Dutch disease (Wikipedia)", href: "https://en.wikipedia.org/wiki/Dutch_disease" },
     ],
+  },
+  affordability_ratio: {
+    title: "Affordability ratio",
+    description:
+      "A relative burden measure: a major cost divided by income (or a similar denominator). Example: median home price ÷ median household income. Lower values generally mean the cost takes a smaller share of income; the ratio is contextual, not a full household budget model.",
+  },
+  hours_of_work_measure: {
+    title: "Hours-of-work measure",
+    description:
+      "An affordability proxy: price of an expense ÷ average hourly wage, expressed as hours of work at that wage. It approximates how many hours an average worker would need to cover the expense — a contextual signal, not a precise household budget.",
+  },
+  median_vs_average: {
+    title: "Median vs average",
+    description:
+      "The median is the middle observation: half of households (or values) are above and half below. The average (mean) can be pulled by extremes. This study uses median household income and median home price where available because they describe the typical case more robustly than means.",
+  },
+  interpolation: {
+    title: "Interpolation between anchor years",
+    description:
+      "When only sparse published anchor years exist (e.g. public-university tuition or rent), values between anchors are estimated with linear interpolation. Interpolated years are contextual trends, not measured annual transactions.",
+  },
+  context_vs_affordability: {
+    title: "Context indicator vs affordability measure",
+    description:
+      "Affordability measures (ratios, hours of work, real income) speak to relative economic burden. Context indicators (life expectancy, fertility, homeownership rate) describe social or outcome conditions — useful background, but not direct measures of whether a cost is easy to afford.",
   },
 };
 

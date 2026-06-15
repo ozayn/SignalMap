@@ -19,17 +19,9 @@ export const US_LS_CHART_DIRECTION = {
     directionMeaning: "lower_better",
     directionPill: "↓ Lower = more affordable",
   },
-  universityTuitionToIncome: {
-    directionMeaning: "lower_better",
-    directionPill: "↓ Lower = more affordable",
-  },
   hoursOfWork: {
     directionMeaning: "lower_better",
     directionPill: "↓ Lower = more affordable",
-  },
-  lifeExpectancy: {
-    directionMeaning: "higher_better",
-    directionPill: "↑ Higher = generally better",
   },
 } as const satisfies Record<string, ChartDirectionMeta>;
 
@@ -57,11 +49,6 @@ export function computeTrendSummary(
       : "Over selected range: less affordable";
   }
   return last > first ? "Over selected range: improved" : "Over selected range: declined";
-}
-
-/** Append a short direction note to PNG export footers when it stays concise. */
-export function exportFooterWithDirection(footer: string, meta: ChartDirectionMeta): string {
-  return `${footer} ${meta.directionPill}.`;
 }
 
 type ChartDirectionCueProps = {

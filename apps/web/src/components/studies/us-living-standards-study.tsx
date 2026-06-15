@@ -23,7 +23,6 @@ import { TIMELINE_CHART_MOBILE_HEIGHT_PREFIX } from "@/lib/chart-study-typograph
 import {
   ChartDirectionCue,
   ChartInterpretivePrompt,
-  exportFooterWithDirection,
   US_LS_CHART_DIRECTION,
   US_LS_CHART_PROMPTS,
 } from "@/components/studies/chart-direction-cue";
@@ -158,8 +157,8 @@ function resolveChartTimeRange(
   return shared;
 }
 
-function hoursWorkChartFooter(wageCode: string, expenseSource: string): string {
-  return `Source: FRED ${wageCode} (average hourly wage); ${expenseSource}; method: price ÷ average hourly wage`;
+function shortSourceFooter(source: string, detail?: string): string {
+  return detail ? `${source}; ${detail}` : source;
 }
 
 const HOURS_Y_AXIS_LABEL = "Hours at average hourly wage";
@@ -177,6 +176,9 @@ const PUBLIC_UNIVERSITY_K12_NOTE =
   "This measure refers to public universities (state universities) and does not include K–12 schooling, private universities, living expenses, books, or financial aid.";
 
 const HOURS_CHART_HOUSEHOLD_LABEL = "Hours of work to afford household goods";
+const HOURS_CHART_VEHICLE_LABEL = "Hours of work to afford a new vehicle";
+
+const CONTEXT_SECTION_NOTE = "Context indicators — not direct affordability measures.";
 
 const HOURS_CHART_RENT_METHOD =
   "Estimated as median monthly rent divided by the average hourly wage.";
@@ -362,8 +364,10 @@ export function UsLivingStandardsStudy() {
         label: "Median household income (real)",
         sourceName: "FRED",
         sourceUrl: `https://fred.stlouisfed.org/series/${fred.median_household_income_real_usd ?? "MEHOINUSA672N"}`,
-        sourceDetail: "United States",
+        sourceDetail: "United States; CPI-U-adjusted in source",
         unitLabel: "Real US$ (CPI-U adjusted in source)",
+        unitNote:
+          "Describes the middle household, not the full distribution of earnings or wealth (median vs mean).",
       },
       {
         label: "Median home price",
@@ -378,14 +382,6 @@ export function UsLivingStandardsStudy() {
         sourceDetail: "MSPUS / MEHOINUSA672N and College Board public-university anchors / MEHOINUSA672N",
         unitLabel: "Ratio (left: house price / income; right: tuition / income)",
         unitNote: AFFORDABILITY_BURDEN_METHOD_NOTE,
-      },
-      {
-        label: "House-price-to-income ratio",
-        sourceName: "SignalMap derived",
-        sourceUrl: "https://fred.stlouisfed.org",
-        sourceDetail: "MSPUS / MEHOINUSA672N",
-        unitLabel: "Ratio (nominal home price / real median household income)",
-        unitNote: "Mixed nominal/real units — interpret as contextual affordability signal, not a formal housing-affordability index.",
       },
       {
         label: "Public university tuition (nominal)",
@@ -404,18 +400,21 @@ export function UsLivingStandardsStudy() {
         unitNote: PUBLIC_UNIVERSITY_K12_NOTE,
       },
       {
-        label: "Public university tuition relative to household income",
-        sourceName: "SignalMap derived",
-        sourceDetail: "Nominal public-university tuition / real median household income",
-        unitLabel: "Ratio",
-        unitNote: PUBLIC_UNIVERSITY_K12_NOTE,
-      },
-      {
         label: "Productivity vs compensation",
         sourceName: "FRED",
         sourceUrl: "https://fred.stlouisfed.org",
         sourceDetail: `Nonfarm business sector indexes; ${formatIndexedToEquals100Subtitle(prodBaseYear)}`,
         unitLabel: `${formatIndexedToEquals100Subtitle(prodBaseYear)} — ${fred.productivity_index ?? "OPHNFB"} vs ${fred.hourly_compensation_index ?? "COMPNFB"}`,
+        unitNote:
+          "Productivity is real output per hour; compensation is the BLS hourly compensation index. Both are reindexed for visual comparison — the gap between lines is contextual, not a direct dollar measure of lost pay." +
+          (prodIndexFallbackNote ? ` ${prodIndexFallbackNote}` : ""),
+      },
+      {
+        label: "Hours-of-work charts (overview)",
+        sourceName: "SignalMap derived",
+        sourceDetail: `Wage denominator: FRED ${hoursOfWorkWageSeriesId} (production and nonsupervisory employees, 1964+)`,
+        unitLabel: HOURS_Y_AXIS_LABEL,
+        unitNote: `${hoursOfWorkMethodologyNote} ${hoursOfWorkMeta?.wage_tradeoffs ?? "CES0500000003 (all private employees) begins in 2006; AHETPI is used for longer history."} Each chart begins when both its expense and wage data are available.`,
       },
       {
         label: "Average hourly earnings (hours-of-work charts)",
@@ -463,23 +462,31 @@ export function UsLivingStandardsStudy() {
         sourceUrl: "https://data.worldbank.org/indicator/SH.XPD.CHEX.PC.CD",
         sourceDetail: `WDI SH.XPD.CHEX.PC.CD deflated with CPI-U to ${realBaseYear} dollars`,
         unitLabel: `Constant ${realBaseYear} US$ per person`,
-        unitNote:
+        unitNote: [
           phase2Meta?.health_expenditure_start_year != null
             ? `WDI health spending per capita begins ${phase2Meta.health_expenditure_start_year}; earlier years are not shown.`
             : "World Bank current health expenditure per capita; annual coverage varies.",
+          phase2Meta?.health_insurance_note ??
+            refSources.health_insurance_premiums ??
+            "Health insurance premiums relative to income are not charted: consistent long-run premium series are not available without large gaps.",
+          CONTEXT_SECTION_NOTE,
+        ]
+          .filter(Boolean)
+          .join(" "),
       },
       {
         label: "Life expectancy at birth",
         sourceName: "World Bank WDI",
         sourceUrl: "https://data.worldbank.org/indicator/SP.DYN.LE00.IN",
-        sourceDetail: "United States — outcome/context series, not an affordability measure",
+        sourceDetail: "United States — health outcome context",
         unitLabel: "Years",
+        unitNote: CONTEXT_SECTION_NOTE,
       },
       {
         label: gasPriceChart.label,
         sourceName: "FRED",
         sourceUrl: `https://fred.stlouisfed.org/series/${fred.gasoline_price_usd_per_gallon ?? "GASREGW"}`,
-        sourceDetail: "U.S. regular gasoline; annual mean of weekly retail price",
+        sourceDetail: "U.S. regular gasoline; annual mean of weekly retail price; series begins 1990 on FRED",
         unitLabel: gasPriceChart.unit,
       },
       {
@@ -492,11 +499,11 @@ export function UsLivingStandardsStudy() {
         unitNote: "Estimated retail price from CPI anchor; contextual signal, not a transaction-price index.",
       },
       {
-        label: "Hours of work to afford a new vehicle",
+        label: HOURS_CHART_VEHICLE_LABEL,
         sourceName: "SignalMap derived",
         sourceDetail:
           refSources.hours_for_new_vehicle ??
-          `Estimated new-vehicle price ÷ FRED ${fred.average_hourly_earnings_household_goods_usd ?? "AHETPI"}`,
+          `Estimated new-vehicle price ÷ FRED ${hoursOfWorkWageSeriesId}`,
         unitLabel: HOURS_Y_AXIS_LABEL,
         unitNote: HOURS_OF_WORK_METHODOLOGY_NOTE,
       },
@@ -506,13 +513,15 @@ export function UsLivingStandardsStudy() {
         sourceUrl: `https://fred.stlouisfed.org/series/${fred.homeownership_rate_pct ?? "RHORUSQ156N"}`,
         sourceDetail: "Census homeownership rate; annual mean of quarterly observations",
         unitLabel: "Percent of occupied housing units",
+        unitNote: CONTEXT_SECTION_NOTE,
       },
       {
         label: "Median age at first marriage",
         sourceName: "U.S. Census Bureau (reference anchors)",
         sourceUrl: "https://www.census.gov",
-        sourceDetail: "Historical median age at first marriage, men and women; interpolated between anchor years",
+        sourceDetail: "Historical median age at first marriage, men and women; linear interpolation between anchor years",
         unitLabel: "Years",
+        unitNote: CONTEXT_SECTION_NOTE,
       },
       {
         label: "Total fertility rate",
@@ -520,13 +529,35 @@ export function UsLivingStandardsStudy() {
         sourceUrl: `https://fred.stlouisfed.org/series/${fred.fertility_rate_births_per_woman ?? "SPDYNTFRTINUSA"}`,
         sourceDetail: "Births per woman — demographic context for family formation",
         unitLabel: "Births per woman",
+        unitNote: [
+          CONTEXT_SECTION_NOTE,
+          phase2Meta?.childcare_note ??
+            refSources.childcare_costs ??
+            "Reliable long-run national childcare-cost series is not yet included.",
+        ]
+          .filter(Boolean)
+          .join(" "),
       },
     ],
-    [fred, gasPriceChart.label, gasPriceChart.unit, phase2Meta?.health_expenditure_start_year, prodBaseYear, realBaseYear, refSources]
+    [
+      fred,
+      gasPriceChart.label,
+      gasPriceChart.unit,
+      hoursOfWorkMeta?.wage_tradeoffs,
+      hoursOfWorkMethodologyNote,
+      hoursOfWorkWageSeriesId,
+      phase2Meta?.childcare_note,
+      phase2Meta?.health_expenditure_start_year,
+      phase2Meta?.health_insurance_note,
+      prodBaseYear,
+      prodIndexFallbackNote,
+      realBaseYear,
+      refSources,
+    ]
   );
 
   const householdGoodsSourceFooter = useMemo(
-    () => hoursWorkChartFooter(hoursOfWorkWageSeriesId, "CPI/PPI-anchored goods (see Sources & units)"),
+    () => shortSourceFooter(`Source: FRED ${hoursOfWorkWageSeriesId}`, "derived hours-of-work"),
     [hoursOfWorkWageSeriesId]
   );
 
@@ -541,7 +572,7 @@ export function UsLivingStandardsStudy() {
       {
         key: "refrigerator",
         label: "Refrigerator",
-        unit: "hours",
+        unit: HOURS_Y_AXIS_LABEL,
         yAxisIndex: 0 as const,
         points: s.hours_for_refrigerator ?? [],
         ...HOUSEHOLD_GOODS_SERIES_STYLE.refrigerator,
@@ -549,7 +580,7 @@ export function UsLivingStandardsStudy() {
       {
         key: "washing_machine",
         label: "Washing machine",
-        unit: "hours",
+        unit: HOURS_Y_AXIS_LABEL,
         yAxisIndex: 0 as const,
         points: s.hours_for_washing_machine ?? [],
         ...HOUSEHOLD_GOODS_SERIES_STYLE.washing_machine,
@@ -557,7 +588,7 @@ export function UsLivingStandardsStudy() {
       {
         key: "television",
         label: "Television",
-        unit: "hours",
+        unit: HOURS_Y_AXIS_LABEL,
         yAxisIndex: 0 as const,
         points: s.hours_for_television ?? [],
         ...HOUSEHOLD_GOODS_SERIES_STYLE.television,
@@ -565,7 +596,7 @@ export function UsLivingStandardsStudy() {
       {
         key: "vacuum_cleaner",
         label: "Vacuum cleaner",
-        unit: "hours",
+        unit: HOURS_Y_AXIS_LABEL,
         yAxisIndex: 0 as const,
         points: s.hours_for_vacuum_cleaner ?? [],
         ...HOUSEHOLD_GOODS_SERIES_STYLE.vacuum_cleaner,
@@ -731,10 +762,7 @@ export function UsLivingStandardsStudy() {
                     label="Real median household income"
                     unit="Real US$"
                     seriesColor={SIGNAL_COUNTRY.us}
-                    exportSourceFooter={exportFooterWithDirection(
-                      wdiFredFooter(fred.median_household_income_real_usd ?? "MEHOINUSA672N"),
-                      US_LS_CHART_DIRECTION.medianIncome
-                    )}
+                    exportSourceFooter={wdiFredFooter(fred.median_household_income_real_usd ?? "MEHOINUSA672N")}
                     exportFileStem="us-living-standards-median-income"
                     timeRange={resolveChartTimeRange(
                       s.median_household_income_real_usd ?? [],
@@ -748,10 +776,6 @@ export function UsLivingStandardsStudy() {
                     points={s.median_household_income_real_usd ?? []}
                     className="mt-2"
                   />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    FRED real median household income is CPI-U-adjusted in the source series. It describes the middle
-                    household, not the full distribution of earnings or wealth.
-                  </p>
                 </>
               ) : (
                 <p className="py-6 text-xs text-muted-foreground">Data unavailable for this window.</p>
@@ -832,9 +856,6 @@ export function UsLivingStandardsStudy() {
                     )}
                     {...standardChartProps}
                   />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {PUBLIC_UNIVERSITY_K12_NOTE}
-                  </p>
                 </>
               ) : (
                 <p className="py-6 text-xs text-muted-foreground">Data unavailable.</p>
@@ -845,9 +866,6 @@ export function UsLivingStandardsStudy() {
           <Card className="border-border">
             <CardHeader className="space-y-1 pb-2">
               <CardTitle className="text-base">{AFFORDABILITY_BURDEN_CHART_LABEL}</CardTitle>
-              <p className="text-xs text-muted-foreground">
-                House price / median income (left) and public university tuition / median income (right)
-              </p>
             </CardHeader>
             <CardContent className="pt-0">
               {hasAffordabilityBurdenChart ? (
@@ -884,23 +902,19 @@ export function UsLivingStandardsStudy() {
                       0: "House price / median income",
                       1: "Public university tuition / median income",
                     }}
-                    exportSourceFooter={`${exportFooterWithDirection(
-                      wdiFredFooter(
-                        [
-                          fred.median_home_price_usd ?? "MSPUS",
-                          fred.median_household_income_real_usd ?? "MEHOINUSA672N",
-                          "College Board public-university anchors",
-                        ],
-                        "derived ratios; dual y-axes"
-                      ),
-                      US_LS_CHART_DIRECTION.priceToIncome
-                    )} ${AFFORDABILITY_BURDEN_METHOD_NOTE}`}
+                    exportSourceFooter={wdiFredFooter(
+                      [
+                        fred.median_home_price_usd ?? "MSPUS",
+                        fred.median_household_income_real_usd ?? "MEHOINUSA672N",
+                        "College Board public-university anchors",
+                      ],
+                      "derived ratios; dual y-axes"
+                    )}
                     exportFileStem="us-living-standards-affordability-burden-housing-vs-tuition"
                     timeRange={affordabilityBurdenTimeRange}
                     {...dualAxisChartProps}
                   />
                   <ChartDirectionCue meta={US_LS_CHART_DIRECTION.priceToIncome} className="mt-2" />
-                  <p className="mt-1 text-xs text-muted-foreground">{AFFORDABILITY_BURDEN_METHOD_NOTE}</p>
                 </>
               ) : (
                 <p className="py-6 text-xs text-muted-foreground">Data unavailable.</p>
@@ -914,7 +928,6 @@ export function UsLivingStandardsStudy() {
               <CardTitle className="text-base">4. Productivity vs compensation</CardTitle>
               <p className="text-xs text-muted-foreground">
                 {formatIndexedToEquals100Subtitle(prodBaseYear)}
-                {prodIndexFallbackNote ? ` — ${prodIndexFallbackNote}` : null}
               </p>
             </CardHeader>
             <CardContent className="pt-0">
@@ -961,11 +974,6 @@ export function UsLivingStandardsStudy() {
                     question={US_LS_CHART_PROMPTS.productivityCompensation}
                     className="mt-2"
                   />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Productivity is real output per hour; compensation is the BLS hourly compensation index. Both are
-                    reindexed for visual comparison — the gap between lines is a contextual signal, not a direct
-                    dollar measure of &ldquo;lost wages.&rdquo;
-                  </p>
                 </>
               ) : (
                 <p className="py-6 text-xs text-muted-foreground">Data unavailable.</p>
@@ -977,9 +985,6 @@ export function UsLivingStandardsStudy() {
           <Card id="hours-of-work" className={`border-border ${US_LS_SECTION_ANCHOR_CLASS}`}>
             <CardHeader className="space-y-2 pb-2">
               <CardTitle className="text-base">5. Affordability in hours of work</CardTitle>
-              <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
-                {hoursOfWorkMethodologyNote} Each chart begins when both its expense and wage data are available.
-              </p>
             </CardHeader>
             <CardContent className="space-y-6 pt-0">
               {!hasAnyHoursChart ? (
@@ -1005,10 +1010,6 @@ export function UsLivingStandardsStudy() {
                           {...hoursChartBaseProps}
                         />
                         <ChartDirectionCue meta={US_LS_CHART_DIRECTION.hoursOfWork} className="mt-2" />
-                        <p className="text-xs text-muted-foreground">
-                          {HOURS_CHART_HOUSEHOLD_METHOD} Each good uses its own price index and may start in a
-                          different year.
-                        </p>
                       </>
                     ) : (
                       <p className="py-4 text-xs text-muted-foreground">Data unavailable.</p>
@@ -1025,12 +1026,9 @@ export function UsLivingStandardsStudy() {
                             label={HOURS_CHART_RENT_LABEL}
                             unit={HOURS_Y_AXIS_LABEL}
                             seriesColor={SIGNAL_COUNTRY.us}
-                            exportSourceFooter={exportFooterWithDirection(
-                              hoursWorkChartFooter(
-                                hoursOfWorkWageSeriesId,
-                                "Census median gross rent (see Sources & units)"
-                              ),
-                              US_LS_CHART_DIRECTION.hoursOfWork
+                            exportSourceFooter={shortSourceFooter(
+                              `Source: FRED ${hoursOfWorkWageSeriesId}`,
+                              "derived hours-of-work"
                             )}
                             exportFileStem="us-living-standards-hours-rent"
                             timeRange={resolveChartTimeRange(
@@ -1045,7 +1043,6 @@ export function UsLivingStandardsStudy() {
                             points={hoursRentPoints}
                             className="mt-2"
                           />
-                          <p className="text-xs text-muted-foreground">{HOURS_CHART_RENT_METHOD}</p>
                         </>
                       ) : (
                         <p className="py-4 text-xs text-muted-foreground">Data unavailable.</p>
@@ -1060,12 +1057,9 @@ export function UsLivingStandardsStudy() {
                             label={HOURS_CHART_TUITION_LABEL}
                             unit={HOURS_Y_AXIS_LABEL}
                             seriesColor="#9333ea"
-                            exportSourceFooter={exportFooterWithDirection(
-                              hoursWorkChartFooter(
-                                hoursOfWorkWageSeriesId,
-                                "College Board public-university tuition anchors (see Sources & units)"
-                              ),
-                              US_LS_CHART_DIRECTION.hoursOfWork
+                            exportSourceFooter={shortSourceFooter(
+                              `Source: FRED ${hoursOfWorkWageSeriesId}`,
+                              "derived hours-of-work"
                             )}
                             exportFileStem="us-living-standards-hours-tuition"
                             timeRange={resolveChartTimeRange(
@@ -1080,21 +1074,12 @@ export function UsLivingStandardsStudy() {
                             points={hoursTuitionPoints}
                             className="mt-2"
                           />
-                          <p className="text-xs text-muted-foreground">{HOURS_CHART_TUITION_METHOD}</p>
                         </>
                       ) : (
                         <p className="py-4 text-xs text-muted-foreground">Data unavailable.</p>
                       )}
                     </StudyChartCell>
                   </StudyComparisonGroup>
-
-                  <p className="text-xs text-muted-foreground border-t border-border pt-4">
-                    Wage denominator for all hours charts: FRED {hoursOfWorkWageSeriesId} (production and
-                    nonsupervisory employees, 1964+).{" "}
-                    {hoursOfWorkMeta?.wage_tradeoffs ??
-                      "CES0500000003 (all private employees) begins in 2006; AHETPI is used for longer history."}{" "}
-                    See Sources &amp; units for methodology detail.
-                  </p>
                 </>
               )}
             </CardContent>
@@ -1103,8 +1088,8 @@ export function UsLivingStandardsStudy() {
           {/* 6. Healthcare */}
           <Card id="healthcare" className={`border-border ${US_LS_SECTION_ANCHOR_CLASS}`}>
             <CardHeader className="space-y-1 pb-2">
-              <CardTitle className="text-base">6. Healthcare</CardTitle>
-              <p className="text-xs text-muted-foreground">Spending burden and health outcomes (context)</p>
+              <CardTitle className="text-base">6. Healthcare (context indicators)</CardTitle>
+              <p className="text-xs text-muted-foreground">{CONTEXT_SECTION_NOTE}</p>
             </CardHeader>
             <CardContent className="space-y-6 pt-0">
               <StudyComparisonGroup paired={Boolean(healthcareSharedTimeRange)}>
@@ -1133,11 +1118,6 @@ export function UsLivingStandardsStudy() {
                         question={US_LS_CHART_PROMPTS.healthSpending}
                         className="mt-2"
                       />
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {phase2Meta?.health_expenditure_start_year != null
-                          ? `WDI series begins ${phase2Meta.health_expenditure_start_year}.`
-                          : "World Bank health expenditure per capita."}
-                      </p>
                     </>
                   ) : (
                     <p className="py-4 text-xs text-muted-foreground">Data unavailable.</p>
@@ -1152,10 +1132,7 @@ export function UsLivingStandardsStudy() {
                         label="Life expectancy at birth"
                         unit="Years"
                         seriesColor="#059669"
-                        exportSourceFooter={exportFooterWithDirection(
-                          `Source: World Bank WDI — ${wdi.life_expectancy_years ?? "SP.DYN.LE00.IN"}; outcome/context series, not affordability`,
-                          US_LS_CHART_DIRECTION.lifeExpectancy
-                        )}
+                        exportSourceFooter={`Source: World Bank WDI — ${wdi.life_expectancy_years ?? "SP.DYN.LE00.IN"}`}
                         exportFileStem="us-living-standards-life-expectancy"
                         timeRange={resolveChartTimeRange(
                           s.life_expectancy_years ?? [],
@@ -1164,26 +1141,12 @@ export function UsLivingStandardsStudy() {
                         )}
                         {...standardChartProps}
                       />
-                      <ChartDirectionCue
-                        meta={US_LS_CHART_DIRECTION.lifeExpectancy}
-                        points={s.life_expectancy_years ?? []}
-                        className="mt-2"
-                      />
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Health outcome context — not an affordability measure.
-                      </p>
                     </>
                   ) : (
                     <p className="py-4 text-xs text-muted-foreground">Data unavailable.</p>
                   )}
                 </StudyChartCell>
               </StudyComparisonGroup>
-
-              <p className="text-xs text-muted-foreground border-t border-border pt-4">
-                {phase2Meta?.health_insurance_note ??
-                  refSources.health_insurance_premiums ??
-                  "Health insurance premiums relative to income are not charted: consistent long-run premium series are not available without large gaps."}
-              </p>
             </CardContent>
           </Card>
 
@@ -1222,7 +1185,6 @@ export function UsLivingStandardsStudy() {
                         )}
                         {...standardChartProps}
                       />
-                      <p className="mt-1 text-xs text-muted-foreground">Gasoline series begins 1990 on FRED.</p>
                     </>
                   ) : (
                     <p className="py-6 text-xs text-muted-foreground">Data unavailable.</p>
@@ -1249,9 +1211,6 @@ export function UsLivingStandardsStudy() {
                         )}
                         {...standardChartProps}
                       />
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        CPI-anchored estimated new-vehicle price.
-                      </p>
                     </>
                   ) : (
                     <p className="py-6 text-xs text-muted-foreground">Data unavailable.</p>
@@ -1259,18 +1218,18 @@ export function UsLivingStandardsStudy() {
                 </StudyChartCell>
               </StudyComparisonGroup>
 
-              <StudyChartFull title="Hours of work to afford a new vehicle">
+              <StudyChartFull title={HOURS_CHART_VEHICLE_LABEL}>
                 {(s.hours_for_new_vehicle ?? []).length > 0 ? (
                   <>
                     <TimelineChart
                       data={s.hours_for_new_vehicle ?? []}
                       valueKey="value"
-                      label="Hours of work to afford a new vehicle"
+                      label={HOURS_CHART_VEHICLE_LABEL}
                       unit={HOURS_Y_AXIS_LABEL}
                       seriesColor="#0369a1"
-                      exportSourceFooter={hoursWorkChartFooter(
-                        hoursOfWorkWageSeriesId,
-                        "CPI-anchored new-vehicle price (see Sources & units)"
+                      exportSourceFooter={shortSourceFooter(
+                        `Source: FRED ${hoursOfWorkWageSeriesId}`,
+                        "derived hours-of-work"
                       )}
                       exportFileStem="us-living-standards-hours-new-vehicle"
                       timeRange={resolveChartTimeRange(
@@ -1279,6 +1238,11 @@ export function UsLivingStandardsStudy() {
                         studyWindow
                       )}
                       {...hoursChartBaseProps}
+                    />
+                    <ChartDirectionCue
+                      meta={US_LS_CHART_DIRECTION.hoursOfWork}
+                      points={s.hours_for_new_vehicle ?? []}
+                      className="mt-2"
                     />
                   </>
                 ) : (
@@ -1291,8 +1255,8 @@ export function UsLivingStandardsStudy() {
           {/* 8. Family formation */}
           <Card id="family-formation" className={`border-border ${US_LS_SECTION_ANCHOR_CLASS}`}>
             <CardHeader className="space-y-1 pb-2">
-              <CardTitle className="text-base">8. Family formation</CardTitle>
-              <p className="text-xs text-muted-foreground">Homeownership, fertility, and marriage age (demographic context)</p>
+              <CardTitle className="text-base">8. Family formation (context indicators)</CardTitle>
+              <p className="text-xs text-muted-foreground">{CONTEXT_SECTION_NOTE}</p>
             </CardHeader>
             <CardContent className="space-y-6 pt-0">
               <StudyComparisonGroup paired={Boolean(familyHomeFertilitySharedTimeRange)}>
@@ -1384,20 +1348,11 @@ export function UsLivingStandardsStudy() {
                       )}
                       {...denseChartProps}
                     />
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Census anchor years with linear interpolation.
-                    </p>
                   </>
                 ) : (
                   <p className="py-4 text-xs text-muted-foreground">Data unavailable.</p>
                 )}
               </StudyChartFull>
-
-              <p className="text-xs text-muted-foreground border-t border-border pt-4">
-                {phase2Meta?.childcare_note ??
-                  refSources.childcare_costs ??
-                  "Reliable long-run national childcare-cost series is not yet included."}
-              </p>
             </CardContent>
           </Card>
         </div>
@@ -1428,8 +1383,8 @@ export function UsLivingStandardsStudy() {
           {
             heading: "Reading cues",
             bullets: [
-              "Direction pills on affordability and outcome charts (e.g. “↓ Lower = more affordable”) are interpretive aids, not causal claims.",
-              "Some charts use a guiding question instead when a single direction would be misleading.",
+              "Direction pills and question prompts are interpretive aids, not causal claims.",
+              "Long methodology notes live in Sources & units below.",
             ],
           },
           {
