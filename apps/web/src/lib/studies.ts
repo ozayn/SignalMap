@@ -31,7 +31,8 @@ export type PrimarySignal =
   | { kind: "iran_money_supply_m2" }
   | { kind: "oil_economy_overview" }
   | { kind: "iran_economy_reconstruction_1368_1376" }
-  | { kind: "iran_economy_period_comparison" };
+  | { kind: "iran_economy_period_comparison" }
+  | { kind: "us_living_standards" };
 
 import type { StudyConceptId } from "./signalmap-concepts";
 
@@ -1012,6 +1013,52 @@ export const STUDIES: StudyMeta[] = [
     countries: ["south_korea", "global"],
     themes: ["macro", "fx", "dashboard"],
     tags: ["South Korea", "WDI", "export-led growth", "macro dashboard", "country dashboard"],
+  },
+  {
+    id: "us-living-standards",
+    number: 50,
+    title: "US living standards and affordability",
+    subtitle: "How wages, housing, education, healthcare, and everyday goods changed over time.",
+    timeRange: ["1970-01-01", "today"],
+    description:
+      "Compare income, housing, education, productivity, and hours-of-work affordability in the United States using inflation-adjusted and relative measures — exploratory, not ideological.",
+    socialDescription:
+      "Explore US living standards through real median income, home prices, tuition, productivity vs compensation, and hours of work required for rent, tuition, and everyday goods.",
+    status: "active",
+    groupPlacements: [
+      { group: "welfare", order: 3 },
+      { group: "country", order: 9 },
+    ],
+    primarySignal: { kind: "us_living_standards" },
+    countries: ["us"],
+    themes: ["macro", "inequality"],
+    tags: ["USA", "FRED", "affordability", "housing", "tuition", "wages"],
+    keywords: [
+      "living standards",
+      "median income",
+      "home price",
+      "tuition",
+      "productivity",
+      "compensation",
+      "hours of work",
+      "rent",
+      "refrigerator",
+    ],
+    concepts: [
+      "nominal_vs_real",
+      "cpi",
+      "purchasing_power",
+      "real_wage",
+      "measurement_vs_reality",
+      "derived_series",
+    ],
+    observations: [
+      "Real median household income, nominal home prices, and tuition can move in different directions in the same decade.",
+      "House-price-to-income and tuition-to-income ratios summarize relative burden without replacing formal affordability indices.",
+      "Hours-of-work charts compare item prices to average hourly earnings; the earnings series limits pre-2006 coverage.",
+      "Reference anchors for tuition, rent, and appliances are interpolated between published years and should be read as contextual trends.",
+      "Productivity and compensation indexes are reindexed for comparison; the gap is not a direct dollar measure of lost pay.",
+    ],
   },
 ];
 

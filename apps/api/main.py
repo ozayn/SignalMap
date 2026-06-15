@@ -757,6 +757,29 @@ def get_wdi_country_economy_bundle_signal(
         raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
 
 
+@app.get("/api/signals/us/living-standards-bundle")
+def get_us_living_standards_bundle_signal(
+    start: str | None = Query(None, description="Start date YYYY-MM-DD"),
+    end: str | None = Query(None, description="End date YYYY-MM-DD"),
+):
+    """Return US living standards bundle for affordability study."""
+    if start is None:
+        start = "1970-01-01"
+    if end is None:
+        end = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if not _validate_date(start) or not _validate_date(end):
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be <= end")
+    try:
+        from signalmap.services.signals import get_us_living_standards_bundle
+
+        return get_us_living_standards_bundle(start, end)
+    except Exception as e:
+        log.exception("us_living_standards_bundle failed start=%s end=%s", start, end)
+        raise HTTPException(status_code=502, detail=f"Signal fetch failed: {e}")
+
+
 @app.get("/api/signals/oil/production-exporters")
 def get_oil_production_exporters_signal(
     start: str | None = Query(None, description="Start date YYYY-MM-DD"),

@@ -92,7 +92,7 @@ def _fetch_fred_graph_csv_rows(series_id: str) -> list[tuple[int, float]]:
     reader = csv.DictReader(StringIO(r.text))
     value_col = series_id
     for rec in reader:
-        ds = (rec.get("DATE") or rec.get("date") or "").strip()
+        ds = (rec.get("DATE") or rec.get("date") or rec.get("observation_date") or "").strip()
         vs = (rec.get(value_col) or rec.get("VALUE") or "").strip()
         if not ds or vs in ("", ".", "NaN"):
             continue

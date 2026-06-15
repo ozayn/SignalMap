@@ -36,6 +36,9 @@ const STUDY_METADATA_OVERRIDES: Record<string, StudyMetadataOverride> = {
   "south-korea-economy": {
     title: "South Korea Economy Study | SignalMap",
   },
+  "us-living-standards": {
+    title: "US Living Standards & Affordability | SignalMap",
+  },
 };
 
 function resolveSiteUrl(): string {

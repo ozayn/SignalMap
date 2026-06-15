@@ -677,6 +677,26 @@ function deriveBrowseDefaults(study: StudyMeta): BrowseProfile {
           "pezeshkian",
         ],
       };
+    case "us_living_standards":
+      return {
+        countries: ["us"],
+        themes: ["macro", "inequality"],
+        tags: [],
+        keywords: [
+          "affordability",
+          "living standards",
+          "median income",
+          "housing",
+          "home price",
+          "tuition",
+          "productivity",
+          "compensation",
+          "hours of work",
+          "rent",
+          "fred",
+          "wages",
+        ],
+      };
     default:
       return { countries: ["global"], themes: ["macro"], tags: [], keywords: [] };
   }

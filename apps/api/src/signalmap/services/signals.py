@@ -1508,6 +1508,45 @@ def get_country_economy_bundle(iso3: str, start: str, end: str) -> dict:
         raise
 
 
+US_LIVING_STANDARDS_SOURCE = {
+    "name": "FRED / Census / College Board (reference anchors)",
+    "url": "https://fred.stlouisfed.org",
+}
+
+
+def get_us_living_standards_bundle(start: str, end: str) -> dict:
+    """US living standards bundle: income, housing, tuition, productivity, hours-of-work proxies."""
+    from signalmap.sources.us_living_standards import fetch_us_living_standards_bundle
+
+    start_year = int(start[:4])
+    end_year = int(end[:4])
+    ck = f"signal:us_living_standards_bundle:v1:{start_year}:{end_year}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+    stale_cached = cache_get_stale(ck)
+
+    try:
+        bundle = fetch_us_living_standards_bundle(start_year, end_year)
+        result = {
+            **bundle,
+            "source": US_LIVING_STANDARDS_SOURCE,
+            "resolution": "annual",
+        }
+        if not result.get("partial"):
+            cache_set(ck, result, CACHE_TTL)
+        return result
+    except Exception:
+        if stale_cached is not None:
+            logger.warning(
+                "us_living_standards_bundle stale cache fallback used start_year=%d end_year=%d",
+                start_year,
+                end_year,
+            )
+            return stale_cached
+        raise
+
+
 def _filter_indicator_points_by_year(
     points: list[dict], year_start: int, year_end: int
 ) -> list[dict]:
