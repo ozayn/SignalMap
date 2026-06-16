@@ -1,34 +1,35 @@
 {
   "sources": {
-    "public_tuition_annual_usd": "College Board Trends in College Pricing — average published in-state tuition and required fees at public four-year universities (nominal US$). Sparse annual anchors; intermediate years are linearly interpolated in the API. Refers to public universities (state universities), not K–12 schooling.",
+    "public_tuition_annual_usd": "College Board Trends in College Pricing \u2014 average published in-state tuition and required fees at public four-year universities (nominal US$). Sparse annual anchors; intermediate years are linearly interpolated in the API. Refers to public universities (state universities), not K\u201312 schooling.",
     "median_gross_rent_monthly_usd": "U.S. Census Bureau historical median gross rent tables (nominal US$ per month). Sparse annual anchors; intermediate years are linearly interpolated in the API.",
     "refrigerator_usd": "Representative retail price anchors for a standard refrigerator (nominal US$). Contextual reference prices for affordability hours, not a single SKU time series.",
     "washing_machine_usd": "Representative retail price anchors for a standard clothes washer (nominal US$). Contextual reference prices for affordability hours, not a single SKU time series.",
     "television_usd": "Representative retail price anchors for a color television (nominal US$). Contextual reference prices for affordability hours, not a single SKU time series.",
     "household_goods_methodology": "Historical prices for some durable goods are estimated using official price indices anchored to benchmark price observations. Comparisons should be interpreted as approximate indicators of changing affordability.",
     "hours_of_work_methodology": "Hours-of-work estimates use historical wage proxies to approximate how many hours an average worker would need to work to cover the selected expense. The series are intended as contextual affordability signals rather than precise household budget calculations.",
-    "hours_of_work_wage": "FRED AHETPI — BLS average hourly earnings of production and nonsupervisory employees, total private (nominal US$/hour, 1964+). Used for rent, public-university tuition, and household-goods hours charts. FRED CES0500000003 (all private employees) begins in 2006 and is not used here so charts can extend further back; AHETPI excludes supervisory workers and may differ slightly in level from the all-employee series in overlapping years.",
-    "hours_for_month_rent": "U.S. Census Bureau median gross rent (reference anchors, interpolated) ÷ FRED AHETPI.",
-    "hours_for_year_tuition": "College Board published in-state public four-year university tuition (reference anchors, interpolated) ÷ FRED AHETPI. Public universities only — not K–12.",
-    "household_goods_wage": "FRED AHETPI — same wage series as other hours-of-work charts (see hours_of_work_wage).",
-    "hours_for_refrigerator": "Estimated refrigerator price (CPI household furnishings proxy, FRED CUSR0000SAH3, anchored to 2000 = US$825) ÷ FRED AHETPI.",
-    "hours_for_washing_machine": "Estimated washing-machine price (PPI household laundry equipment, FRED WPU12410220 through 2016 then WPU1241 major appliances, anchored to 2000 = US$650) ÷ FRED AHETPI.",
-    "hours_for_television": "Estimated television price (CPI video and audio, FRED CUSR0000SERA from 1994, anchored to 2000 = US$450; 1970–1993 from published retail price anchors with linear interpolation) ÷ FRED AHETPI.",
-    "hours_for_vacuum_cleaner": "Estimated vacuum-cleaner price (CPI household furnishings proxy, FRED CUSR0000SAH3, anchored to 2000 = US$120) ÷ FRED AHETPI.",
-    "health_expenditure_per_capita_usd": "World Bank WDI SH.XPD.CHEX.PC.CD — current health expenditure per capita (current US$). Real series deflated to study base year with FRED CPI-U.",
+    "hours_of_work_wage": "FRED AHETPI \u2014 BLS average hourly earnings of production and nonsupervisory employees, total private (nominal US$/hour, 1964+). Used for rent, public-university tuition, and household-goods hours charts. FRED CES0500000003 (all private employees) begins in 2006 and is not used here so charts can extend further back; AHETPI excludes supervisory workers and may differ slightly in level from the all-employee series in overlapping years.",
+    "hours_for_month_rent": "U.S. Census Bureau median gross rent (reference anchors, interpolated) \u00f7 FRED AHETPI.",
+    "hours_for_year_tuition": "College Board published in-state public four-year university tuition (reference anchors, interpolated) \u00f7 FRED AHETPI. Public universities only \u2014 not K\u201312.",
+    "household_goods_wage": "FRED AHETPI \u2014 same wage series as other hours-of-work charts (see hours_of_work_wage).",
+    "hours_for_refrigerator": "Estimated refrigerator price (CPI household furnishings proxy, FRED CUSR0000SAH3, anchored to 2000 = US$825) \u00f7 FRED AHETPI.",
+    "hours_for_washing_machine": "Estimated washing-machine price (PPI household laundry equipment, FRED WPU12410220 through 2016 then WPU1241 major appliances, anchored to 2000 = US$650) \u00f7 FRED AHETPI.",
+    "hours_for_television": "Estimated television price (CPI video and audio, FRED CUSR0000SERA from 1994, anchored to 2000 = US$450; 1970\u20131993 from published retail price anchors with linear interpolation) \u00f7 FRED AHETPI.",
+    "hours_for_vacuum_cleaner": "Estimated vacuum-cleaner price (CPI household furnishings proxy, FRED CUSR0000SAH3, anchored to 2000 = US$120) \u00f7 FRED AHETPI.",
+    "health_expenditure_per_capita_usd": "World Bank WDI SH.XPD.CHEX.PC.CD \u2014 current health expenditure per capita (current US$). Real series deflated to study base year with FRED CPI-U.",
     "health_expenditure_per_capita_real_usd": "World Bank SH.XPD.CHEX.PC.CD deflated with FRED CPIAUCSL to constant study-base-year dollars.",
-    "life_expectancy_years": "World Bank WDI SP.DYN.LE00.IN — life expectancy at birth (years). Outcome/context series, not an affordability measure.",
+    "life_expectancy_years": "World Bank WDI SP.DYN.LE00.IN \u2014 life expectancy at birth (years). Outcome/context series, not an affordability measure.",
     "health_insurance_premiums": "Not charted: consistent long-run employer-sponsored premium series suitable for income ratios is not available on FRED without large gaps.",
     "childcare_costs": "Reliable long-run national childcare-cost series is not yet included.",
-    "gasoline_price_usd_per_gallon": "FRED GASREGW — U.S. regular gasoline, annual mean of weekly retail price (nominal US$/gallon).",
+    "gasoline_price_usd_per_gallon": "FRED GASREGW \u2014 U.S. regular gasoline, annual mean of weekly retail price (nominal US$/gallon).",
     "gasoline_price_real_usd_per_gallon": "FRED GASREGW deflated with CPI-U to constant study-base-year dollars per gallon.",
     "new_vehicle_estimated_price_usd": "BLS CPI new vehicles (FRED CUUR0000SETA01) anchored to benchmark retail price; contextual estimate, not a transaction-price index.",
-    "new_vehicle_to_income_ratio": "Estimated new-vehicle price ÷ real median household income.",
-    "hours_for_new_vehicle": "Estimated new-vehicle price ÷ FRED AHETPI.",
-    "homeownership_rate_pct": "FRED RHORUSQ156N — Census homeownership rate (annual mean of quarterly observations, percent).",
-    "fertility_rate_births_per_woman": "FRED SPDYNTFRTINUSA — total fertility rate (births per woman).",
+    "new_vehicle_to_income_ratio": "Estimated new-vehicle price \u00f7 real median household income.",
+    "hours_for_new_vehicle": "Estimated new-vehicle price \u00f7 FRED AHETPI.",
+    "homeownership_rate_pct": "FRED RHORUSQ156N \u2014 Census homeownership rate (annual mean of quarterly observations, percent).",
+    "fertility_rate_births_per_woman": "FRED SPDYNTFRTINUSA \u2014 total fertility rate (births per woman).",
     "median_age_first_marriage_male": "U.S. Census Bureau historical median age at first marriage, men (reference anchors; interpolated).",
-    "median_age_first_marriage_female": "U.S. Census Bureau historical median age at first marriage, women (reference anchors; interpolated)."
+    "median_age_first_marriage_female": "U.S. Census Bureau historical median age at first marriage, women (reference anchors; interpolated).",
+    "absolute_mobility_by_birth_cohort_pct": "Opportunity Insights / Chetty, Grusky, Hell, Hendren, Manduca, and Narang (2017) \u2014 research estimate of absolute income mobility by child birth cohort. Share of children who earned more than their parents at age 30 (household income, CPI-U-RS). National baseline estimates from Online Data Table 1 (cohort_mean). Not an administrative time series."
   },
   "phase2": {
     "health_insurance_note": "Employer-sponsored health insurance premium series on FRED are too sparse or inconsistent for a reliable long-run chart relative to income. Premiums are omitted rather than interpolated.",
@@ -44,7 +45,7 @@
   "hours_of_work": {
     "methodology_note": "Hours-of-work estimates use historical wage proxies to approximate how many hours an average worker would need to work to cover the selected expense. The series are intended as contextual affordability signals rather than precise household budget calculations.",
     "wage_fred_series": "AHETPI",
-    "wage_source": "FRED AHETPI — BLS average hourly earnings of production and nonsupervisory employees, total private (1964+).",
+    "wage_source": "FRED AHETPI \u2014 BLS average hourly earnings of production and nonsupervisory employees, total private (1964+).",
     "wage_tradeoffs": "FRED CES0500000003 (average hourly earnings of all private employees) begins in 2006. AHETPI extends to 1964 but covers production and nonsupervisory workers only; levels may differ from the all-employee series where both exist."
   },
   "household_goods": {
@@ -66,7 +67,7 @@
         "cpi_fred_series": "WPU12410220",
         "cpi_continuation_series": "WPU1241",
         "cpi_continuation_from_year": 2017,
-        "cpi_source": "BLS PPI household laundry equipment (FRED WPU12410220, 1947–2016); continued with PPI major appliances (FRED WPU1241) from 2017.",
+        "cpi_source": "BLS PPI household laundry equipment (FRED WPU12410220, 1947\u20132016); continued with PPI major appliances (FRED WPU1241) from 2017.",
         "cpi_start_year": 1947
       },
       "television": {
@@ -90,86 +91,482 @@
     }
   },
   "public_tuition_annual_usd": [
-    { "year": 1971, "value": 428 },
-    { "year": 1975, "value": 590 },
-    { "year": 1980, "value": 804 },
-    { "year": 1985, "value": 1177 },
-    { "year": 1990, "value": 1809 },
-    { "year": 1995, "value": 2811 },
-    { "year": 2000, "value": 3501 },
-    { "year": 2005, "value": 5135 },
-    { "year": 2010, "value": 7627 },
-    { "year": 2015, "value": 9370 },
-    { "year": 2020, "value": 10560 },
-    { "year": 2023, "value": 11260 }
+    {
+      "year": 1971,
+      "value": 428
+    },
+    {
+      "year": 1975,
+      "value": 590
+    },
+    {
+      "year": 1980,
+      "value": 804
+    },
+    {
+      "year": 1985,
+      "value": 1177
+    },
+    {
+      "year": 1990,
+      "value": 1809
+    },
+    {
+      "year": 1995,
+      "value": 2811
+    },
+    {
+      "year": 2000,
+      "value": 3501
+    },
+    {
+      "year": 2005,
+      "value": 5135
+    },
+    {
+      "year": 2010,
+      "value": 7627
+    },
+    {
+      "year": 2015,
+      "value": 9370
+    },
+    {
+      "year": 2020,
+      "value": 10560
+    },
+    {
+      "year": 2023,
+      "value": 11260
+    }
   ],
   "median_gross_rent_monthly_usd": [
-    { "year": 1970, "value": 108 },
-    { "year": 1975, "value": 138 },
-    { "year": 1980, "value": 243 },
-    { "year": 1985, "value": 308 },
-    { "year": 1990, "value": 447 },
-    { "year": 1995, "value": 481 },
-    { "year": 2000, "value": 602 },
-    { "year": 2005, "value": 721 },
-    { "year": 2010, "value": 842 },
-    { "year": 2015, "value": 928 },
-    { "year": 2020, "value": 1098 },
-    { "year": 2023, "value": 1359 }
+    {
+      "year": 1970,
+      "value": 108
+    },
+    {
+      "year": 1975,
+      "value": 138
+    },
+    {
+      "year": 1980,
+      "value": 243
+    },
+    {
+      "year": 1985,
+      "value": 308
+    },
+    {
+      "year": 1990,
+      "value": 447
+    },
+    {
+      "year": 1995,
+      "value": 481
+    },
+    {
+      "year": 2000,
+      "value": 602
+    },
+    {
+      "year": 2005,
+      "value": 721
+    },
+    {
+      "year": 2010,
+      "value": 842
+    },
+    {
+      "year": 2015,
+      "value": 928
+    },
+    {
+      "year": 2020,
+      "value": 1098
+    },
+    {
+      "year": 2023,
+      "value": 1359
+    }
   ],
   "refrigerator_usd": [
-    { "year": 1970, "value": 375 },
-    { "year": 1980, "value": 525 },
-    { "year": 1990, "value": 675 },
-    { "year": 2000, "value": 825 },
-    { "year": 2010, "value": 950 },
-    { "year": 2020, "value": 1150 },
-    { "year": 2023, "value": 1300 }
+    {
+      "year": 1970,
+      "value": 375
+    },
+    {
+      "year": 1980,
+      "value": 525
+    },
+    {
+      "year": 1990,
+      "value": 675
+    },
+    {
+      "year": 2000,
+      "value": 825
+    },
+    {
+      "year": 2010,
+      "value": 950
+    },
+    {
+      "year": 2020,
+      "value": 1150
+    },
+    {
+      "year": 2023,
+      "value": 1300
+    }
   ],
   "washing_machine_usd": [
-    { "year": 1970, "value": 325 },
-    { "year": 1980, "value": 475 },
-    { "year": 1990, "value": 575 },
-    { "year": 2000, "value": 650 },
-    { "year": 2010, "value": 750 },
-    { "year": 2020, "value": 950 },
-    { "year": 2023, "value": 1050 }
+    {
+      "year": 1970,
+      "value": 325
+    },
+    {
+      "year": 1980,
+      "value": 475
+    },
+    {
+      "year": 1990,
+      "value": 575
+    },
+    {
+      "year": 2000,
+      "value": 650
+    },
+    {
+      "year": 2010,
+      "value": 750
+    },
+    {
+      "year": 2020,
+      "value": 950
+    },
+    {
+      "year": 2023,
+      "value": 1050
+    }
   ],
   "television_usd": [
-    { "year": 1970, "value": 425 },
-    { "year": 1980, "value": 525 },
-    { "year": 1990, "value": 375 },
-    { "year": 2000, "value": 450 },
-    { "year": 2010, "value": 550 },
-    { "year": 2020, "value": 480 },
-    { "year": 2023, "value": 430 }
+    {
+      "year": 1970,
+      "value": 425
+    },
+    {
+      "year": 1980,
+      "value": 525
+    },
+    {
+      "year": 1990,
+      "value": 375
+    },
+    {
+      "year": 2000,
+      "value": 450
+    },
+    {
+      "year": 2010,
+      "value": 550
+    },
+    {
+      "year": 2020,
+      "value": 480
+    },
+    {
+      "year": 2023,
+      "value": 430
+    }
   ],
   "median_age_first_marriage_male": [
-    { "year": 1970, "value": 23.2 },
-    { "year": 1975, "value": 23.6 },
-    { "year": 1980, "value": 24.7 },
-    { "year": 1985, "value": 25.5 },
-    { "year": 1990, "value": 26.1 },
-    { "year": 1995, "value": 26.9 },
-    { "year": 2000, "value": 26.8 },
-    { "year": 2005, "value": 27.2 },
-    { "year": 2010, "value": 28.2 },
-    { "year": 2015, "value": 29.2 },
-    { "year": 2020, "value": 30.5 },
-    { "year": 2023, "value": 30.2 }
+    {
+      "year": 1970,
+      "value": 23.2
+    },
+    {
+      "year": 1975,
+      "value": 23.6
+    },
+    {
+      "year": 1980,
+      "value": 24.7
+    },
+    {
+      "year": 1985,
+      "value": 25.5
+    },
+    {
+      "year": 1990,
+      "value": 26.1
+    },
+    {
+      "year": 1995,
+      "value": 26.9
+    },
+    {
+      "year": 2000,
+      "value": 26.8
+    },
+    {
+      "year": 2005,
+      "value": 27.2
+    },
+    {
+      "year": 2010,
+      "value": 28.2
+    },
+    {
+      "year": 2015,
+      "value": 29.2
+    },
+    {
+      "year": 2020,
+      "value": 30.5
+    },
+    {
+      "year": 2023,
+      "value": 30.2
+    }
   ],
   "median_age_first_marriage_female": [
-    { "year": 1970, "value": 20.8 },
-    { "year": 1975, "value": 21.1 },
-    { "year": 1980, "value": 22.0 },
-    { "year": 1985, "value": 22.8 },
-    { "year": 1990, "value": 23.9 },
-    { "year": 1995, "value": 24.5 },
-    { "year": 2000, "value": 25.1 },
-    { "year": 2005, "value": 25.5 },
-    { "year": 2010, "value": 26.1 },
-    { "year": 2015, "value": 27.1 },
-    { "year": 2020, "value": 28.1 },
-    { "year": 2023, "value": 28.4 }
+    {
+      "year": 1970,
+      "value": 20.8
+    },
+    {
+      "year": 1975,
+      "value": 21.1
+    },
+    {
+      "year": 1980,
+      "value": 22.0
+    },
+    {
+      "year": 1985,
+      "value": 22.8
+    },
+    {
+      "year": 1990,
+      "value": 23.9
+    },
+    {
+      "year": 1995,
+      "value": 24.5
+    },
+    {
+      "year": 2000,
+      "value": 25.1
+    },
+    {
+      "year": 2005,
+      "value": 25.5
+    },
+    {
+      "year": 2010,
+      "value": 26.1
+    },
+    {
+      "year": 2015,
+      "value": 27.1
+    },
+    {
+      "year": 2020,
+      "value": 28.1
+    },
+    {
+      "year": 2023,
+      "value": 28.4
+    }
+  ],
+  "social_mobility": {
+    "methodology_note": "Research-based estimate of absolute income mobility by birth cohort. Values indicate the estimated share of children who surpassed their parents' income at a comparable age.",
+    "source": "Opportunity Insights \u2014 The Fading American Dream (Science 2017)",
+    "source_url": "https://opportunityinsights.org/paper/the-fading-american-dream/",
+    "data_table_url": "http://www.equality-of-opportunity.org/data/absolute/table1_national_absmob_by_cohort_parpctile.xlsx",
+    "future_indicators_note": "Potential future additions: relative mobility, education and mobility, geographic mobility."
+  },
+  "absolute_mobility_by_birth_cohort_pct": [
+    {
+      "year": 1940,
+      "value": 91.5
+    },
+    {
+      "year": 1941,
+      "value": 89.1
+    },
+    {
+      "year": 1942,
+      "value": 89.6
+    },
+    {
+      "year": 1943,
+      "value": 88.8
+    },
+    {
+      "year": 1944,
+      "value": 89.9
+    },
+    {
+      "year": 1945,
+      "value": 86.4
+    },
+    {
+      "year": 1946,
+      "value": 85.8
+    },
+    {
+      "year": 1947,
+      "value": 84.0
+    },
+    {
+      "year": 1948,
+      "value": 82.1
+    },
+    {
+      "year": 1949,
+      "value": 79.6
+    },
+    {
+      "year": 1950,
+      "value": 78.5
+    },
+    {
+      "year": 1951,
+      "value": 78.4
+    },
+    {
+      "year": 1952,
+      "value": 74.0
+    },
+    {
+      "year": 1953,
+      "value": 70.8
+    },
+    {
+      "year": 1954,
+      "value": 68.2
+    },
+    {
+      "year": 1955,
+      "value": 69.6
+    },
+    {
+      "year": 1956,
+      "value": 67.4
+    },
+    {
+      "year": 1957,
+      "value": 67.3
+    },
+    {
+      "year": 1958,
+      "value": 67.1
+    },
+    {
+      "year": 1959,
+      "value": 65.3
+    },
+    {
+      "year": 1960,
+      "value": 62.3
+    },
+    {
+      "year": 1961,
+      "value": 60.1
+    },
+    {
+      "year": 1962,
+      "value": 58.3
+    },
+    {
+      "year": 1963,
+      "value": 57.6
+    },
+    {
+      "year": 1964,
+      "value": 56.5
+    },
+    {
+      "year": 1965,
+      "value": 59.3
+    },
+    {
+      "year": 1966,
+      "value": 57.5
+    },
+    {
+      "year": 1967,
+      "value": 57.8
+    },
+    {
+      "year": 1968,
+      "value": 60.1
+    },
+    {
+      "year": 1969,
+      "value": 59.4
+    },
+    {
+      "year": 1970,
+      "value": 61.0
+    },
+    {
+      "year": 1971,
+      "value": 61.2
+    },
+    {
+      "year": 1972,
+      "value": 60.8
+    },
+    {
+      "year": 1973,
+      "value": 59.9
+    },
+    {
+      "year": 1974,
+      "value": 58.0
+    },
+    {
+      "year": 1975,
+      "value": 58.6
+    },
+    {
+      "year": 1976,
+      "value": 54.9
+    },
+    {
+      "year": 1977,
+      "value": 56.6
+    },
+    {
+      "year": 1978,
+      "value": 55.7
+    },
+    {
+      "year": 1979,
+      "value": 54.3
+    },
+    {
+      "year": 1980,
+      "value": 50.0
+    },
+    {
+      "year": 1981,
+      "value": 53.2
+    },
+    {
+      "year": 1982,
+      "value": 54.3
+    },
+    {
+      "year": 1983,
+      "value": 52.7
+    },
+    {
+      "year": 1984,
+      "value": 50.3
+    }
   ]
 }

@@ -90,6 +90,15 @@ type LivingStandardsBundle = {
     vehicle_hours_start_year?: number | null;
     vehicle_hours_end_year?: number | null;
   };
+  social_mobility?: {
+    methodology_note?: string;
+    source?: string;
+    source_url?: string;
+    data_table_url?: string;
+    future_indicators_note?: string;
+    start_year?: number | null;
+    end_year?: number | null;
+  };
 };
 
 const STUDY_ID = "us-living-standards";
@@ -180,6 +189,13 @@ const HOURS_CHART_VEHICLE_LABEL = "Hours of work to afford a new vehicle";
 
 const CONTEXT_SECTION_NOTE = "Context indicators — not direct affordability measures.";
 
+const RESEARCH_INDICATOR_NOTE = "Research estimate — not an administrative time series.";
+
+const ABSOLUTE_MOBILITY_CHART_LABEL = "Children earning more than their parents";
+const ABSOLUTE_MOBILITY_Y_AXIS_LABEL = "Percent (%)";
+const ABSOLUTE_MOBILITY_METHOD_NOTE =
+  "Research-based estimate of absolute income mobility by birth cohort. Values indicate the estimated share of children who surpassed their parents' income at a comparable age.";
+
 const HOURS_CHART_RENT_METHOD =
   "Estimated as median monthly rent divided by the average hourly wage.";
 const HOURS_CHART_TUITION_METHOD =
@@ -251,6 +267,7 @@ export function UsLivingStandardsStudy() {
   const fred = bundle?.fred_series ?? {};
   const wdi = bundle?.wdi_indicators ?? {};
   const phase2Meta = bundle?.phase2;
+  const socialMobilityMeta = bundle?.social_mobility;
   const realBaseYear = bundle?.real_base_year ?? 2022;
   const prodBaseYear = bundle?.productivity_compensation_base_year ?? DEFAULT_INDEX_PREFERRED_YEAR;
   const prodIndexUnit = formatIndexEquals100Label(prodBaseYear);
@@ -410,6 +427,23 @@ export function UsLivingStandardsStudy() {
           (prodIndexFallbackNote ? ` ${prodIndexFallbackNote}` : ""),
       },
       {
+        label: ABSOLUTE_MOBILITY_CHART_LABEL,
+        sourceName: socialMobilityMeta?.source ?? "Opportunity Insights",
+        sourceUrl:
+          socialMobilityMeta?.source_url ?? "https://opportunityinsights.org/paper/the-fading-american-dream/",
+        sourceDetail:
+          refSources.absolute_mobility_by_birth_cohort_pct ??
+          "Research estimate of absolute income mobility by child birth cohort (Chetty et al. 2017).",
+        unitLabel: ABSOLUTE_MOBILITY_Y_AXIS_LABEL,
+        unitNote: [
+          ABSOLUTE_MOBILITY_METHOD_NOTE,
+          RESEARCH_INDICATOR_NOTE,
+          socialMobilityMeta?.future_indicators_note,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      },
+      {
         label: "Hours-of-work charts (overview)",
         sourceName: "SignalMap derived",
         sourceDetail: `Wage denominator: FRED ${hoursOfWorkWageSeriesId} (production and nonsupervisory employees, 1964+)`,
@@ -553,6 +587,9 @@ export function UsLivingStandardsStudy() {
       prodIndexFallbackNote,
       realBaseYear,
       refSources,
+      socialMobilityMeta?.future_indicators_note,
+      socialMobilityMeta?.source,
+      socialMobilityMeta?.source_url,
     ]
   );
 
@@ -639,12 +676,18 @@ export function UsLivingStandardsStudy() {
 
   const housePriceToIncomePoints = s.house_price_to_income_ratio ?? [];
   const tuitionToIncomePoints = s.tuition_to_income_ratio ?? [];
+  const absoluteMobilityPoints = s.absolute_mobility_by_birth_cohort_pct ?? [];
 
   const affordabilityBurdenTimeRange = useMemo(() => {
     const shared = sharedSectionTimeRange([housePriceToIncomePoints, tuitionToIncomePoints]);
     const allPoints = [...housePriceToIncomePoints, ...tuitionToIncomePoints];
     return shared ?? seriesTimeRange(allPoints) ?? studyWindow;
   }, [housePriceToIncomePoints, tuitionToIncomePoints, studyWindow]);
+
+  const absoluteMobilityTimeRange = useMemo(
+    () => seriesTimeRange(absoluteMobilityPoints),
+    [absoluteMobilityPoints]
+  );
 
   const hasAffordabilityBurdenChart =
     housePriceToIncomePoints.length > 0 || tuitionToIncomePoints.length > 0;
@@ -717,6 +760,7 @@ export function UsLivingStandardsStudy() {
             <li>Real median household income and nominal home prices often diverge, so price-to-income ratios can rise even when incomes grow.</li>
             <li>Public university tuition and rent can outpace hourly earnings in some decades while appliances may take fewer hours of work as manufacturing productivity improves.</li>
             <li>Productivity and hourly compensation indexes can decouple — productivity growth does not automatically translate into proportional wage growth.</li>
+            <li>Absolute mobility by birth cohort (Opportunity Insights) estimates how often children out-earn their parents — a research indicator, not an administrative series.</li>
             <li>Reference-price series for public-university tuition, rent, and appliances use published anchors and interpolation; treat them as contextual signals, not precise retail transactions.</li>
             <li>Healthcare spending (WDI) and gasoline prices can rise in nominal terms while life expectancy improves — different dimensions can diverge.</li>
             <li>Family-formation indicators (homeownership, marriage age, fertility) describe social context; they are not direct affordability measures.</li>
@@ -972,6 +1016,42 @@ export function UsLivingStandardsStudy() {
                   />
                   <ChartInterpretivePrompt
                     question={US_LS_CHART_PROMPTS.productivityCompensation}
+                    className="mt-2"
+                  />
+                </>
+              ) : (
+                <p className="py-6 text-xs text-muted-foreground">Data unavailable.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Opportunity and social mobility */}
+          <Card id="social-mobility" className={`border-border ${US_LS_SECTION_ANCHOR_CLASS}`}>
+            <CardHeader className="space-y-1 pb-2">
+              <CardTitle className="text-base">Opportunity and social mobility</CardTitle>
+              <p className="text-xs text-muted-foreground">{RESEARCH_INDICATOR_NOTE}</p>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {absoluteMobilityPoints.length > 0 ? (
+                <>
+                  <p className="mb-3 text-xs text-muted-foreground">Birth cohort on the horizontal axis.</p>
+                  <TimelineChart
+                    data={absoluteMobilityPoints}
+                    valueKey="value"
+                    label={ABSOLUTE_MOBILITY_CHART_LABEL}
+                    unit={ABSOLUTE_MOBILITY_Y_AXIS_LABEL}
+                    seriesColor={SIGNAL_COUNTRY.us}
+                    exportSourceFooter={shortSourceFooter(
+                      `Source: ${socialMobilityMeta?.source ?? "Opportunity Insights (Chetty et al. 2017)"}`,
+                      "research estimate; absolute mobility by birth cohort"
+                    )}
+                    exportFileStem="us-living-standards-absolute-mobility-birth-cohort"
+                    timeRange={absoluteMobilityTimeRange ?? studyWindow}
+                    {...standardChartProps}
+                  />
+                  <ChartDirectionCue
+                    meta={US_LS_CHART_DIRECTION.absoluteMobility}
+                    points={absoluteMobilityPoints}
                     className="mt-2"
                   />
                 </>
@@ -1393,6 +1473,7 @@ export function UsLivingStandardsStudy() {
               "It does not measure subjective well-being or the full distribution of income and wealth.",
               "It does not prove that a specific policy caused a given affordability shift.",
               "Life expectancy, fertility, and marriage age are demographic context — not direct affordability measures.",
+              "Absolute mobility is a published research estimate (Opportunity Insights); it complements affordability charts but is not a live administrative statistic.",
               "Health insurance premiums and long-run childcare costs are omitted where reliable national series are unavailable.",
             ],
           },
@@ -1403,13 +1484,13 @@ export function UsLivingStandardsStudy() {
 
       <SourceInfo
         items={sourceItems}
-        note="Primary macro series from FRED; health spending and life expectancy from World Bank WDI; public-university tuition, rent, marriage age, and appliances from reference anchors with interpolation. Household goods and new-vehicle prices are CPI-anchored estimates (see Sources & units)."
+        note="Primary macro series from FRED; health spending and life expectancy from World Bank WDI; public-university tuition, rent, marriage age, and appliances from reference anchors with interpolation. Absolute mobility from Opportunity Insights (research estimate). Household goods and new-vehicle prices are CPI-anchored estimates (see Sources & units)."
       />
 
       <InSimpleTerms>
         <p>
           This page compares several ways to ask whether everyday economic life became easier or harder to afford over
-          time — not with a single verdict, but with separate charts for income, housing, higher education, healthcare,
+          time — not with a single verdict, but with separate charts for income, housing, higher education, opportunity and social mobility, healthcare,
           transportation, family formation, productivity, and hours of work.
         </p>
         <p>

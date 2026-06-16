@@ -1023,7 +1023,7 @@ export const STUDIES: StudyMeta[] = [
     description:
       "Compare income, housing, public university affordability, productivity, and hours-of-work affordability in the United States using inflation-adjusted and relative measures — exploratory, not ideological.",
     socialDescription:
-      "Explore US living standards through real median income, home prices, public university tuition, healthcare spending, gasoline, family formation, productivity vs compensation, and hours of work for rent, university tuition, vehicles, and everyday goods.",
+      "Explore US living standards through real median income, home prices, public university tuition, healthcare spending, gasoline, family formation, productivity vs compensation, absolute mobility by birth cohort, and hours of work for rent, university tuition, vehicles, and everyday goods.",
     status: "active",
     groupPlacements: [
       { group: "welfare", order: 3 },
@@ -1047,6 +1047,9 @@ export const STUDIES: StudyMeta[] = [
       "gasoline",
       "homeownership",
       "fertility",
+      "social mobility",
+      "absolute mobility",
+      "intergenerational mobility",
     ],
     concepts: [
       "nominal_vs_real",
@@ -1067,6 +1070,7 @@ export const STUDIES: StudyMeta[] = [
       "Reference anchors for public-university tuition, rent, marriage age, and appliances are interpolated between published years and should be read as contextual trends.",
       "Health spending per capita (WDI) begins around 2000; life expectancy and fertility provide demographic context alongside affordability charts.",
       "Productivity and compensation indexes are reindexed for comparison; the gap is not a direct dollar measure of lost pay.",
+      "Absolute mobility by birth cohort (Opportunity Insights) fell from roughly 90% for the 1940 cohort to about 50% for the 1980s cohorts — a research estimate, not a live administrative series.",
     ],
   },
 ];

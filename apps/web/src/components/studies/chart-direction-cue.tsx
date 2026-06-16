@@ -23,6 +23,10 @@ export const US_LS_CHART_DIRECTION = {
     directionMeaning: "lower_better",
     directionPill: "↓ Lower = more affordable",
   },
+  absoluteMobility: {
+    directionMeaning: "higher_better",
+    directionPill: "↑ Higher = greater absolute mobility",
+  },
 } as const satisfies Record<string, ChartDirectionMeta>;
 
 /** Interpretive questions for charts without a single directional reading. */

@@ -7,6 +7,7 @@ export const US_LIVING_STANDARDS_SECTIONS = [
   { id: "income", label: "Income" },
   { id: "housing", label: "Housing" },
   { id: "higher-education", label: "Higher education" },
+  { id: "social-mobility", label: "Opportunity" },
   { id: "healthcare", label: "Healthcare" },
   { id: "transportation", label: "Transportation" },
   { id: "family-formation", label: "Family" },

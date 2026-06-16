@@ -110,6 +110,18 @@ def _default_reference() -> dict[str, Any]:
         "television_usd": [],
         "median_age_first_marriage_male": [],
         "median_age_first_marriage_female": [],
+        "absolute_mobility_by_birth_cohort_pct": [],
+        "social_mobility": {
+            "methodology_note": (
+                "Research-based estimate of absolute income mobility by birth cohort. "
+                "Values indicate the estimated share of children who surpassed their parents' income at a comparable age."
+            ),
+            "source": "Opportunity Insights — The Fading American Dream (Science 2017)",
+            "source_url": "https://opportunityinsights.org/paper/the-fading-american-dream/",
+            "future_indicators_note": (
+                "Potential future additions: relative mobility, education and mobility, geographic mobility."
+            ),
+        },
     }
 
 
@@ -349,6 +361,14 @@ def _build_new_vehicle_price_series(
     )
 
 
+def _anchors_to_annual_points(anchors: list[dict[str, float | int]]) -> list[dict[str, float | str]]:
+    """Convert reference anchors to annual points without API window clipping."""
+    if not anchors:
+        return []
+    sorted_anchors = sorted({int(a["year"]): float(a["value"]) for a in anchors}.items())
+    return [{"date": f"{y}-01-01", "value": round(v, 2)} for y, v in sorted_anchors]
+
+
 def _interpolate_annual(anchors: list[dict[str, float | int]], start_year: int, end_year: int) -> list[dict[str, float | str]]:
     if not anchors:
         return []
@@ -565,6 +585,7 @@ def _empty_bundle_skeleton(start_year: int, end_year: int) -> dict[str, Any]:
             "childcare_note": phase2_cfg.get("childcare_note", ""),
             "new_vehicle": phase2_cfg.get("new_vehicle", {}),
         },
+        "social_mobility": dict(reference.get("social_mobility", {})),
         "country_iso3": "USA",
         "partial": True,
     }
@@ -580,6 +601,7 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
     household_goods_cfg = reference.get("household_goods", {})
     hours_of_work_cfg = reference.get("hours_of_work", {})
     phase2_cfg = reference.get("phase2", {})
+    social_mobility_cfg = reference.get("social_mobility", {})
     household_goods_meta: dict[str, Any] = {
         "methodology_note": household_goods_cfg.get("methodology_note", ""),
         "wage_fred_series": household_goods_cfg.get("wage_fred_series", "AHETPI"),
@@ -606,6 +628,11 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
         "median_age_first_marriage_female",
     ):
         series[ref_key] = _interpolate_annual(reference.get(ref_key, []), start_year, end_year)
+
+    absolute_mobility_points = _anchors_to_annual_points(
+        reference.get("absolute_mobility_by_birth_cohort_pct", [])
+    )
+    series["absolute_mobility_by_birth_cohort_pct"] = absolute_mobility_points
 
     cpi_requests = _collect_household_goods_cpi_requests(reference, start_year)
     cpi_cache = _prefetch_household_goods_cpi_parallel(cpi_requests, end_year, series_warnings)
@@ -703,6 +730,17 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
     )
 
     vehicle_hours_years = [int(str(p["date"])[:4]) for p in series.get("hours_for_new_vehicle", [])]
+    mobility_years = [int(str(p["date"])[:4]) for p in absolute_mobility_points]
+    social_mobility_meta: dict[str, Any] = {
+        "methodology_note": social_mobility_cfg.get("methodology_note", ""),
+        "source": social_mobility_cfg.get("source", ""),
+        "source_url": social_mobility_cfg.get("source_url", ""),
+        "data_table_url": social_mobility_cfg.get("data_table_url", ""),
+        "future_indicators_note": social_mobility_cfg.get("future_indicators_note", ""),
+        "start_year": min(mobility_years) if mobility_years else None,
+        "end_year": max(mobility_years) if mobility_years else None,
+    }
+
     phase2_meta: dict[str, Any] = {
         "health_insurance_note": phase2_cfg.get("health_insurance_note", ""),
         "childcare_note": phase2_cfg.get("childcare_note", ""),
@@ -729,6 +767,7 @@ def fetch_us_living_standards_bundle(start_year: int, end_year: int) -> dict[str
         "household_goods": household_goods_meta,
         "hours_of_work": hours_of_work_meta,
         "phase2": phase2_meta,
+        "social_mobility": social_mobility_meta,
         "country_iso3": "USA",
     }
     if series_warnings:
