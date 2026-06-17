@@ -30,6 +30,9 @@ env/
 apps/web/.env.local
 apps/api/.env
 
+# US Living Standards FRED runtime disk cache (committed snapshot is separate)
+apps/api/data/us_living_standards_fred_series_cache.json
+
 # IDE
 .idea
 .vscode

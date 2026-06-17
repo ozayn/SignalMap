@@ -40,6 +40,10 @@ import {
 } from "@/lib/chart-study-typography";
 import { localizeChartNumericDisplayString, localizeChartNumericDisplayStringSafe } from "@/lib/chart-numerals-fa";
 import { formatChartAxisNumber } from "@/lib/format-compact-decimal";
+import {
+  getOrInitEcharts,
+  useEchartsContainerLayout,
+} from "@/lib/use-echarts-container-layout";
 
 export type FollowerGrowthPoint = { date: string; value: number };
 
@@ -84,6 +88,8 @@ export function FollowerGrowthChart({
 }: FollowerGrowthChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
+  const chartLayoutId = exportFileStem?.trim() || "follower-growth";
+  const { layoutRevision, resizeChart } = useEchartsContainerLayout(chartRef, chartLayoutId);
   const [clipStart, setClipStart] = useState("");
   const [clipEnd, setClipEnd] = useState("");
   const [exportModalOpen, setExportModalOpen] = useState(false);
@@ -209,10 +215,9 @@ export function FollowerGrowthChart({
 
     if (!chartRef.current || !data.length || !chartRange) return;
 
-    let chart = echarts.getInstanceByDom(chartRef.current);
-    if (!chart) {
-      chart = echarts.init(chartRef.current);
-    }
+    const el = chartRef.current;
+    const chart = getOrInitEcharts(el, chartLayoutId, chartInstanceRef.current);
+    if (!chart) return;
     chartInstanceRef.current = chart;
 
     const [t0, t1] = chartRange;
@@ -330,18 +335,9 @@ export function FollowerGrowthChart({
     };
 
     chart.setOption(option, { notMerge: true });
-
-    const handleResize = () => {
-      try {
-        chart.resize();
-      } catch {
-        // Chart may be disposed
-      }
-    };
-    window.addEventListener("resize", handleResize);
+    resizeChart(chart);
 
     return () => {
-      window.removeEventListener("resize", handleResize);
       try {
         chart.dispose();
       } catch {
@@ -350,6 +346,7 @@ export function FollowerGrowthChart({
       chartInstanceRef.current = null;
     };
   }, [
+    chartLayoutId,
     data,
     metricLabel,
     showLinear,
@@ -361,6 +358,8 @@ export function FollowerGrowthChart({
     chartRange,
     showChartControls,
     chartLocale,
+    layoutRevision,
+    resizeChart,
   ]);
 
   if (!data.length) return null;
@@ -415,7 +414,7 @@ export function FollowerGrowthChart({
       <p className={STUDY_CHART_TITLE_WRAP_CLASS} dir={chartLocaleResolved === "fa" ? "rtl" : "ltr"}>
         {titleText}
       </p>
-      <div ref={chartRef} className="h-72 w-full min-w-0" />
+      <div ref={chartRef} className="h-72 w-full min-w-[2px]" />
       {sourceText ? (
         <ChartSourceFooter line={sourceText} locale={chartLocaleResolved} />
       ) : null}

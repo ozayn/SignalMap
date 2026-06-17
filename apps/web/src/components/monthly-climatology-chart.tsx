@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as echarts from "echarts";
 import { cssHsl } from "@/lib/utils";
 import { CHART_LINE_SYMBOL_ITEM_OPACITY, CHART_LINE_SYMBOL_SIZE } from "@/lib/chart-series-markers";
 import { CHART_Y_AXIS_TICK_FONT_SIZE } from "@/lib/chart-axis-label";
 import { formatChartAxisNumber, formatChartTooltipNumber } from "@/lib/format-compact-decimal";
+import {
+  getOrInitEcharts,
+  useEchartsContainerLayout,
+} from "@/lib/use-echarts-container-layout";
 
 /** Short three-letter month names used on the categorical x-axis. */
 export const MONTH_LABELS_SHORT = [
@@ -78,15 +82,23 @@ export function MonthlyClimatologyChart({
   ariaLabel,
 }: MonthlyClimatologyChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
+  const chartInstanceRef = useRef<echarts.ECharts | null>(null);
+  const chartId = useMemo(
+    () => `monthly-climatology-${series.map((s) => s.key).join("-") || "empty"}`,
+    [series]
+  );
+  const { layoutRevision, resizeChart } = useEchartsContainerLayout(chartRef, chartId);
 
   useEffect(() => {
-    if (!chartRef.current || series.length === 0) return;
+    const el = chartRef.current;
+    if (!el || series.length === 0) return;
+
+    const chart = getOrInitEcharts(el, chartId, chartInstanceRef.current);
+    if (!chart) return;
+    chartInstanceRef.current = chart;
 
     const mutedFg = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
     const borderColor = cssHsl("--border", "hsl(240, 5.9%, 90%)");
-
-    let chart = echarts.getInstanceByDom(chartRef.current);
-    if (!chart) chart = echarts.init(chartRef.current);
 
     const hasRightAxis = series.some((s) => s.yAxisIndex === 1);
 
@@ -221,34 +233,17 @@ export function MonthlyClimatologyChart({
     };
 
     chart.setOption(option, { notMerge: true });
-
-    const handleResize = () => {
-      try {
-        chart.resize();
-      } catch {
-        // chart may be disposed
-      }
-    };
-    window.addEventListener("resize", handleResize);
-
-    // ResizeObserver picks up container resize (e.g. grid layout reflow on viewport
-    // change). Falls back gracefully if the browser doesn't support it.
-    let observer: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== "undefined" && chartRef.current) {
-      observer = new ResizeObserver(handleResize);
-      observer.observe(chartRef.current);
-    }
+    resizeChart(chart);
 
     return () => {
-      window.removeEventListener("resize", handleResize);
-      observer?.disconnect();
       try {
         chart.dispose();
       } catch {
         // chart already disposed
       }
+      chartInstanceRef.current = null;
     };
-  }, [series, yAxisNames]);
+  }, [chartId, layoutRevision, resizeChart, series, yAxisNames]);
 
   return (
     <div

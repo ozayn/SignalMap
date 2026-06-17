@@ -16,6 +16,7 @@ COPY main.py run.py db.py jobs.py cron_daily_update.py cron_oil_economy_brent_da
 COPY connectors/ ./connectors/
 COPY src/ ./src/
 COPY data/us_living_standards_reference.json ./data/us_living_standards_reference.json
+COPY data/us_living_standards_fred_snapshot.json ./data/us_living_standards_fred_snapshot.json
 
 EXPOSE 8080
 

@@ -6,7 +6,7 @@ import csv
 import json
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -22,8 +22,9 @@ from signalmap.sources.world_bank_national_accounts import fetch_wdi_annual_indi
 _logger = logging.getLogger(__name__)
 
 STUDY_ID = "us-living-standards"
-FRED_GRAPH_TIMEOUT = 12.0
-FRED_API_TIMEOUT = 15.0
+FRED_GRAPH_TIMEOUT = 4.0
+FRED_API_TIMEOUT = 5.0
+FRED_PARALLEL_DEADLINE = 8.0
 FRED_MAX_WORKERS = 10
 
 FRED_OBSERVATIONS_URL = "https://api.stlouisfed.org/fred/series/observations"
@@ -183,7 +184,12 @@ def _fetch_fred_graph_csv_rows_timed(series_id: str, timeout: float = FRED_GRAPH
     return rows
 
 
-def _fetch_fred_api_rows(series_id: str, observation_start: str = "1940-01-01") -> list[tuple[int, float]]:
+def _fetch_fred_api_rows(
+    series_id: str,
+    observation_start: str = "1940-01-01",
+    *,
+    timeout: float = FRED_API_TIMEOUT,
+) -> list[tuple[int, float]]:
     api_key = (os.getenv("FRED_API_KEY") or "").strip()
     if not api_key:
         raise ValueError("FRED_API_KEY not configured")
@@ -193,7 +199,7 @@ def _fetch_fred_api_rows(series_id: str, observation_start: str = "1940-01-01") 
         "file_type": "json",
         "observation_start": observation_start,
     }
-    with httpx.Client(timeout=FRED_API_TIMEOUT, headers={"User-Agent": FRED_USER_AGENT}) as client:
+    with httpx.Client(timeout=timeout, headers={"User-Agent": FRED_USER_AGENT}) as client:
         r = client.get(FRED_OBSERVATIONS_URL, params=params)
         r.raise_for_status()
         data = r.json()
@@ -213,16 +219,24 @@ def _fetch_fred_api_rows(series_id: str, observation_start: str = "1940-01-01") 
 
 
 def _fetch_fred_raw_rows(series_id: str) -> tuple[list[tuple[int, float]] | None, str | None]:
-    try:
-        return _fetch_fred_graph_csv_rows_timed(series_id), None
-    except Exception as graph_err:
-        api_key = (os.getenv("FRED_API_KEY") or "").strip()
-        if not api_key:
-            return None, f"FRED {series_id} graph failed ({graph_err}); FRED_API_KEY not configured"
+    from signalmap.sources.us_living_standards_fred_cache import resolve_fred_rows
+
+    def _live_fetch() -> list[tuple[int, float]]:
         try:
-            return _fetch_fred_api_rows(series_id), None
-        except Exception as api_err:
-            return None, f"FRED {series_id} unavailable (graph: {graph_err}; api: {api_err})"
+            return _fetch_fred_graph_csv_rows_timed(series_id, timeout=FRED_GRAPH_TIMEOUT)
+        except Exception as graph_err:
+            api_key = (os.getenv("FRED_API_KEY") or "").strip()
+            if not api_key:
+                raise ValueError(
+                    f"FRED {series_id} graph failed ({graph_err}); FRED_API_KEY not configured"
+                ) from graph_err
+            return _fetch_fred_api_rows(series_id, timeout=FRED_API_TIMEOUT)
+
+    return resolve_fred_rows(
+        series_id,
+        _live_fetch,
+        timeout_seconds=FRED_GRAPH_TIMEOUT,
+    )
 
 
 def _fetch_fred_annual_points_safe(
@@ -232,6 +246,26 @@ def _fetch_fred_annual_points_safe(
     if err or rows is None:
         return [], err
     return _fred_rows_to_points(rows, start_year, end_year, mode), None
+
+
+def _fred_deadline_fallback_rows(
+    series_id: str,
+    start_year: int,
+    end_year: int,
+    mode: str,
+) -> tuple[list[dict[str, float | str]], str | None]:
+    from signalmap.sources.us_living_standards_fred_cache import get_fred_rows_from_cache
+
+    cached, layer = get_fred_rows_from_cache(series_id)
+    if cached:
+        _logger.warning(
+            "us_living_standards fred deadline fallback study=%s series=%s layer=%s",
+            STUDY_ID,
+            series_id,
+            layer,
+        )
+        return _fred_rows_to_points(cached, start_year, end_year, mode), None
+    return [], f"FRED {series_id} timed out ({FRED_PARALLEL_DEADLINE}s deadline, no cache)"
 
 
 def _fetch_fred_series_parallel(
@@ -247,15 +281,24 @@ def _fetch_fred_series_parallel(
         return key, _fred_rows_to_points(rows, start_year, end_year, mode), None
 
     with ThreadPoolExecutor(max_workers=FRED_MAX_WORKERS) as pool:
-        futures = [
-            pool.submit(_worker, key, series_id, mode)
+        future_to_meta = {
+            pool.submit(_worker, key, series_id, mode): (key, series_id, mode)
             for key, (series_id, mode) in FRED_SERIES.items()
-        ]
-        for fut in as_completed(futures):
+        }
+        done, pending = wait(future_to_meta.keys(), timeout=FRED_PARALLEL_DEADLINE)
+        for fut in done:
             key, points, err = fut.result()
             series[key] = points
             if err:
                 series_warnings[key] = err
+        for fut in pending:
+            key, series_id, mode = future_to_meta[fut]
+            points, err = _fred_deadline_fallback_rows(series_id, start_year, end_year, mode)
+            series[key] = points
+            if err:
+                _log_series_warning("fred", key, "FRED", err)
+                series_warnings[key] = err
+            fut.cancel()
     return series
 
 
@@ -291,15 +334,24 @@ def _prefetch_household_goods_cpi_parallel(
         return series_id, points, err
 
     with ThreadPoolExecutor(max_workers=FRED_MAX_WORKERS) as pool:
-        futures = {
-            pool.submit(_worker, series_id, cpi_start): series_id
+        future_to_meta = {
+            pool.submit(_worker, series_id, cpi_start): (series_id, cpi_start)
             for series_id, cpi_start in cpi_requests.items()
         }
-        for fut in as_completed(futures):
+        done, pending = wait(future_to_meta.keys(), timeout=FRED_PARALLEL_DEADLINE)
+        for fut in done:
             series_id, points, err = fut.result()
             cpi_cache[series_id] = points
             if err:
                 series_warnings[f"cpi_{series_id}"] = err
+        for fut in pending:
+            series_id, cpi_start = future_to_meta[fut]
+            points, err = _fred_deadline_fallback_rows(series_id, cpi_start, end_year, "monthly_mean")
+            cpi_cache[series_id] = points
+            if err:
+                _log_series_warning("household_goods", series_id, "FRED", err)
+                series_warnings[f"cpi_{series_id}"] = err
+            fut.cancel()
     return cpi_cache
 
 

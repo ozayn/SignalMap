@@ -16,6 +16,11 @@ import {
   type ExportChartSettings,
 } from "@/lib/chart-export-presentation";
 import { cssHsl } from "@/lib/utils";
+import {
+  CHART_MIN_LAYOUT_PX,
+  getOrInitEcharts,
+  useEchartsContainerLayout,
+} from "@/lib/use-echarts-container-layout";
 
 export type NetworkNode = { id: string };
 export type NetworkEdge = { source: string; target: string; value: number };
@@ -131,9 +136,14 @@ export function NetworkGraph({
 }: NetworkGraphProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
+  const chartLayoutId = exportFileStem ?? DEFAULT_EXPORT_STEM;
+  const { layoutRevision, resizeChart: scheduleChartResize } = useEchartsContainerLayout(
+    chartRef,
+    chartLayoutId
+  );
   const exportFilenameCtx = useStudyChartExportFilenameContext();
   const { resolvedTheme } = useTheme();
-  const [containerSize, setContainerSize] = useState({ width: 800, height: 720 });
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportModalDefaults, setExportModalDefaults] = useState<{
     title: string;
@@ -142,15 +152,18 @@ export function NetworkGraph({
   const exporterBorderColor = resolvedTheme === "dark" ? "#fff" : "#374151";
 
   useEffect(() => {
-    if (!chartRef.current) return;
     const el = chartRef.current;
+    if (!el) return;
     const observer = new ResizeObserver(() => {
       const rect = el.getBoundingClientRect();
-      setContainerSize({ width: rect.width || 800, height: rect.height || 720 });
+      if (rect.width < CHART_MIN_LAYOUT_PX || rect.height < CHART_MIN_LAYOUT_PX) return;
+      setContainerSize({ width: rect.width, height: rect.height });
     });
     observer.observe(el);
     const rect = el.getBoundingClientRect();
-    setContainerSize({ width: rect.width || 800, height: rect.height || 720 });
+    if (rect.width >= CHART_MIN_LAYOUT_PX && rect.height >= CHART_MIN_LAYOUT_PX) {
+      setContainerSize({ width: rect.width, height: rect.height });
+    }
     return () => observer.disconnect();
   }, []);
 
@@ -236,9 +249,11 @@ export function NetworkGraph({
   );
 
   useEffect(() => {
-    if (!chartRef.current || nodes.length === 0) return;
+    const el = chartRef.current;
+    if (!el || nodes.length === 0 || !containerSize) return;
 
-    const chart = echarts.init(chartRef.current);
+    const chart = getOrInitEcharts(el, chartLayoutId, chartInstanceRef.current);
+    if (!chart) return;
     chartInstanceRef.current = chart;
     const { width, height } = containerSize;
     const isMobile = width < 768;
@@ -445,6 +460,7 @@ export function NetworkGraph({
     };
 
     chart.setOption(option, { notMerge: true });
+    scheduleChartResize(chart);
 
     if (onNodeClick) {
       chart.on("click", (params) => {
@@ -455,24 +471,24 @@ export function NetworkGraph({
       });
     }
 
-    const resizeChart = () => {
-      if (chartRef.current) {
-        const rect = chartRef.current.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          chart.resize({ width: rect.width, height: rect.height });
-        }
-      }
-    };
-    resizeChart();
-    window.addEventListener("resize", resizeChart);
-
     return () => {
       chartInstanceRef.current = null;
       chart.off("click");
-      window.removeEventListener("resize", resizeChart);
       chart.dispose();
     };
-  }, [nodes, edges, containerSize, onNodeClick, nodeColorOrder, nodeOrder, exporterBorderColor, isAllDataMode]);
+  }, [
+    chartLayoutId,
+    containerSize,
+    edges,
+    exporterBorderColor,
+    isAllDataMode,
+    layoutRevision,
+    nodeColorOrder,
+    nodeOrder,
+    nodes,
+    onNodeClick,
+    scheduleChartResize,
+  ]);
 
   if (nodes.length === 0) return null;
 

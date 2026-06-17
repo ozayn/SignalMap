@@ -16,6 +16,11 @@ import {
   type ExportChartSettings,
 } from "@/lib/chart-export-presentation";
 import { cssHsl } from "@/lib/utils";
+import {
+  getOrInitEcharts,
+  readChartContainerSize,
+  useEchartsContainerLayout,
+} from "@/lib/use-echarts-container-layout";
 
 export type SankeyEdge = { source: string; target: string; value: number };
 
@@ -73,6 +78,8 @@ export function OilTradeSankey({
 }: OilTradeSankeyProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
+  const chartLayoutId = exportFileStem ?? DEFAULT_SANKEY_EXPORT_STEM;
+  const { layoutRevision, resizeChart } = useEchartsContainerLayout(chartRef, chartLayoutId);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportModalDefaults, setExportModalDefaults] = useState<{
     title: string;
@@ -161,12 +168,11 @@ export function OilTradeSankey({
     const el = chartRef.current;
     if (!el || edges.length === 0) return;
 
-    const rect = el.getBoundingClientRect();
-    const w = rect.width > 0 ? rect.width : 800;
-    const h = rect.height > 0 ? rect.height : 520;
+    const size = readChartContainerSize(el);
+    if (!size) return;
 
-    let chart = echarts.getInstanceByDom(el);
-    if (!chart) chart = echarts.init(el);
+    const chart = getOrInitEcharts(el, chartLayoutId, chartInstanceRef.current);
+    if (!chart) return;
     chartInstanceRef.current = chart;
 
     const validEdges = edges.filter((e) => Number.isFinite(e.value) && e.value > 0);
@@ -306,22 +312,25 @@ export function OilTradeSankey({
       ],
     };
 
-    chart.resize({ width: w, height: h });
     chart.setOption(option, { notMerge: true });
+    resizeChart(chart);
 
-    const resize = () => {
-      if (el) {
-        const r = el.getBoundingClientRect();
-        if (r.width > 0 && r.height > 0) chart.resize({ width: r.width, height: r.height });
-      }
-    };
-    window.addEventListener("resize", resize);
     return () => {
-      window.removeEventListener("resize", resize);
       chartInstanceRef.current = null;
       chart.dispose();
     };
-  }, [edges, year, exporterOrder, importerOrder, nodeColorOrder, labelColor, isAllDataMode]);
+  }, [
+    chartLayoutId,
+    edges,
+    year,
+    exporterOrder,
+    importerOrder,
+    nodeColorOrder,
+    labelColor,
+    isAllDataMode,
+    layoutRevision,
+    resizeChart,
+  ]);
 
   if (edges.length === 0) return null;
 

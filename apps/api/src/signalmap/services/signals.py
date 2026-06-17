@@ -1514,6 +1514,35 @@ US_LIVING_STANDARDS_SOURCE = {
 }
 
 
+def _schedule_us_living_standards_bundle_refresh(start_year: int, end_year: int, cache_key: str) -> None:
+    import threading
+
+    def _run() -> None:
+        try:
+            from signalmap.sources.us_living_standards import fetch_us_living_standards_bundle
+
+            bundle = fetch_us_living_standards_bundle(start_year, end_year)
+            result = {
+                **bundle,
+                "source": US_LIVING_STANDARDS_SOURCE,
+                "resolution": "annual",
+            }
+            cache_set(cache_key, result, CACHE_TTL)
+            logger.info(
+                "us_living_standards_bundle background refresh ok start_year=%d end_year=%d",
+                start_year,
+                end_year,
+            )
+        except Exception:
+            logger.exception(
+                "us_living_standards_bundle background refresh failed start_year=%d end_year=%d",
+                start_year,
+                end_year,
+            )
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def get_us_living_standards_bundle(start: str, end: str) -> dict:
     """US living standards bundle: income, housing, tuition, productivity, hours-of-work proxies."""
     from signalmap.sources.us_living_standards import (
@@ -1523,11 +1552,19 @@ def get_us_living_standards_bundle(start: str, end: str) -> dict:
 
     start_year = int(start[:4])
     end_year = int(end[:4])
-    ck = f"signal:us_living_standards_bundle:v9:{start_year}:{end_year}"
+    ck = f"signal:us_living_standards_bundle:v10:{start_year}:{end_year}"
     cached = cache_get(ck)
     if cached is not None:
         return cached
     stale_cached = cache_get_stale(ck)
+    if stale_cached is not None:
+        _schedule_us_living_standards_bundle_refresh(start_year, end_year, ck)
+        logger.info(
+            "us_living_standards_bundle stale cache served start_year=%d end_year=%d",
+            start_year,
+            end_year,
+        )
+        return stale_cached
 
     try:
         bundle = fetch_us_living_standards_bundle(start_year, end_year)

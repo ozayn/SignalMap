@@ -1707,4 +1707,14 @@ def update_macro_signals() -> dict:
     except Exception as e:
         out["wdi_signal_cache_invalidated"] = {"error": str(e)}
 
+    try:
+        from signalmap.sources.us_living_standards_fred_cache import prefetch_us_living_standards_fred_series
+
+        out["us_living_standards_fred"] = prefetch_us_living_standards_fred_series(
+            timeout_seconds=15.0,
+            write_snapshot=True,
+        )
+    except Exception as e:
+        out["us_living_standards_fred"] = {"error": str(e)}
+
     return out

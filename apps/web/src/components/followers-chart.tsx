@@ -6,6 +6,10 @@ import { cssHsl } from "@/lib/utils";
 import { CHART_LINE_SYMBOL_ITEM_OPACITY, CHART_LINE_SYMBOL_SIZE } from "@/lib/chart-series-markers";
 import { CHART_Y_AXIS_TICK_FONT_SIZE } from "@/lib/chart-axis-label";
 import { formatChartAxisNumber, formatChartTooltipNumber } from "@/lib/format-compact-decimal";
+import {
+  getOrInitEcharts,
+  useEchartsContainerLayout,
+} from "@/lib/use-echarts-container-layout";
 
 export type FollowersPoint = {
   date: string;
@@ -30,18 +34,17 @@ function getXLabelRotate() {
 
 export function FollowersChart({ data, username, metricLabel = "Followers" }: FollowersChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
+  const chartInstanceRef = useRef<echarts.ECharts | null>(null);
+  const chartId = `followers-${username}`;
+  const { layoutRevision, resizeChart } = useEchartsContainerLayout(chartRef, chartId);
 
   useEffect(() => {
-    const color = cssHsl("--chart-primary", "hsl(238, 84%, 67%)");
-    const mutedFg = cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)");
-    const borderColor = cssHsl("--border", "hsl(240, 5.9%, 90%)");
+    const el = chartRef.current;
+    if (!el || !data.length) return;
 
-    if (!chartRef.current || !data.length) return;
-
-    let chart = echarts.getInstanceByDom(chartRef.current);
-    if (!chart) {
-      chart = echarts.init(chartRef.current);
-    }
+    const chart = getOrInitEcharts(el, chartId, chartInstanceRef.current);
+    if (!chart) return;
+    chartInstanceRef.current = chart;
 
     const seriesData = data.map((d) => [d.date, d.followers != null ? d.followers : null]);
 
@@ -75,9 +78,9 @@ export function FollowersChart({ data, username, metricLabel = "Followers" }: Fo
           type: "time",
           boundaryGap: [0, 0],
           splitNumber: 8,
-          axisLine: { lineStyle: { color: borderColor } },
+          axisLine: { lineStyle: { color: cssHsl("--border", "hsl(240, 5.9%, 90%)") } },
           axisLabel: {
-            color: mutedFg,
+            color: cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)"),
             fontSize: CHART_Y_AXIS_TICK_FONT_SIZE,
             rotate,
             formatter: (value: number) => String(new Date(value).getFullYear()),
@@ -86,9 +89,9 @@ export function FollowersChart({ data, username, metricLabel = "Followers" }: Fo
         yAxis: {
           type: "value",
           axisLine: { show: false },
-          splitLine: { lineStyle: { color: borderColor, type: "dashed" } },
+          splitLine: { lineStyle: { color: cssHsl("--border", "hsl(240, 5.9%, 90%)"), type: "dashed" } },
           axisLabel: {
-            color: mutedFg,
+            color: cssHsl("--muted-foreground", "hsl(240, 3.8%, 46.1%)"),
             fontSize: CHART_Y_AXIS_TICK_FONT_SIZE,
             formatter: (v: number) => formatFollowers(v),
           },
@@ -103,39 +106,32 @@ export function FollowersChart({ data, username, metricLabel = "Followers" }: Fo
             connectNulls: false,
             lineStyle:
               data.length >= 3
-                ? { color, width: 1, opacity: 0.35 }
+                ? { color: cssHsl("--chart-primary", "hsl(238, 84%, 67%)"), width: 1, opacity: 0.35 }
                 : { width: 0 },
-            itemStyle: { color, opacity: CHART_LINE_SYMBOL_ITEM_OPACITY },
+            itemStyle: {
+              color: cssHsl("--chart-primary", "hsl(238, 84%, 67%)"),
+              opacity: CHART_LINE_SYMBOL_ITEM_OPACITY,
+            },
           },
         ],
       };
       chart.setOption(option);
+      resizeChart(chart);
     };
 
-    const rafId = requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
       if (chartRef.current) applyOption();
     });
 
-    const handleResize = () => {
-      try {
-        applyOption();
-        chart.resize();
-      } catch {
-        // Chart may be disposed
-      }
-    };
-    window.addEventListener("resize", handleResize);
-
     return () => {
-      cancelAnimationFrame(rafId);
-      window.removeEventListener("resize", handleResize);
       try {
         chart.dispose();
       } catch {
         // Ignore
       }
+      chartInstanceRef.current = null;
     };
-  }, [data, username, metricLabel]);
+  }, [chartId, data, layoutRevision, metricLabel, resizeChart, username]);
 
   if (!data.length) return null;
 
@@ -166,7 +162,7 @@ export function FollowersChart({ data, username, metricLabel = "Followers" }: Fo
           </div>
         </details>
       )}
-      <div ref={chartRef} className="h-72 w-full min-w-0" />
+      <div ref={chartRef} className="h-72 w-full min-w-[2px]" />
     </div>
   );
 }

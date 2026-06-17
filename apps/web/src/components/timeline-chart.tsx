@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } from "react";
+import { useRef, useEffect, useState, useMemo, useCallback } from "react";
 import * as echarts from "echarts";
 import { cssHsl, withAlphaHsl } from "@/lib/utils";
 import {
@@ -86,6 +86,10 @@ import {
   TIMELINE_CHART_DEFAULT_HEIGHT_CLASS,
 } from "@/lib/chart-study-typography";
 import { useChartViewportLayout } from "@/lib/use-chart-viewport-layout";
+import {
+  getOrInitEcharts,
+  useEchartsContainerLayout,
+} from "@/lib/use-echarts-container-layout";
 import { usePathname, useSearchParams } from "next/navigation";
 
 const MULTI_SERIES_FALLBACK_LEGEND_ICONS: Array<"circle" | "diamond" | "triangle" | "rect"> = [
@@ -1045,8 +1049,6 @@ export function TimelineChart({
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  /** Bumps when the chart container gains usable layout size (avoids echarts.init at 0×0). */
-  const [chartLayoutRevision, setChartLayoutRevision] = useState(0);
   const [xLabelRotate, setXLabelRotate] = useState(0);
   const [clipStart, setClipStart] = useState("");
   const [clipEnd, setClipEnd] = useState("");
@@ -1099,6 +1101,11 @@ export function TimelineChart({
     const raw = shareChartId?.trim() || exportFileStem?.trim() || label.trim() || "chart";
     return slugifyChartFilename(raw) || "chart";
   }, [shareChartId, exportFileStem, label]);
+
+  const { layoutRevision: chartLayoutRevision, resizeChart } = useEchartsContainerLayout(
+    chartRef,
+    resolvedShareChartId
+  );
 
   /** Study PNG export: filename range segment and shared toolbar always use calendar years (data may be daily). */
   const studyExportRangeGranularity: ChartRangeGranularity = "year";
@@ -1502,57 +1509,6 @@ export function TimelineChart({
       window.removeEventListener("orientationchange", updateRotate);
       window.visualViewport?.removeEventListener("resize", updateRotate);
       clearTimeout(deb);
-    };
-  }, []);
-
-  /** One ResizeObserver on the plot box: bump layout revision when size crosses thresholds, debounce `chart.resize()`. */
-  useLayoutEffect(() => {
-    const el = chartRef.current;
-    if (!el) return;
-    let prevOk = el.clientWidth >= 2 && el.clientHeight >= 2;
-    let prevW = el.clientWidth;
-    let prevH = el.clientHeight;
-    let debResize: ReturnType<typeof setTimeout> | undefined;
-    const scheduleChartResize = () => {
-      clearTimeout(debResize);
-      debResize = setTimeout(() => {
-        const chart = chartInstanceRef.current;
-        const box = chartRef.current;
-        if (chart && box && box.clientWidth >= 2 && box.clientHeight >= 2) {
-          try {
-            chart.resize({ width: box.clientWidth, height: box.clientHeight });
-          } catch {
-            /* disposed */
-          }
-        }
-      }, 125);
-    };
-    const run = () => {
-      const w = el.clientWidth;
-      const h = el.clientHeight;
-      const ok = w >= 2 && h >= 2;
-      if (ok && !prevOk) setChartLayoutRevision((n) => n + 1);
-      if (ok && prevOk && (Math.abs(w - prevW) > 48 || Math.abs(h - prevH) > 48)) {
-        setChartLayoutRevision((n) => n + 1);
-      }
-      prevOk = ok;
-      prevW = w;
-      prevH = h;
-      scheduleChartResize();
-    };
-    const ro = new ResizeObserver(run);
-    ro.observe(el);
-    window.addEventListener("resize", scheduleChartResize);
-    window.addEventListener("orientationchange", scheduleChartResize);
-    window.visualViewport?.addEventListener("resize", scheduleChartResize);
-    run();
-    scheduleChartResize();
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", scheduleChartResize);
-      window.removeEventListener("orientationchange", scheduleChartResize);
-      window.visualViewport?.removeEventListener("resize", scheduleChartResize);
-      clearTimeout(debResize);
     };
   }, []);
 
@@ -4056,18 +4012,9 @@ export function TimelineChart({
 
     const dom = chartRef.current;
     if (!dom) return;
-    const cw = dom.clientWidth;
-    const ch = dom.clientHeight;
-    if (cw < 2 || ch < 2) return;
 
-    let chart = echarts.getInstanceByDom(dom);
-    if (!chart) {
-      chart = echarts.init(dom, undefined, {
-        renderer: "canvas",
-        width: cw,
-        height: ch,
-      });
-    }
+    const chart = getOrInitEcharts(dom, resolvedShareChartId, chartInstanceRef.current);
+    if (!chart) return;
     chartInstanceRef.current = chart;
     const handleLegendSelectChanged = (evt: unknown) => {
       const selected =
@@ -4100,14 +4047,7 @@ export function TimelineChart({
     const rafId = requestAnimationFrame(() => {
       if (!cancelled && chartRef.current) {
         chart.setOption(option, { notMerge: true });
-        try {
-          const box = chartRef.current;
-          if (box && box.clientWidth >= 2 && box.clientHeight >= 2) {
-            chart.resize({ width: box.clientWidth, height: box.clientHeight });
-          }
-        } catch {
-          // Chart may be disposed
-        }
+        resizeChart(chart);
       }
     });
 
@@ -4181,6 +4121,8 @@ export function TimelineChart({
     chartLayoutRevision,
     isCompact,
     isLandscapeCompact,
+    resolvedShareChartId,
+    resizeChart,
   ]);
 
   useEffect(() => {
