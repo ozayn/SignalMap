@@ -4307,21 +4307,14 @@ export function TimelineChart({
     />
   );
 
-  if (chartLocaleResolved === "fa") {
-    return (
-      <>
-        {exportModal}
-        <div className="min-w-0" dir="ltr" lang="en">
-          {inner}
-        </div>
-      </>
-    );
-  }
-
+  // Keep the chart container mounted when switching languages: ECharts owns
+  // its canvas and retains the DOM element used to initialize the instance.
   return (
     <>
       {exportModal}
-      {inner}
+      <div className="min-w-0" dir="ltr" lang={chartLocaleResolved === "fa" ? "en" : undefined}>
+        {inner}
+      </div>
     </>
   );
 }

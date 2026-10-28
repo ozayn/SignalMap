@@ -5965,8 +5965,7 @@ export default function StudyDetailPage() {
         lang={isFa ? "fa" : "en"}
         suppressHydrationWarning
       >
-      <header className="study-header">
-        <div className="flex items-center gap-4 flex-wrap">
+      <div className={faEligible ? "study-display-toolbar" : "flex items-center gap-4 flex-wrap"}>
           <Link
             href="/studies"
             className="text-xs text-muted-foreground hover:text-foreground inline-block"
@@ -5982,7 +5981,8 @@ export default function StudyDetailPage() {
               </span>
             </div>
           ) : null}
-        </div>
+      </div>
+      <header className="study-header">
         <p className="study-header-number">
           {L(isFa, `Study ${study.number}`, `مطالعه ${study.number}`)}
         </p>

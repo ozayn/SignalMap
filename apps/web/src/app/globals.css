@@ -1138,3 +1138,25 @@ a.learning-study-link {
   letter-spacing: 0.06em;
   color: var(--muted-foreground);
 }
+
+/* Keep study language/calendar controls available throughout a long study. */
+html:has(.study-display-toolbar),
+body:has(.study-display-toolbar),
+.main-content:has(.study-display-toolbar),
+.study-page-container:has(> .study-display-toolbar) {
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+.study-display-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 0;
+  background: hsl(var(--background));
+  border-bottom: 1px solid hsl(var(--border));
+}
