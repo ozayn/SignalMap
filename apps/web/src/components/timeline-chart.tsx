@@ -1953,10 +1953,11 @@ export function TimelineChart({
       useYearlyMultiSeries || useYearlyAxisForMultiSeries || useYearlyCategoryAxisForSparseSingleSeries
         ? "year_bucket"
         : "calendar";
+    const axisYearResolution = tooltipDateResolution === "year_bucket" ? "year_tick" : "calendar";
     const formatCategoryAxisYearTick = (value: string) => {
       if (axisYearMode !== "both")
-        return formatChartCategoryAxisYearLabel(value, axisYearMode, chartNumeralLocale, tooltipDateResolution);
-      const { gregorian, jalali } = getChartAxisYearDisplayParts(value, tooltipDateResolution);
+        return formatChartCategoryAxisYearLabel(value, axisYearMode, chartNumeralLocale, axisYearResolution);
+      const { gregorian, jalali } = getChartAxisYearDisplayParts(value, axisYearResolution);
       if (!gregorian) return value;
       return jalali
         ? `{gy|${localizeChartNumericDisplayString(gregorian, chartNumeralLocale)}}\n{jy|${localizeChartNumericDisplayString(jalali, chartNumeralLocale)}}`
@@ -3192,12 +3193,12 @@ export function TimelineChart({
                     ? axisYearMode === "both"
                       ? (() => {
                           const iso = new Date(value).toISOString().slice(0, 10);
-                          const { gregorian, jalali } = getChartAxisYearDisplayParts(iso, tooltipDateResolution);
+                          const { gregorian, jalali } = getChartAxisYearDisplayParts(iso, axisYearResolution);
                           return jalali
                             ? `{gy|${localizeChartNumericDisplayString(gregorian, chartNumeralLocale)}}\n{jy|${localizeChartNumericDisplayString(jalali, chartNumeralLocale)}}`
                             : localizeChartNumericDisplayString(gregorian, chartNumeralLocale);
                         })()
-                      : formatChartTimeAxisYearLabel(value, axisYearMode, chartNumeralLocale, tooltipDateResolution)
+                      : formatChartTimeAxisYearLabel(value, axisYearMode, chartNumeralLocale, axisYearResolution)
                     : new Date(value).toLocaleDateString(chartNumeralLocale === "fa" ? "fa-IR" : undefined, {
                         month: "short",
                         day: "numeric",

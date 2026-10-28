@@ -13539,8 +13539,8 @@ export default function StudyDetailPage() {
                   <p className="text-xs text-muted-foreground mb-3 max-w-3xl leading-relaxed">
                     {ipcFocusBandContextParagraph}
                     {" "}{L(isFa,
-                      "Annual observations remain Gregorian-year data. A Persian label such as 1391–1392 shows the overlapping calendar years; it is not a recalculated Solar Hijri annual total. Focus and outer year inputs use Gregorian years.",
-                      "داده‌های سالانه همچنان بر اساس سال میلادی‌اند. برچسب شمسی مانند ۱۳۹۱–۱۳۹۲، دو سال هم‌پوشان را نشان می‌دهد و به معنی محاسبهٔ دوبارهٔ داده برای سال شمسی نیست. ورودی‌های سالِ دوره و بازه بیرونی میلادی هستند."
+                      "Annual observations remain Gregorian-year data. Persian axis labels use the year containing July 1 (for example, 2013 → 1392), consistent with summer presidential transitions. This does not recalculate annual totals. Focus and outer year inputs use Gregorian years.",
+                      "داده‌های سالانه همچنان میلادی‌اند. محور شمسی سالِ شامل اول ژوئیه را نشان می‌دهد (مثلاً ۲۰۱۳ ← ۱۳۹۲)، هماهنگ با آغاز دوره‌های ریاست‌جمهوری در تابستان؛ مجموع سالانه دوباره محاسبه نمی‌شود. ورودی‌های سالِ دوره و بازه بیرونی میلادی هستند."
                     )}
                   </p>
                 ) : null}

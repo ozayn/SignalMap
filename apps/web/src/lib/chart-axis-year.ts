@@ -37,7 +37,7 @@ function isoUtcYmdToJalaliYearString(isoYmd: string): string {
 /** Category axis tick value (often YYYY-MM-DD) → Gregorian year + optional Solar Hijri year. */
 export function getChartAxisYearDisplayParts(
   value: string,
-  resolution: "calendar" | "year_bucket" = "calendar"
+  resolution: "calendar" | "year_bucket" | "year_tick" = "calendar"
 ): ChartAxisYearDisplayParts {
   const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
   const yPrefix = value.match(/^(\d{4})/);
@@ -47,9 +47,11 @@ export function getChartAxisYearDisplayParts(
   const isoForJalali = m ? `${m[1]}-${m[2]}-${m[3]}` : `${gyStr}-01-01`;
   // An annual Gregorian observation spans two Solar Hijri years. January 1
   // is a storage key, not the date of the historical event or observation.
+  // Axis ticks use the Persian year containing July 1 (the majority of the
+  // Gregorian year), consistent with summer presidential transitions.
   const jy = resolution === "year_bucket"
     ? `${isoUtcYmdToJalaliYearString(`${gyStr}-01-01`)}–${isoUtcYmdToJalaliYearString(`${gyStr}-12-31`)}`
-    : isoUtcYmdToJalaliYearString(isoForJalali);
+    : isoUtcYmdToJalaliYearString(resolution === "year_tick" ? `${gyStr}-07-01` : isoForJalali);
   return { gregorian: gyStr, jalali: jy || null };
 }
 
@@ -66,7 +68,7 @@ export function formatChartCategoryAxisYearLabel(
   value: string,
   mode: ChartAxisYearMode,
   chartLocale?: ChartAxisNumeralLocale,
-  resolution: "calendar" | "year_bucket" = "calendar"
+  resolution: "calendar" | "year_bucket" | "year_tick" = "calendar"
 ): string {
   const { gregorian, jalali } = getChartAxisYearDisplayParts(value, resolution);
   if (!gregorian) return value;
@@ -87,7 +89,7 @@ export function formatChartTimeAxisYearLabel(
   ms: number,
   mode: ChartAxisYearMode,
   chartLocale?: ChartAxisNumeralLocale,
-  resolution: "calendar" | "year_bucket" = "calendar"
+  resolution: "calendar" | "year_bucket" | "year_tick" = "calendar"
 ): string {
   const iso = new Date(ms).toISOString().slice(0, 10);
   return formatChartCategoryAxisYearLabel(iso, mode, chartLocale, resolution);
