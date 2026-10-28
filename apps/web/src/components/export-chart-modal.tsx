@@ -46,6 +46,7 @@ function clampFontSizes(s: ExportChartFontSizes): ExportChartFontSizes {
 const DEFAULT_FONT_PRESET: ExportChartFontPreset = "presentation";
 
 export type ExportChartModalProps = {
+  batch?: boolean;
   open: boolean;
   onClose: () => void;
   defaultTitle: string;
@@ -66,6 +67,7 @@ export function ExportChartModal({
   defaultFontSizes,
   onExport,
   titleDir = "ltr",
+  batch = false,
 }: ExportChartModalProps) {
   const [titleText, setTitleText] = useState(defaultTitle);
   const [fontSizes, setFontSizes] = useState<ExportChartFontSizes>(FONT_PRESET_PRESENTATION);
@@ -141,14 +143,14 @@ export function ExportChartModal({
         className="relative z-[81] w-full max-w-md rounded-lg border border-border bg-background px-4 pb-4 pt-3 shadow-lg"
       >
         <h2 id="export-chart-modal-title" className="text-base font-semibold leading-tight text-foreground">
-          Export chart
+          {batch ? "Export all charts" : "Export chart"}
         </h2>
         <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
-          These options apply to the downloaded PNG only.
+          {batch ? "Download a ZIP of all charts as currently shown. Each chart keeps its own title. These settings apply to every PNG." : "These options apply to the downloaded PNG only."}
         </p>
 
         <div className="mt-3 space-y-3">
-          <div>
+          <div hidden={batch}>
             <label className="block text-sm font-medium text-foreground" htmlFor="export-chart-title-input">
               Title
             </label>
@@ -300,7 +302,7 @@ export function ExportChartModal({
               Cancel
             </Button>
             <Button type="button" variant="default" size="sm" className="min-w-[7.5rem]" onClick={handleDownload}>
-              Download PNG
+              {batch ? "Download ZIP" : "Download PNG"}
             </Button>
           </div>
         </div>

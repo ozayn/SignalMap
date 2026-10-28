@@ -40,6 +40,9 @@ export type IpcPresidentPresetConfig = {
   outerStart?: number;
   outerEnd?: number;
   outerUseCurrentEnd?: boolean;
+  /** Exact term dates where verified; annual charts still use reporting-year buckets. */
+  termStartDate?: string;
+  termEndDate?: string;
   focusStart?: number;
   focusEnd?: number;
   focusUseCurrentEnd?: boolean;
@@ -90,6 +93,8 @@ export const IPC_PRESIDENT_PRESETS: Record<IpcPresidentPreset, IpcPresidentPrese
     labelFa: "احمدی‌نژاد",
   },
   rouhani: {
+    termStartDate: "2013-08-03",
+    termEndDate: "2021-08-03",
     focusStart: 2013,
     focusEnd: 2021,
     labelEn: "Rouhani",

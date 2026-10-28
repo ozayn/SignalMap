@@ -594,13 +594,19 @@ function buildEchartsAxisAutoClearPatch(opt: Record<string, unknown>): Record<st
 
 function triggerChartDownload(href: string, filenameStem: string): void {
   const a = document.createElement("a");
-  a.href = href;
+  // Large presentation PNGs can exceed browser data-URL download limits.
+  // Use the same Blob URL path as the study ZIP download.
+  const raw = atob(href.slice(href.indexOf(",") + 1));
+  const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+  a.href = url;
   a.download = `${slugifyChartFilename(filenameStem)}.png`;
   a.rel = "noopener";
   a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-async function exportPresentationPngFromLiveChart(
+export async function exportPresentationPngFromLiveChart(
   liveChart: echarts.ECharts,
   backgroundColor: string,
   opts: DownloadEchartsRasterOptions

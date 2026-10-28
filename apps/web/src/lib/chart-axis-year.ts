@@ -35,14 +35,21 @@ function isoUtcYmdToJalaliYearString(isoYmd: string): string {
 }
 
 /** Category axis tick value (often YYYY-MM-DD) → Gregorian year + optional Solar Hijri year. */
-export function getChartAxisYearDisplayParts(value: string): ChartAxisYearDisplayParts {
+export function getChartAxisYearDisplayParts(
+  value: string,
+  resolution: "calendar" | "year_bucket" = "calendar"
+): ChartAxisYearDisplayParts {
   const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
   const yPrefix = value.match(/^(\d{4})/);
   const gyStr = m ? m[1]! : yPrefix ? yPrefix[1]! : "";
   if (!gyStr) return { gregorian: "", jalali: null };
 
   const isoForJalali = m ? `${m[1]}-${m[2]}-${m[3]}` : `${gyStr}-01-01`;
-  const jy = isoUtcYmdToJalaliYearString(isoForJalali);
+  // An annual Gregorian observation spans two Solar Hijri years. January 1
+  // is a storage key, not the date of the historical event or observation.
+  const jy = resolution === "year_bucket"
+    ? `${isoUtcYmdToJalaliYearString(`${gyStr}-01-01`)}–${isoUtcYmdToJalaliYearString(`${gyStr}-12-31`)}`
+    : isoUtcYmdToJalaliYearString(isoForJalali);
   return { gregorian: gyStr, jalali: jy || null };
 }
 
@@ -58,9 +65,10 @@ export function formatChartYearBothInlineCompact(value: string, chartLocale?: Ch
 export function formatChartCategoryAxisYearLabel(
   value: string,
   mode: ChartAxisYearMode,
-  chartLocale?: ChartAxisNumeralLocale
+  chartLocale?: ChartAxisNumeralLocale,
+  resolution: "calendar" | "year_bucket" = "calendar"
 ): string {
-  const { gregorian, jalali } = getChartAxisYearDisplayParts(value);
+  const { gregorian, jalali } = getChartAxisYearDisplayParts(value, resolution);
   if (!gregorian) return value;
 
   let raw: string;
@@ -78,10 +86,11 @@ export function formatChartCategoryAxisYearLabel(
 export function formatChartTimeAxisYearLabel(
   ms: number,
   mode: ChartAxisYearMode,
-  chartLocale?: ChartAxisNumeralLocale
+  chartLocale?: ChartAxisNumeralLocale,
+  resolution: "calendar" | "year_bucket" = "calendar"
 ): string {
   const iso = new Date(ms).toISOString().slice(0, 10);
-  return formatChartCategoryAxisYearLabel(iso, mode, chartLocale);
+  return formatChartCategoryAxisYearLabel(iso, mode, chartLocale, resolution);
 }
 
 export type ChartTooltipYearLineColors = {
@@ -221,7 +230,7 @@ export function formatChartTooltipYearLine(
     iso = `${trimmed.slice(0, 4)}-01-01`;
   }
 
-  const { gregorian, jalali } = iso ? getChartAxisYearDisplayParts(iso) : { gregorian: "", jalali: null as string | null };
+  const { gregorian, jalali } = iso ? getChartAxisYearDisplayParts(iso, "year_bucket") : { gregorian: "", jalali: null as string | null };
 
   if (mode === "both" && gregorian && jalali) {
     const gc = colors?.gregorianColor ?? "inherit";
@@ -238,6 +247,6 @@ export function formatChartTooltipYearLine(
     return html;
   }
 
-  const body = iso ? formatChartCategoryAxisYearLabel(iso, mode, numeralLoc) : localizeChartNumericDisplayString(trimmed, numeralLoc);
+  const body = iso ? formatChartCategoryAxisYearLabel(iso, mode, numeralLoc, "year_bucket") : localizeChartNumericDisplayString(trimmed, numeralLoc);
   return localizeChartNumericDisplayString(`${prefix}: ${body}`, numeralLoc);
 }

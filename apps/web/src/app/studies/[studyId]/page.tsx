@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useMemo, useRef } from "react";
+import { StudyBatchExportProvider } from "@/components/study-batch-export";
 import { StudyLanguageToggle } from "@/components/study-language-toggle";
 import { StudyShareButton } from "@/components/study-share-button";
 import {
@@ -1391,6 +1392,18 @@ export default function StudyDetailPage() {
     }
     const cfg = IPC_PRESIDENT_PRESETS[ipcPresetId];
     if (cfg.outerOnly) return null;
+    if (cfg.termStartDate && cfg.termEndDate) {
+      const formatTermDate = (date: string, calendar: "gregory" | "persian", locale: string) =>
+        new Intl.DateTimeFormat(locale, {
+          calendar, year: "numeric", month: "long", day: "numeric", timeZone: "UTC",
+        }).format(new Date(`${date}T12:00:00Z`));
+      const gregorian = `${formatTermDate(cfg.termStartDate, "gregory", "en-US")} – ${formatTermDate(cfg.termEndDate, "gregory", "en-US")}`;
+      const persian = `${formatTermDate(cfg.termStartDate, "persian", "fa-IR")} تا ${formatTermDate(cfg.termEndDate, "persian", "fa-IR")}`;
+      return L(isFa,
+        `Term of office: ${cfg.labelEn}: ${gregorian}; ${persian}. Annual charts align the shaded band to reporting-year buckets, not exact days.`,
+        `دوره ریاست‌جمهوری ${cfg.labelFa}: ${persian}. ${gregorian}. در نمودارهای سالانه، سایه با سال گزارش داده هم‌تراز می‌شود و مرز روزانهٔ دقیق نیست.`
+      );
+    }
     if (ipcPresetId === "mohammad_reza_pahlavi") {
       return L(
         isFa,
@@ -1923,8 +1936,12 @@ export default function StudyDetailPage() {
   const ipcRegimeAreaBounds = useMemo(() => {
     if (!isIranEconomyPeriodComparison) return null;
     const { start, end } = ipcFocusResolved;
-    return { xStart: `${start}-07-01`, xEnd: `${end}-07-01` };
-  }, [isIranEconomyPeriodComparison, ipcFocusResolved]);
+    const cfg = ipcPresetId === "custom" ? undefined : IPC_PRESIDENT_PRESETS[ipcPresetId];
+    return {
+      xStart: cfg?.termStartDate ?? `${start}-07-01`,
+      xEnd: cfg?.termEndDate ?? `${end}-07-01`,
+    };
+  }, [isIranEconomyPeriodComparison, ipcFocusResolved, ipcPresetId]);
 
   const ipcRegimeAreaWithLabel = useMemo(() => {
     if (ipcPresetId === "islamic_republic_outer") return undefined;
@@ -5982,6 +5999,7 @@ export default function StudyDetailPage() {
             </div>
           ) : null}
       </div>
+      <StudyBatchExportProvider studySlug={study.id} locale={isFa ? "fa" : "en"}>
       <header className="study-header">
         <p className="study-header-number">
           {L(isFa, `Study ${study.number}`, `مطالعه ${study.number}`)}
@@ -13520,6 +13538,10 @@ export default function StudyDetailPage() {
                 {ipcFocusBandContextParagraph ? (
                   <p className="text-xs text-muted-foreground mb-3 max-w-3xl leading-relaxed">
                     {ipcFocusBandContextParagraph}
+                    {" "}{L(isFa,
+                      "Annual observations remain Gregorian-year data. A Persian label such as 1391–1392 shows the overlapping calendar years; it is not a recalculated Solar Hijri annual total. Focus and outer year inputs use Gregorian years.",
+                      "داده‌های سالانه همچنان بر اساس سال میلادی‌اند. برچسب شمسی مانند ۱۳۹۱–۱۳۹۲، دو سال هم‌پوشان را نشان می‌دهد و به معنی محاسبهٔ دوبارهٔ داده برای سال شمسی نیست. ورودی‌های سالِ دوره و بازه بیرونی میلادی هستند."
+                    )}
                   </p>
                 ) : null}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 text-xs max-w-3xl">
@@ -15175,6 +15197,7 @@ export default function StudyDetailPage() {
         </CardContent>
       </Card>
       )}
+      </StudyBatchExportProvider>
       </div>
     </StudyChartExportFilenameProvider>
   );

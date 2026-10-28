@@ -16,6 +16,7 @@ import {
 import type { ChartPeriodOverlayBandInput } from "@/lib/iran-iraq-war-chart-overlay";
 import {
   downloadEchartsRaster,
+  exportPresentationPngFromLiveChart,
   slugifyChartFilename,
   type DownloadEchartsRasterOptions,
 } from "@/lib/chart-export";
@@ -29,6 +30,7 @@ import {
   type ExportChartSettings,
 } from "@/lib/chart-export-presentation";
 import { ExportChartModal } from "@/components/export-chart-modal";
+import { useStudyBatchExport } from "@/components/study-batch-export";
 import { StudyChartControls } from "@/components/study-chart-controls";
 import { timelineChartFaUi } from "@/lib/timeline-chart-fa";
 import {
@@ -1390,11 +1392,12 @@ export function TimelineChart({
     setExportModalOpen(true);
   }, [chartLocale, chartRange, exportPresentationTitle, exportPresentationStudyHeading, label, xAxisYearLabel]);
 
+  const batchExport = useStudyBatchExport();
   const handleExportDownload = useCallback(
-    (settings: ExportChartSettings) => {
+    async (settings: ExportChartSettings, captureOnly = false) => {
       setExportModalOpen(false);
       const chart = chartInstanceRef.current;
-      if (!chart) return;
+      if (!chart) throw new Error("Chart is not ready for export");
       const backgroundColor = cssHsl("--background", "hsl(0, 0%, 100%)");
       const yearAxisForFile = xAxisYearLabel ?? "gregorian";
       const stem =
@@ -1449,33 +1452,31 @@ export function TimelineChart({
 
       const titleForExport = settings.titleText.trim();
 
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          try {
-            const exportOpts: DownloadEchartsRasterOptions = {
-              exportSourceFooter: exportSourceFooter?.trim(),
-              exportSourceFooterColor: footerColor,
-              exportPresentationTitle: titleForExport,
-              exportPresentationAllowEmptyTitle: true,
-              exportPresentationFontSizes: settings.fontSizes,
-              exportPresentationPreset: settings.fontPreset,
-              exportPresentationSubtitle,
-              ...(useExportAuxLegend
-                ? {
-                    exportPresentationCountryKey: exportPresentationCountryKey,
-                    exportPresentationLineStyleKey: exportPresentationLineStyleKey,
-                  }
-                : {}),
-              exportPresentationDirection: (chartLocale ?? "en") === "fa" ? "rtl" : "ltr",
-              exportPresentationLocale: (chartLocale ?? "en") === "fa" ? "fa" : "en",
-              exportPresentationTitleColor: titleColor,
-            };
-            downloadEchartsRaster(chart, "png", stemWithPreset, backgroundColor, exportOpts);
-          } catch {
-            // Instance may be disposed mid-frame
-          }
-        });
-      });
+      const exportOpts: DownloadEchartsRasterOptions = {
+        exportSourceFooter: exportSourceFooter?.trim(),
+        exportSourceFooterColor: footerColor,
+        exportPresentationTitle: titleForExport,
+        exportPresentationAllowEmptyTitle: true,
+        exportPresentationFontSizes: settings.fontSizes,
+        exportPresentationPreset: settings.fontPreset,
+        exportPresentationSubtitle,
+        ...(useExportAuxLegend
+          ? {
+              exportPresentationCountryKey: exportPresentationCountryKey,
+              exportPresentationLineStyleKey: exportPresentationLineStyleKey,
+            }
+          : {}),
+        exportPresentationDirection: (chartLocale ?? "en") === "fa" ? "rtl" : "ltr",
+        exportPresentationLocale: (chartLocale ?? "en") === "fa" ? "fa" : "en",
+        exportPresentationTitleColor: titleColor,
+      };
+      if (captureOnly) {
+        return {
+          filename: `${slugifyChartFilename(stemWithPreset)}.png`,
+          dataUrl: await exportPresentationPngFromLiveChart(chart, backgroundColor, exportOpts),
+        };
+      }
+      downloadEchartsRaster(chart, "png", stemWithPreset, backgroundColor, exportOpts);
     },
     [
       chartLocale,
@@ -1491,6 +1492,18 @@ export function TimelineChart({
       yAxisDetailNote,
     ]
   );
+
+  useEffect(() => {
+    if (!batchExport || (!showChartControls && !showPngExportWhenRangeHidden)) return;
+    return batchExport.register(resolvedShareChartId, async (settings) => {
+      const result = await handleExportDownload({
+        ...settings,
+        titleText: localizeChartNumericDisplayString(label.trim(), chartLocale ?? "en"),
+      }, true);
+      if (!result) throw new Error("Chart export failed");
+      return result;
+    });
+  }, [batchExport, resolvedShareChartId, handleExportDownload, label, chartLocale, showChartControls, showPngExportWhenRangeHidden]);
 
   useEffect(() => {
     let deb: ReturnType<typeof setTimeout> | undefined;
@@ -1942,8 +1955,8 @@ export function TimelineChart({
         : "calendar";
     const formatCategoryAxisYearTick = (value: string) => {
       if (axisYearMode !== "both")
-        return formatChartCategoryAxisYearLabel(value, axisYearMode, chartNumeralLocale);
-      const { gregorian, jalali } = getChartAxisYearDisplayParts(value);
+        return formatChartCategoryAxisYearLabel(value, axisYearMode, chartNumeralLocale, tooltipDateResolution);
+      const { gregorian, jalali } = getChartAxisYearDisplayParts(value, tooltipDateResolution);
       if (!gregorian) return value;
       return jalali
         ? `{gy|${localizeChartNumericDisplayString(gregorian, chartNumeralLocale)}}\n{jy|${localizeChartNumericDisplayString(jalali, chartNumeralLocale)}}`
@@ -2103,9 +2116,12 @@ export function TimelineChart({
       };
     }> = [];
     const periodBoundarySeen = new Set<string>();
-    const pushPeriodBoundary = (xResolved: number | string | null, year: number) => {
+    const pushPeriodBoundary = (xResolved: number | string | null, year: number, exactDate?: string) => {
       if (xResolved == null || !Number.isFinite(year)) return;
-      const yearLabel = localizeChartNumericDisplayString(String(year), chartNumeralLocale);
+      const yearLabel = formatChartCategoryAxisYearLabel(
+        exactDate ?? `${year}-01-01`, axisYearMode, chartNumeralLocale,
+        exactDate ? "calendar" : "year_bucket"
+      ).replace("\n", " · ");
       const key = `${String(xResolved)}|${yearLabel}`;
       if (periodBoundarySeen.has(key)) return;
       periodBoundarySeen.add(key);
@@ -2421,8 +2437,8 @@ export function TimelineChart({
     for (const p of presidentialBandData) {
       const y0 = parseInt(p.event.date_start?.slice(0, 4) ?? "", 10);
       const y1 = parseInt(p.event.date_end?.slice(0, 4) ?? "", 10);
-      pushPeriodBoundary(p.xStart, y0);
-      pushPeriodBoundary(p.xEnd, y1);
+      pushPeriodBoundary(p.xStart, y0, p.event.date_start);
+      pushPeriodBoundary(p.xEnd, y1, p.event.date_end ?? undefined);
     }
     for (const b of chartPeriodOverlayBands ?? []) {
       const r = findTimeSeriesEventRangeCategoryIndices(
@@ -2440,8 +2456,8 @@ export function TimelineChart({
     if (regimeArea) {
       const focusYears = regimeFocusGregorianYearBounds(regimeArea, focusGregorianYearRange);
       if (focusYears) {
-        pushPeriodBoundary(regimeArea.xStart, focusYears.startYear);
-        pushPeriodBoundary(regimeArea.xEnd, focusYears.endYear);
+        pushPeriodBoundary(regimeArea.xStart, focusYears.startYear, regimeArea.xStart);
+        pushPeriodBoundary(regimeArea.xEnd, focusYears.endYear, regimeArea.xEnd);
       }
     }
     const regularBandData = rangeBandData.filter((r) => !isPresidentialEvent(r.event));
@@ -3176,12 +3192,12 @@ export function TimelineChart({
                     ? axisYearMode === "both"
                       ? (() => {
                           const iso = new Date(value).toISOString().slice(0, 10);
-                          const { gregorian, jalali } = getChartAxisYearDisplayParts(iso);
+                          const { gregorian, jalali } = getChartAxisYearDisplayParts(iso, tooltipDateResolution);
                           return jalali
                             ? `{gy|${localizeChartNumericDisplayString(gregorian, chartNumeralLocale)}}\n{jy|${localizeChartNumericDisplayString(jalali, chartNumeralLocale)}}`
                             : localizeChartNumericDisplayString(gregorian, chartNumeralLocale);
                         })()
-                      : formatChartTimeAxisYearLabel(value, axisYearMode, chartNumeralLocale)
+                      : formatChartTimeAxisYearLabel(value, axisYearMode, chartNumeralLocale, tooltipDateResolution)
                     : new Date(value).toLocaleDateString(chartNumeralLocale === "fa" ? "fa-IR" : undefined, {
                         month: "short",
                         day: "numeric",
